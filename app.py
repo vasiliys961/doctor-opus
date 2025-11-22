@@ -10,7 +10,12 @@ import requests
 import tempfile
 import os
 from io import BytesIO
-import librosa
+# import librosa  # Опционально, если нужна обработка аудио
+try:
+    import librosa
+    LIBROSA_AVAILABLE = True
+except ImportError:
+    LIBROSA_AVAILABLE = False
 import datetime
 from pathlib import Path
 import time
