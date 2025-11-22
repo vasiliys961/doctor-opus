@@ -259,24 +259,60 @@ class AdvancedLabProcessor:
         
         # Остальной код для PDF, Excel и т.д.
         try:
+            raw_text = ""
+            extraction_errors = []
+            
             if file_type == "pdf":
-                raw_text = self._extract_from_pdf(file_path)
+                try:
+                    raw_text = self._extract_from_pdf(file_path)
+                except Exception as e:
+                    extraction_errors.append(f"Ошибка извлечения из PDF: {str(e)}")
+                    raise
             elif file_type == "excel":
-                raw_text = self._extract_from_excel(file_path)
+                try:
+                    raw_text = self._extract_from_excel(file_path)
+                except Exception as e:
+                    extraction_errors.append(f"Ошибка извлечения из Excel: {str(e)}")
+                    raise
             elif file_type == "csv":
-                raw_text = self._extract_from_csv(file_path)
+                try:
+                    raw_text = self._extract_from_csv(file_path)
+                except Exception as e:
+                    extraction_errors.append(f"Ошибка извлечения из CSV: {str(e)}")
+                    raise
             elif file_type == "json":
-                raw_text = self._extract_from_json(file_path)
+                try:
+                    raw_text = self._extract_from_json(file_path)
+                except Exception as e:
+                    extraction_errors.append(f"Ошибка извлечения из JSON: {str(e)}")
+                    raise
             elif file_type == "xml":
-                raw_text = self._extract_from_xml(file_path)
+                try:
+                    raw_text = self._extract_from_xml(file_path)
+                except Exception as e:
+                    extraction_errors.append(f"Ошибка извлечения из XML: {str(e)}")
+                    raise
             else:
-                raise ValueError(f"Неподдерживаемый тип файла: {file_type}")
+                raise ValueError(f"Неподдерживаемый тип файла: {file_type}. Поддерживаются: PDF, Excel, CSV, JSON, XML, изображения")
+            
+            # Проверяем, что текст извлечен
+            if not raw_text or not raw_text.strip():
+                raise ValueError(f"Не удалось извлечь данные из файла типа {file_type}. Файл может быть пустым или поврежденным.")
             
             # Парсинг параметров из текста
             parameters = self._parse_parameters(raw_text)
+            
+            # Если параметры не найдены, добавляем предупреждение
+            if not parameters:
+                warnings = [f"Не удалось автоматически извлечь параметры из файла типа {file_type}. Попробуйте использовать ИИ-анализ."]
+                if len(raw_text) < 50:
+                    warnings.append("Извлеченный текст слишком короткий - возможно, файл поврежден или имеет нестандартный формат.")
+            else:
+                warnings = []
+            
             analyzed_parameters = self._analyze_parameters(parameters)
             critical_values = self._find_critical_values(analyzed_parameters)
-            warnings = self._generate_warnings(analyzed_parameters)
+            warnings.extend(self._generate_warnings(analyzed_parameters))
             confidence = self._calculate_confidence(analyzed_parameters, raw_text)
             
             return LabReport(
@@ -477,49 +513,137 @@ class AdvancedLabProcessor:
 """
 
     def _extract_from_pdf(self, file_path: str) -> str:
-        """Извлечение текста из PDF"""
-        if not PDF_AVAILABLE:
-            raise ImportError("Для работы с PDF установите: pip install PyPDF2 pdfplumber")
-        
+        """Извлечение текста из PDF - улучшенная версия с обработкой ошибок"""
         text = ""
+        errors = []
         
-        # Попробуем с pdfplumber (лучше для таблиц)
+        # Проверяем доступность библиотек
+        pdfplumber_available = False
+        pypdf2_available = False
+        
         try:
             import pdfplumber
-            with pdfplumber.open(file_path) as pdf:
-                for page in pdf.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
-                    
-                    # Извлечение таблиц
-                    tables = page.extract_tables()
-                    for table in tables:
-                        for row in table:
-                            if row:
-                                text += "\t".join([cell or "" for cell in row]) + "\n"
+            pdfplumber_available = True
+        except ImportError:
+            pass
         
-        except Exception:
-            # Fallback на PyPDF2
-            with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                for page in pdf_reader.pages:
-                    text += page.extract_text() + "\n"
+        try:
+            import PyPDF2
+            pypdf2_available = True
+        except ImportError:
+            pass
+        
+        if not pdfplumber_available and not pypdf2_available:
+            raise ImportError("Для работы с PDF установите: pip install PyPDF2 pdfplumber")
+        
+        # Попробуем с pdfplumber (лучше для таблиц)
+        if pdfplumber_available:
+            try:
+                with pdfplumber.open(file_path) as pdf:
+                    total_pages = len(pdf.pages)
+                    for page_num, page in enumerate(pdf.pages, 1):
+                        try:
+                            # Извлечение текста
+                            page_text = page.extract_text()
+                            if page_text and page_text.strip():
+                                text += f"\n--- Страница {page_num}/{total_pages} ---\n"
+                                text += page_text + "\n"
+                            
+                            # Извлечение таблиц
+                            try:
+                                tables = page.extract_tables()
+                                if tables:
+                                    text += f"\n--- Таблицы со страницы {page_num} ---\n"
+                                    for table_num, table in enumerate(tables, 1):
+                                        text += f"\nТаблица {table_num}:\n"
+                                        for row in table:
+                                            if row and any(cell for cell in row if cell):
+                                                # Фильтруем пустые строки
+                                                row_text = "\t".join([str(cell).strip() if cell else "" for cell in row])
+                                                if row_text.strip():
+                                                    text += row_text + "\n"
+                            except Exception as e:
+                                errors.append(f"Ошибка извлечения таблиц со страницы {page_num}: {str(e)}")
+                                
+                        except Exception as e:
+                            errors.append(f"Ошибка обработки страницы {page_num}: {str(e)}")
+                            continue
+                            
+            except Exception as e:
+                errors.append(f"Ошибка pdfplumber: {str(e)}")
+        
+        # Если pdfplumber не сработал или не установлен, пробуем PyPDF2
+        if (not text.strip() or not pdfplumber_available) and pypdf2_available:
+            try:
+                import PyPDF2
+                with open(file_path, 'rb') as file:
+                    pdf_reader = PyPDF2.PdfReader(file)
+                    total_pages = len(pdf_reader.pages)
+                    for page_num, page in enumerate(pdf_reader.pages, 1):
+                        try:
+                            page_text = page.extract_text()
+                            if page_text and page_text.strip():
+                                text += f"\n--- Страница {page_num}/{total_pages} (PyPDF2) ---\n"
+                                text += page_text + "\n"
+                        except Exception as e2:
+                            errors.append(f"Ошибка PyPDF2 на странице {page_num}: {str(e2)}")
+            except Exception as e2:
+                errors.append(f"Ошибка PyPDF2: {str(e2)}")
+        
+        # Если ничего не извлечено
+        if not text.strip():
+            error_msg = "Не удалось извлечь текст из PDF."
+            if errors:
+                error_msg += f" Ошибки: {'; '.join(errors[:3])}"  # Показываем первые 3 ошибки
+            else:
+                error_msg += " Возможно, PDF содержит только изображения (сканированный документ)."
+            raise Exception(error_msg)
         
         return text
 
     def _extract_from_excel(self, file_path: str) -> str:
-        """Извлечение данных из Excel"""
+        """Извлечение данных из Excel - улучшенная версия"""
         if not EXCEL_AVAILABLE:
             raise ImportError("Для работы с Excel установите: pip install openpyxl")
         
+        text = ""
+        errors = []
+        
         try:
-            df = pd.read_excel(file_path, sheet_name=None)
-            text = ""
+            # Пробуем прочитать все листы
+            try:
+                df_dict = pd.read_excel(file_path, sheet_name=None, engine='openpyxl')
+            except Exception:
+                # Пробуем с другим движком
+                try:
+                    df_dict = pd.read_excel(file_path, sheet_name=None, engine='xlrd')
+                except Exception as e:
+                    raise Exception(f"Не удалось прочитать Excel файл: {e}")
             
-            for sheet_name, sheet_data in df.items():
-                text += f"Лист: {sheet_name}\n"
-                text += sheet_data.to_csv(sep="\t", index=False) + "\n"
+            for sheet_name, sheet_data in df_dict.items():
+                try:
+                    text += f"\n=== Лист: {sheet_name} ===\n"
+                    
+                    # Обрабатываем пустые значения
+                    sheet_data = sheet_data.fillna("")
+                    
+                    # Конвертируем в текст с табуляцией
+                    csv_text = sheet_data.to_csv(sep="\t", index=False, na_rep="")
+                    text += csv_text + "\n"
+                    
+                    # Если таблица пустая, добавляем информацию
+                    if sheet_data.empty:
+                        text += "(Лист пуст)\n"
+                        
+                except Exception as e:
+                    errors.append(f"Ошибка обработки листа '{sheet_name}': {str(e)}")
+                    continue
+            
+            if not text.strip():
+                raise Exception("Excel файл не содержит данных или все листы пусты")
+            
+            if errors:
+                text += f"\n⚠️ Предупреждения: {'; '.join(errors)}\n"
             
             return text
             
@@ -527,58 +651,137 @@ class AdvancedLabProcessor:
             raise Exception(f"Ошибка чтения Excel файла: {e}")
 
     def _extract_from_csv(self, file_path: str) -> str:
-        """Извлечение данных из CSV"""
+        """Извлечение данных из CSV - улучшенная версия с поддержкой разных кодировок"""
+        encodings = ['utf-8', 'cp1251', 'windows-1251', 'latin-1', 'iso-8859-1', 'utf-16']
+        separators = [',', ';', '\t', '|']
+        
+        for encoding in encodings:
+            for sep in separators:
+                try:
+                    df = pd.read_csv(file_path, encoding=encoding, sep=sep, on_bad_lines='skip', engine='python')
+                    if not df.empty:
+                        # Обрабатываем пустые значения
+                        df = df.fillna("")
+                        return df.to_csv(sep="\t", index=False, na_rep="")
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+                except Exception:
+                    continue
+        
+        # Если ничего не сработало, пробуем с автоматическим определением
         try:
-            df = pd.read_csv(file_path, encoding='utf-8')
-            return df.to_csv(sep="\t", index=False)
-        except UnicodeDecodeError:
-            try:
-                df = pd.read_csv(file_path, encoding='cp1251')
-                return df.to_csv(sep="\t", index=False)
-            except Exception as e:
-                raise Exception(f"Ошибка чтения CSV файла: {e}")
+            df = pd.read_csv(file_path, encoding='utf-8', sep=None, engine='python', on_bad_lines='skip')
+            df = df.fillna("")
+            return df.to_csv(sep="\t", index=False, na_rep="")
+        except Exception as e:
+            raise Exception(f"Не удалось прочитать CSV файл. Попробованы кодировки: {', '.join(encodings)}. Ошибка: {e}")
 
     def _extract_from_json(self, file_path: str) -> str:
-        """Извлечение данных из JSON"""
-        try:
-            with open(file_path, 'r', encoding='utf-8') as file:
-                data = json.load(file)
-                return json.dumps(data, ensure_ascii=False, indent=2)
-        except Exception as e:
-            raise Exception(f"Ошибка чтения JSON файла: {e}")
+        """Извлечение данных из JSON - улучшенная версия"""
+        encodings = ['utf-8', 'utf-16', 'cp1251']
+        
+        for encoding in encodings:
+            try:
+                with open(file_path, 'r', encoding=encoding) as file:
+                    data = json.load(file)
+                    
+                    # Если это список словарей (лабораторные данные)
+                    if isinstance(data, list) and data and isinstance(data[0], dict):
+                        text = ""
+                        for item in data:
+                            # Форматируем как таблицу
+                            for key, value in item.items():
+                                text += f"{key}\t{value}\n"
+                        return text
+                    
+                    # Обычный JSON
+                    return json.dumps(data, ensure_ascii=False, indent=2)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            except Exception as e:
+                if encoding == encodings[-1]:  # Последняя попытка
+                    raise Exception(f"Ошибка чтения JSON файла: {e}")
+                continue
+        
+        raise Exception(f"Не удалось прочитать JSON файл. Попробованы кодировки: {', '.join(encodings)}")
 
     def _extract_from_xml(self, file_path: str) -> str:
-        """Извлечение данных из XML"""
-        try:
-            tree = ET.parse(file_path)
-            root = tree.getroot()
-            
-            def xml_to_text(element, level=0):
-                text = "  " * level + f"{element.tag}: {element.text or ''}\n"
-                for child in element:
-                    text += xml_to_text(child, level + 1)
-                return text
-            
-            return xml_to_text(root)
-        except Exception as e:
-            raise Exception(f"Ошибка чтения XML файла: {e}")
+        """Извлечение данных из XML - улучшенная версия"""
+        encodings = ['utf-8', 'utf-16', 'cp1251']
+        
+        for encoding in encodings:
+            try:
+                with open(file_path, 'r', encoding=encoding) as file:
+                    tree = ET.parse(file)
+                    root = tree.getroot()
+                    
+                    def xml_to_text(element, level=0):
+                        text = ""
+                        # Добавляем тег и текст
+                        tag_name = element.tag.split('}')[-1] if '}' in element.tag else element.tag
+                        text += "  " * level + f"{tag_name}"
+                        
+                        # Добавляем атрибуты
+                        if element.attrib:
+                            attrs = ", ".join([f"{k}={v}" for k, v in element.attrib.items()])
+                            text += f" [{attrs}]"
+                        
+                        # Добавляем текст элемента
+                        if element.text and element.text.strip():
+                            text += f": {element.text.strip()}"
+                        
+                        text += "\n"
+                        
+                        # Обрабатываем дочерние элементы
+                        for child in element:
+                            text += xml_to_text(child, level + 1)
+                        
+                        # Добавляем tail текст (текст после закрывающего тега)
+                        if element.tail and element.tail.strip():
+                            text += "  " * level + f"tail: {element.tail.strip()}\n"
+                        
+                        return text
+                    
+                    return xml_to_text(root)
+                    
+            except (UnicodeDecodeError, ET.ParseError):
+                continue
+            except Exception as e:
+                if encoding == encodings[-1]:  # Последняя попытка
+                    raise Exception(f"Ошибка чтения XML файла: {e}")
+                continue
+        
+        raise Exception(f"Не удалось прочитать XML файл. Попробованы кодировки: {', '.join(encodings)}")
 
     def _parse_parameters(self, text: str) -> List[Dict]:
-        """Парсинг параметров из текста"""
+        """Парсинг параметров из текста - улучшенная версия"""
         parameters = []
         lines = text.split('\n')
         
-        # Паттерны для поиска лабораторных данных
+        # Расширенные паттерны для поиска лабораторных данных
         patterns = [
             # Паттерн: Параметр значение единица (норма)
-            r'([а-яё\s\w]+)\s*[-:]?\s*(\d+[\.,]?\d*)\s*([а-яё/×\w\d\^°]+)?\s*(?:\(([^)]+)\))?',
+            r'([а-яёА-ЯЁ\s\w\-]+?)\s*[-:]\s*(\d+[\.,]?\d*)\s*([а-яё/×\w\d\^°\-]+)?\s*(?:\(([^)]+)\))?',
             # Паттерн с табуляцией
-            r'([а-яё\s\w]+)\t+(\d+[\.,]?\d*)\t*([а-яё/×\w\d\^°]+)?\t*([^t]*)?',
+            r'([а-яёА-ЯЁ\s\w\-]+?)\t+(\d+[\.,]?\d*)\t*([а-яё/×\w\d\^°\-]+)?\t*([^\t]*)?',
+            # Паттерн: Параметр = значение единица
+            r'([а-яёА-ЯЁ\s\w\-]+?)\s*=\s*(\d+[\.,]?\d*)\s*([а-яё/×\w\d\^°\-]+)?',
+            # Паттерн для таблиц: | Параметр | значение | единица |
+            r'\|\s*([а-яёА-ЯЁ\s\w\-]+?)\s*\|\s*(\d+[\.,]?\d*)\s*\|\s*([а-яё/×\w\d\^°\-]+)?',
+            # Паттерн с диапазоном нормы: Параметр значение единица (мин-макс)
+            r'([а-яёА-ЯЁ\s\w\-]+?)\s+(\d+[\.,]?\d*)\s+([а-яё/×\w\d\^°\-]+)?\s+\((\d+[\.,]?\d*)\s*-\s*(\d+[\.,]?\d*)\)',
         ]
+        
+        # Список стоп-слов, которые не являются параметрами
+        stop_words = {'дата', 'время', 'пациент', 'врач', 'лаборатория', 'номер', 'лист', 'страница', 'итого', 'сумма'}
         
         for line in lines:
             line = line.strip()
             if not line or len(line) < 3:
+                continue
+            
+            # Пропускаем заголовки и служебные строки
+            if any(word in line.lower() for word in ['заголовок', 'header', 'footer', 'подпись']):
                 continue
             
             for pattern in patterns:
@@ -586,16 +789,36 @@ class AdvancedLabProcessor:
                 
                 for match in matches:
                     param_name = match.group(1).strip()
-                    value_str = match.group(2).replace(',', '.')
-                    unit = match.group(3).strip() if match.group(3) else ""
-                    reference = match.group(4).strip() if match.group(4) else ""
                     
                     # Фильтрация шума
-                    if len(param_name) < 3 or not param_name[0].isalpha():
+                    if len(param_name) < 2:
+                        continue
+                    
+                    # Пропускаем стоп-слова
+                    if param_name.lower() in stop_words:
+                        continue
+                    
+                    # Пропускаем строки, которые выглядят как даты или служебная информация
+                    if re.match(r'^\d{1,2}[./]\d{1,2}[./]\d{2,4}', param_name):
                         continue
                     
                     try:
+                        value_str = match.group(2).replace(',', '.')
                         value = float(value_str)
+                        
+                        # Пропускаем значения, которые явно не являются лабораторными (например, даты, номера)
+                        if value > 1000000 or (value < 0.0001 and value > 0):
+                            continue
+                        
+                        unit = match.group(3).strip() if len(match.groups()) > 2 and match.group(3) else ""
+                        reference = ""
+                        
+                        # Обработка референсных значений
+                        if len(match.groups()) >= 4 and match.group(4):
+                            reference = match.group(4).strip()
+                        elif len(match.groups()) >= 5:  # Для паттерна с диапазоном
+                            reference = f"{match.group(4)}-{match.group(5)}"
+                        
                         parameters.append({
                             'name': param_name,
                             'value': value,
@@ -603,10 +826,19 @@ class AdvancedLabProcessor:
                             'reference': reference,
                             'raw_line': line
                         })
-                    except ValueError:
+                    except (ValueError, IndexError):
                         continue
         
-        return parameters
+        # Удаляем дубликаты (по имени и значению)
+        seen = set()
+        unique_parameters = []
+        for param in parameters:
+            key = (param['name'].lower(), param['value'])
+            if key not in seen:
+                seen.add(key)
+                unique_parameters.append(param)
+        
+        return unique_parameters
 
     def _analyze_parameters(self, raw_parameters: List[Dict]) -> List[LabParameter]:
         """Анализ и классификация параметров"""

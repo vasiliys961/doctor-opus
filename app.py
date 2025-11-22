@@ -1,5 +1,4 @@
-from assemblyai_transcriber import transcribe_audio_assemblyai# app.py (восстановленная версия после аварии)
-from claude_assistant import OpenRouterAssistant
+# app.py (восстановленная версия после аварии)
 import streamlit as st
 import io
 import base64
@@ -12,23 +11,215 @@ import tempfile
 import os
 from io import BytesIO
 import librosa
-from modules.medical_ai_analyzer import EnhancedMedicalAIAnalyzer, ImageType
-from modules.streamlit_enhanced_pages import (
-    show_enhanced_analysis_page,
-    show_comparative_analysis_page, 
-    #show_ai_training_page,
-    show_medical_protocols_page
-)
-from modules.advanced_lab_processor import AdvancedLabProcessor
 import datetime
+from pathlib import Path
+import time
+import sys
+import gzip
+import json
+import re
+
+# Безопасные импорты модулей
+try:
+    from modules.medical_ai_analyzer import EnhancedMedicalAIAnalyzer, ImageType
+    MEDICAL_AI_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: medical_ai_analyzer недоступен: {e}", file=sys.stderr)
+    MEDICAL_AI_AVAILABLE = False
+    ImageType = None
+    EnhancedMedicalAIAnalyzer = None
+
+try:
+    from modules.streamlit_enhanced_pages import (
+        show_enhanced_analysis_page,
+        show_comparative_analysis_page, 
+        show_medical_protocols_page
+    )
+    ENHANCED_PAGES_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: streamlit_enhanced_pages недоступен: {e}", file=sys.stderr)
+    ENHANCED_PAGES_AVAILABLE = False
+    show_enhanced_analysis_page = None
+    show_comparative_analysis_page = None
+    show_medical_protocols_page = None
+
+try:
+    from modules.advanced_lab_processor import AdvancedLabProcessor
+    LAB_PROCESSOR_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: advanced_lab_processor недоступен: {e}", file=sys.stderr)
+    LAB_PROCESSOR_AVAILABLE = False
+    AdvancedLabProcessor = None
+
+try:
+    from utils.image_processor import ImageFormatProcessor, optimize_image_for_ai
+    IMAGE_PROCESSOR_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: image_processor недоступен: {e}", file=sys.stderr)
+    IMAGE_PROCESSOR_AVAILABLE = False
+    ImageFormatProcessor = None
+    optimize_image_for_ai = None
+
+try:
+    from utils.specialist_detector import get_specialist_prompt, get_specialist_info
+    SPECIALIST_DETECTOR_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: specialist_detector недоступен: {e}", file=sys.stderr)
+    SPECIALIST_DETECTOR_AVAILABLE = False
+    get_specialist_prompt = None
+    get_specialist_info = None
+
+try:
+    from config import IS_REPLIT, MOBILE_MAX_IMAGE_SIZE, ALLOWED_IMAGE_EXTENSIONS
+    CONFIG_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: config недоступен: {e}", file=sys.stderr)
+    CONFIG_AVAILABLE = False
+    IS_REPLIT = False
+    MOBILE_MAX_IMAGE_SIZE = (1024, 1024)
+    ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png']
+
+try:
+    from utils.error_handler import handle_error, log_api_call
+    ERROR_HANDLER_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: error_handler недоступен: {e}", file=sys.stderr)
+    ERROR_HANDLER_AVAILABLE = False
+    def handle_error(error, context="", show_to_user=True):
+        return str(error)
+    def log_api_call(*args, **kwargs):
+        pass
+
+try:
+    from utils.performance_monitor import track_model_usage
+    PERFORMANCE_MONITOR_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: performance_monitor недоступен: {e}", file=sys.stderr)
+    PERFORMANCE_MONITOR_AVAILABLE = False
+    def track_model_usage(*args, **kwargs):
+        pass
+
+try:
+    from utils.validators import validate_image, validate_file_size
+    VALIDATORS_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: validators недоступен: {e}", file=sys.stderr)
+    VALIDATORS_AVAILABLE = False
+    def validate_image(*args, **kwargs):
+        return True, ""
+    def validate_file_size(*args, **kwargs):
+        return True, ""
+
+try:
+    from utils.cache_manager import get_image_hash, get_cache_key, get_cached_result, save_to_cache, clear_old_cache
+    CACHE_MANAGER_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: cache_manager недоступен: {e}", file=sys.stderr)
+    CACHE_MANAGER_AVAILABLE = False
+    def get_image_hash(*args, **kwargs):
+        return ""
+    def get_cache_key(*args, **kwargs):
+        return ""
+    def get_cached_result(*args, **kwargs):
+        return None
+    def save_to_cache(*args, **kwargs):
+        pass
+    def clear_old_cache(*args, **kwargs):
+        pass
+
+try:
+    from utils.export_manager import export_analysis_to_json, export_analysis_to_csv, export_lab_results_to_excel
+    EXPORT_MANAGER_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: export_manager недоступен: {e}", file=sys.stderr)
+    EXPORT_MANAGER_AVAILABLE = False
+    def export_analysis_to_json(*args, **kwargs):
+        return ""
+    def export_analysis_to_csv(*args, **kwargs):
+        return ""
+    def export_lab_results_to_excel(*args, **kwargs):
+        return ""
+
+try:
+    from services.consensus_engine import ConsensusEngine
+    CONSENSUS_ENGINE_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: consensus_engine недоступен: {e}", file=sys.stderr)
+    CONSENSUS_ENGINE_AVAILABLE = False
+    ConsensusEngine = None
+
+try:
+    from services.validation_pipeline import ValidationPipeline
+    VALIDATION_PIPELINE_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: validation_pipeline недоступен: {e}", file=sys.stderr)
+    VALIDATION_PIPELINE_AVAILABLE = False
+    ValidationPipeline = None
+
+try:
+    from storages.context_store import ContextStore
+    CONTEXT_STORE_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: context_store недоступен: {e}", file=sys.stderr)
+    CONTEXT_STORE_AVAILABLE = False
+    ContextStore = None
+
+try:
+    from evaluators.scorecards import MedicalScorecard
+    SCORECARDS_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: scorecards недоступен: {e}", file=sys.stderr)
+    SCORECARDS_AVAILABLE = False
+    MedicalScorecard = None
+
+try:
+    from prompts.prompt_registry import PromptRegistry
+    PROMPT_REGISTRY_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: prompt_registry недоступен: {e}", file=sys.stderr)
+    PROMPT_REGISTRY_AVAILABLE = False
+    PromptRegistry = None
+
+try:
+    from utils.gap_detector import DiagnosticGapDetector
+    GAP_DETECTOR_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: gap_detector недоступен: {e}", file=sys.stderr)
+    GAP_DETECTOR_AVAILABLE = False
+    DiagnosticGapDetector = None
+
+try:
+    from utils.notification_system import NotificationSystem
+    NOTIFICATION_SYSTEM_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: notification_system недоступен: {e}", file=sys.stderr)
+    NOTIFICATION_SYSTEM_AVAILABLE = False
+    NotificationSystem = None
+
+try:
+    from services.model_router import ModelRouter
+    MODEL_ROUTER_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: model_router недоступен: {e}", file=sys.stderr)
+    MODEL_ROUTER_AVAILABLE = False
+    ModelRouter = None
+
+try:
+    from utils.evidence_ranker import EvidenceRanker
+    EVIDENCE_RANKER_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: evidence_ranker недоступен: {e}", file=sys.stderr)
+    EVIDENCE_RANKER_AVAILABLE = False
+    EvidenceRanker = None
 
 # --- Проверка доступности ИИ ---
 try:
     from claude_assistant import OpenRouterAssistant
     AI_AVAILABLE = True
 except ImportError as e:
-    st.error(f"❌ Ошибка импорта: {e}")
+    print(f"⚠️ Предупреждение: ИИ-модуль недоступен: {e}", file=sys.stderr)
     AI_AVAILABLE = False
+    OpenRouterAssistant = None
 
 # --- AssemblyAI для голосового ввода ---
 try:
@@ -36,6 +227,7 @@ try:
     ASSEMBLYAI_AVAILABLE = True
 except ImportError:
     ASSEMBLYAI_AVAILABLE = False
+    transcribe_audio_assemblyai = None
 
 def transcribe_audio(audio_file):
     """Заглушка - используйте AssemblyAI"""
@@ -104,15 +296,75 @@ def show_ecg_analysis():
         return
 
     st.header("📈 Анализ ЭКГ")
-    uploaded_file = st.file_uploader("Загрузите ЭКГ (JPG, PNG, PDF, DICOM)", type=["jpg", "png", "pdf", "dcm"])
+    
+    # Мобильная поддержка: выбор источника
+    source_type = st.radio(
+        "Выберите источник изображения:",
+        ["📁 Загрузить файл", "📷 Сделать фото"],
+        horizontal=True
+    )
+    
+    image_array = None
+    metadata = {}
+    
+    if source_type == "📷 Сделать фото":
+        # Использование камеры смартфона
+        camera_image = st.camera_input("Сфотографируйте ЭКГ", key="ecg_camera")
+        if camera_image:
+            try:
+                # Конвертация в numpy array
+                image = Image.open(camera_image)
+                image_array = np.array(image)
+                metadata = {'source': 'camera', 'format': 'mobile_photo'}
+            except Exception as e:
+                st.error(f"Ошибка обработки фото: {e}")
+                return
+    else:
+        # Загрузка файла с расширенной поддержкой форматов
+        uploaded_file = st.file_uploader(
+            "Загрузите ЭКГ", 
+            type=["jpg", "jpeg", "png", "pdf", "dcm", "dicom", "tiff", "tif", "heic", "heif", "webp", "zip"],
+            help="Поддерживаются: JPG, PNG, TIFF, HEIC, WEBP, DICOM, ZIP"
+        )
+        
+        if uploaded_file:
+            try:
+                # Сохранение во временный файл
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    tmp_path = tmp.name
+                
+                # Загрузка через процессор форматов
+                processor = ImageFormatProcessor()
+                image_array, file_metadata = processor.load_image(tmp_path, MOBILE_MAX_IMAGE_SIZE)
+                metadata = {**metadata, **file_metadata, 'source': 'upload'}
+                
+                # Очистка
+                os.unlink(tmp_path)
+                processor.cleanup_temp_files()
+                
+            except Exception as e:
+                st.error(f"Ошибка обработки файла: {e}")
+                return
 
-    if uploaded_file is None:
-        st.info("Загрузите файл для анализа.")
+    if image_array is None:
+        st.info("Загрузите файл или сделайте фото для анализа.")
+        return
+
+    # Валидация изображения
+    is_valid, error_msg = validate_image(image_array)
+    if not is_valid:
+        st.error(f"❌ Ошибка валидации изображения: {error_msg}")
         return
 
     try:
-        image = Image.open(uploaded_file).convert("L")
-        image_array = np.array(image)
+        # Оптимизация для мобильных устройств
+        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+            image_array = optimize_image_for_ai(image_array)
+        
+        st.image(image_array, caption="ЭКГ", use_container_width=True, clamp=True)
+
+        # Базовый анализ
         analysis = {
             "heart_rate": 75,
             "rhythm_assessment": "Синусовый",
@@ -120,8 +372,7 @@ def show_ecg_analysis():
             "duration": 10,
             "signal_quality": "Хорошее"
         }
-        st.image(image_array, caption="ЭКГ", use_container_width=True, clamp=True)
-
+        
         st.subheader("📊 Результаты анализа")
         col1, col2 = st.columns(2)
         with col1:
@@ -132,38 +383,237 @@ def show_ecg_analysis():
             st.metric("Комплексы", analysis['num_beats'])
 
         assistant = OpenRouterAssistant()
-        if st.button("🔍 ИИ-анализ ЭКГ (с контекстом)"):
+        
+        # Инициализация новых компонентов
+        consensus_engine = ConsensusEngine(assistant)
+        validator = ValidationPipeline(assistant)
+        scorecard = MedicalScorecard()
+        context_store = ContextStore()
+        
+        gap_detector = DiagnosticGapDetector()
+        notifier = NotificationSystem()
+        model_router = ModelRouter()
+        
+        evidence_ranker = EvidenceRanker()
+
+        # Выбор пациента для сохранения в контекст
+        st.subheader("👤 Связь с пациентом (опционально)")
+        init_db()
+        conn = sqlite3.connect('medical_data.db')
+        patients = pd.read_sql_query("SELECT id, name FROM patients", conn)
+        conn.close()
+        
+        selected_patient_id = None
+        if not patients.empty:
+            save_to_context = st.checkbox("💾 Сохранить результаты в контекст пациента", value=False)
+            if save_to_context:
+                selected_patient_name = st.selectbox("Выберите пациента:", patients['name'], key="ecg_patient_select")
+                selected_patient_id = patients[patients['name'] == selected_patient_name].iloc[0]['id']
+        else:
+            save_to_context = False
+            st.info("💡 Добавьте пациента в разделе 'База данных', чтобы сохранять результаты в контекст")
+
+        # Использование контекста пациента (если загружен)
+        patient_context = None
+        if 'patient_context' in st.session_state and 'selected_patient_id' in st.session_state:
+            patient_context = st.session_state['patient_context']
+            st.info(f"💡 Используется клинический контекст пациента")
+        
+        if st.button("🔍 ИИ-анализ ЭКГ (с контекстом)", use_container_width=True):
+            # Выбор режима анализа
+            analysis_mode = st.radio(
+                "Режим анализа:",
+                ["⚡ Быстрый (одна модель)", "🎯 Консенсус (несколько моделей)", "✅ С валидацией"],
+                horizontal=True,
+                key="ecg_analysis_mode"
+            )
+            
             with st.spinner("ИИ анализирует ЭКГ..."):
-                prompt = "Проанализируйте ЭКГ на изображении. Оцените ритм, ЧСС, признаки ишемии, блокад, аритмий."
-                result = assistant.send_vision_request(prompt, image_array, str(analysis))
-                st.markdown("### 🧠 Ответ ИИ:")
-                st.write(result)
+                from modules.medical_ai_analyzer import ImageType
+                prompt = get_specialist_prompt(ImageType.ECG)
+                specialist_info = get_specialist_info(ImageType.ECG)
+                
+                # Добавьте контекст в промпт если есть
+                if patient_context:
+                    prompt += f"\n\nКЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n{patient_context}\n\nУчтите этот контекст при анализе."
+                
+                if analysis_mode == "⚡ Быстрый (одна модель)":
+                    result = assistant.send_vision_request(prompt, image_array, str(analysis))
+                    st.markdown(f"### 🧠 Ответ ИИ ({specialist_info['role']}):")
+                    st.write(result)
+                
+                elif analysis_mode == "🎯 Консенсус (несколько моделей)":
+                    consensus_result = consensus_engine.analyze_with_consensus(prompt, image_array, str(analysis))
+                    
+                    st.markdown("### 🎯 Консенсусное заключение:")
+                    if consensus_result['consensus']['consensus_available']:
+                        st.write(consensus_result['consensus']['consensus_response'])
+                        st.metric("Уровень согласия", f"{consensus_result['consensus']['agreement_level']:.1%}")
+                        
+                        if consensus_result['consensus']['discrepancies']:
+                            st.warning("⚠️ Обнаружены расхождения между моделями:")
+                            for disc in consensus_result['consensus']['discrepancies']:
+                                st.warning(f"• {disc}")
+                    else:
+                        st.write(consensus_result['consensus'].get('single_opinion', 'Ошибка получения консенсуса'))
+                
+                elif analysis_mode == "✅ С валидацией":
+                    result = assistant.send_vision_request(prompt, image_array, str(analysis))
+                    
+                    # Проверка на критические находки
+                    critical_findings = notifier.check_critical_findings(result)
+                    if critical_findings:
+                        notifier.display_notifications(critical_findings)
+                    
+                    # Валидация
+                    validation_result = validator.validate_response(result, {'image_type': 'ECG'})
+                    
+                    # Оценка
+                    scorecard_result = scorecard.evaluate_response(result, ImageType.ECG)
+                    
+                    # Выявление пробелов
+                    gaps = gap_detector.detect_gaps(result, ImageType.ECG)
+                    gap_report = gap_detector.generate_gap_report(gaps)
+                    
+                    # Оценка доказательности
+                    evidence_ranking = evidence_ranker.rank_evidence(result)
+                    evidence_report = evidence_ranker.generate_evidence_report(evidence_ranking)
+                    
+                    # Отображение результатов
+                    st.markdown(f"### 🧠 Ответ ИИ ({specialist_info['role']}):")
+                    st.write(result)
+                    
+                    # Сохранение результатов ЭКГ в контекст пациента
+                    if 'selected_patient_id' in locals() and selected_patient_id:
+                        try:
+                            context_store.add_context(
+                                patient_id=selected_patient_id,
+                                context_type='imaging',
+                                context_data={
+                                    'type': 'ECG',
+                                    'analysis': result,
+                                    'specialist': specialist_info['role'],
+                                    'mode': analysis_mode,
+                                    'validation': validation_result,
+                                    'scorecard': scorecard_result
+                                },
+                                source='ai_analysis'
+                            )
+                            st.success("✅ Результаты ЭКГ сохранены в клинический контекст пациента!")
+                        except Exception as e:
+                            st.warning(f"⚠️ Не удалось сохранить в контекст: {e}")
+                    
+                    # Оценка качества
+                    st.markdown("### 📊 Оценка качества:")
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Общая оценка", scorecard_result['grade'])
+                    with col2:
+                        st.metric("Полнота", f"{scorecard_result['completeness']:.1%}")
+                    with col3:
+                        st.metric("Валидация", "✅ Пройдена" if validation_result['is_valid'] else "❌ Не пройдена")
+                    with col4:
+                        st.metric("Заполненность", f"{gaps['completeness_percentage']:.1f}%")
+                    
+                    # Отчет о пробелах
+                    if gaps['completeness_percentage'] < 80:
+                        with st.expander("📋 Отчет о пробелах в ответе"):
+                            st.text(gap_report)
+                    
+                    # Рекомендации
+                    if scorecard_result['recommendations']:
+                        st.info("💡 Рекомендации по улучшению:")
+                        for rec in scorecard_result['recommendations']:
+                            st.write(f"• {rec}")
+                    
+                    # Предупреждения валидации
+                    if validation_result['warnings']:
+                        st.warning("⚠️ Предупреждения валидации:")
+                        for warning in validation_result['warnings']:
+                            st.warning(f"• {warning}")
+                    
+                    # Оценка доказательности
+                    with st.expander("📚 Оценка доказательности"):
+                        st.text(evidence_report)
 
     except Exception as e:
-        st.error(f"Ошибка обработки ЭКГ: {e}")
+        handle_error(e, "show_ecg_analysis", show_to_user=True)
+        return
 
 def show_xray_analysis():
     if not AI_AVAILABLE:
         st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
         return
 
-    st.header("🩻 Анализ рентгена")
-    uploaded_file = st.file_uploader("Загрузите рентген (JPG, PNG, DICOM)", type=["jpg", "png", "dcm"])
+    st.header("�� Анализ рентгена")
+    
+    # Мобильная поддержка: выбор источника
+    source_type = st.radio(
+        "Выберите источник изображения:",
+        ["📁 Загрузить файл", "📷 Сделать фото"],
+        horizontal=True
+    )
+    
+    image_array = None
+    metadata = {}
+    
+    if source_type == "📷 Сделать фото":
+        camera_image = st.camera_input("Сфотографируйте рентген", key="xray_camera")
+        if camera_image:
+            try:
+                image = Image.open(camera_image)
+                image_array = np.array(image)
+                metadata = {'source': 'camera', 'format': 'mobile_photo'}
+            except Exception as e:
+                st.error(f"Ошибка обработки фото: {e}")
+                return
+    else:
+        uploaded_file = st.file_uploader(
+            "Загрузите рентген", 
+            type=["jpg", "jpeg", "png", "pdf", "dcm", "dicom", "tiff", "tif", "heic", "heif", "webp", "zip"],
+            help="Поддерживаются: JPG, PNG, TIFF, HEIC, WEBP, DICOM, ZIP"
+        )
+        
+        if uploaded_file:
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    tmp_path = tmp.name
+                
+                processor = ImageFormatProcessor()
+                image_array, file_metadata = processor.load_image(tmp_path, MOBILE_MAX_IMAGE_SIZE)
+                metadata = {**metadata, **file_metadata, 'source': 'upload'}
+                
+                os.unlink(tmp_path)
+                processor.cleanup_temp_files()
+                
+            except Exception as e:
+                st.error(f"Ошибка обработки файла: {e}")
+                return
 
-    if uploaded_file is None:
-        st.info("Загрузите файл для анализа.")
+    if image_array is None:
+        st.info("Загрузите файл или сделайте фото для анализа.")
+        return
+
+    # Валидация изображения
+    is_valid, error_msg = validate_image(image_array)
+    if not is_valid:
+        st.error(f"❌ Ошибка валидации изображения: {error_msg}")
         return
 
     try:
-        image = Image.open(uploaded_file).convert("L")
-        image_array = np.array(image)
+        # Оптимизация для мобильных устройств
+        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+            image_array = optimize_image_for_ai(image_array)
+        
+        st.image(image_array, caption="Рентген", use_container_width=True, clamp=True)
+
         analysis = {
             "quality_assessment": "Хорошее",
             "contrast": 45.0,
             "lung_area": 50000
         }
-        st.image(image_array, caption="Рентген", use_container_width=True, clamp=True)
-
+        
         st.subheader("📊 Оценка качества")
         col1, col2 = st.columns(2)
         with col1:
@@ -172,16 +622,45 @@ def show_xray_analysis():
         with col2:
             st.metric("Площадь лёгких", f"{analysis['lung_area']:,}")
 
-        assistant = OpenRouterAssistant()
-        if st.button("🩺 ИИ-анализ рентгена"):
+        # Универсальный анализатор
+        from utils.universal_analyzer import UniversalMedicalAnalyzer
+        analyzer = UniversalMedicalAnalyzer()
+        
+        # Выбор режима анализа
+        analysis_mode = st.radio(
+            "Режим анализа:",
+            ["⚡ Быстрый (одна модель)", "🎯 Консенсус (несколько моделей)", "✅ С валидацией"],
+            horizontal=True,
+            key="xray_analysis_mode"
+        )
+        
+        # Выбор пациента для сохранения контекста
+        patient_id = None
+        if st.checkbox("💾 Сохранить в контекст пациента"):
+            init_db()
+            conn = sqlite3.connect('medical_data.db')
+            patients = pd.read_sql_query("SELECT id, name FROM patients", conn)
+            conn.close()
+            
+            if not patients.empty:
+                selected_patient = st.selectbox("Выберите пациента", patients['name'])
+                patient_id = patients[patients['name'] == selected_patient].iloc[0]['id']
+        
+        if st.button("🩺 ИИ-анализ рентгена", use_container_width=True):
             with st.spinner("ИИ анализирует снимок..."):
-                prompt = "Проанализируйте рентген грудной клетки. Оцените качество, структуры, признаки патологии."
-                result = assistant.send_vision_request(prompt, image_array, str(analysis))
-                st.markdown("### 🧠 Заключение:")
-                st.write(result)
+                from modules.medical_ai_analyzer import ImageType
+                results = analyzer.analyze_image(
+                    image_array=image_array,
+                    image_type=ImageType.XRAY,
+                    analysis_mode=analysis_mode,
+                    metadata=analysis,
+                    patient_id=patient_id
+                )
+                
+                analyzer.display_results(results)
 
     except Exception as e:
-        st.error(f"Ошибка обработки рентгена: {e}")
+        handle_error(e, "show_xray_analysis", show_to_user=True)
 
 def show_mri_analysis():
     if not AI_AVAILABLE:
@@ -189,15 +668,68 @@ def show_mri_analysis():
         return
 
     st.header("🧠 Анализ МРТ")
-    uploaded_file = st.file_uploader("Загрузите МРТ (DICOM, JPG, PNG)", type=["dcm", "jpg", "png"])
+    
+    # Мобильная поддержка: выбор источника
+    source_type = st.radio(
+        "Выберите источник изображения:",
+        ["📁 Загрузить файл", "📷 Сделать фото"],
+        horizontal=True
+    )
+    
+    image_array = None
+    metadata = {}
+    
+    if source_type == "📷 Сделать фото":
+        camera_image = st.camera_input("Сфотографируйте МРТ", key="mri_camera")
+        if camera_image:
+            try:
+                image = Image.open(camera_image)
+                image_array = np.array(image)
+                metadata = {'source': 'camera', 'format': 'mobile_photo'}
+            except Exception as e:
+                st.error(f"Ошибка обработки фото: {e}")
+                return
+    else:
+        uploaded_file = st.file_uploader(
+            "Загрузите МРТ", 
+            type=["jpg", "jpeg", "png", "pdf", "dcm", "dicom", "tiff", "tif", "heic", "heif", "webp", "zip"],
+            help="Поддерживаются: JPG, PNG, TIFF, HEIC, WEBP, DICOM, ZIP"
+        )
+        
+        if uploaded_file:
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    tmp_path = tmp.name
+                
+                processor = ImageFormatProcessor()
+                image_array, file_metadata = processor.load_image(tmp_path, MOBILE_MAX_IMAGE_SIZE)
+                metadata = {**metadata, **file_metadata, 'source': 'upload'}
+                
+                os.unlink(tmp_path)
+                processor.cleanup_temp_files()
+                
+            except Exception as e:
+                st.error(f"Ошибка обработки файла: {e}")
+                return
 
-    if uploaded_file is None:
-        st.info("Загрузите DICOM-файл МРТ или изображение.")
+    if image_array is None:
+        st.info("Загрузите файл или сделайте фото для анализа.")
+        return
+
+    # Валидация изображения
+    is_valid, error_msg = validate_image(image_array)
+    if not is_valid:
+        st.error(f"❌ Ошибка валидации изображения: {error_msg}")
         return
 
     try:
-        image = Image.open(uploaded_file).convert("L")
-        image_array = np.array(image)
+        # Оптимизация для мобильных устройств
+        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+            image_array = optimize_image_for_ai(image_array)
+        
+        st.image(image_array, caption="МРТ-срез", use_container_width=True, clamp=True)
+
         mri_analysis = {
             "quality_assessment": "Хорошее",
             "sharpness": 120.0,
@@ -205,8 +737,7 @@ def show_mri_analysis():
             "snr": 15.0,
             "artifacts": "Минимальные артефакты"
         }
-        st.image(image_array, caption="МРТ-срез", use_container_width=True, clamp=True)
-
+        
         st.subheader("📊 Оценка качества МРТ")
         col1, col2 = st.columns(2)
         with col1:
@@ -218,16 +749,489 @@ def show_mri_analysis():
 
         st.caption(f"Артефакты: {mri_analysis['artifacts']}")
 
-        assistant = OpenRouterAssistant()
-        if st.button("🧠 ИИ-анализ МРТ (с контекстом)"):
+        # Универсальный анализатор
+        from utils.universal_analyzer import UniversalMedicalAnalyzer
+        analyzer = UniversalMedicalAnalyzer()
+        
+        # Выбор режима анализа
+        analysis_mode = st.radio(
+            "Режим анализа:",
+            ["⚡ Быстрый (одна модель)", "🎯 Консенсус (несколько моделей)", "✅ С валидацией"],
+            horizontal=True,
+            key="mri_analysis_mode"
+        )
+        
+        # Выбор пациента для сохранения контекста
+        patient_id = None
+        if st.checkbox("💾 Сохранить в контекст пациента"):
+            init_db()
+            conn = sqlite3.connect('medical_data.db')
+            patients = pd.read_sql_query("SELECT id, name FROM patients", conn)
+            conn.close()
+            
+            if not patients.empty:
+                selected_patient = st.selectbox("Выберите пациента", patients['name'], key="mri_patient_select")
+                patient_id = patients[patients['name'] == selected_patient].iloc[0]['id']
+        
+        if st.button("🧠 ИИ-анализ МРТ (с контекстом)", use_container_width=True):
             with st.spinner("ИИ анализирует МРТ..."):
-                prompt = "Проанализируйте МРТ-срез на изображении. Учитывайте анатомию, качество, визуальные патологии."
-                result = assistant.send_vision_request(prompt, image_array, str(mri_analysis))
-                st.markdown("### 🧠 Нейрорадиологическое заключение:")
+                from modules.medical_ai_analyzer import ImageType
+                results = analyzer.analyze_image(
+                    image_array=image_array,
+                    image_type=ImageType.MRI,
+                    analysis_mode=analysis_mode,
+                    metadata=mri_analysis,
+                    patient_id=patient_id
+                )
+                
+                analyzer.display_results(results)
+
+    except Exception as e:
+        handle_error(e, "show_mri_analysis", show_to_user=True)
+
+def show_dermatoscopy_analysis():
+    """Анализ дерматоскопии (фото кожи)"""
+    if not AI_AVAILABLE:
+        st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
+        return
+
+    st.header("🔬 Анализ дерматоскопии (фото кожи)")
+    
+    # Мобильная поддержка: выбор источника
+    source_type = st.radio(
+        "Выберите источник изображения:",
+        ["📁 Загрузить файл", "📷 Сделать фото"],
+        horizontal=True
+    )
+    
+    image_array = None
+    metadata = {}
+    
+    if source_type == "📷 Сделать фото":
+        # Использование камеры смартфона
+        camera_image = st.camera_input("Сфотографируйте кожное образование", key="derm_camera")
+        if camera_image:
+            try:
+                image = Image.open(camera_image)
+                image_array = np.array(image)
+                metadata = {'source': 'camera', 'format': 'mobile_photo'}
+            except Exception as e:
+                st.error(f"Ошибка обработки фото: {e}")
+                return
+    else:
+        # Загрузка файла с расширенной поддержкой форматов
+        uploaded_file = st.file_uploader(
+            "Загрузите фото кожи/дерматоскопию", 
+            type=["jpg", "jpeg", "png", "tiff", "tif", "heic", "heif", "webp"],
+            help="Поддерживаются: JPG, PNG, TIFF, HEIC, WEBP"
+        )
+        
+        if uploaded_file:
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    tmp_path = tmp.name
+                
+                processor = ImageFormatProcessor()
+                image_array, file_metadata = processor.load_image(tmp_path, MOBILE_MAX_IMAGE_SIZE)
+                metadata = {**metadata, **file_metadata, 'source': 'upload'}
+                
+                os.unlink(tmp_path)
+                processor.cleanup_temp_files()
+                
+            except Exception as e:
+                st.error(f"Ошибка обработки файла: {e}")
+                return
+
+    if image_array is None:
+        st.info("Загрузите файл или сделайте фото для анализа.")
+        return
+
+    try:
+        # Оптимизация для мобильных устройств
+        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+            image_array = optimize_image_for_ai(image_array)
+        
+        st.image(image_array, caption="Дерматоскопия", use_container_width=True, clamp=True)
+
+        assistant = OpenRouterAssistant()
+        if st.button("🔬 ИИ-анализ дерматоскопии", use_container_width=True):
+            with st.spinner("ИИ анализирует изображение..."):
+                # Промпт от имени специалиста
+                from modules.medical_ai_analyzer import ImageType
+                specialist_info = get_specialist_info(ImageType.DERMATOSCOPY)
+                prompt = f"""Проанализируйте дерматоскопическое изображение как {specialist_info['role']} с {specialist_info['experience']}.
+
+Оцените по критериям ABCDE:
+- A (Asymmetry) - Асимметрия
+- B (Border) - Границы
+- C (Color) - Цвет
+- D (Diameter) - Диаметр
+- E (Evolution) - Эволюция
+
+Также оцените:
+- Пигментную сеть
+- Точки и глобулы
+- Полосы и линии
+- Структуры регрессии
+- Сосудистую картину
+
+Дайте заключение о риске меланомы и рекомендации."""
+                
+                result = assistant.send_vision_request(prompt, image_array, str(metadata))
+                st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
                 st.write(result)
 
     except Exception as e:
-        st.error(f"Ошибка обработки МРТ: {e}")
+        st.error(f"Ошибка обработки дерматоскопии: {e}")
+
+def show_ct_analysis():
+    """Анализ КТ (компьютерная томография) с полной интеграцией компонентов"""
+    if not AI_AVAILABLE:
+        st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
+        return
+
+    st.header("🩻 Анализ КТ (компьютерная томография)")
+    
+    source_type = st.radio(
+        "Выберите источник изображения:",
+        ["📁 Загрузить файл", "📷 Сделать фото"],
+        horizontal=True
+    )
+    
+    image_array = None
+    metadata = {}
+    
+    if source_type == "📷 Сделать фото":
+        camera_image = st.camera_input("Сфотографируйте КТ-снимок", key="ct_camera")
+        if camera_image:
+            try:
+                image = Image.open(camera_image)
+                image_array = np.array(image)
+                metadata = {'source': 'camera', 'format': 'mobile_photo'}
+            except Exception as e:
+                st.error(f"Ошибка обработки фото: {e}")
+                return
+    else:
+        uploaded_file = st.file_uploader(
+            "Загрузите КТ", 
+            type=["jpg", "jpeg", "png", "pdf", "dcm", "dicom", "tiff", "tif", "heic", "heif", "webp", "zip"],
+            help="Поддерживаются: JPG, PNG, TIFF, HEIC, WEBP, DICOM, ZIP"
+        )
+        
+        if uploaded_file:
+            try:
+                is_valid, error_msg = validate_file_size(uploaded_file.size)
+                if not is_valid:
+                    st.error(f"❌ {error_msg}")
+                    return
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    tmp_path = tmp.name
+                
+                processor = ImageFormatProcessor()
+                image_array, file_metadata = processor.load_image(tmp_path, MOBILE_MAX_IMAGE_SIZE)
+                metadata = {**metadata, **file_metadata, 'source': 'upload'}
+                
+                os.unlink(tmp_path)
+                processor.cleanup_temp_files()
+                
+            except Exception as e:
+                st.error(f"Ошибка обработки файла: {e}")
+                return
+
+    if image_array is None:
+        st.info("Загрузите файл или сделайте фото для анализа.")
+        return
+
+    # Валидация изображения
+    is_valid, error_msg = validate_image(image_array)
+    if not is_valid:
+        st.error(f"❌ Ошибка валидации изображения: {error_msg}")
+        return
+
+    try:
+        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+            image_array = optimize_image_for_ai(image_array)
+        
+        st.image(image_array, caption="КТ-срез", use_container_width=True, clamp=True)
+
+        # Инициализация компонентов
+        assistant = OpenRouterAssistant()
+        consensus_engine = ConsensusEngine(assistant)
+        validator = ValidationPipeline(assistant)
+        scorecard = MedicalScorecard()
+        gap_detector = DiagnosticGapDetector()
+        notifier = NotificationSystem()
+        model_router = ModelRouter()
+        evidence_ranker = EvidenceRanker()
+        
+        from modules.medical_ai_analyzer import ImageType
+        
+        # Выбор режима анализа
+        analysis_mode = st.radio(
+            "Режим анализа:",
+            ["⚡ Быстрый (одна модель)", "🎯 Консенсус (несколько моделей)", "✅ С валидацией"],
+            horizontal=True,
+            key="ct_analysis_mode"
+        )
+        
+        specialist_info = get_specialist_info(ImageType.CT)
+        base_prompt = f"Проанализируйте КТ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените структуры, патологические изменения, денситометрию."
+        prompt = get_specialist_prompt(ImageType.CT, base_prompt)
+        
+        if st.button("🩻 ИИ-анализ КТ", use_container_width=True):
+            with st.spinner("ИИ анализирует КТ..."):
+                if analysis_mode == "⚡ Быстрый (одна модель)":
+                    result = assistant.send_vision_request(prompt, image_array, str(metadata))
+                    st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
+                    st.write(result)
+                    
+                elif analysis_mode == "🎯 Консенсус (несколько моделей)":
+                    consensus_result = consensus_engine.analyze_with_consensus(prompt, image_array, str(metadata))
+                    st.markdown("### 🎯 Консенсус-анализ:")
+                    st.write(consensus_result['consensus_report'])
+                    
+                    with st.expander("📊 Детали мнений моделей"):
+                        for i, opinion in enumerate(consensus_result['opinions'], 1):
+                            st.markdown(f"**Модель {i}:**")
+                            st.write(opinion['response'][:500] + "...")
+                    
+                elif analysis_mode == "✅ С валидацией":
+                    result = assistant.send_vision_request(prompt, image_array, str(metadata))
+                    
+                    # Валидация
+                    validation = validator.validate_response(result)
+                    
+                    # Оценка качества
+                    evaluation = scorecard.evaluate_response(result, ImageType.CT)
+                    
+                    # Детекция пробелов
+                    gaps = gap_detector.detect_gaps(result, ImageType.CT)
+                    
+                    # Критические находки
+                    critical_findings = notifier.check_critical_findings(result)
+                    
+                    # Оценка доказательности
+                    evidence = evidence_ranker.rank_evidence(result)
+                    
+                    # Отображение результатов
+                    st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
+                    st.write(result)
+                    
+                    # Уведомления о критических находках
+                    notifier.display_notifications(critical_findings)
+                    
+                    # Валидация
+                    with st.expander("✅ Результаты валидации"):
+                        if validation['is_valid']:
+                            st.success("✅ Валидация пройдена")
+                        else:
+                            st.error("❌ Обнаружены проблемы")
+                        st.write(f"Полнота: {validation['completeness_score']:.1%}")
+                        if validation['warnings']:
+                            for warning in validation['warnings']:
+                                st.warning(warning)
+                        if validation['errors']:
+                            for error in validation['errors']:
+                                st.error(error)
+                    
+                    # Оценка качества
+                    with st.expander("📊 Оценка качества"):
+                        st.write(f"**Оценка:** {evaluation['grade']}")
+                        st.write(f"**Балл:** {evaluation['score']:.1%}")
+                        if evaluation['recommendations']:
+                            st.write("**Рекомендации:**")
+                            for rec in evaluation['recommendations']:
+                                st.write(f"• {rec}")
+                    
+                    # Пробелы
+                    if gaps['completeness_percentage'] < 100:
+                        with st.expander("⚠️ Обнаруженные пробелы"):
+                            st.write(gap_detector.generate_gap_report(gaps))
+                    
+                    # Доказательность
+                    with st.expander("📚 Оценка доказательности"):
+                        st.write(evidence_ranker.generate_evidence_report(evidence))
+
+    except Exception as e:
+        error_msg = handle_error(e, "show_ct_analysis", show_to_user=True)
+        st.error(f"Ошибка обработки КТ: {error_msg}")
+
+def show_ultrasound_analysis():
+    """Анализ УЗИ (ультразвуковое исследование) с полной интеграцией компонентов"""
+    if not AI_AVAILABLE:
+        st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
+        return
+
+    st.header("🔊 Анализ УЗИ (ультразвуковое исследование)")
+    
+    source_type = st.radio(
+        "Выберите источник изображения:",
+        ["📁 Загрузить файл", "📷 Сделать фото"],
+        horizontal=True
+    )
+    
+    image_array = None
+    metadata = {}
+    
+    if source_type == "📷 Сделать фото":
+        camera_image = st.camera_input("Сфотографируйте УЗИ-снимок", key="us_camera")
+        if camera_image:
+            try:
+                image = Image.open(camera_image)
+                image_array = np.array(image)
+                metadata = {'source': 'camera', 'format': 'mobile_photo'}
+            except Exception as e:
+                st.error(f"Ошибка обработки фото: {e}")
+                return
+    else:
+        uploaded_file = st.file_uploader(
+            "Загрузите УЗИ", 
+            type=["jpg", "jpeg", "png", "tiff", "tif", "heic", "heif", "webp"],
+            help="Поддерживаются: JPG, PNG, TIFF, HEIC, WEBP"
+        )
+        
+        if uploaded_file:
+            try:
+                is_valid, error_msg = validate_file_size(uploaded_file.size)
+                if not is_valid:
+                    st.error(f"❌ {error_msg}")
+                    return
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    tmp_path = tmp.name
+                
+                processor = ImageFormatProcessor()
+                image_array, file_metadata = processor.load_image(tmp_path, MOBILE_MAX_IMAGE_SIZE)
+                metadata = {**metadata, **file_metadata, 'source': 'upload'}
+                
+                os.unlink(tmp_path)
+                processor.cleanup_temp_files()
+                
+            except Exception as e:
+                st.error(f"Ошибка обработки файла: {e}")
+                return
+
+    if image_array is None:
+        st.info("Загрузите файл или сделайте фото для анализа.")
+        return
+
+    # Валидация изображения
+    is_valid, error_msg = validate_image(image_array)
+    if not is_valid:
+        st.error(f"❌ Ошибка валидации изображения: {error_msg}")
+        return
+
+    try:
+        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+            image_array = optimize_image_for_ai(image_array)
+        
+        st.image(image_array, caption="УЗИ-снимок", use_container_width=True, clamp=True)
+
+        # Инициализация компонентов
+        assistant = OpenRouterAssistant()
+        consensus_engine = ConsensusEngine(assistant)
+        validator = ValidationPipeline(assistant)
+        scorecard = MedicalScorecard()
+        gap_detector = DiagnosticGapDetector()
+        notifier = NotificationSystem()
+        model_router = ModelRouter()
+        evidence_ranker = EvidenceRanker()
+        
+        from modules.medical_ai_analyzer import ImageType
+        
+        # Выбор режима анализа
+        analysis_mode = st.radio(
+            "Режим анализа:",
+            ["⚡ Быстрый (одна модель)", "🎯 Консенсус (несколько моделей)", "✅ С валидацией"],
+            horizontal=True,
+            key="us_analysis_mode"
+        )
+        
+        specialist_info = get_specialist_info(ImageType.ULTRASOUND)
+        base_prompt = f"Проанализируйте УЗИ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените эхогенность, структуры, патологические изменения."
+        prompt = get_specialist_prompt(ImageType.ULTRASOUND, base_prompt)
+        
+        if st.button("🔊 ИИ-анализ УЗИ", use_container_width=True):
+            with st.spinner("ИИ анализирует УЗИ..."):
+                if analysis_mode == "⚡ Быстрый (одна модель)":
+                    result = assistant.send_vision_request(prompt, image_array, str(metadata))
+                    st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
+                    st.write(result)
+                    
+                elif analysis_mode == "🎯 Консенсус (несколько моделей)":
+                    consensus_result = consensus_engine.analyze_with_consensus(prompt, image_array, str(metadata))
+                    st.markdown("### 🎯 Консенсус-анализ:")
+                    st.write(consensus_result['consensus_report'])
+                    
+                    with st.expander("📊 Детали мнений моделей"):
+                        for i, opinion in enumerate(consensus_result['opinions'], 1):
+                            st.markdown(f"**Модель {i}:**")
+                            st.write(opinion['response'][:500] + "...")
+                    
+                elif analysis_mode == "✅ С валидацией":
+                    result = assistant.send_vision_request(prompt, image_array, str(metadata))
+                    
+                    # Валидация
+                    validation = validator.validate_response(result)
+                    
+                    # Оценка качества
+                    evaluation = scorecard.evaluate_response(result, ImageType.ULTRASOUND)
+                    
+                    # Детекция пробелов
+                    gaps = gap_detector.detect_gaps(result, ImageType.ULTRASOUND)
+                    
+                    # Критические находки
+                    critical_findings = notifier.check_critical_findings(result)
+                    
+                    # Оценка доказательности
+                    evidence = evidence_ranker.rank_evidence(result)
+                    
+                    # Отображение результатов
+                    st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
+                    st.write(result)
+                    
+                    # Уведомления о критических находках
+                    notifier.display_notifications(critical_findings)
+                    
+                    # Валидация
+                    with st.expander("✅ Результаты валидации"):
+                        if validation['is_valid']:
+                            st.success("✅ Валидация пройдена")
+                        else:
+                            st.error("❌ Обнаружены проблемы")
+                        st.write(f"Полнота: {validation['completeness_score']:.1%}")
+                        if validation['warnings']:
+                            for warning in validation['warnings']:
+                                st.warning(warning)
+                        if validation['errors']:
+                            for error in validation['errors']:
+                                st.error(error)
+                    
+                    # Оценка качества
+                    with st.expander("📊 Оценка качества"):
+                        st.write(f"**Оценка:** {evaluation['grade']}")
+                        st.write(f"**Балл:** {evaluation['score']:.1%}")
+                        if evaluation['recommendations']:
+                            st.write("**Рекомендации:**")
+                            for rec in evaluation['recommendations']:
+                                st.write(f"• {rec}")
+                    
+                    # Пробелы
+                    if gaps['completeness_percentage'] < 100:
+                        with st.expander("⚠️ Обнаруженные пробелы"):
+                            st.write(gap_detector.generate_gap_report(gaps))
+                    
+                    # Доказательность
+                    with st.expander("📚 Оценка доказательности"):
+                        st.write(evidence_ranker.generate_evidence_report(evidence))
+
+    except Exception as e:
+        error_msg = handle_error(e, "show_ultrasound_analysis", show_to_user=True)
+        st.error(f"Ошибка обработки УЗИ: {error_msg}")
 
 # --- Страница: Протокол приёма ---
 def show_consultation_protocol():
@@ -252,7 +1256,48 @@ def show_consultation_protocol():
     patient_id = patients[patients['name'] == selected_patient].iloc[0]['id']
 
     st.subheader("🎙️ Голосовой ввод через AssemblyAI")
-    audio = st.audio_input("Загрузите аудио (до 30 мин)")
+    
+    # Выбор способа ввода аудио
+    input_method = st.radio(
+        "Выберите способ ввода:",
+        ["🎤 Записать с микрофона", "📁 Загрузить аудиофайл"],
+        horizontal=True
+    )
+    
+    audio = None
+    
+    if input_method == "🎤 Записать с микрофона":
+        try:
+            from audio_recorder_streamlit import audio_recorder
+            st.info("💡 Нажмите на кнопку ниже, чтобы начать запись. Запись остановится автоматически при повторном нажатии.")
+            st.warning("⚠️ **Важно:** Разрешите доступ к микрофону в браузере, когда появится запрос.")
+            
+            audio_bytes = audio_recorder(text="🎤 Нажмите для записи", pause_threshold=2.0, sample_rate=44100)
+            
+            if audio_bytes:
+                # Сохраняем во временный файл для AssemblyAI
+                import tempfile
+                import os
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+                    tmp_file.write(audio_bytes)
+                    audio = tmp_file.name
+                    st.session_state['audio_file_path'] = audio  # Сохраняем путь в session_state
+                
+                st.success(f"✅ Записано {len(audio_bytes)} байт аудио")
+                st.audio(audio_bytes, format="audio/wav")
+            elif 'audio_file_path' in st.session_state:
+                # Используем сохраненный файл из предыдущей записи
+                audio = st.session_state['audio_file_path']
+        except ImportError as e:
+            st.warning("⚠️ Для записи с микрофона установите: pip install audio-recorder-streamlit")
+            st.info("💡 Пока используйте загрузку аудиофайла")
+            audio = st.audio_input("Загрузите аудио (до 30 мин)")
+        except Exception as e:
+            st.error(f"❌ Ошибка при записи с микрофона: {e}")
+            st.info("💡 Попробуйте использовать загрузку аудиофайла")
+            audio = st.audio_input("Загрузите аудио (до 30 мин)")
+    else:
+        audio = st.audio_input("Загрузите аудио (до 30 мин)")
 
     if not ASSEMBLYAI_AVAILABLE:
         st.error("❌ AssemblyAI недоступен. Проверьте файл assemblyai_transcriber.py")
@@ -261,11 +1306,33 @@ def show_consultation_protocol():
         if ASSEMBLYAI_AVAILABLE:
             with st.spinner("🔄 Расшифровка через AssemblyAI..."):
                 try:
-                    api_key = st.secrets["ASSEMBLYAI_API_KEY"]
+                    from config import ASSEMBLYAI_API_KEY
+                    import os
+                    
+                    api_key = ASSEMBLYAI_API_KEY or st.secrets.get("ASSEMBLYAI_API_KEY", "")
+                    if not api_key:
+                        st.error("❌ API ключ AssemblyAI не найден. Проверьте config.py или secrets.toml")
+                        return
+                    
+                    # Проверяем, что файл существует (если это путь)
+                    if isinstance(audio, str):
+                        if not os.path.exists(audio):
+                            st.error(f"❌ Аудиофайл не найден: {audio}")
+                            return
+                    
                     raw_text = transcribe_audio_assemblyai(audio, api_key)
+                    
+                    # Проверяем, не вернулась ли ошибка
+                    if raw_text.startswith("❌"):
+                        st.error(raw_text)
+                        return
+                    
                     st.session_state.raw_text = raw_text
                 except Exception as e:
+                    import traceback
                     st.error(f"❌ Ошибка AssemblyAI: {e}")
+                    with st.expander("🔍 Детали ошибки"):
+                        st.code(traceback.format_exc())
                     return
         else:
             st.error("❌ AssemblyAI недоступен")
@@ -277,47 +1344,83 @@ def show_consultation_protocol():
         with st.spinner("🤖 Генерация протокола..."):
             assistant = OpenRouterAssistant()
             prompt = f"""
-Ты — американский профессор клинической медицины и ведущий специалист в
-университетской клинике. На основе следующего текста сформируйте медицинский протокол:
-Контекст:
-- Основная задача: сформулировать строгую, научно обоснованную и практически
-применимую клиническую директиву для врача, готовую к немедленному использованию в
-реальной практике.
+Вы — опытный терапевт, американский профессор клинической медицины и ведущий специалист университетской клиники с многолетним клиническим опытом.
+
+Вы совмещаете клиническую строгость и ответственность, давая ответы по клиническим проблемам внутренних болезней, включая акушерство и гинекологию, хирургию, а также помогаете обрабатывать несистемно изложенную информацию, облекая её по шаблону и стандартному протоколу осмотра терапевта с рекомендациями по обследованию и лечению.
+
+Ваша задача — создать полный и структурированный протокол осмотра пациента на основании представленной пользователем неструктурированной информации, включающих перечень жалоб, истории появления симптомов и жалоб, данных объективного осмотра, приведенных данных лабораторных тестов и инструментальных исследований. Использовать как модель протокола шаблоны. Постарайтесь вместить всю информацию на 2 страницы, поскольку скачанный файл в формате .doc будет использоваться для печати.
+
+Текст для обработки: {raw_text}
+
+ФОРМАТ ПРОТОКОЛА:
 
 **Жалобы:**
-- ...
+(текст изложенный в жалобах должен быть без дополнительных абзацев, не нужно делать дополнительных пустых строк, пишите единым полотном)
 
 **Анамнез заболевания:**
-- ...
+(текст без дополнительных абзацев, единым полотном)
 
 **Анамнез жизни:**
-- ...
+(текст без дополнительных абзацев, единым полотном)
 
 **Объективный осмотр:**
-- Общее состояние: лимфоузлы: Кожа: Слизистые: Пульс: АД: ЧДД:
-- Сердце: Лёгкие: Живот: Печень, селезёнка: почки: стул: диурез: отёки:
-- Неврологический статус: (оставьте "без патологии" или укажите изменения)
+Общее состояние: лимфоузлы: Кожа: Слизистые: Пульс: АД: ЧДД: Сердце: Лёгкие: Живот: Печень, селезёнка: почки: стул: диурез: отёки: Неврологический статус:
+(не используйте выражения "не проводилась", вместо этого напишите выражения отражающие нормы, но упомяните все основные системы, текст без дополнительных абзацев, единым полотном)
 
 **Предварительный диагноз:**
-- ...
+(диагноз выносите на основании российских классификаций болезней)
 
 **Рекомендованные обследования:**
-- ...
+1. ...
+2. ...
+(рекомендации по обследованию напишите по пунктам 1., 2., и т.д., используйте сокращения, если строчка очень длинная, не делайте дополнительного пропуска между строками)
 
 **Терапия:**
-- рекомендации по режиму, диете
-- фармакотерапия: перечисли желаемые группы для лечения, потом укажи международное название препарата и стандартную дозу, а в скобках — 2 коммерческих генерика согласно рекомендациям...
-- предложи физиолечение, 1-2 наиболее подходящих для пациента, не указывай те, которые могут быть противопоказаны
+- Рекомендации по режиму, диете
+- Фармакотерапия: перечислите препараты. Назовите международное название и 2 коммерческих (бренд и копию) генерика, доступных в РФ. Не делайте дополнительного пропуска между строками.
+- Физиолечение: предложите 1-2 наиболее подходящих для пациента, не указывайте те, которые могут быть противопоказаны
 
-Текст: {raw_text}
+**Согласие пациента:**
+(тезис о согласии и прочтении в конце сделать более мелким шрифтом)
 
-Правила:
-- Ответ на русском. Жалобы перечисляй с детализацией и развитием в динамике. Не переноси каждое предложение на новую строку, продолжай. Переносы только когда строка заканчивается.
-- Если пункт не упомянут — поставьте "без патологии" или стандартное словосочетание, используемое в российских медицинских протоколах.
-- Диагноз — только предварительный.
+ОГРАНИЧЕНИЯ И ПРАВИЛА СТИЛЯ:
+
+- Язык ответа: русский. Стиль: строго профессиональный, клинически и технически точный, без упрощений.
+- Не нужно использовать текст подзаголовков другого размера.
+- Текст изложенный в жалобах, анамнезе, объективном осмотре должен быть без дополнительных абзацев, не нужно делать дополнительных пустых строк, пишите единым полотном.
+- Не используйте выражения "не проводилась", вместо этого напишите выражения отражающие нормы, но упомяните все основные системы.
+- Уберите логотип переплексити с первой страницы.
+- Представьте всю полученную информацию в форме протокола осмотра первичного осмотра врача.
+- Диагноз выносите на основании российских классификаций болезней.
+- Рекомендации по обследованию напишите по пунктам 1., 2., и т.д., используйте сокращения, если строчка очень длинная. Не делайте дополнительного пропуска между строками.
+- Точно так же перечислите препараты и не делайте дополнительного пропуска между строками. Просто назовите международное и 2 коммерческих (бренд и копию) генерика, доступных в РФ.
+- Следует придерживаться такого стиля изложения и выбор шрифта при экспорте, чтобы протокол умещался на 2 страницы листа А4.
+- Тезис о согласии и прочтении в конце сделать более мелким шрифтом.
+
+ИСТОЧНИКИ (медицина):
+UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (и другие международные руководства с доказательной базой).
+
+Медицинские рекомендации — опираться только на проверенные международные источники; для каждого ключевого лечебного шага указывать ссылку и год публикации (предпочтительно ≤5 лет).
 """
             structured_note = assistant.get_response(prompt)
             st.session_state.structured_note = structured_note
+            
+            # Автоматическое сохранение протокола в контекст пациента
+            try:
+                context_store = ContextStore()
+                context_store.add_context(
+                    patient_id=patient_id,
+                    context_type='protocol',
+                    context_data={
+                        'protocol': structured_note,
+                        'type': 'consultation',
+                        'raw_transcription': raw_text
+                    },
+                    source='ai_generated'
+                )
+                st.info("💾 Протокол автоматически сохранен в клинический контекст пациента")
+            except Exception as e:
+                st.warning(f"⚠️ Не удалось сохранить протокол в контекст: {e}")
 
         with st.spinner("📄 Создание документа..."):
             filepath, message = create_local_doc(f"Протокол — {selected_patient}", structured_note)
@@ -332,6 +1435,23 @@ def show_consultation_protocol():
 
         st.subheader("📄 Сгенерированный протокол")
         st.write(structured_note)
+        
+        # Кнопка для сохранения в контекст (если не сохранилось автоматически)
+        if st.button("💾 Сохранить протокол в контекст пациента"):
+            try:
+                context_store = ContextStore()
+                context_store.add_context(
+                    patient_id=patient_id,
+                    context_type='protocol',
+                    context_data={
+                        'protocol': structured_note,
+                        'type': 'consultation'
+                    },
+                    source='manual_entry'
+                )
+                st.success("✅ Протокол сохранен в клинический контекст пациента!")
+            except Exception as e:
+                st.error(f"❌ Ошибка сохранения: {e}")
 
 def show_patient_database():
     st.header("👤 База данных пациентов")
@@ -488,11 +1608,17 @@ def show_lab_analysis():
                 tmp_path = tmp_file.name
             
             try:
+                # Определяем тип файла если нужно
+                file_type = None
+                if not auto_detect_type:
+                    file_ext = uploaded_file.name.split('.')[-1].lower()
+                    file_type = file_ext
+                
                 # Обработка
-                lab_report = processor.process_file(tmp_path, ai_assistant=OpenRouterAssistant())
+                lab_report = processor.process_file(tmp_path, file_type=file_type, ai_assistant=OpenRouterAssistant() if AI_AVAILABLE else None)
                 
                 # Результаты
-                if lab_report.parameters:
+                if lab_report.parameters and len(lab_report.parameters) > 0:
                     st.success(f"✅ Обработано {len(lab_report.parameters)} параметров")
                     
                     # Метрики
@@ -522,7 +1648,23 @@ def show_lab_analysis():
                     
                     # Таблица результатов
                     st.subheader("📊 Результаты анализов")
-                    df = processor.to_dataframe(lab_report)
+                    try:
+                        df = processor.to_dataframe(lab_report)
+                    except Exception as e:
+                        st.warning(f"⚠️ Ошибка создания таблицы: {e}")
+                        # Создаем простую таблицу вручную
+                        import pandas as pd
+                        data = []
+                        for param in lab_report.parameters:
+                            data.append({
+                                'Параметр': param.name,
+                                'Значение': param.value,
+                                'Единица': param.unit,
+                                'Норма': param.reference_range,
+                                'Статус': param.status,
+                                'Категория': param.category
+                            })
+                        df = pd.DataFrame(data)
                     
                     # Цветовая кодировка статусов
                     def style_status(val):
@@ -555,8 +1697,18 @@ def show_lab_analysis():
                                 
                                 st.markdown(f"{status_emoji} **{param['name']}:** {param['value']} {param['unit']} ({param['status']})")
                     
-                    # ИИ-интерпретация (если доступна)
-                    if st.button("🤖 ИИ-интерпретация результатов"):
+                    # ИИ-интерпретация с полной интеграцией компонентов
+                    st.subheader("🤖 ИИ-интерпретация результатов")
+                    
+                    # Выбор режима анализа
+                    lab_analysis_mode = st.radio(
+                        "Режим анализа:",
+                        ["⚡ Быстрый (одна модель)", "🎯 Консенсус (несколько моделей)", "✅ С валидацией"],
+                        horizontal=True,
+                        key="lab_analysis_mode"
+                    )
+                    
+                    if st.button("🧪 Запустить ИИ-анализ", use_container_width=True):
                         with st.spinner("ИИ анализирует результаты..."):
                             # Формируем контекст для ИИ
                             context = f"""
@@ -572,19 +1724,101 @@ def show_lab_analysis():
                             if lab_report.critical_values:
                                 context += f"\nКритические значения: {'; '.join(lab_report.critical_values)}"
                             
-                            # Запрос к ИИ (используем существующий ассистент)
+                            # Промпт от имени специалиста
+                            base_prompt = f"""Проанализируйте лабораторные результаты как врач-лаборант-консультант с 15-летним опытом работы в клинической лаборатории. 
+Дайте клиническую оценку, выявите критические значения, предложите дифференциальную диагностику и рекомендации в формате «Клиническая директива».
+
+{context}"""
+                            
                             try:
                                 assistant = OpenRouterAssistant()
-                                interpretation = assistant.get_response(
-                                    "Проинтерпретируйте лабораторные результаты. Дайте клиническую оценку и рекомендации.",
-                                    context
-                                )
+                                consensus_engine = ConsensusEngine(assistant)
+                                validator = ValidationPipeline(assistant)
+                                scorecard = MedicalScorecard()
+                                gap_detector = DiagnosticGapDetector()
+                                notifier = NotificationSystem()
+                                evidence_ranker = EvidenceRanker()
                                 
-                                st.subheader("🧠 ИИ-интерпретация")
-                                st.write(interpretation)
+                                if lab_analysis_mode == "⚡ Быстрый (одна модель)":
+                                    interpretation = assistant.get_response(base_prompt)
+                                    st.markdown("### 🧠 ИИ-интерпретация (Врач-лаборант-консультант)")
+                                    st.write(interpretation)
+                                    
+                                elif lab_analysis_mode == "🎯 Консенсус (несколько моделей)":
+                                    # Для текстового анализа используем get_multiple_opinions
+                                    opinions = consensus_engine.get_multiple_opinions(base_prompt)
+                                    
+                                    # Генерация консенсуса
+                                    findings_list = [consensus_engine.extract_key_findings(op['response']) for op in opinions]
+                                    comparison = consensus_engine.compare_opinions(opinions)
+                                    
+                                    consensus_report = consensus_engine._generate_consensus_report(
+                                        findings_list,
+                                        comparison.get('common_diagnoses', []),
+                                        comparison.get('urgency', 'не определена'),
+                                        comparison.get('discrepancies', [])
+                                    )
+                                    
+                                    st.markdown("### 🎯 Консенсус-анализ:")
+                                    st.write(consensus_report)
+                                    
+                                    with st.expander("📊 Детали мнений моделей"):
+                                        for i, opinion in enumerate(opinions, 1):
+                                            st.markdown(f"**Модель {i}:**")
+                                            st.write(opinion['response'][:500] + "...")
+                                    
+                                elif lab_analysis_mode == "✅ С валидацией":
+                                    interpretation = assistant.get_response(base_prompt)
+                                    
+                                    # Валидация
+                                    validation = validator.validate_response(interpretation)
+                                    
+                                    # Оценка качества (используем общий чек-лист)
+                                    evaluation = scorecard.evaluate_response(interpretation, ImageType.ECG)  # Используем общий тип
+                                    
+                                    # Критические находки
+                                    critical_findings = notifier.check_critical_findings(interpretation)
+                                    
+                                    # Оценка доказательности
+                                    evidence = evidence_ranker.rank_evidence(interpretation)
+                                    
+                                    # Отображение результатов
+                                    st.markdown("### 🧠 ИИ-интерпретация (Врач-лаборант-консультант)")
+                                    st.write(interpretation)
+                                    
+                                    # Уведомления о критических находках
+                                    notifier.display_notifications(critical_findings)
+                                    
+                                    # Валидация
+                                    with st.expander("✅ Результаты валидации"):
+                                        if validation['is_valid']:
+                                            st.success("✅ Валидация пройдена")
+                                        else:
+                                            st.error("❌ Обнаружены проблемы")
+                                        st.write(f"Полнота: {validation['completeness_score']:.1%}")
+                                        if validation['warnings']:
+                                            for warning in validation['warnings']:
+                                                st.warning(warning)
+                                        if validation['errors']:
+                                            for error in validation['errors']:
+                                                st.error(error)
+                                    
+                                    # Оценка качества
+                                    with st.expander("📊 Оценка качества"):
+                                        st.write(f"**Оценка:** {evaluation['grade']}")
+                                        st.write(f"**Балл:** {evaluation['score']:.1%}")
+                                        if evaluation['recommendations']:
+                                            st.write("**Рекомендации:**")
+                                            for rec in evaluation['recommendations']:
+                                                st.write(f"• {rec}")
+                                    
+                                    # Доказательность
+                                    with st.expander("📚 Оценка доказательности"):
+                                        st.write(evidence_ranker.generate_evidence_report(evidence))
                                 
                             except Exception as e:
-                                st.error(f"Ошибка ИИ-анализа: {e}")
+                                error_msg = handle_error(e, "show_lab_analysis", show_to_user=True)
+                                st.error(f"Ошибка ИИ-анализа: {error_msg}")
                     
                     # Исходные данные
                     if show_raw_data:
@@ -599,14 +1833,84 @@ def show_lab_analysis():
                         file_name=f"lab_results_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                         mime="text/csv"
                     )
+                    
+                    # Экспорт в Excel
+                    lab_data_for_export = {
+                        'parameters': [{
+                            'name': p.name,
+                            'value': p.value,
+                            'unit': p.unit,
+                            'reference_range': p.reference_range,
+                            'status': p.status
+                        } for p in lab_report.parameters],
+                        'critical_values': lab_report.critical_values,
+                        'warnings': lab_report.warnings
+                    }
+                    
+                    excel_path = export_lab_results_to_excel(lab_data_for_export)
+                    with open(excel_path, 'rb') as f:
+                        st.download_button(
+                            label="📊 Скачать результаты (Excel)",
+                            data=f.read(),
+                            file_name=f"lab_results_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
                 
                 else:
                     st.error("❌ Не удалось извлечь лабораторные данные из файла")
-                    if show_raw_data:
-                        st.text_area("Извлеченный текст для диагностики", lab_report.raw_text, height=200)
+                    
+                    # Показываем детальную информацию об ошибке
+                    if lab_report.warnings:
+                        st.warning("⚠️ **Предупреждения:**")
+                        for warning in lab_report.warnings:
+                            st.warning(f"• {warning}")
+                    
+                    # Показываем извлеченный текст для диагностики
+                    if lab_report.raw_text:
+                        st.info("📄 **Извлеченный текст из файла:**")
+                        st.text_area("", lab_report.raw_text, height=300, key="raw_text_display")
+                        
+                        # Попытка ручного парсинга
+                        if st.button("🔍 Попробовать извлечь параметры вручную"):
+                            with st.spinner("Анализ текста..."):
+                                try:
+                                    # Пробуем использовать ИИ для извлечения
+                                    assistant = OpenRouterAssistant()
+                                    ai_prompt = f"""Извлеки все лабораторные параметры из следующего текста в формате JSON:
+                                    
+{lab_report.raw_text[:2000]}
+
+Верни JSON массив с объектами вида:
+{{"name": "название параметра", "value": число, "unit": "единица измерения", "reference": "норма"}}
+"""
+                                    ai_result = assistant.get_response(ai_prompt)
+                                    st.success("✅ ИИ извлек данные:")
+                                    st.json(ai_result)
+                                except Exception as e:
+                                    st.error(f"Ошибка ИИ-извлечения: {e}")
+                    else:
+                        st.warning("⚠️ Не удалось извлечь текст из файла. Проверьте формат файла.")
             
             except Exception as e:
-                st.error(f"Ошибка обработки файла: {e}")
+                import traceback
+                error_msg = str(e)
+                st.error(f"❌ Ошибка обработки файла: {error_msg}")
+                
+                # Показываем детальную информацию об ошибке
+                with st.expander("🔍 Детали ошибки и советы"):
+                    st.code(error_msg)
+                    st.write("**Трассировка ошибки:**")
+                    st.code(traceback.format_exc())
+                    st.info("💡 **Советы по устранению:**")
+                    st.write("""
+                    1. **Проверьте формат файла** - поддерживаются: PDF, Excel (xlsx, xls), CSV, JSON, XML, изображения (JPG, PNG)
+                    2. **Убедитесь, что файл не поврежден** - попробуйте открыть его в другой программе
+                    3. **Для PDF файлов** - убедитесь, что текст можно выделить (не сканированное изображение)
+                    4. **Для Excel файлов** - проверьте, что файл не защищен паролем
+                    5. **Для CSV файлов** - проверьте кодировку (должна быть UTF-8 или Windows-1251)
+                    6. **Попробуйте сохранить файл в другом формате** (например, CSV вместо Excel)
+                    7. **Для изображений** - используйте ИИ-анализ, если автоматическое извлечение не работает
+                    """)
             
             finally:
                 # Удаляем временный файл
@@ -616,20 +1920,1241 @@ def show_lab_analysis():
                     pass
 
 def show_genetic_analysis_page():
+    """Страница анализа генетических данных с поддержкой VCF"""
     st.header("🧬 Генетический анализ")
     
-    uploaded_file = st.file_uploader("Загрузите генетический файл", type=["txt", "csv"])
+    # Импорт генетического анализатора
+    try:
+        from modules.genetic_analyzer import GeneticAnalyzer, VCFParser
+        GENETIC_ANALYZER_AVAILABLE = True
+    except ImportError as e:
+        st.error(f"❌ Модуль генетического анализа недоступен: {e}")
+        GENETIC_ANALYZER_AVAILABLE = False
+        return
     
-    col1, col2 = st.columns(2)
+    # Информация о пациенте
+    st.subheader("👤 Информация о пациенте")
+    col1, col2, col3 = st.columns(3)
     with col1:
         age = st.number_input("Возраст", 1, 120, 30)
-        gender = st.selectbox("Пол", ["М", "Ж"])
     with col2:
-        lifestyle = st.selectbox("Активность", ["Низкая", "Средняя", "Высокая"])
+        gender = st.selectbox("Пол", ["М", "Ж"])
+    with col3:
+        lifestyle = st.selectbox("Образ жизни", ["Низкая активность", "Средняя активность", "Высокая активность"])
     
-    if uploaded_file and st.button("🧬 Анализировать"):
-        st.success("✅ Генетические риски проанализированы!")
-        st.info("📊 Функция в разработке")
+    # Клинический контекст
+    clinical_context = st.text_area(
+        "Клинический контекст (опционально)",
+        placeholder="Укажите жалобы, семейный анамнез, сопутствующие заболевания...",
+        height=100
+    )
+    
+    # Загрузка файла
+    uploaded_file = st.file_uploader(
+        "Загрузите генетический файл", 
+        type=["vcf", "vcf.gz", "txt", "csv"],
+        help="Поддерживаются: VCF, VCF.GZ (сжатый), TXT, CSV"
+    )
+    
+    if uploaded_file:
+        file_ext = uploaded_file.name.split('.')[-1].lower()
+        file_name = uploaded_file.name
+        
+        # Сохранение во временный файл
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
+        
+        # Сохраняем путь к файлу в session_state для повторного использования
+        file_key = f"genetic_file_{uploaded_file.name}"
+        
+        if st.button("🧬 Запустить генетический анализ", use_container_width=True):
+            try:
+                with st.spinner("🔬 Анализ генетических данных..."):
+                    # Инициализация анализатора
+                    analyzer = GeneticAnalyzer()
+                    
+                    # Информация о пациенте
+                    patient_info = {
+                        "age": age,
+                        "gender": gender,
+                        "lifestyle": lifestyle
+                    }
+                    
+                    # Анализ VCF файла
+                    if file_ext in ['vcf', 'gz']:
+                        st.info("📄 Парсинг VCF файла...")
+                        analysis_result = analyzer.analyze_vcf_file(
+                            tmp_path,
+                            patient_info=patient_info,
+                            clinical_context=clinical_context
+                        )
+                        
+                        # Сохраняем результат в session_state для использования после rerun
+                        if 'genetic_analysis_results' not in st.session_state:
+                            st.session_state.genetic_analysis_results = {}
+                        
+                        st.session_state.genetic_analysis_results[file_key] = {
+                            'result': analysis_result,
+                            'patient_info': patient_info,
+                            'clinical_context': clinical_context,
+                            'file_name': file_name
+                        }
+                        
+                        # Отображение результатов
+                        st.success("✅ Анализ завершен! Результаты сохранены.")
+                        st.rerun()  # Перезагружаем страницу, чтобы показать сохраненные результаты
+                        
+            except Exception as e:
+                st.error(f"❌ Ошибка анализа: {e}")
+                import traceback
+                with st.expander("🔍 Детали ошибки"):
+                    st.code(traceback.format_exc())
+                analysis_result = None
+            finally:
+                # Очистка временного файла
+                try:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                except:
+                    pass
+        
+        # Получаем сохраненный результат анализа
+        analysis_result = None
+        if 'genetic_analysis_results' in st.session_state and file_key in st.session_state.genetic_analysis_results:
+            saved_data = st.session_state.genetic_analysis_results[file_key]
+            analysis_result = saved_data['result']
+            patient_info = saved_data['patient_info']
+            clinical_context = saved_data.get('clinical_context', '')
+        
+        # Отображаем результаты, если анализ был выполнен
+        if analysis_result:
+            # Основная статистика
+            st.subheader("📊 Статистика анализа")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Всего вариантов", analysis_result.total_variants)
+            with col2:
+                st.metric("Патогенных", len(analysis_result.pathogenic_variants))
+            with col3:
+                st.metric("Клинически значимых", len(analysis_result.clinical_interpretations))
+            with col4:
+                st.metric("Фармакогенетических", len(analysis_result.pharmacogenetic_variants))
+            
+            # Патогенные варианты
+            if analysis_result.pathogenic_variants:
+                st.subheader("⚠️ Патогенные варианты")
+                with st.expander("Показать патогенные варианты", expanded=True):
+                    for variant in analysis_result.pathogenic_variants[:10]:  # Показываем первые 10
+                        st.markdown(f"""
+                        **Хромосома {variant.chromosome}:{variant.position}**
+                        - Референс: {variant.ref} → Альтернатива: {variant.alt}
+                        - ID: {variant.id if variant.id != '.' else 'Нет'}
+                        - Качество: {variant.quality:.2f}
+                        """)
+                    
+                    if len(analysis_result.pathogenic_variants) > 10:
+                        st.info(f"И еще {len(analysis_result.pathogenic_variants) - 10} патогенных вариантов...")
+            
+            # Клинические интерпретации
+            if analysis_result.clinical_interpretations:
+                st.subheader("🏥 Клинические интерпретации")
+                for interpretation in analysis_result.clinical_interpretations[:5]:
+                    # interpretation это ClinicalVariant объект
+                    st.markdown(f"""
+                    **{interpretation.gene}**
+                    - Вариант: {interpretation.variant_name}
+                    - Изменение белка: {interpretation.protein_change}
+                    - Заболевание: {interpretation.disease}
+                    - Патогенность: {interpretation.pathogenicity.value}
+                    - Наследование: {interpretation.inheritance_pattern}
+                    - Клиническое действие: {interpretation.clinical_action}
+                    """)
+            
+            # Фармакогенетические рекомендации
+            if analysis_result.pharmacogenetic_interpretations:
+                st.subheader("💊 Фармакогенетические рекомендации")
+                for pharm in analysis_result.pharmacogenetic_interpretations[:5]:
+                    # pharm это PharmacogeneticVariant объект
+                    drugs_str = ", ".join(pharm.drugs) if pharm.drugs else "Не указаны"
+                    st.markdown(f"""
+                    **Ген: {pharm.gene}**
+                    - Вариант: {pharm.variant}
+                    - Фенотип: {pharm.phenotype}
+                    - Препараты: {drugs_str}
+                    - Рекомендация: {pharm.recommendation}
+                    - Уровень доказательности: {pharm.evidence_level}
+                    """)
+            
+            # Оценка рисков
+            if analysis_result.risk_assessment:
+                st.subheader("📈 Оценка генетических рисков")
+                risk_data = analysis_result.risk_assessment
+                
+                st.markdown(f"**Общий уровень риска: {risk_data.overall_risk_level}**")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**Высокопенетрантные заболевания:**")
+                    for disease in risk_data.high_penetrance_diseases[:5]:
+                        disease_name = disease.get('disease', 'Неизвестно') if isinstance(disease, dict) else str(disease)
+                        st.write(f"- {disease_name}")
+                
+                with col2:
+                    st.markdown("**Умеренные риски:**")
+                    for condition in risk_data.moderate_risk_conditions[:5]:
+                        cond_name = condition.get('condition', 'Неизвестно') if isinstance(condition, dict) else str(condition)
+                        st.write(f"- {cond_name}")
+                
+                if risk_data.surveillance_recommendations:
+                    st.markdown("**Рекомендации по мониторингу:**")
+                    for rec in risk_data.surveillance_recommendations[:5]:
+                        st.write(f"- {rec}")
+            
+            # Рекомендации
+            if analysis_result.recommendations:
+                st.subheader("💡 Рекомендации")
+                for i, rec in enumerate(analysis_result.recommendations[:10], 1):
+                    st.markdown(f"{i}. {rec}")
+            
+            # ИИ-интерпретация высококлассным специалистом (если доступен ИИ)
+            if AI_AVAILABLE and OpenRouterAssistant is not None:
+                st.subheader("🤖 ИИ-интерпретация от врача-генетика-консультанта")
+                st.info("💡 Получите детальную интерпретацию с персонализированными рекомендациями по лечению и образу жизни")
+                
+                # Тест доступности ИИ
+                if st.checkbox("🔍 Проверить доступность ИИ перед запросом", value=False, key="test_ai_genetic"):
+                                try:
+                                    test_assistant = OpenRouterAssistant()
+                                    success, msg = test_assistant.test_connection()
+                                    if success:
+                                        st.success(f"✅ {msg}")
+                                    else:
+                                        st.error(f"❌ {msg}")
+                                except Exception as e:
+                                    st.error(f"❌ Ошибка проверки: {e}")
+                
+                # Проверяем, есть ли уже сохраненная интерпретация
+                saved_interpretation = None
+                if 'genetic_ai_interpretation' in st.session_state:
+                    saved_interpretation = st.session_state.genetic_ai_interpretation.get(analysis_result.analysis_id)
+                
+                if saved_interpretation:
+                    st.success("✅ Интерпретация уже получена. Вы можете просмотреть её ниже или получить новую.")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("📖 Показать сохраненную интерпретацию", use_container_width=True, key="show_saved_genetic"):
+                            st.markdown("### 🧬 Интерпретация врача-генетика-консультанта")
+                            st.markdown("---")
+                            st.write(saved_interpretation)
+                            st.download_button(
+                                "📥 Скачать интерпретацию (TXT)",
+                                saved_interpretation,
+                                file_name=f"genetic_interpretation_{analysis_result.analysis_id}.txt",
+                                mime="text/plain",
+                                key="download_saved_genetic"
+                            )
+                    with col2:
+                        if st.button("🔄 Получить новую интерпретацию", use_container_width=True, key="new_genetic"):
+                            # Очищаем сохраненную интерпретацию
+                            if analysis_result.analysis_id in st.session_state.genetic_ai_interpretation:
+                                del st.session_state.genetic_ai_interpretation[analysis_result.analysis_id]
+                            st.rerun()
+                
+                # Кнопка для получения интерпретации (всегда видна, если нет сохраненной)
+                if not saved_interpretation:
+                    button_key = f"get_genetic_interpretation_{analysis_result.analysis_id}"
+                    if st.button("🧠 Получить интерпретацию специалиста", use_container_width=True, type="primary", key=button_key):
+                        try:
+                            # Проверка перед началом
+                            st.info("🔄 Инициализация ИИ-ассистента...")
+                            assistant = OpenRouterAssistant()
+                            
+                            with st.spinner("🔬 Врач-генетик анализирует результаты (это может занять 1-2 минуты)..."):
+                                # Формируем детальный контекст для ИИ
+                                ai_context = f"""
+═══════════════════════════════════════════════════════════
+ГЕНЕТИЧЕСКИЙ АНАЛИЗ ПАЦИЕНТА
+═══════════════════════════════════════════════════════════
+
+ДЕМОГРАФИЧЕСКИЕ ДАННЫЕ:
+- Возраст: {age} лет
+- Пол: {gender}
+- Образ жизни: {lifestyle}
+
+СТАТИСТИКА АНАЛИЗА:
+- Всего вариантов обнаружено: {analysis_result.total_variants}
+- Патогенных вариантов: {len(analysis_result.pathogenic_variants)}
+- Вероятно патогенных: {len(analysis_result.likely_pathogenic_variants)}
+- Клинически значимых интерпретаций: {len(analysis_result.clinical_interpretations)}
+- Фармакогенетических вариантов: {len(analysis_result.pharmacogenetic_variants)}
+- Вариантов признаков: {len(analysis_result.trait_variants)}
+
+ПАТОГЕННЫЕ ВАРИАНТЫ (первые 30):
+"""
+                                for i, variant in enumerate(analysis_result.pathogenic_variants[:30], 1):
+                                                ai_context += f"""
+{i}. Хромосома {variant.chromosome}, позиция {variant.position}
+   - Референс: {variant.ref} → Альтернатива: {variant.alt}
+   - ID варианта: {variant.id if variant.id != '.' else 'Нет'}
+   - Качество: {variant.quality:.2f}
+   - Фильтр: {variant.filter}
+"""
+                                
+                                # Клинические интерпретации
+                                if analysis_result.clinical_interpretations:
+                                    ai_context += "\n\nКЛИНИЧЕСКИЕ ИНТЕРПРЕТАЦИИ:\n"
+                                    for i, interp in enumerate(analysis_result.clinical_interpretations[:15], 1):
+                                        ai_context += f"""
+{i}. Ген: {interp.gene}
+   - Вариант: {interp.variant_name}
+   - Изменение белка: {interp.protein_change}
+   - Патогенность: {interp.pathogenicity.value}
+   - Заболевание: {interp.disease}
+   - Тип наследования: {interp.inheritance_pattern}
+   - Пенетрантность: {interp.penetrance}
+   - Клиническое действие: {interp.clinical_action}
+   - Уровень доказательности: {interp.evidence_level}
+"""
+                                
+                                # Фармакогенетика
+                                if analysis_result.pharmacogenetic_interpretations:
+                                    ai_context += "\n\nФАРМАКОГЕНЕТИЧЕСКИЕ ДАННЫЕ:\n"
+                                    for i, pharm in enumerate(analysis_result.pharmacogenetic_interpretations[:15], 1):
+                                        drugs_str = ", ".join(pharm.drugs) if pharm.drugs else "Не указаны"
+                                        ai_context += f"""
+{i}. Ген: {pharm.gene}
+   - Вариант: {pharm.variant}
+   - Фенотип метаболизма: {pharm.phenotype}
+   - Препараты: {drugs_str}
+   - Рекомендация: {pharm.recommendation}
+   - Уровень доказательности: {pharm.evidence_level}
+   - Клиническая аннотация: {pharm.clinical_annotation}
+"""
+                                
+                                # Оценка рисков
+                                if analysis_result.risk_assessment:
+                                    risk_data = analysis_result.risk_assessment
+                                    ai_context += f"\n\nОЦЕНКА РИСКОВ:\n"
+                                    ai_context += f"- Общий уровень риска: {risk_data.overall_risk_level}\n"
+                                    if risk_data.high_penetrance_diseases:
+                                        ai_context += f"- Высокопенетрантные заболевания: {len(risk_data.high_penetrance_diseases)}\n"
+                                    if risk_data.moderate_risk_conditions:
+                                        ai_context += f"- Умеренные риски: {len(risk_data.moderate_risk_conditions)}\n"
+                                
+                                # Клинический контекст
+                                if clinical_context:
+                                    ai_context += f"\n\nКЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n{clinical_context}\n"
+                                
+                                # Рекомендации из анализа
+                                if analysis_result.recommendations:
+                                    ai_context += "\n\nАВТОМАТИЧЕСКИЕ РЕКОМЕНДАЦИИ СИСТЕМЫ:\n"
+                                    for rec in analysis_result.recommendations[:10]:
+                                        ai_context += f"- {rec}\n"
+                                
+                                # Срочные флаги
+                                if analysis_result.urgent_flags:
+                                    ai_context += "\n\n⚠️ СРОЧНЫЕ ФЛАГИ:\n"
+                                    for flag in analysis_result.urgent_flags:
+                                        ai_context += f"- {flag}\n"
+                                
+                                ai_context += "\n═══════════════════════════════════════════════════════════\n"
+                                
+                                # Расширенный промпт от имени высококлассного специалиста
+                                prompt = f"""Вы — ведущий врач-генетик-консультант с 25-летним опытом работы в престижной клинике, специализирующийся на персонализированной медицине, фармакогенетике и превентивной генетике. Вы являетесь экспертом международного уровня, публикуетесь в ведущих журналах (Nature Genetics, American Journal of Human Genetics) и консультируете сложные клинические случаи.
+
+ВАША ЗАДАЧА: Провести комплексную интерпретацию генетического анализа с фокусом на ПЕРСОНАЛИЗАЦИЮ лечения и образа жизни для конкретного пациента.
+
+ФОРМАТ ОТВЕТА — «Клиническая директива по персонализированной генетической медицине»:
+
+1. **КЛИНИЧЕСКИЙ ОБЗОР** (3-4 предложения)
+   - Краткая характеристика генетического профиля пациента
+   - Общая оценка клинической значимости находок
+   - Приоритетные направления для внимания
+
+2. **ДЕТАЛЬНЫЙ АНАЛИЗ ПАТОГЕННЫХ ВАРИАНТОВ**
+   Для каждого значимого патогенного варианта:
+   - Полное описание варианта (ген, транскрипт, изменение белка)
+   - Связь с конкретными заболеваниями (с указанием OMIM кодов)
+   - Оценка пенетрантности и экспрессивности
+   - Наследственный характер (de novo или унаследованный)
+   - Прогноз развития заболевания
+   - Связь с клинической картиной пациента (если указана)
+
+3. **ПЕРСОНАЛИЗИРОВАННАЯ ФАРМАКОГЕНЕТИКА**
+   Для каждого фармакогенетического варианта:
+   - Детальная характеристика фенотипа метаболизма
+   - Конкретные препараты, требующие коррекции дозы или замены
+   - Рекомендуемые дозировки с учетом генотипа
+   - Альтернативные препараты (если применимо)
+   - Мониторинг эффективности и токсичности
+   - Ссылки на клинические рекомендации (CPIC, DPWG)
+
+4. **ПЕРСОНАЛИЗИРОВАННЫЕ РЕКОМЕНДАЦИИ ПО ОБРАЗУ ЖИЗНИ**
+   На основе генетического профиля и образа жизни пациента ({lifestyle}):
+   
+   a) ПИТАНИЕ:
+      - Нутригенетические рекомендации
+      - Оптимальный макро- и микросостав рациона
+      - Продукты, которые следует ограничить/исключить
+      - Добавки и витамины (с учетом генетики)
+      - Режим питания
+   
+   b) ФИЗИЧЕСКАЯ АКТИВНОСТЬ:
+      - Тип и интенсивность тренировок (с учетом генетики)
+      - Рекомендации по восстановлению
+      - Профилактика травм
+      - Оптимальный режим активности
+   
+   c) СОН И ВОССТАНОВЛЕНИЕ:
+      - Рекомендации по режиму сна
+      - Оптимизация циркадных ритмов
+   
+   d) СТРЕСС-МЕНЕДЖМЕНТ:
+      - Стратегии управления стрессом
+      - Медитация, релаксация
+   
+   e) ОКРУЖАЮЩАЯ СРЕДА:
+      - Избегание токсинов/канцерогенов (если есть повышенная чувствительность)
+      - Защита от УФ (если есть мутации в генах репарации ДНК)
+
+5. **ПЕРСОНАЛИЗИРОВАННЫЙ ПЛАН ЛЕЧЕНИЯ** (если есть текущие заболевания)
+   - Выбор препаратов с учетом фармакогенетики
+   - Индивидуализация дозировок
+   - Мониторинг эффективности
+   - Побочные эффекты, на которые обратить внимание
+   - Альтернативные схемы лечения
+
+6. **ПРЕВЕНТИВНЫЕ МЕРЫ**
+   - Скрининговые программы (с учетом возраста и генетики)
+   - Частота обследований
+   - Специфические тесты для раннего выявления
+   - Вакцинация (если применимо)
+
+7. **ГЕНЕТИЧЕСКОЕ КОНСУЛЬТИРОВАНИЕ СЕМЬИ**
+   - Риски для родственников
+   - Рекомендации по тестированию семьи
+   - Репродуктивные риски (если применимо)
+   - Планирование семьи
+
+8. **МОНИТОРИНГ И ДИНАМИЧЕСКОЕ НАБЛЮДЕНИЕ**
+   - План последующих визитов
+   - Параметры для мониторинга
+   - Триггеры для немедленного обращения
+   - Долгосрочные цели
+
+9. **СРОЧНЫЕ РЕКОМЕНДАЦИИ** (если есть)
+   - Немедленные действия
+   - Консультации специалистов (с указанием сроков)
+   - Дополнительные обследования
+
+10. **ИСТОЧНИКИ И ДОКАЗАТЕЛЬСТВА**
+    - Использованные базы данных (ClinVar, PharmGKB, dbSNP)
+    - Клинические рекомендации
+    - Уровень доказательности для каждой рекомендации
+
+ВАЖНО:
+- Все рекомендации должны быть КОНКРЕТНЫМИ и ПРИМЕНИМЫМИ
+- Учитывайте возраст ({age} лет), пол ({gender}) и образ жизни ({lifestyle})
+- Используйте только проверенные источники (ACMG, CPIC, PharmGKB)
+- Указывайте уровень доказательности для каждой рекомендации
+- Пишите понятным языком, но профессионально
+- Фокус на ПРАКТИЧЕСКОМ применении
+
+ДАННЫЕ ГЕНЕТИЧЕСКОГО АНАЛИЗА:
+{ai_context}
+
+Дайте развернутый ответ в формате «Клиническая директива по персонализированной генетической медицине».
+"""
+                                
+                                # Отправляем запрос с увеличенным таймаутом
+                                st.info("📤 Отправка запроса к ИИ (это может занять 1-3 минуты для детального анализа)...")
+                                
+                                # Показываем прогресс
+                                progress_bar = st.progress(0)
+                                status_text = st.empty()
+                                
+                                try:
+                                    status_text.text("🔄 Подключение к ИИ...")
+                                    progress_bar.progress(10)
+                                    
+                                    status_text.text("📝 Формирование запроса...")
+                                    progress_bar.progress(30)
+                                    
+                                    status_text.text("🧠 ИИ анализирует данные (это может занять время)...")
+                                    progress_bar.progress(50)
+                                    
+                                    ai_interpretation = assistant.get_response(prompt)
+                                    
+                                    progress_bar.progress(90)
+                                    status_text.text("✅ Получен ответ от ИИ")
+                                    progress_bar.progress(100)
+                                    
+                                    if not ai_interpretation or len(ai_interpretation.strip()) == 0:
+                                        st.error("❌ ИИ вернул пустой ответ. Попробуйте еще раз.")
+                                        return
+                                    
+                                    # Очищаем прогресс-бар
+                                    progress_bar.empty()
+                                    status_text.empty()
+                                    
+                                except Exception as api_error:
+                                    progress_bar.empty()
+                                    status_text.empty()
+                                    raise api_error
+                                
+                                # Сохраняем интерпретацию в session_state
+                                if 'genetic_ai_interpretation' not in st.session_state:
+                                    st.session_state.genetic_ai_interpretation = {}
+                                
+                                st.session_state.genetic_ai_interpretation[analysis_result.analysis_id] = ai_interpretation
+                                
+                                # Очищаем прогресс-бар перед отображением результата
+                                progress_bar.empty()
+                                status_text.empty()
+                                
+                                st.markdown("### 🧬 Интерпретация врача-генетика-консультанта")
+                                st.markdown("---")
+                                st.write(ai_interpretation)
+                                
+                                # Кнопка для скачивания интерпретации
+                                st.download_button(
+                                    "📥 Скачать интерпретацию (TXT)",
+                                    ai_interpretation,
+                                    file_name=f"genetic_interpretation_{analysis_result.analysis_id}.txt",
+                                    mime="text/plain",
+                                    key=f"download_genetic_{analysis_result.analysis_id}"
+                                )
+                                
+                                st.success("✅ Интерпретация успешно получена!")
+                                st.rerun()
+                        
+                        except Exception as e:
+                                        st.error(f"❌ Ошибка при получении интерпретации: {e}")
+                                        import traceback
+                                        with st.expander("🔍 Детали ошибки"):
+                                            st.code(traceback.format_exc())
+                        else:
+                            # Если ИИ недоступен, показываем сообщение
+                            st.warning("⚠️ ИИ-модуль недоступен. Проверьте настройки API ключей.")
+                            if not AI_AVAILABLE:
+                                st.error("❌ ИИ-модуль не загружен. Проверьте файл `claude_assistant.py`.")
+                            elif OpenRouterAssistant is None:
+                                st.error("❌ Класс OpenRouterAssistant недоступен.")
+                        
+                        # Экспорт результатов
+                        st.subheader("📥 Экспорт результатов")
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            # JSON экспорт
+                            if EXPORT_MANAGER_AVAILABLE:
+                                json_data = {
+                                    "analysis_id": analysis_result.analysis_id,
+                                    "patient_info": patient_info,
+                                    "summary": {
+                                        "total_variants": analysis_result.total_variants,
+                                        "pathogenic_count": len(analysis_result.pathogenic_variants),
+                                        "clinically_significant": len(analysis_result.clinical_interpretations),
+                                        "pharmacogenetic_count": len(analysis_result.pharmacogenetic_variants)
+                                    },
+                                    "pathogenic_variants": [v.to_dict() for v in analysis_result.pathogenic_variants[:50]],
+                                    "recommendations": analysis_result.recommendations
+                                }
+                                json_file = export_analysis_to_json(json_data, f"genetic_analysis_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                                with open(json_file, 'rb') as f:
+                                    st.download_button(
+                                        "📥 Скачать JSON",
+                                        f.read(),
+                                        file_name=os.path.basename(json_file),
+                                        mime="application/json"
+                                    )
+                        
+                        with col2:
+                            # CSV экспорт вариантов
+                            if EXPORT_MANAGER_AVAILABLE and analysis_result.pathogenic_variants:
+                                variants_data = []
+                                for v in analysis_result.pathogenic_variants[:100]:
+                                    variants_data.append({
+                                        "chromosome": v.chromosome,
+                                        "position": v.position,
+                                        "ref": v.ref,
+                                        "alt": v.alt,
+                                        "id": v.id,
+                                        "quality": v.quality
+                                    })
+                                csv_file = export_analysis_to_csv(variants_data, f"genetic_variants_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+                                with open(csv_file, 'rb') as f:
+                                    st.download_button(
+                                        "📥 Скачать CSV вариантов",
+                                        f.read(),
+                                        file_name=os.path.basename(csv_file),
+                                        mime="text/csv"
+                                    )
+            
+            else:
+                st.warning(f"Формат файла {file_ext} пока не поддерживается для полного анализа. Используйте VCF формат.")
+                st.info("📊 Для других форматов функция в разработке")
+
+def show_statistics_page():
+    """Страница статистики использования моделей"""
+    st.header("📊 Статистика использования")
+    
+    if 'model_stats' not in st.session_state or not st.session_state.model_stats:
+        st.info("Статистика пока недоступна. Используйте функции анализа для накопления данных.")
+        return
+    
+    stats = st.session_state.model_stats
+    
+    st.subheader("📈 Использование моделей ИИ")
+    
+    # Таблица статистики
+    stats_data = []
+    for model, data in stats.items():
+        success_rate = (data['successful_calls'] / data['total_calls'] * 100) if data['total_calls'] > 0 else 0
+        stats_data.append({
+            "Модель": model,
+            "Всего вызовов": data['total_calls'],
+            "Успешных": data['successful_calls'],
+            "Неудачных": data['failed_calls'],
+            "Успешность": f"{success_rate:.1f}%",
+            "Токенов использовано": data.get('total_tokens', 0)
+        })
+    
+    df_stats = pd.DataFrame(stats_data)
+    st.dataframe(df_stats, use_container_width=True)
+    
+    # Графики
+    if len(stats_data) > 0:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Успешность моделей")
+            chart_data = pd.DataFrame({
+                'Модель': [s['Модель'] for s in stats_data],
+                'Успешность (%)': [float(s['Успешность'].replace('%', '')) for s in stats_data]
+            })
+            st.bar_chart(chart_data.set_index('Модель'))
+        
+        with col2:
+            st.subheader("Количество вызовов")
+            chart_data2 = pd.DataFrame({
+                'Модель': [s['Модель'] for s in stats_data],
+                'Вызовов': [s['Всего вызовов'] for s in stats_data]
+            })
+            st.bar_chart(chart_data2.set_index('Модель'))
+    
+    # Кнопка сброса статистики
+    if st.button("🔄 Сбросить статистику"):
+        st.session_state.model_stats = {}
+        st.rerun()
+
+def show_patient_context_page():
+    """Страница управления клиническим контекстом пациента"""
+    st.header("📋 Клинический контекст пациента")
+    
+    init_db()
+    conn = sqlite3.connect('medical_data.db')
+    patients = pd.read_sql_query("SELECT id, name FROM patients", conn)
+    conn.close()
+    
+    if patients.empty:
+        st.warning("❌ База пациентов пуста. Добавьте пациента в разделе 'База данных'.")
+        return
+    
+    selected_patient = st.selectbox("Выберите пациента", patients['name'])
+    patient_id = patients[patients['name'] == selected_patient].iloc[0]['id']
+    
+    context_store = ContextStore()
+    
+    # Вкладки для разных действий
+    tab1, tab2, tab3 = st.tabs(["📊 Просмотр контекста", "➕ Добавить данные", "🔍 Использовать для анализа"])
+    
+    with tab1:
+        st.subheader("📊 Просмотр сохраненного контекста")
+        
+        if st.button("📊 Загрузить контекст"):
+            context_data = context_store.get_patient_context(patient_id)
+            comprehensive_context = context_store.build_comprehensive_context(patient_id)
+            
+            if not context_data:
+                st.info("Контекст для данного пациента отсутствует. Добавьте данные во вкладке '➕ Добавить данные'.")
+            else:
+                st.subheader("📋 Полный клинический контекст")
+                st.text_area("Контекст", comprehensive_context, height=300, key="comprehensive_context")
+                
+                # Детализация по типам
+                st.subheader("📁 Детализация по типам данных")
+                for context_type, contexts in context_data.items():
+                    with st.expander(f"📁 {context_type.upper()} ({len(contexts)} записей)"):
+                        for i, ctx in enumerate(contexts, 1):
+                            st.write(f"**Запись {i}** (источник: {ctx['source']}, дата: {ctx['created_at']})")
+                            st.json(ctx['data'])
+    
+    with tab2:
+        st.subheader("➕ Добавить данные в контекст пациента")
+        
+        context_type = st.selectbox(
+            "Тип данных:",
+            ["complaints", "lab_results", "imaging", "diagnosis", "protocol", "other"],
+            format_func=lambda x: {
+                "complaints": "Жалобы",
+                "lab_results": "Лабораторные анализы",
+                "imaging": "Результаты визуализации (ЭКГ, рентген и т.д.)",
+                "diagnosis": "Диагноз",
+                "protocol": "Протокол осмотра",
+                "other": "Другое"
+            }[x]
+        )
+        
+        if context_type == "protocol":
+            st.info("💡 Вставьте текст протокола осмотра (можно скопировать из Word или другого документа)")
+            protocol_text = st.text_area("Текст протокола:", height=200, key="protocol_text")
+            
+            if st.button("💾 Сохранить протокол"):
+                if protocol_text:
+                    context_store.add_context(
+                        patient_id=patient_id,
+                        context_type='protocol',
+                        context_data={'protocol': protocol_text, 'type': 'consultation'},
+                        source='manual_entry'
+                    )
+                    st.success("✅ Протокол осмотра сохранен в контекст пациента!")
+                else:
+                    st.warning("⚠️ Введите текст протокола")
+        
+        elif context_type == "complaints":
+            st.info("💡 Введите жалобы пациента")
+            complaints_text = st.text_area("Жалобы:", height=150, key="complaints_text")
+            
+            if st.button("💾 Сохранить жалобы"):
+                if complaints_text:
+                    context_store.add_context(
+                        patient_id=patient_id,
+                        context_type='complaints',
+                        context_data={'complaints': complaints_text},
+                        source='manual_entry'
+                    )
+                    st.success("✅ Жалобы сохранены в контекст пациента!")
+                else:
+                    st.warning("⚠️ Введите жалобы")
+        
+        elif context_type == "diagnosis":
+            st.info("💡 Введите диагноз")
+            diagnosis_text = st.text_input("Диагноз:", key="diagnosis_text")
+            icd10 = st.text_input("Код МКБ-10 (опционально):", key="icd10")
+            
+            if st.button("💾 Сохранить диагноз"):
+                if diagnosis_text:
+                    context_store.add_context(
+                        patient_id=patient_id,
+                        context_type='diagnosis',
+                        context_data={'diagnosis': diagnosis_text, 'icd10': icd10},
+                        source='manual_entry'
+                    )
+                    st.success("✅ Диагноз сохранен в контекст пациента!")
+                else:
+                    st.warning("⚠️ Введите диагноз")
+        
+        elif context_type == "lab_results":
+            st.info("💡 Введите результаты лабораторных анализов (можно вставить текст или JSON)")
+            lab_text = st.text_area("Результаты анализов:", height=200, key="lab_text")
+            
+            if st.button("💾 Сохранить анализы"):
+                if lab_text:
+                    try:
+                        # Пробуем распарсить как JSON
+                        lab_data = json.loads(lab_text)
+                    except:
+                        # Если не JSON, сохраняем как текст
+                        lab_data = {'results_text': lab_text}
+                    
+                    context_store.add_context(
+                        patient_id=patient_id,
+                        context_type='lab_results',
+                        context_data=lab_data,
+                        source='manual_entry'
+                    )
+                    st.success("✅ Результаты анализов сохранены в контекст пациента!")
+                else:
+                    st.warning("⚠️ Введите результаты анализов")
+        
+        elif context_type == "imaging":
+            st.info("💡 Введите результаты визуализации (ЭКГ, рентген, МРТ и т.д.)")
+            imaging_type = st.selectbox("Тип исследования:", ["ЭКГ", "Рентген", "МРТ", "КТ", "УЗИ", "Другое"])
+            imaging_text = st.text_area("Результаты исследования:", height=200, key="imaging_text")
+            
+            if st.button("💾 Сохранить результаты"):
+                if imaging_text:
+                    context_store.add_context(
+                        patient_id=patient_id,
+                        context_type='imaging',
+                        context_data={'type': imaging_type, 'results': imaging_text},
+                        source='manual_entry'
+                    )
+                    st.success("✅ Результаты исследования сохранены в контекст пациента!")
+                else:
+                    st.warning("⚠️ Введите результаты исследования")
+        
+        else:  # other
+            st.info("💡 Введите произвольные данные")
+            other_text = st.text_area("Данные:", height=200, key="other_text")
+            
+            if st.button("💾 Сохранить данные"):
+                if other_text:
+                    context_store.add_context(
+                        patient_id=patient_id,
+                        context_type='other',
+                        context_data={'data': other_text},
+                        source='manual_entry'
+                    )
+                    st.success("✅ Данные сохранены в контекст пациента!")
+                else:
+                    st.warning("⚠️ Введите данные")
+    
+    with tab3:
+        st.subheader("🔍 Использовать контекст для анализа")
+        st.info("💡 Загрузите контекст пациента, чтобы он использовался при следующем анализе ЭКГ, рентгена и т.д.")
+        
+        if st.button("📥 Загрузить контекст для использования"):
+            comprehensive_context = context_store.build_comprehensive_context(patient_id)
+            
+            if comprehensive_context:
+                st.session_state['patient_context'] = comprehensive_context
+                st.session_state['selected_patient_id'] = patient_id
+                st.success("✅ Контекст загружен! Он будет использован при следующем анализе.")
+                st.info("💡 Теперь перейдите в раздел 'Анализ ЭКГ' или другой анализ - контекст будет автоматически учтен.")
+                
+                with st.expander("📋 Просмотр загруженного контекста"):
+                    st.text_area("", comprehensive_context, height=200, disabled=True)
+            else:
+                st.warning("⚠️ Контекст для данного пациента отсутствует. Добавьте данные во вкладке '➕ Добавить данные'.")
+        
+        if 'patient_context' in st.session_state:
+            st.success("✅ Контекст активен и будет использован при анализе")
+            if st.button("❌ Очистить контекст"):
+                del st.session_state['patient_context']
+                if 'selected_patient_id' in st.session_state:
+                    del st.session_state['selected_patient_id']
+                st.success("✅ Контекст очищен")
+
+def show_document_scanner_page():
+    """Страница сканирования и извлечения данных из медицинских документов"""
+    st.header("📄 Сканирование медицинских документов")
+    st.info("💡 Загрузите фото или сканированную копию медицинской справки, рецепта, направления или выписки для автоматического извлечения данных")
+    
+    # Выбор типа документа
+    doc_type = st.selectbox(
+        "Тип документа:",
+        ["Медицинская справка", "Рецепт", "Направление на обследование", "Выписка из больницы", "Больничный лист", "Результаты анализов", "Другое"],
+        help="Выберите тип документа для более точного извлечения данных"
+    )
+    
+    # Выбор источника
+    source_type = st.radio(
+        "Источник документа:",
+        ["📁 Загрузить файл", "📷 Сделать фото"],
+        horizontal=True
+    )
+    
+    image_array = None
+    uploaded_file = None
+    
+    if source_type == "📷 Сделать фото":
+        camera_image = st.camera_input("Сфотографируйте документ", key="doc_camera")
+        if camera_image:
+            try:
+                image = Image.open(camera_image)
+                image_array = np.array(image)
+            except Exception as e:
+                st.error(f"Ошибка обработки фото: {e}")
+                return
+    else:
+        uploaded_file = st.file_uploader(
+            "Загрузите документ",
+            type=["jpg", "jpeg", "png", "pdf", "tiff", "tif", "heic", "webp"],
+            help="Поддерживаются изображения и PDF файлы"
+        )
+        
+        if uploaded_file:
+            try:
+                if uploaded_file.type == "application/pdf":
+                    st.info("📄 PDF файл. Используется извлечение текста из PDF...")
+                    # Для PDF используем существующий процессор
+                    from modules.advanced_lab_processor import AdvancedLabProcessor
+                    processor = AdvancedLabProcessor()
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        tmp_path = tmp.name
+                    
+                    try:
+                        extracted_text = processor._extract_from_pdf(tmp_path)
+                        st.session_state['extracted_doc_text'] = extracted_text
+                        st.success("✅ Текст извлечен из PDF")
+                    except Exception as e:
+                        st.error(f"Ошибка извлечения из PDF: {e}")
+                    finally:
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
+                else:
+                    # Для изображений
+                    image = Image.open(uploaded_file)
+                    image_array = np.array(image)
+            except Exception as e:
+                st.error(f"Ошибка обработки файла: {e}")
+                return
+    
+    # Если есть изображение, показываем его
+    if image_array is not None:
+        st.image(image_array, caption="Загруженный документ", use_container_width=True, clamp=True)
+        
+        # Кнопка извлечения данных
+        if st.button("🔍 Извлечь данные из документа", use_container_width=True, type="primary"):
+            if not AI_AVAILABLE:
+                st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
+                return
+            
+            with st.spinner("🤖 ИИ анализирует документ и извлекает данные..."):
+                assistant = OpenRouterAssistant()
+                
+                # Промпт в зависимости от типа документа
+                prompts = {
+                    "Медицинская справка": """
+Вы - эксперт по распознаванию медицинских документов. Извлеките из этого изображения медицинской справки все данные в структурированном JSON формате.
+
+Извлеките:
+1. ФИО пациента
+2. Дата рождения
+3. Дата выдачи справки
+4. Номер справки (если есть)
+5. Название медицинского учреждения
+6. ФИО врача, выдавшего справку
+7. Диагноз или заключение
+8. Рекомендации (если есть)
+9. Ограничения или противопоказания (если есть)
+10. Печати и подписи (наличие)
+
+Формат ответа - JSON:
+{
+  "patient_name": "...",
+  "birth_date": "...",
+  "issue_date": "...",
+  "document_number": "...",
+  "medical_institution": "...",
+  "doctor_name": "...",
+  "diagnosis": "...",
+  "recommendations": "...",
+  "restrictions": "...",
+  "has_stamp": true/false,
+  "has_signature": true/false,
+  "raw_text": "весь извлеченный текст"
+}
+""",
+                    "Рецепт": """
+Вы - эксперт по распознаванию рецептов. Извлеките из этого изображения рецепта все данные в структурированном JSON формате.
+
+Извлеките:
+1. ФИО пациента
+2. Дата выдачи рецепта
+3. ФИО врача
+4. Список препаратов с:
+   - Название (международное и торговое)
+   - Дозировка
+   - Количество
+   - Способ применения
+   - Кратность приема
+5. Срок действия рецепта
+6. Печати и подписи
+
+Формат ответа - JSON:
+{
+  "patient_name": "...",
+  "issue_date": "...",
+  "doctor_name": "...",
+  "medications": [
+    {
+      "name": "...",
+      "dosage": "...",
+      "quantity": "...",
+      "instructions": "...",
+      "frequency": "..."
+    }
+  ],
+  "valid_until": "...",
+  "has_stamp": true/false,
+  "raw_text": "весь извлеченный текст"
+}
+""",
+                    "Направление на обследование": """
+Вы - эксперт по распознаванию медицинских направлений. Извлеките из этого изображения направления все данные в структурированном JSON формате.
+
+Извлеките:
+1. ФИО пациента
+2. Дата направления
+3. ФИО врача, выдавшего направление
+4. Тип обследования
+5. Цель обследования
+6. Предварительный диагноз
+7. Медицинское учреждение назначения
+8. Срочность
+9. Особые указания
+
+Формат ответа - JSON:
+{
+  "patient_name": "...",
+  "issue_date": "...",
+  "doctor_name": "...",
+  "examination_type": "...",
+  "purpose": "...",
+  "preliminary_diagnosis": "...",
+  "target_institution": "...",
+  "urgency": "...",
+  "special_instructions": "...",
+  "raw_text": "весь извлеченный текст"
+}
+""",
+                    "Выписка из больницы": """
+Вы - эксперт по распознаванию выписок из больницы. Извлеките из этого изображения выписки все данные в структурированном JSON формате.
+
+Извлеките:
+1. ФИО пациента
+2. Дата рождения
+3. Даты госпитализации и выписки
+4. Отделение
+5. Диагноз при поступлении
+6. Диагноз при выписке
+7. Проведенное лечение
+8. Операции (если были)
+9. Рекомендации при выписке
+10. ФИО лечащего врача
+
+Формат ответа - JSON:
+{
+  "patient_name": "...",
+  "birth_date": "...",
+  "admission_date": "...",
+  "discharge_date": "...",
+  "department": "...",
+  "admission_diagnosis": "...",
+  "discharge_diagnosis": "...",
+  "treatment": "...",
+  "surgeries": [...],
+  "recommendations": "...",
+  "attending_doctor": "...",
+  "raw_text": "весь извлеченный текст"
+}
+""",
+                    "Больничный лист": """
+Вы - эксперт по распознаванию больничных листов. Извлеките из этого изображения больничного листа все данные в структурированном JSON формате.
+
+Извлеките:
+1. ФИО пациента
+2. Дата начала нетрудоспособности
+3. Дата окончания нетрудоспособности
+4. Диагноз
+5. Код МКБ-10
+6. ФИО врача
+7. Медицинское учреждение
+8. Номер больничного листа
+
+Формат ответа - JSON:
+{
+  "patient_name": "...",
+  "start_date": "...",
+  "end_date": "...",
+  "diagnosis": "...",
+  "icd10_code": "...",
+  "doctor_name": "...",
+  "medical_institution": "...",
+  "document_number": "...",
+  "raw_text": "весь извлеченный текст"
+}
+""",
+                    "Результаты анализов": """
+Вы - эксперт по распознаванию результатов анализов. Извлеките из этого изображения все данные в структурированном JSON формате.
+
+Извлеките:
+1. ФИО пациента
+2. Дата анализа
+3. Тип анализа
+4. Название лаборатории
+5. Все параметры с значениями, единицами измерения и референсными интервалами
+6. Заключение (если есть)
+
+Формат ответа - JSON:
+{
+  "patient_name": "...",
+  "analysis_date": "...",
+  "analysis_type": "...",
+  "laboratory": "...",
+  "parameters": [
+    {
+      "name": "...",
+      "value": "...",
+      "unit": "...",
+      "reference_range": "...",
+      "status": "normal/abnormal"
+    }
+  ],
+  "conclusion": "...",
+  "raw_text": "весь извлеченный текст"
+}
+""",
+                    "Другое": """
+Вы - эксперт по распознаванию медицинских документов. Извлеките из этого изображения все данные в структурированном JSON формате.
+
+Извлеките:
+1. Тип документа
+2. ФИО пациента (если есть)
+3. Даты
+4. Все ключевые данные
+5. Полный текст документа
+
+Формат ответа - JSON:
+{
+  "document_type": "...",
+  "patient_name": "...",
+  "dates": [...],
+  "key_data": {...},
+  "raw_text": "весь извлеченный текст"
+}
+"""
+                }
+                
+                prompt = prompts.get(doc_type, prompts["Другое"])
+                
+                # Отправка запроса к ИИ
+                try:
+                    result = assistant.send_vision_request(prompt, image_array, str({"document_type": doc_type}))
+                    
+                    # Попытка распарсить JSON из ответа
+                    import re
+                    json_match = re.search(r'\{.*\}', result, re.DOTALL)
+                    if json_match:
+                        try:
+                            extracted_data = json.loads(json_match.group())
+                            st.session_state['extracted_doc_data'] = extracted_data
+                            st.session_state['extracted_doc_raw'] = result
+                        except:
+                            st.session_state['extracted_doc_data'] = None
+                            st.session_state['extracted_doc_raw'] = result
+                    else:
+                        st.session_state['extracted_doc_data'] = None
+                        st.session_state['extracted_doc_raw'] = result
+                    
+                except Exception as e:
+                    st.error(f"❌ Ошибка при извлечении данных: {e}")
+                    return
+    
+    # Показ извлеченных данных
+    if 'extracted_doc_data' in st.session_state and st.session_state['extracted_doc_data']:
+        st.subheader("📋 Извлеченные данные")
+        extracted_data = st.session_state['extracted_doc_data']
+        
+        # Отображение структурированных данных
+        st.json(extracted_data)
+        
+        # Сохранение в контекст пациента
+        st.subheader("💾 Сохранение данных")
+        init_db()
+        conn = sqlite3.connect('medical_data.db')
+        patients = pd.read_sql_query("SELECT id, name FROM patients", conn)
+        conn.close()
+        
+        if not patients.empty:
+            selected_patient = st.selectbox("Выберите пациента для сохранения:", patients['name'], key="doc_patient_select")
+            patient_id = patients[patients['name'] == selected_patient].iloc[0]['id']
+            
+            if st.button("💾 Сохранить в контекст пациента"):
+                try:
+                    context_store = ContextStore()
+                    context_store.add_context(
+                        patient_id=patient_id,
+                        context_type='document',
+                        context_data={
+                            'document_type': doc_type,
+                            'extracted_data': extracted_data,
+                            'raw_text': extracted_data.get('raw_text', '')
+                        },
+                        source='ai_extraction'
+                    )
+                    st.success("✅ Данные сохранены в клинический контекст пациента!")
+                except Exception as e:
+                    st.error(f"❌ Ошибка сохранения: {e}")
+        else:
+            st.info("💡 Добавьте пациента в разделе 'База данных', чтобы сохранять извлеченные данные")
+        
+        # Экспорт данных
+        st.subheader("📥 Экспорт данных")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📄 Экспорт в Word"):
+                try:
+                    from local_docs import create_local_doc
+                    doc_text = json.dumps(extracted_data, ensure_ascii=False, indent=2)
+                    filepath, message = create_local_doc(f"Извлеченные данные - {doc_type}", doc_text)
+                    st.success(message)
+                    with open(filepath, "rb") as f:
+                        st.download_button(
+                            label="📥 Скачать документ",
+                            data=f,
+                            file_name=os.path.basename(filepath),
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        )
+                except Exception as e:
+                    st.error(f"❌ Ошибка экспорта: {e}")
+        
+        with col2:
+            json_str = json.dumps(extracted_data, ensure_ascii=False, indent=2)
+            st.download_button(
+                label="📥 Скачать JSON",
+                data=json_str,
+                file_name=f"extracted_data_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json"
+            )
+    
+    elif 'extracted_doc_raw' in st.session_state:
+        st.subheader("📋 Извлеченный текст")
+        st.text_area("Текст", st.session_state['extracted_doc_raw'], height=300, disabled=True)
+        st.info("💡 ИИ не смог структурировать данные, но извлек текст. Вы можете скопировать его и использовать вручную.")
+    
+    # Для PDF файлов
+    if 'extracted_doc_text' in st.session_state:
+        st.subheader("📋 Извлеченный текст из PDF")
+        st.text_area("Текст", st.session_state['extracted_doc_text'], height=300)
+        
+        if st.button("🤖 Обработать текст с помощью ИИ"):
+            if not AI_AVAILABLE:
+                st.error("❌ ИИ-модуль недоступен.")
+                return
+            
+            with st.spinner("🤖 ИИ структурирует данные..."):
+                assistant = OpenRouterAssistant()
+                prompt = f"""
+Вы - эксперт по структурированию медицинских документов. Структурируйте следующий текст из медицинского документа типа "{doc_type}".
+
+Текст документа:
+{st.session_state['extracted_doc_text']}
+
+Извлеките все ключевые данные в JSON формате, аналогично тому, как это делается для изображений документов.
+"""
+                try:
+                    result = assistant.get_response(prompt)
+                    st.subheader("📋 Структурированные данные")
+                    st.write(result)
+                    
+                    # Попытка распарсить JSON
+                    json_match = re.search(r'\{.*\}', result, re.DOTALL)
+                    if json_match:
+                        try:
+                            extracted_data = json.loads(json_match.group())
+                            st.json(extracted_data)
+                            st.session_state['extracted_doc_data'] = extracted_data
+                        except:
+                            pass
+                except Exception as e:
+                    st.error(f"❌ Ошибка обработки: {e}")
 
 # --- Главная функция ---
 def main():
@@ -647,16 +3172,19 @@ def main():
         "📈 Анализ ЭКГ",
         "🩻 Анализ рентгена",
         "🧠 Анализ МРТ",
-        "🔬 Анализ лабораторных данных",     # ← улучшенная версия
+        "🩻 Анализ КТ",
+        "🔊 Анализ УЗИ",
+        "🔬 Анализ дерматоскопии",
+        "🔬 Анализ лабораторных данных",
         "📝 Протокол приёма",
         "👤 База данных пациентов",
+        "📋 Клинический контекст",  # ← НОВОЕ
         "🤖 ИИ-Консультант",
         "🧬 Генетический анализ",
-        # === НОВЫЕ СТРАНИЦЫ ===
-        "🔬 Расширенный ИИ-анализ",          # ← НОВОЕ
-        "📊 Сравнительный анализ",           # ← НОВОЕ
-        "📚 Медицинские протоколы",          # ← НОВОЕ
-        #"🎓 Обучение ИИ",                   # ← НОВОЕ
+        "📊 Статистика",
+        "🔬 Расширенный ИИ-анализ",
+        "📊 Сравнительный анализ",
+        "📚 Медицинские протоколы",
     ]
 
     st.sidebar.title("🧠 Меню")
@@ -671,24 +3199,47 @@ def main():
         show_xray_analysis()
     elif page == "🧠 Анализ МРТ":
         show_mri_analysis()
+    elif page == "🩻 Анализ КТ":  # ← НОВОЕ
+        show_ct_analysis()
+    elif page == "🔊 Анализ УЗИ":  # ← НОВОЕ
+        show_ultrasound_analysis()
+    elif page == "🔬 Анализ дерматоскопии":
+        show_dermatoscopy_analysis()
     elif page == "🔬 Анализ лабораторных данных":
         show_lab_analysis()  # ← ваша новая улучшенная функция
     elif page == "📝 Протокол приёма":
         show_consultation_protocol()
+    elif page == "📄 Сканирование документов":  # ← НОВОЕ
+        show_document_scanner_page()
     elif page == "👤 База данных пациентов":
         show_patient_database()
+    elif page == "📋 Клинический контекст":  # ← НОВОЕ
+        show_patient_context_page()
     elif page == "🤖 ИИ-Консультант":
         show_ai_chat()
     elif page == "🧬 Генетический анализ":
         show_genetic_analysis_page()  # ← ваша готовая функция
-    
+    elif page == "📊 Статистика":  # ← НОВОЕ
+        show_statistics_page()
     # === НОВЫЕ СТРАНИЦЫ ===
     elif page == "🔬 Расширенный ИИ-анализ":
-        show_enhanced_analysis_page()
+        if ENHANCED_PAGES_AVAILABLE and show_enhanced_analysis_page:
+            show_enhanced_analysis_page()
+        else:
+            st.error("❌ Модуль расширенного анализа недоступен. Проверьте файл `modules/streamlit_enhanced_pages.py`")
+            st.info("💡 Убедитесь, что все зависимости установлены: `pip install plotly pandas`")
     elif page == "📊 Сравнительный анализ":
-        show_comparative_analysis_page()
+        if ENHANCED_PAGES_AVAILABLE and show_comparative_analysis_page:
+            show_comparative_analysis_page()
+        else:
+            st.error("❌ Модуль сравнительного анализа недоступен. Проверьте файл `modules/streamlit_enhanced_pages.py`")
+            st.info("💡 Убедитесь, что все зависимости установлены: `pip install plotly pandas`")
     elif page == "📚 Медицинские протоколы":
-        show_medical_protocols_page()
+        if ENHANCED_PAGES_AVAILABLE and show_medical_protocols_page:
+            show_medical_protocols_page()
+        else:
+            st.error("❌ Модуль медицинских протоколов недоступен. Проверьте файл `modules/streamlit_enhanced_pages.py`")
+            st.info("💡 Убедитесь, что все зависимости установлены: `pip install plotly pandas`")
     #"elif page == "🎓 Обучение ИИ":
 #       show_ai_training_page()
     

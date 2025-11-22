@@ -1,0 +1,48 @@
+# Секреты и конфигурация
+secrets.toml
+.env
+.env.*
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Базы данных
+*.db
+*.sqlite
+*.sqlite3
+
+# Логи
+*.log
+logs/
+
+# Временные файлы
+temp/
+tmp/
+*.tmp
+
+# Медицинские данные
+uploads/
+generated_documents/
+backups/
+
+# Streamlit
+.streamlit/secrets.toml
+

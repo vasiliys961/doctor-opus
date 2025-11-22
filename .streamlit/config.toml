@@ -1,9 +1,6 @@
-[global]
-dataFrameSerialization = "legacy"
-
 [server]
 runOnSave = true
-port = 8501
+port = 8502  # Измените на другой порт
 maxUploadSize = 200
 
 [browser]

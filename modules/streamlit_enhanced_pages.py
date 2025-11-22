@@ -14,17 +14,41 @@ import plotly.express as px
 from typing import Dict, List, Optional
 import io
 import base64
-from .medical_ai_analyzer import EnhancedMedicalAIAnalyzer, ImageType, AnalysisResult
+try:
+    from .medical_ai_analyzer import EnhancedMedicalAIAnalyzer, ImageType, AnalysisResult
+except ImportError:
+    try:
+        from modules.medical_ai_analyzer import EnhancedMedicalAIAnalyzer, ImageType, AnalysisResult
+    except ImportError:
+        # Fallback - используем базовый класс из claude_assistant
+        EnhancedMedicalAIAnalyzer = None
+        ImageType = None
+        AnalysisResult = None
 
 
 def show_enhanced_analysis_page():
     """Страница расширенного ИИ-анализа"""
     st.header("🔬 Расширенный ИИ-Анализ")
     
+    # Проверка доступности анализатора
+    if EnhancedMedicalAIAnalyzer is None or ImageType is None:
+        st.error("❌ Модуль EnhancedMedicalAIAnalyzer недоступен")
+        st.info("💡 Убедитесь, что файл `modules/medical_ai_analyzer.py` существует и правильно настроен")
+        return
+    
     # Инициализация анализатора
     if 'enhanced_analyzer' not in st.session_state:
-        api_key = "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"
-        st.session_state.enhanced_analyzer = EnhancedMedicalAIAnalyzer(api_key)
+        try:
+            from config import OPENROUTER_API_KEY
+            api_key = OPENROUTER_API_KEY
+        except:
+            api_key = "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"
+        
+        try:
+            st.session_state.enhanced_analyzer = EnhancedMedicalAIAnalyzer(api_key)
+        except Exception as e:
+            st.error(f"❌ Ошибка инициализации анализатора: {e}")
+            return
     
     analyzer = st.session_state.enhanced_analyzer
     
@@ -362,6 +386,12 @@ def show_comparative_analysis_page():
     """Страница сравнительного анализа"""
     st.header("📊 Сравнительный анализ изображений")
     
+    # Проверка доступности анализатора
+    if EnhancedMedicalAIAnalyzer is None or ImageType is None:
+        st.error("❌ Модуль EnhancedMedicalAIAnalyzer недоступен")
+        st.info("💡 Убедитесь, что файл `modules/medical_ai_analyzer.py` существует и правильно настроен")
+        return
+    
     st.info("💡 Загрузите несколько изображений одного типа для сравнения динамики или разных проекций")
     
     # Настройки сравнения
@@ -405,10 +435,24 @@ def show_comparative_analysis_page():
         
         if st.button("🔄 Выполнить сравнительный анализ"):
             
+            # Проверка доступности анализатора
+            if EnhancedMedicalAIAnalyzer is None:
+                st.error("❌ Модуль EnhancedMedicalAIAnalyzer недоступен")
+                return
+            
             # Инициализация анализатора
             if 'enhanced_analyzer' not in st.session_state:
-                api_key = "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"
-                st.session_state.enhanced_analyzer = EnhancedMedicalAIAnalyzer(api_key)
+                try:
+                    from config import OPENROUTER_API_KEY
+                    api_key = OPENROUTER_API_KEY
+                except:
+                    api_key = "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"
+                
+                try:
+                    st.session_state.enhanced_analyzer = EnhancedMedicalAIAnalyzer(api_key)
+                except Exception as e:
+                    st.error(f"❌ Ошибка инициализации анализатора: {e}")
+                    return
             
             analyzer = st.session_state.enhanced_analyzer
             
