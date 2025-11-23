@@ -1,64 +1,58 @@
-import toml
+"""Configuration management with environment variables only."""
 import os
 from pathlib import Path
 
-# Базовые пути
+# Base paths
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 UPLOADS_DIR = BASE_DIR / "uploads"
 LOGS_DIR = BASE_DIR / "logs"
 TEMP_DIR = BASE_DIR / "temp"
 
-# Создание директорий если не существуют
+# Create directories if they don't exist
 for dir_path in [DATA_DIR, UPLOADS_DIR, LOGS_DIR, TEMP_DIR]:
     dir_path.mkdir(exist_ok=True)
 
-def load_secrets(config_path=".streamlit/secrets.toml"):
-    """Загрузка секретов с fallback на прямые ключи"""
-    if os.path.exists(config_path):
-        config = toml.load(config_path)
-        api_keys = config.get("api_keys", {})
-        return {
-            "OPENROUTER_API_KEY": api_keys.get("OPENROUTER_API_KEY", config.get("OPENROUTER_API_KEY")),
-            "ASSEMBLYAI_API_KEY": api_keys.get("ASSEMBLYAI_API_KEY", config.get("ASSEMBLYAI_API_KEY")),
-            "model_preference": config.get("medical_analyzer", {}).get("model_preference"),
-            "timeout": config.get("medical_analyzer", {}).get("timeout", 90),
-            "max_retries": config.get("medical_analyzer", {}).get("max_retries", 2)
-        }
-    else:
-        # Fallback на прямые ключи из переменных окружения или дефолтные
-        return {
-            "OPENROUTER_API_KEY": os.getenv("OPENROUTER_API_KEY", "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"),
-            "ASSEMBLYAI_API_KEY": os.getenv("ASSEMBLYAI_API_KEY", "dea6f5f506c2491588b8178de20c51a0"),
-            "model_preference": None,
-            "timeout": 90,
-            "max_retries": 2
-        }
+# API Keys - ONLY from environment variables
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 
-# Загрузка секретов
-try:
-    secrets = load_secrets()
-    OPENROUTER_API_KEY = secrets["OPENROUTER_API_KEY"]
-    ASSEMBLYAI_API_KEY = secrets["ASSEMBLYAI_API_KEY"]
-except Exception as e:
-    # Fallback на прямые ключи
-    OPENROUTER_API_KEY = "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"
-    ASSEMBLYAI_API_KEY = "dea6f5f506c2491588b8178de20c51a0"
+# Validate required API keys
+if not OPENROUTER_API_KEY:
+    raise RuntimeError(
+        "OPENROUTER_API_KEY environment variable is required. "
+        "Set it using: export OPENROUTER_API_KEY='your-key-here'"
+    )
 
-# Настройки для Replit
+if not ASSEMBLYAI_API_KEY:
+    raise RuntimeError(
+        "ASSEMBLYAI_API_KEY environment variable is required. "
+        "Set it using: export ASSEMBLYAI_API_KEY='your-key-here'"
+    )
+
+# Optional configuration from environment
+MODEL_PREFERENCE = os.getenv("MODEL_PREFERENCE", "anthropic/claude-3-5-sonnet-20241022")
+TIMEOUT = int(os.getenv("TIMEOUT", "90"))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
+
+# Platform detection
 IS_REPLIT = os.getenv("REPL_ID") is not None
 PORT = int(os.getenv("PORT", 8501))
 
-# Настройки загрузки файлов
+# File upload settings
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
-ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.heic', '.heif', 
-                           '.webp', '.dcm', '.dicom', '.zip', '.pdf']
-ALLOWED_LAB_EXTENSIONS = ['.pdf', '.xlsx', '.xls', '.csv', '.json', '.xml', 
-                         '.jpg', '.jpeg', '.png']
+ALLOWED_IMAGE_EXTENSIONS = [
+    '.jpg', '.jpeg', '.png', '.tiff', '.tif', '.heic', '.heif',
+    '.webp', '.dcm', '.dicom', '.zip', '.pdf'
+]
+ALLOWED_LAB_EXTENSIONS = [
+    '.pdf', '.xlsx', '.xls', '.csv', '.json', '.xml',
+    '.jpg', '.jpeg', '.png'
+]
 
-# Мобильные настройки
+# Mobile settings
 MOBILE_OPTIMIZED = True
 MOBILE_MAX_IMAGE_SIZE = (1024, 1024)
 
-# Настройки базы данных
+# Database
 DB_PATH = DATA_DIR / "medical_data.db"
