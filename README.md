@@ -102,7 +102,7 @@
 
 1. **Клонирование репозитория**:
 git clone <repository-url>
-cd medical-assistant32. **Создание виртуального окружения**:
+cd medical-assistant33. **Создание виртуального окружения**:
 python -m venv venv
 source venv/bin/activate  # для Linux/Mac
 venv\Scripts\activate     # для Windows3. **Установка зависимостей**:
@@ -125,7 +125,7 @@ streamlit run app.pyПриложение будет доступно по адр
 ## 📁 Структура проекта
 
 ```
-medical-assistant3/
+medical-assistant33/
 │
 ├── app.py                           # Основное приложение Streamlit
 ├── claude_assistant.py              # Ин
