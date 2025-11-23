@@ -447,16 +447,12 @@ def show_comparative_analysis_page():
             
             # Инициализация анализатора
             if 'enhanced_analyzer' not in st.session_state:
+                # Получаем ключ из config или secrets
                 try:
                     from config import OPENROUTER_API_KEY
                     api_key = OPENROUTER_API_KEY
-                except:
-                    # Получаем ключ из config или secrets
-            try:
-                from config import OPENROUTER_API_KEY
-                api_key = OPENROUTER_API_KEY
-            except ImportError:
-                api_key = st.secrets.get("api_keys", {}).get("OPENROUTER_API_KEY") or st.secrets.get("OPENROUTER_API_KEY")
+                except ImportError:
+                    api_key = st.secrets.get("api_keys", {}).get("OPENROUTER_API_KEY") or st.secrets.get("OPENROUTER_API_KEY")
                 
                 try:
                     st.session_state.enhanced_analyzer = EnhancedMedicalAIAnalyzer(api_key)
