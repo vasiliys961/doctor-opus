@@ -5,7 +5,7 @@
 Новый API ключ установлен в `config.py`:
 
 ```python
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "sk-or-v1-67c72ххххххххххх"
 ```
 
 ## Проверка
