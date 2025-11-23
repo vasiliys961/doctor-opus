@@ -129,3 +129,53 @@ medical-assistant3/
 │
 ├── app.py                           # Основное приложение Streamlit
 ├── claude_assistant.py              # Ин
+
+
+---
+
+## 🚀 Быстрый запуск (команды для копирования)
+
+### Клонирование и настройка:
+```bash
+git clone https://github.com/vasiliys961/medical-assistant33.git
+cd medical-assistant33
+```
+
+### Создание виртуального окружения:
+```bash
+python -m venv venv
+```
+
+### Активация виртуального окружения:
+
+**Linux/Mac:**
+```bash
+source venv/bin/activate
+```
+
+**Windows:**
+```bash
+venv\Scripts\activate
+```
+
+### Установка зависимостей:
+```bash
+pip install -r requirements.txt
+```
+
+### Настройка переменных окружения:
+
+Создайте файл `.env` в корне проекта:
+```bash
+OPENROUTER_API_KEY=your-openrouter-key-here
+ASSEMBLYAI_API_KEY=your-assemblyai-key-here
+```
+
+### Запуск приложения:
+```bash
+streamlit run app.py
+```
+
+Приложение будет доступно по адресу: `http://localhost:8501`
+
+---
