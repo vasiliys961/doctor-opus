@@ -31,7 +31,7 @@ if not ASSEMBLYAI_API_KEY:
     )
 
 # Optional configuration from environment
-MODEL_PREFERENCE = os.getenv("MODEL_PREFERENCE", "anthropic/claude-3.7-sonnet")
+MODEL_PREFERENCE = os.getenv("MODEL_PREFERENCE", "anthropic/claude-3-5-sonnet-20241022")
 TIMEOUT = int(os.getenv("TIMEOUT", "90"))
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
 
