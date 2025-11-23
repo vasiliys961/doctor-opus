@@ -6,10 +6,22 @@ import streamlit as st
 import os
 import numpy as np
 
+# Импорт ключа из config (безопасно)
+try:
+    from config import OPENROUTER_API_KEY
+except ImportError:
+    # Fallback: попытка получить из Streamlit secrets
+    try:
+        OPENROUTER_API_KEY = st.secrets.get("api_keys", {}).get("OPENROUTER_API_KEY") or st.secrets.get("OPENROUTER_API_KEY")
+    except:
+        OPENROUTER_API_KEY = None
+
 class OpenRouterAssistant:
-    def __init__(self):
-        # Ваш рабочий ключ
-        self.api_key = "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"
+    def __init__(self, api_key=None):
+        # Используем переданный ключ или ключ из config/secrets
+        self.api_key = api_key or OPENROUTER_API_KEY
+        if not self.api_key:
+            raise ValueError("API ключ не найден. Установите OPENROUTER_API_KEY в config.py или .streamlit/secrets.toml")
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         
         # Модели с приоритетом Claude Sonnet 4

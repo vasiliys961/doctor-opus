@@ -1423,8 +1423,21 @@ def analyze_multiple_images(analyzer: EnhancedMedicalAIAnalyzer,
 def example_usage():
     """Расширенный пример использования анализатора"""
     
-    # Инициализация (замените на ваш API ключ)
-    API_KEY = "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"
+    # Инициализация (получите API ключ из config или secrets)
+    try:
+        from config import OPENROUTER_API_KEY
+        API_KEY = OPENROUTER_API_KEY
+    except ImportError:
+        import streamlit as st
+        try:
+            API_KEY = st.secrets.get("api_keys", {}).get("OPENROUTER_API_KEY") or st.secrets.get("OPENROUTER_API_KEY")
+        except:
+            API_KEY = None
+    
+    if not API_KEY:
+        print("⚠️ API ключ не найден. Установите OPENROUTER_API_KEY в config.py или .streamlit/secrets.toml")
+        return
+    
     analyzer = create_analyzer(API_KEY)
     
     # Пример 1: Анализ одного изображения

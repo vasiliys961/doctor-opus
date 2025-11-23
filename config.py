@@ -28,7 +28,7 @@ def load_secrets(config_path=".streamlit/secrets.toml"):
     else:
         # Fallback на прямые ключи из переменных окружения или дефолтные
         return {
-            "OPENROUTER_API_KEY": os.getenv("OPENROUTER_API_KEY", "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"),
+            "OPENROUTER_API_KEY": os.getenv("OPENROUTER_API_KEY", "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"),
             "ASSEMBLYAI_API_KEY": os.getenv("ASSEMBLYAI_API_KEY", "dea6f5f506c2491588b8178de20c51a0"),
             "model_preference": None,
             "timeout": 90,
@@ -42,7 +42,7 @@ try:
     ASSEMBLYAI_API_KEY = secrets["ASSEMBLYAI_API_KEY"]
 except Exception as e:
     # Fallback на прямые ключи
-    OPENROUTER_API_KEY = "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"
+    OPENROUTER_API_KEY = "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"
     ASSEMBLYAI_API_KEY = "dea6f5f506c2491588b8178de20c51a0"
 
 # Настройки для Replit

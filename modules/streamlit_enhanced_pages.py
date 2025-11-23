@@ -42,7 +42,12 @@ def show_enhanced_analysis_page():
             from config import OPENROUTER_API_KEY
             api_key = OPENROUTER_API_KEY
         except:
-            api_key = "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"
+            # Получаем ключ из config или secrets
+            try:
+                from config import OPENROUTER_API_KEY
+                api_key = OPENROUTER_API_KEY
+            except ImportError:
+                api_key = st.secrets.get("api_keys", {}).get("OPENROUTER_API_KEY") or st.secrets.get("OPENROUTER_API_KEY")
         
         try:
             st.session_state.enhanced_analyzer = EnhancedMedicalAIAnalyzer(api_key)
@@ -446,7 +451,12 @@ def show_comparative_analysis_page():
                     from config import OPENROUTER_API_KEY
                     api_key = OPENROUTER_API_KEY
                 except:
-                    api_key = "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"
+                    # Получаем ключ из config или secrets
+            try:
+                from config import OPENROUTER_API_KEY
+                api_key = OPENROUTER_API_KEY
+            except ImportError:
+                api_key = st.secrets.get("api_keys", {}).get("OPENROUTER_API_KEY") or st.secrets.get("OPENROUTER_API_KEY")
                 
                 try:
                     st.session_state.enhanced_analyzer = EnhancedMedicalAIAnalyzer(api_key)
