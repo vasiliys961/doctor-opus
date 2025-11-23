@@ -1,17 +1,30 @@
 # config.example.py
 # 
-# ИНСТРУКЦИЯ:
-# 1. Скопируйте этот файл: cp config.example.py config.py
-# 2. Добавьте свои API ключи в config.py
-# 3. НЕ КОММИТЬТЕ config.py в git! (он уже в .gitignore)
-
-# OpenRouter API ключ для доступа к ИИ-моделям
-# Получите здесь: https://openrouter.ai/keys
-OPENROUTER_API_KEY = "sk-or-v1-ваш_ключ_здесь"
-
-# AssemblyAI API ключ для транскрипции голоса
-# Получите здесь: https://www.assemblyai.com/app/account
-ASSEMBLYAI_API_KEY = "ваш_ключ_здесь"
+# ⚠️ ВАЖНО: Этот файл - пример. НЕ храните ключи здесь!
+# 
+# ИНСТРУКЦИЯ ПО НАСТРОЙКЕ:
+# 
+# Вариант 1 (РЕКОМЕНДУЕТСЯ): Используйте .streamlit/secrets.toml
+# 1. Создайте файл .streamlit/secrets.toml:
+#    [api_keys]
+#    OPENROUTER_API_KEY = "sk-or-v1-ваш_ключ_здесь"
+#    ASSEMBLYAI_API_KEY = "ваш_ключ_здесь"
+# 
+# Вариант 2: Используйте переменные окружения
+#    export OPENROUTER_API_KEY="sk-or-v1-ваш_ключ_здесь"
+#    export ASSEMBLYAI_API_KEY="ваш_ключ_здесь"
+# 
+# Вариант 3: Скопируйте этот файл в config.py (НЕ рекомендуется)
+#    cp config.example.py config.py
+#    # Добавьте ключи в config.py
+# 
+# ⚠️ НЕ КОММИТЬТЕ файлы с ключами в git!
+#    - config.py уже в .gitignore
+#    - .streamlit/secrets.toml уже в .gitignore
+# 
+# Получите ключи:
+# - OpenRouter: https://openrouter.ai/keys
+# - AssemblyAI: https://www.assemblyai.com/app/account
 
 # Настройки для Replit (если используете)
 IS_REPLIT = False

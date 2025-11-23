@@ -64,10 +64,15 @@ exports/
 .DS_Store
 Thumbs.db
 
-# Config (не коммитить API ключи!)
+# Config и секреты (НЕ КОММИТИТЬ API ключи!)
 config.py
+config.local.py
 .env
 .env.local
+.env.*
+*.env
+secrets.toml
+*.secrets.toml
 
 # Backups
 backups/

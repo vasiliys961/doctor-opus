@@ -14,36 +14,63 @@ for dir_path in [DATA_DIR, UPLOADS_DIR, LOGS_DIR, TEMP_DIR]:
     dir_path.mkdir(exist_ok=True)
 
 def load_secrets(config_path=".streamlit/secrets.toml"):
-    """Загрузка секретов с fallback на прямые ключи"""
+    """
+    Загрузка секретов из .streamlit/secrets.toml или переменных окружения.
+    
+    Приоритет загрузки:
+    1. .streamlit/secrets.toml (файл secrets)
+    2. Переменные окружения (OPENROUTER_API_KEY, ASSEMBLYAI_API_KEY)
+    3. None (если ничего не найдено)
+    
+    ⚠️ ВАЖНО: Никогда не храните ключи в коде!
+    """
+    secrets = {
+        "OPENROUTER_API_KEY": None,
+        "ASSEMBLYAI_API_KEY": None,
+        "model_preference": None,
+        "timeout": 90,
+        "max_retries": 2
+    }
+    
+    # Попытка 1: Загрузить из .streamlit/secrets.toml
     if os.path.exists(config_path):
-        config = toml.load(config_path)
-        api_keys = config.get("api_keys", {})
-        return {
-            "OPENROUTER_API_KEY": api_keys.get("OPENROUTER_API_KEY", config.get("OPENROUTER_API_KEY")),
-            "ASSEMBLYAI_API_KEY": api_keys.get("ASSEMBLYAI_API_KEY", config.get("ASSEMBLYAI_API_KEY")),
-            "model_preference": config.get("medical_analyzer", {}).get("model_preference"),
-            "timeout": config.get("medical_analyzer", {}).get("timeout", 90),
-            "max_retries": config.get("medical_analyzer", {}).get("max_retries", 2)
-        }
-    else:
-        # Fallback на прямые ключи из переменных окружения или дефолтные
-        return {
-            "OPENROUTER_API_KEY": os.getenv("OPENROUTER_API_KEY", "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"),
-            "ASSEMBLYAI_API_KEY": os.getenv("ASSEMBLYAI_API_KEY", "dea6f5f506c2491588b8178de20c51a0"),
-            "model_preference": None,
-            "timeout": 90,
-            "max_retries": 2
-        }
+        try:
+            config = toml.load(config_path)
+            api_keys = config.get("api_keys", {})
+            secrets["OPENROUTER_API_KEY"] = (
+                api_keys.get("OPENROUTER_API_KEY") or 
+                config.get("OPENROUTER_API_KEY")
+            )
+            secrets["ASSEMBLYAI_API_KEY"] = (
+                api_keys.get("ASSEMBLYAI_API_KEY") or 
+                config.get("ASSEMBLYAI_API_KEY")
+            )
+            secrets["model_preference"] = config.get("medical_analyzer", {}).get("model_preference")
+            secrets["timeout"] = config.get("medical_analyzer", {}).get("timeout", 90)
+            secrets["max_retries"] = config.get("medical_analyzer", {}).get("max_retries", 2)
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки secrets.toml: {e}")
+    
+    # Попытка 2: Переменные окружения (если не найдено в файле)
+    if not secrets["OPENROUTER_API_KEY"]:
+        secrets["OPENROUTER_API_KEY"] = os.getenv("OPENROUTER_API_KEY")
+    if not secrets["ASSEMBLYAI_API_KEY"]:
+        secrets["ASSEMBLYAI_API_KEY"] = os.getenv("ASSEMBLYAI_API_KEY")
+    
+    return secrets
 
 # Загрузка секретов
-try:
-    secrets = load_secrets()
-    OPENROUTER_API_KEY = secrets["OPENROUTER_API_KEY"]
-    ASSEMBLYAI_API_KEY = secrets["ASSEMBLYAI_API_KEY"]
-except Exception as e:
-    # Fallback на прямые ключи
-    OPENROUTER_API_KEY = "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"
-    ASSEMBLYAI_API_KEY = "dea6f5f506c2491588b8178de20c51a0"
+secrets = load_secrets()
+OPENROUTER_API_KEY = secrets["OPENROUTER_API_KEY"]
+ASSEMBLYAI_API_KEY = secrets["ASSEMBLYAI_API_KEY"]
+
+# Предупреждение, если ключи не найдены
+if not OPENROUTER_API_KEY:
+    print("⚠️ ВНИМАНИЕ: OPENROUTER_API_KEY не найден!")
+    print("   Установите ключ в .streamlit/secrets.toml или переменную окружения OPENROUTER_API_KEY")
+if not ASSEMBLYAI_API_KEY:
+    print("⚠️ ВНИМАНИЕ: ASSEMBLYAI_API_KEY не найден!")
+    print("   Установите ключ в .streamlit/secrets.toml или переменную окружения ASSEMBLYAI_API_KEY")
 
 # Настройки для Replit
 IS_REPLIT = os.getenv("REPL_ID") is not None
