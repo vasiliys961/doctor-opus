@@ -340,13 +340,20 @@ def show_ecg_analysis():
                     tmp_path = tmp.name
                 
                 # Загрузка через процессор форматов
-                processor = ImageFormatProcessor()
-                image_array, file_metadata = processor.load_image(tmp_path, MOBILE_MAX_IMAGE_SIZE)
-                metadata = {**metadata, **file_metadata, 'source': 'upload'}
+                if IMAGE_PROCESSOR_AVAILABLE and ImageFormatProcessor:
+                    processor = ImageFormatProcessor()
+                    image_array, file_metadata = processor.load_image(tmp_path, MOBILE_MAX_IMAGE_SIZE)
+                    metadata = {**metadata, **file_metadata, 'source': 'upload'}
+                else:
+                    # Fallback - простая загрузка через PIL
+                    image = Image.open(tmp_path)
+                    image_array = np.array(image)
+                    metadata = {**metadata, 'source': 'upload'}
                 
                 # Очистка
                 os.unlink(tmp_path)
-                processor.cleanup_temp_files()
+                if IMAGE_PROCESSOR_AVAILABLE and ImageFormatProcessor and 'processor' in locals():
+                    processor.cleanup_temp_files()
                 
             except Exception as e:
                 st.error(f"Ошибка обработки файла: {e}")
@@ -357,14 +364,20 @@ def show_ecg_analysis():
         return
 
     # Валидация изображения
-    is_valid, error_msg = validate_image(image_array)
-    if not is_valid:
-        st.error(f"❌ Ошибка валидации изображения: {error_msg}")
-        return
+    if VALIDATORS_AVAILABLE and validate_image:
+        is_valid, error_msg = validate_image(image_array)
+        if not is_valid:
+            st.error(f"❌ Ошибка валидации изображения: {error_msg}")
+            return
+    else:
+        # Простая проверка без валидатора
+        if image_array is None or image_array.size == 0:
+            st.error("❌ Ошибка: изображение пустое или не загружено")
+            return
 
     try:
         # Оптимизация для мобильных устройств
-        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+        if (IS_REPLIT or st.session_state.get('mobile_mode', False)) and IMAGE_PROCESSOR_AVAILABLE and optimize_image_for_ai:
             image_array = optimize_image_for_ai(image_array)
         
         st.image(image_array, caption="ЭКГ", use_container_width=True, clamp=True)
@@ -435,8 +448,26 @@ def show_ecg_analysis():
             
             with st.spinner("ИИ анализирует ЭКГ..."):
                 from modules.medical_ai_analyzer import ImageType
-                prompt = get_specialist_prompt(ImageType.ECG)
-                specialist_info = get_specialist_info(ImageType.ECG)
+                
+                # Получение промпта специалиста
+                if SPECIALIST_DETECTOR_AVAILABLE and get_specialist_prompt and get_specialist_info:
+                    prompt = get_specialist_prompt(ImageType.ECG)
+                    specialist_info = get_specialist_info(ImageType.ECG)
+                else:
+                    # Fallback промпт для ЭКГ
+                    prompt = """Вы — опытный кардиолог с многолетним стажем. Проанализируйте эту ЭКГ максимально подробно.
+
+Опишите:
+1. Ритм и частота сердечных сокращений
+2. Электрическая ось сердца
+3. Интервалы (PR, QRS, QT)
+4. Сегменты (ST, T)
+5. Патологические изменения
+6. Клиническое значение находок
+7. Рекомендации по дальнейшему обследованию
+
+Будьте точны и профессиональны."""
+                    specialist_info = {'role': 'Кардиолог', 'specialization': 'ЭКГ'}
                 
                 # Добавьте контекст в промпт если есть
                 if patient_context:
@@ -608,7 +639,7 @@ def show_xray_analysis():
 
     try:
         # Оптимизация для мобильных устройств
-        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+        if (IS_REPLIT or st.session_state.get('mobile_mode', False)) and IMAGE_PROCESSOR_AVAILABLE and optimize_image_for_ai:
             image_array = optimize_image_for_ai(image_array)
         
         st.image(image_array, caption="Рентген", use_container_width=True, clamp=True)
@@ -730,7 +761,7 @@ def show_mri_analysis():
 
     try:
         # Оптимизация для мобильных устройств
-        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+        if (IS_REPLIT or st.session_state.get('mobile_mode', False)) and IMAGE_PROCESSOR_AVAILABLE and optimize_image_for_ai:
             image_array = optimize_image_for_ai(image_array)
         
         st.image(image_array, caption="МРТ-срез", use_container_width=True, clamp=True)
@@ -854,7 +885,7 @@ def show_dermatoscopy_analysis():
 
     try:
         # Оптимизация для мобильных устройств
-        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+        if (IS_REPLIT or st.session_state.get('mobile_mode', False)) and IMAGE_PROCESSOR_AVAILABLE and optimize_image_for_ai:
             image_array = optimize_image_for_ai(image_array)
         
         st.image(image_array, caption="Дерматоскопия", use_container_width=True, clamp=True)
@@ -957,7 +988,7 @@ def show_ct_analysis():
         return
 
     try:
-        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+        if (IS_REPLIT or st.session_state.get('mobile_mode', False)) and IMAGE_PROCESSOR_AVAILABLE and optimize_image_for_ai:
             image_array = optimize_image_for_ai(image_array)
         
         st.image(image_array, caption="КТ-срез", use_container_width=True, clamp=True)
@@ -1131,7 +1162,7 @@ def show_ultrasound_analysis():
         return
 
     try:
-        if IS_REPLIT or st.session_state.get('mobile_mode', False):
+        if (IS_REPLIT or st.session_state.get('mobile_mode', False)) and IMAGE_PROCESSOR_AVAILABLE and optimize_image_for_ai:
             image_array = optimize_image_for_ai(image_array)
         
         st.image(image_array, caption="УЗИ-снимок", use_container_width=True, clamp=True)
@@ -1324,6 +1355,11 @@ def show_consultation_protocol():
                         if not os.path.exists(audio):
                             st.error(f"❌ Аудиофайл не найден: {audio}")
                             return
+                    
+                    # Вызываем функцию транскрипции
+                    if not transcribe_audio_assemblyai:
+                        st.error("❌ Функция транскрипции недоступна. Проверьте импорт assemblyai_transcriber")
+                        return
                     
                     raw_text = transcribe_audio_assemblyai(audio, api_key)
                     
@@ -1974,6 +2010,9 @@ def show_genetic_analysis_page():
         file_key = f"genetic_file_{uploaded_file.name}"
         
         if st.button("🧬 Запустить генетический анализ", use_container_width=True):
+            if not GENETIC_ANALYZER_AVAILABLE:
+                st.error("❌ Модуль генетического анализа недоступен. Проверьте файл modules/genetic_analyzer.py")
+                return
             try:
                 with st.spinner("🔬 Анализ генетических данных..."):
                     # Инициализация анализатора
@@ -3182,8 +3221,9 @@ def main():
         "🔬 Анализ дерматоскопии",
         "🔬 Анализ лабораторных данных",
         "📝 Протокол приёма",
+        "📄 Сканирование документов",
         "👤 База данных пациентов",
-        "📋 Клинический контекст",  # ← НОВОЕ
+        "📋 Клинический контекст",
         "🤖 ИИ-Консультант",
         "🧬 Генетический анализ",
         "📊 Статистика",
