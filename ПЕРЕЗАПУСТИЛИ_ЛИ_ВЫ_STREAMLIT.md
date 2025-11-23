@@ -25,7 +25,7 @@ Python кэширует импорты модулей. Старый ключ о�
 
 ```bash
 curl -X POST "https://openrouter.ai/api/v1/chat/completions" \
-  -H "Authorization: Bearer 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" \
+  -H "Authorization: Bearer sk-or-v1-6хххххххххххххххх69b7a9f1238248b9" \
   -H "Content-Type: application/json" \
   -d '{"model": "anthropic/claude-3-haiku", "messages": [{"role": "user", "content": "OK"}]}'
 ```
@@ -74,7 +74,7 @@ streamlit run app.py
 
 ```toml
 [api_keys]
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "sk-or-v1-67c0ХХХХХХХХХХХХХХХХХХХ469b7a9f1238248b9"
 ASSEMBLYAI_API_KEY = "dea6f5f506c2491588b8178de20c51a0"
 ```
 
