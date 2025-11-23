@@ -1,6 +1,35 @@
-import toml
 import os
 from pathlib import Path
+
+# Попытка импорта toml (может отсутствовать)
+try:
+    import toml
+    TOML_AVAILABLE = True
+except ImportError:
+    TOML_AVAILABLE = False
+    # Простой парсер TOML для базовых случаев
+    def toml_load_simple(path):
+        """Простой парсер TOML для базовых случаев"""
+        result = {}
+        with open(path, 'r', encoding='utf-8') as f:
+            current_section = None
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                if line.startswith('[') and line.endswith(']'):
+                    current_section = line[1:-1]
+                    if current_section not in result:
+                        result[current_section] = {}
+                elif '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if current_section:
+                        result[current_section][key] = value
+                    else:
+                        result[key] = value
+        return result
 
 # Базовые пути
 BASE_DIR = Path(__file__).parent
@@ -35,7 +64,10 @@ def load_secrets(config_path=".streamlit/secrets.toml"):
     # Попытка 1: Загрузить из .streamlit/secrets.toml
     if os.path.exists(config_path):
         try:
-            config = toml.load(config_path)
+            if TOML_AVAILABLE:
+                config = toml.load(config_path)
+            else:
+                config = toml_load_simple(config_path)
             api_keys = config.get("api_keys", {})
             secrets["OPENROUTER_API_KEY"] = (
                 api_keys.get("OPENROUTER_API_KEY") or 
