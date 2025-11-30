@@ -8,45 +8,45 @@ class ModelRouter:
     """Умный выбор модели для конкретной задачи"""
     
     def __init__(self):
-        # Специализация моделей по типам задач
+        # Специализация моделей по типам задач (обновлено на Claude 4.5)
         self.model_specialization = {
             ImageType.ECG: [
-                "anthropic/claude-3-5-sonnet-20241022",  # Лучше для детального анализа
-                "anthropic/claude-3-5-sonnet",
+                "anthropic/claude-sonnet-4.5",  # Основная модель для ЭКГ
+                "anthropic/claude-opus-4.5",    # Для сложных ЭКГ
                 "meta-llama/llama-3.2-90b-vision-instruct"  # Vision для ЭКГ изображений
             ],
             ImageType.XRAY: [
-                "anthropic/claude-3-5-sonnet-20241022",
-                "google/gemini-pro-vision",  # Хорошо для рентгенов
+                "anthropic/claude-sonnet-4.5",  # Обновлено на Claude 4.5
+                "anthropic/claude-opus-4.5",    # Для сложных случаев
                 "meta-llama/llama-3.2-90b-vision-instruct"
             ],
             ImageType.MRI: [
-                "anthropic/claude-3-5-sonnet-20241022",  # Лучше для сложных структур
-                "anthropic/claude-3-5-sonnet",
-                "qwen/qwen2-vl-72b-instruct"  # Vision для МРТ
+                "anthropic/claude-sonnet-4.5",  # Обновлено на Claude 4.5
+                "anthropic/claude-opus-4.5",    # Для сложных структур
+                "meta-llama/llama-3.2-90b-vision-instruct"  # Vision для МРТ
             ],
             ImageType.DERMATOSCOPY: [
-                "google/gemini-pro-vision",  # Хорошо для цветных изображений
-                "meta-llama/llama-3.2-90b-vision-instruct",
-                "anthropic/claude-3-5-sonnet-20241022"
+                "anthropic/claude-opus-4.5",    # Критично для диагностики меланомы
+                "anthropic/claude-sonnet-4.5",  # Альтернатива
+                "meta-llama/llama-3.2-90b-vision-instruct"
             ],
             ImageType.CT: [
-                "anthropic/claude-3-5-sonnet-20241022",
-                "qwen/qwen2-vl-72b-instruct",
-                "google/gemini-pro-vision"
+                "anthropic/claude-sonnet-4.5",  # Обновлено на Claude 4.5
+                "anthropic/claude-opus-4.5",    # Для сложных случаев
+                "meta-llama/llama-3.2-90b-vision-instruct"
             ],
             ImageType.ULTRASOUND: [
-                "meta-llama/llama-3.2-90b-vision-instruct",
-                "google/gemini-pro-vision",
-                "anthropic/claude-3-5-sonnet-20241022"
+                "anthropic/claude-sonnet-4.5",  # Обновлено на Claude 4.5
+                "anthropic/claude-opus-4.5",    # Для сложных случаев
+                "meta-llama/llama-3.2-90b-vision-instruct"
             ]
         }
         
-        # Модели для текстовых задач
+        # Модели для текстовых задач (обновлено на Claude 4.5)
         self.text_models = [
-            "anthropic/claude-3-5-sonnet-20241022",
-            "anthropic/claude-3-5-sonnet",
-            "anthropic/claude-3-sonnet-20240229"
+            "anthropic/claude-sonnet-4.5",  # Основная модель
+            "anthropic/claude-opus-4.5",    # Для сложных задач
+            "anthropic/claude-haiku-4.5"    # Для быстрых задач
         ]
     
     def get_optimal_models(self, image_type: Optional[ImageType] = None, 
@@ -67,8 +67,8 @@ class ModelRouter:
         return self.model_specialization.get(image_type, self.text_models)
     
     def get_fallback_models(self) -> List[str]:
-        """Получение резервных моделей"""
+        """Получение резервных моделей (обновлено на Claude 4.5)"""
         return [
-            "anthropic/claude-3-haiku",  # Быстрая и дешевая
-            "anthropic/claude-3-sonnet-20240229"
+            "anthropic/claude-haiku-4.5",  # Быстрая и дешевая
+            "anthropic/claude-sonnet-4.5"  # Основная модель
         ]
