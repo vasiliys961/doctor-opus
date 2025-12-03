@@ -1005,6 +1005,67 @@ class OpenRouterAssistant:
                 continue
         
         return "❌ Ошибка: Все модели недоступны. Проверьте подключение к интернету и API ключи."
+
+    def get_response_without_system(self, user_message: str, force_opus: bool = False) -> str:
+        """
+        Текстовый запрос БЕЗ глобального системного промпта (например, для узкоспециализированных ролей,
+        таких как врач-генетик). Весь контекст и инструкции должны быть внутри user_message.
+        """
+        # Приоритет Opus для сложных клинических задач по генетике
+        if force_opus:
+            models_to_try = ["anthropic/claude-opus-4.5"] + [
+                m for m in self.models if m != "anthropic/claude-opus-4.5"
+            ]
+        else:
+            models_to_try = self.models
+
+        for model in models_to_try:
+            try:
+                start_time = time.time()
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "user", "content": user_message}
+                    ],
+                    "max_tokens": 8000,
+                    "temperature": 0.2,
+                }
+
+                response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=300)
+                latency = time.time() - start_time
+
+                if response.status_code == 200:
+                    result_data = response.json()
+                    result = result_data["choices"][0]["message"]["content"]
+
+                    tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                    log_api_call(model, True, latency, None)
+                    track_model_usage(model, True, tokens_used)
+
+                    self.model = model
+                    return result
+                else:
+                    error_msg = f"HTTP {response.status_code}"
+                    log_api_call(model, False, latency, error_msg)
+                    track_model_usage(model, False)
+                    continue
+
+            except requests.exceptions.Timeout:
+                latency = time.time() - start_time if 'start_time' in locals() else 0
+                error_msg = "Таймаут запроса (>300 секунд)"
+                log_api_call(model, False, latency, error_msg)
+                track_model_usage(model, False)
+                print(f"⚠️ Таймаут для модели {model}")
+                continue
+            except Exception as e:
+                latency = time.time() - start_time if 'start_time' in locals() else 0
+                error_msg = handle_error(e, f"get_response_without_system ({model})", show_to_user=False)
+                log_api_call(model, False, latency, error_msg)
+                track_model_usage(model, False)
+                print(f"⚠️ Ошибка с моделью {model}: {e}")
+                continue
+
+        return "❌ Ошибка: Все модели недоступны для запроса без системного промпта."
     
     def general_medical_consultation(self, user_question: str) -> str:
         """Общая медицинская консультация"""
