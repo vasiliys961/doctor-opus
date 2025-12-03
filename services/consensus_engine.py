@@ -13,52 +13,30 @@ class ConsensusEngine:
     
     def __init__(self, assistant: OpenRouterAssistant):
         self.assistant = assistant
-        # Модели для консенсуса (обновлено на Claude 4.5 серию)
+        # Модели для консенсуса (разные типы для разнообразия)
         self.consensus_models = [
-            "anthropic/claude-sonnet-4.5",  # Новая рабочая лошадка
-            "anthropic/claude-opus-4.5",    # Для сложных случаев
-            "meta-llama/llama-3.2-90b-vision-instruct"  # Для документов и графиков
-        ]
-        # Специальные модели для ЭКГ (Claude 4.5 серия)
-        self.ecg_consensus_models = [
-            "anthropic/claude-sonnet-4.5",  # Основная модель для ЭКГ
-            "anthropic/claude-opus-4.5",    # Для сложных ЭКГ
-            "meta-llama/llama-3.2-90b-vision-instruct"  # Альтернатива
+            "anthropic/claude-3-5-sonnet-20241022",
+            "meta-llama/llama-3.2-90b-vision-instruct",
+            "google/gemini-pro-vision"
         ]
     
-    def get_multiple_opinions(self, prompt: str, image_array=None, metadata: str = "", 
-                             custom_models: List[str] = None) -> List[Dict[str, Any]]:
+    def get_multiple_opinions(self, prompt: str, image_array=None, metadata: str = "") -> List[Dict[str, Any]]:
         """
         Получение мнений от нескольких моделей
-        
-        Args:
-            prompt: Промпт для анализа
-            image_array: Массив изображения (опционально)
-            metadata: Метаданные (опционально)
-            custom_models: Кастомный список моделей для консенсуса (если None, используется стандартный)
         
         Returns:
             Список ответов с информацией о модели
         """
         opinions = []
         
-        # Определяем, какие модели использовать
-        if custom_models:
-            models_to_use = custom_models
-        else:
-            models_to_use = self.consensus_models[:2]  # Берем первые 2 для скорости
-        
-        for model in models_to_use:
+        for model in self.consensus_models[:2]:  # Берем первые 2 для скорости
             try:
                 # Временно меняем модель
                 original_models = self.assistant.models
-                original_model = self.assistant.model
                 self.assistant.models = [model]
-                self.assistant.model = model
                 
                 if image_array is not None:
-                    # Отключаем роутер для консенсуса, чтобы использовать указанную модель напрямую
-                    result = self.assistant.send_vision_request(prompt, image_array, metadata, use_router=False)
+                    result = self.assistant.send_vision_request(prompt, image_array, metadata)
                 else:
                     result = self.assistant.get_response(prompt)
                 
@@ -70,7 +48,6 @@ class ConsensusEngine:
                 
                 # Восстанавливаем модели
                 self.assistant.models = original_models
-                self.assistant.model = original_model
                 
             except Exception as e:
                 opinions.append({
@@ -237,22 +214,15 @@ class ConsensusEngine:
         except Exception as e:
             return f"Ошибка генерации консенсуса: {str(e)}"
     
-    def analyze_with_consensus(self, prompt: str, image_array=None, metadata: str = "", 
-                              custom_models: List[str] = None) -> Dict[str, Any]:
+    def analyze_with_consensus(self, prompt: str, image_array=None, metadata: str = "") -> Dict[str, Any]:
         """
         Полный анализ с консенсусом от нескольких моделей
-        
-        Args:
-            prompt: Промпт для анализа
-            image_array: Массив изображения (опционально)
-            metadata: Метаданные (опционально)
-            custom_models: Кастомный список моделей для консенсуса (если None, используется стандартный)
         
         Returns:
             Результат с консенсусом и индивидуальными мнениями
         """
         # Получаем мнения от нескольких моделей
-        opinions = self.get_multiple_opinions(prompt, image_array, metadata, custom_models)
+        opinions = self.get_multiple_opinions(prompt, image_array, metadata)
         
         # Сравниваем и формируем консенсус
         consensus_result = self.compare_opinions(opinions)

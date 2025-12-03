@@ -450,30 +450,14 @@ def show_ecg_analysis():
             patient_context = st.session_state['patient_context']
             st.info(f"💡 Используется клинический контекст пациента")
         
-        # Кнопка для принудительного использования Opus 4.5
-        use_opus_ecg = st.checkbox("🎯 Использовать Opus 4.5 (максимальная точность)", 
-                                   help="Принудительно использует Claude Opus 4.5 для детального анализа ЭКГ. Дороже, но точнее.",
-                                   key="ecg_use_opus")
-        
-        if st.button("🔍 ИИ-анализ ЭКГ (с контекстом)", use_container_width=True):
-            # Выбор режима анализа
-            analysis_mode = st.radio(
-                "Режим анализа:",
-                ["⚡ Быстрый (одна модель)", "🎯 Консенсус (несколько моделей)", "✅ С валидацией"],
-                horizontal=True,
-                key="ecg_analysis_mode"
-            )
-            
-            with st.spinner("ИИ анализирует ЭКГ..."):
-                from modules.medical_ai_analyzer import ImageType
-                
-                # Получение промпта специалиста
-                if SPECIALIST_DETECTOR_AVAILABLE and get_specialist_prompt and get_specialist_info:
-                    prompt = get_specialist_prompt(ImageType.ECG)
-                    specialist_info = get_specialist_info(ImageType.ECG)
-                else:
-                    # Fallback промпт для ЭКГ - детальная дешифровка
-                    prompt = """Ты — ведущий кардиолог-электрофизиолог с 20+ летним опытом. Проведи ПОЛНУЮ дешифровку ЭКГ по международным стандартам (AHA/ACC/HRS, ESC).
+        # Получение промпта специалиста (выносим за пределы кнопок, чтобы был доступен для всех)
+        from modules.medical_ai_analyzer import ImageType
+        if SPECIALIST_DETECTOR_AVAILABLE and get_specialist_prompt and get_specialist_info:
+            prompt = get_specialist_prompt(ImageType.ECG)
+            specialist_info = get_specialist_info(ImageType.ECG)
+        else:
+            # Fallback промпт для ЭКГ - детальная дешифровка
+            prompt = """Ты — ведущий кардиолог-электрофизиолог с 20+ летним опытом. Проведи ПОЛНУЮ дешифровку ЭКГ по международным стандартам (AHA/ACC/HRS, ESC).
 
 ОБЯЗАТЕЛЬНО проанализируй и опиши:
 
@@ -519,17 +503,42 @@ def show_ecg_analysis():
 10. **КОДЫ МКБ-10** для выявленных патологий
 
 ВАЖНО: измеряй ВСЕ параметры ТОЧНО, анализируй ВСЕ 12 отведений, указывай конкретные отведения для каждого отклонения, не используй общие фразы."""
-                    specialist_info = {'role': 'Кардиолог', 'specialization': 'ЭКГ'}
-                
-                # Добавьте контекст в промпт если есть
-                if patient_context:
-                    prompt += f"\n\nКЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n{patient_context}\n\nУчтите этот контекст при анализе."
+            specialist_info = {'role': 'Кардиолог', 'specialization': 'ЭКГ'}
+        
+        # Добавляем контекст в промпт если есть
+        if patient_context:
+            prompt += f"\n\nКЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n{patient_context}\n\nУчтите этот контекст при анализе."
+        
+        # Выбор режима анализа (показывается всегда, до нажатия кнопки)
+        st.markdown("---")
+        st.markdown("### ⚙️ Настройки анализа")
+        
+        analysis_mode = st.radio(
+            "**Режим анализа:**",
+            ["⚡ Быстрый (одна модель)", "🎯 Консенсус (несколько моделей)", "✅ С валидацией"],
+            horizontal=True,
+            key="ecg_analysis_mode",
+            help="Выберите режим анализа перед запуском"
+        )
+        
+        # Показываем информацию о выбранном режиме
+        if analysis_mode == "🎯 Консенсус (несколько моделей)":
+            st.info("💡 **Консенсус:** Несколько моделей проанализируют ЭКГ, затем будет сформировано общее заключение")
+        elif analysis_mode == "✅ С валидацией":
+            st.info("💡 **С валидацией:** Анализ будет проверен на логичность и полноту")
+        else:
+            st.info("💡 **Быстрый анализ:** Одна модель быстро проанализирует ЭКГ")
+        
+        st.markdown("---")
+        
+        if st.button("🔍 ИИ-анализ ЭКГ (с контекстом)", use_container_width=True, type="primary"):
+            with st.spinner("ИИ анализирует ЭКГ..."):
+                # Промпт уже определен выше, используем его
                 
                 if analysis_mode == "⚡ Быстрый (одна модель)":
                     try:
-                        # Используем Opus, если выбрано
-                        force_model = "opus" if use_opus_ecg else None
-                        result = assistant.send_vision_request(prompt, image_array, str(analysis), force_model=force_model)
+                        # Opus 4.5 используется по умолчанию для клинического анализа ЭКГ
+                        result = assistant.send_vision_request(prompt, image_array, str(analysis))
                         st.markdown(f"### 🧠 Ответ ИИ ({specialist_info['role']}):")
                         st.write(result)
                         
@@ -540,18 +549,13 @@ def show_ecg_analysis():
                         st.error(f"❌ Ошибка анализа: {str(e)}")
                         st.info("💡 Попробуйте еще раз или выберите другой режим анализа")
                 
+                
                 elif analysis_mode == "🎯 Консенсус (несколько моделей)":
-                    # Используем Claude 4.5 и Llama Vision для консенсуса ЭКГ
-                    ecg_consensus_models = [
-                        "anthropic/claude-sonnet-4.5",  # Основная модель для ЭКГ
-                        "anthropic/claude-opus-4.5",    # Для сложных ЭКГ
-                        "meta-llama/llama-3.2-90b-vision-instruct"
-                    ]
-                    
-                    st.info(f"🔄 Используется консенсус моделей: Claude 4.5 Sonnet + Opus 4.5 + Llama 3.2 90B Vision")
+                    # Используем стандартный набор моделей консенсуса из ConsensusEngine
+                    st.info("🔄 Используется консенсус моделей: Sonnet + Llama Vision + Gemini (по настройкам движка консенсуса)")
                     
                     consensus_result = consensus_engine.analyze_with_consensus(
-                        prompt, image_array, str(analysis), custom_models=ecg_consensus_models
+                        prompt, image_array, str(analysis)
                     )
                     
                     st.markdown("### 🎯 Консенсусное заключение:")
@@ -576,9 +580,8 @@ def show_ecg_analysis():
                         st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                 
                 elif analysis_mode == "✅ С валидацией":
-                    # Используем Opus, если выбрано
-                    force_model = "opus" if use_opus_ecg else None
-                    result = assistant.send_vision_request(prompt, image_array, str(analysis), force_model=force_model)
+                    # Opus 4.5 используется по умолчанию для клинического анализа ЭКГ
+                    result = assistant.send_vision_request(prompt, image_array, str(analysis))
                     
                     # Проверка на критические находки
                     critical_findings = notifier.check_critical_findings(result)
@@ -659,6 +662,22 @@ def show_ecg_analysis():
                     # Оценка доказательности
                     with st.expander("📚 Оценка доказательности"):
                         st.text(evidence_report)
+
+        # Возможность скачать стандартный протокол описания ЭКГ
+        if 'ecg_analysis_result' in st.session_state and st.session_state.ecg_analysis_result:
+            st.markdown("---")
+            st.markdown("### 💾 Экспорт протокола ЭКГ")
+            timestamp = st.session_state.get('ecg_analysis_timestamp', '')
+            header = "Стандартный протокол описания ЭКГ"
+            if timestamp:
+                header += f"\nВремя анализа: {timestamp}"
+            report_text = f"{header}\n\n{st.session_state.ecg_analysis_result}"
+            st.download_button(
+                label="📥 Скачать протокол ЭКГ (.txt)",
+                data=report_text,
+                file_name=f"ECG_report_{timestamp.replace(' ', '_').replace(':', '-') if timestamp else 'latest'}.txt",
+                mime="text/plain"
+            )
 
     except Exception as e:
         handle_error(e, "show_ecg_analysis", show_to_user=True)
@@ -990,11 +1009,6 @@ def show_dermatoscopy_analysis():
 
         assistant = OpenRouterAssistant()
         
-        # Кнопка для принудительного использования Opus 4.5
-        use_opus_derm = st.checkbox("🎯 Использовать Opus 4.5 (максимальная точность)", 
-                                    help="Принудительно использует Claude Opus 4.5 для детального анализа дерматоскопии. Критично для диагностики меланомы.",
-                                    key="derm_use_opus")
-        
         if st.button("🔬 ИИ-анализ дерматоскопии", use_container_width=True):
             with st.spinner("ИИ анализирует изображение..."):
                 # Промпт от имени специалиста
@@ -1019,9 +1033,8 @@ def show_dermatoscopy_analysis():
 Дайте заключение о риске меланомы и рекомендации."""
                 
                 try:
-                    # Используем Opus, если выбрано
-                    force_model = "opus" if use_opus_derm else None
-                    result = assistant.send_vision_request(prompt, image_array, str(metadata), force_model=force_model)
+                    # Opus 4.5 используется по умолчанию для клинического анализа изображений
+                    result = assistant.send_vision_request(prompt, image_array, str(metadata))
                     st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
                     st.write(result)
                 except Exception as e:
@@ -1123,11 +1136,6 @@ def show_ct_analysis():
             key="ct_analysis_mode"
         )
         
-        # Кнопка для принудительного использования Opus 4.5
-        use_opus = st.checkbox("🎯 Использовать Opus 4.5 (максимальная точность)", 
-                              help="Принудительно использует Claude Opus 4.5 для детального анализа. Дороже, но точнее.",
-                              key="ct_use_opus")
-        
         specialist_info = get_specialist_info(ImageType.CT)
         base_prompt = f"Проанализируйте КТ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените структуры, патологические изменения, денситометрию."
         prompt = get_specialist_prompt(ImageType.CT, base_prompt)
@@ -1136,9 +1144,8 @@ def show_ct_analysis():
             with st.spinner("ИИ анализирует КТ..."):
                 if analysis_mode == "⚡ Быстрый (одна модель)":
                     try:
-                        # Используем Opus, если выбрано
-                        force_model = "opus" if use_opus else None
-                        result = assistant.send_vision_request(prompt, image_array, str(metadata), force_model=force_model)
+                        # Opus 4.5 используется по умолчанию для клинического анализа КТ
+                        result = assistant.send_vision_request(prompt, image_array, str(metadata))
                         st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
                         st.write(result)
                     except Exception as e:
@@ -1325,11 +1332,6 @@ def show_ultrasound_analysis():
             key="us_analysis_mode"
         )
         
-        # Кнопка для принудительного использования Opus 4.5
-        use_opus_us = st.checkbox("🎯 Использовать Opus 4.5 (максимальная точность)", 
-                                  help="Принудительно использует Claude Opus 4.5 для детального анализа. Дороже, но точнее.",
-                                  key="us_use_opus")
-        
         specialist_info = get_specialist_info(ImageType.ULTRASOUND)
         base_prompt = f"Проанализируйте УЗИ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените эхогенность, структуры, патологические изменения."
         prompt = get_specialist_prompt(ImageType.ULTRASOUND, base_prompt)
@@ -1338,9 +1340,8 @@ def show_ultrasound_analysis():
             with st.spinner("ИИ анализирует УЗИ..."):
                 if analysis_mode == "⚡ Быстрый (одна модель)":
                     try:
-                        # Используем Opus, если выбрано
-                        force_model = "opus" if use_opus_us else None
-                        result = assistant.send_vision_request(prompt, image_array, str(metadata), force_model=force_model)
+                        # Opus 4.5 используется по умолчанию для клинического анализа УЗИ
+                        result = assistant.send_vision_request(prompt, image_array, str(metadata))
                         st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
                         st.write(result)
                     except Exception as e:
@@ -3150,7 +3151,7 @@ def show_genetic_analysis_page():
       - К каким врачам записаться
    
    b. В ТЕЧЕНИЕ МЕСЯЦА:
-      - Дополнительные обследования
+   - Дополнительные обследования
       - Консультации специалистов
       - Коррекция образа жизни
    
@@ -3660,17 +3661,56 @@ def show_document_scanner_page():
     if image_array is not None:
         st.image(image_array, caption="Загруженный документ", use_container_width=True, clamp=True)
         
-        # Кнопка извлечения данных
-        if st.button("🔍 Извлечь данные из документа", use_container_width=True, type="primary"):
-            if not AI_AVAILABLE:
-                st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
-                return
-            
-            with st.spinner("🤖 ИИ анализирует документ и извлекает данные..."):
-                assistant = OpenRouterAssistant()
+        col_scan, col_struct = st.columns(2)
+        
+        # Режим 1: ЧИСТОЕ СКАНИРОВАНИЕ (получить текст без анализа)
+        with col_scan:
+            if st.button("📄 Сканировать (получить текст)", use_container_width=True, type="secondary"):
+                if not AI_AVAILABLE:
+                    st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
+                    return
+                with st.spinner("🤖 ИИ распознает текст документа..."):
+                    assistant = OpenRouterAssistant()
+                    ocr_prompt = """
+Вы — эксперт по OCR медицинских документов. 
+Аккуратно извлеките ВЕСЬ читаемый текст с этого изображения.
+Верните ТОЛЬКО текст документа, без перевода, без интерпретации, без клинических выводов и без ссылок.
+Сохраняйте максимально исходное форматирование (строки, абзацы), насколько это возможно.
+"""
+                    try:
+                        scanned_text = assistant.send_vision_request(
+                            ocr_prompt,
+                            image_array,
+                            metadata={"task": "doc_ocr"}
+                        )
+                        if isinstance(scanned_text, list):
+                            # На всякий случай, если вернулся список результатов
+                            scanned_text = "\n\n".join(str(x.get("result", x)) for x in scanned_text)
+                        st.session_state['scanned_doc_text'] = str(scanned_text)
+                        st.subheader("📋 Распознанный текст документа")
+                        st.text_area("Текст", st.session_state['scanned_doc_text'], height=300)
+                        
+                        st.download_button(
+                            label="📥 Скачать как .txt",
+                            data=st.session_state['scanned_doc_text'],
+                            file_name="scanned_document.txt",
+                            mime="text/plain"
+                        )
+                    except Exception as e:
+                        st.error(f"❌ Ошибка распознавания: {e}")
+        
+        # Режим 2: Структурированное извлечение (как было)
+        with col_struct:
+            if st.button("🔍 Извлечь данные из документа", use_container_width=True, type="primary"):
+                if not AI_AVAILABLE:
+                    st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
+                    return
                 
-                # Промпт в зависимости от типа документа
-                prompts = {
+                with st.spinner("🤖 ИИ анализирует документ и извлекает данные..."):
+                    assistant = OpenRouterAssistant()
+                    
+                    # Промпт в зависимости от типа документа
+                    prompts = {
                     "Медицинская справка": """
 Вы - эксперт по распознаванию медицинских документов. Извлеките из этого изображения медицинской справки все данные в структурированном JSON формате.
 
@@ -4164,7 +4204,7 @@ def show_document_scanner_page():
                     with st.spinner("🤖 ИИ структурирует данные..."):
                         assistant = OpenRouterAssistant()
                         current_doc_type = st.session_state.get('current_doc_type', 'медицинский документ')
-                        prompt = f"""
+                prompt = f"""
 Вы - эксперт по структурированию медицинских документов. Структурируйте следующий текст из медицинского документа типа "{current_doc_type}".
 
 Текст документа:

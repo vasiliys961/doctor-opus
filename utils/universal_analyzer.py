@@ -69,32 +69,17 @@ class UniversalMedicalAnalyzer:
         }
         
         if analysis_mode == "⚡ Быстрый (одна модель)":
-            # Используем интеллектуальный роутер для выбора оптимальной модели
-            result = self.assistant.send_vision_request(prompt, image_array, str(metadata or {}), use_router=True)
+            result = self.assistant.send_vision_request(prompt, image_array, str(metadata or {}))
             results['result'] = result
             
         elif analysis_mode == "🎯 Консенсус (несколько моделей)":
-            # Используем Claude 4.5 и Llama Vision для консенсуса рентгена
-            if image_type == ImageType.XRAY:
-                xray_consensus_models = [
-                    "anthropic/claude-sonnet-4.5",  # Обновлено на Claude 4.5
-                    "anthropic/claude-opus-4.5",    # Для сложных случаев
-                    "meta-llama/llama-3.2-90b-vision-instruct"
-                ]
-                consensus_result = self.consensus_engine.analyze_with_consensus(
-                    prompt, image_array, str(metadata or {}), custom_models=xray_consensus_models
-                )
-            else:
-                consensus_result = self.consensus_engine.analyze_with_consensus(
-                    prompt, image_array, str(metadata or {})
-                )
+            consensus_result = self.consensus_engine.analyze_with_consensus(prompt, image_array, str(metadata or {}))
             results['consensus'] = consensus_result
             results['result'] = consensus_result['consensus'].get('consensus_response', 
                 consensus_result['consensus'].get('single_opinion', 'Ошибка получения консенсуса'))
             
         elif analysis_mode == "✅ С валидацией":
-            # Используем интеллектуальный роутер для выбора оптимальной модели
-            result = self.assistant.send_vision_request(prompt, image_array, str(metadata or {}), use_router=True)
+            result = self.assistant.send_vision_request(prompt, image_array, str(metadata or {}))
             results['result'] = result
             
             # Проверка на критические находки

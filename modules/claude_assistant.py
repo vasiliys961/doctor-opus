@@ -24,15 +24,17 @@ class OpenRouterAssistant:
             raise ValueError("API ключ не найден. Установите OPENROUTER_API_KEY в config.py или .streamlit/secrets.toml")
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         
-        # Модели с приоритетом Claude 4.5 серия
+        # Модели с приоритетом Claude Sonnet 4 + Gemini 3 Pro
         self.models = [
-            "anthropic/claude-sonnet-4.5",            # Claude Sonnet 4.5 (основная модель)
-            "anthropic/claude-opus-4.5",              # Claude Opus 4.5 (для сложных случаев)
-            "anthropic/claude-haiku-4.5",             # Claude Haiku 4.5 (быстрая)
-            "meta-llama/llama-3.2-90b-vision-instruct"  # Llama 3.2 90B Vision (документы)
+            "anthropic/claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (latest)
+            "anthropic/claude-3-5-sonnet",           # Claude 3.5 Sonnet
+            "google/gemini-3-pro-preview",           # Gemini 3 Pro Preview (новейшая модель Google)
+            "anthropic/claude-3-sonnet-20240229",    # Claude 3 Sonnet
+            "anthropic/claude-3-haiku",              # Claude 3 Haiku (fallback)
+            "google/gemini-pro-vision"               # Gemini Pro Vision (дополнительно)
         ]
         
-        self.model = self.models[0]  # Claude Sonnet 4.5 по умолчанию
+        self.model = self.models[0]  # Claude 3.5 Sonnet latest по умолчанию
         
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -127,11 +129,11 @@ class OpenRouterAssistant:
                 "image_url": {"url": f"data:image/png;base64,{base64_str}"}
             })
         
-        # Для ЭКГ используем Claude 4.5 Sonnet и Opus
+        # Для ЭКГ используем только Claude 3.5 Sonnet
         if "экг" in prompt_lower or "ecg" in prompt_lower:
             ecg_models = [
-                "anthropic/claude-sonnet-4.5",  # Обновлено на Claude 4.5
-                "anthropic/claude-opus-4.5"     # Для сложных ЭКГ
+                "anthropic/claude-3-5-sonnet-20241022",
+                "anthropic/claude-3-5-sonnet"
             ]
             models_to_use = ecg_models
         else:
@@ -165,14 +167,14 @@ class OpenRouterAssistant:
     
     def _get_model_name(self, model):
         """Получить читаемое название модели"""
-        if "claude-opus-4.5" in model:
-            return "Claude Opus 4.5"
-        elif "claude-sonnet-4.5" in model:
-            return "Claude Sonnet 4.5"
-        elif "claude-haiku-4.5" in model:
-            return "Claude Haiku 4.5"
-        elif "llama-3.2-90b-vision" in model:
-            return "Llama 3.2 90B Vision"
+        if "claude-3-5-sonnet-20241022" in model:
+            return "Claude 3.5 Sonnet (Latest)"
+        elif "claude-3-5-sonnet" in model:
+            return "Claude 3.5 Sonnet"
+        elif "claude-3-sonnet" in model:
+            return "Claude 3 Sonnet"
+        elif "claude-3-haiku" in model:
+            return "Claude 3 Haiku"
         else:
             return model
     

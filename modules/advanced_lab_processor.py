@@ -393,7 +393,7 @@ class AdvancedLabProcessor:
             # Предобработка изображения для лучшего распознавания текста
             processed_image = self._preprocess_lab_photo(image_array)
             
-            # Если есть ИИ-ассистент, используем его для извлечения данных
+            # Если есть ИИ-ассистент, используем его для извлечения данных (Sonnet 4.5 для лабораторных данных)
             if ai_assistant:
                 extracted_text = self._extract_text_with_ai(processed_image, ai_assistant)
             else:
@@ -491,8 +491,12 @@ class AdvancedLabProcessor:
             img.save(buffered, format="PNG")
             img_base64 = base64.b64encode(buffered.getvalue()).decode()
             
-            # Отправка запроса к ИИ (используется существующий метод)
-            response = ai_assistant.send_vision_request(prompt, image_array)
+            # Отправка запроса к ИИ (используется Sonnet 4.5 для лабораторных данных)
+            response = ai_assistant.send_vision_request(
+                prompt,
+                image_array,
+                metadata={"task": "lab_ocr"},
+            )
             return response
             
         except Exception as e:
