@@ -69,8 +69,8 @@ def transcribe_audio_assemblyai(audio_file, api_key):
             
             # Определяем расширение файла на основе формата
             # AssemblyAI поддерживает: mp3, wav, m4a, webm, ogg, flac, wma, aac, opus
-            # По умолчанию используем .wav, но можно попробовать определить формат
-            file_extension = ".wav"
+            # По умолчанию для данных из браузера (st.audio_input) используем .webm
+            file_extension = ".webm"
             
             # Попытка определить формат по заголовку файла
             if audio_data.startswith(b'RIFF') and b'WAVE' in audio_data[:12]:
@@ -83,6 +83,20 @@ def transcribe_audio_assemblyai(audio_file, api_key):
                 file_extension = ".ogg"
             elif audio_data.startswith(b'\x00\x00\x00\x20ftypM4A'):
                 file_extension = ".m4a"
+            elif audio_data.startswith(b'\x1aE\xdf\xa3') or b'webm' in audio_data[:100].lower():
+                # WebM формат (часто используется браузерами для записи)
+                file_extension = ".webm"
+            elif audio_data.startswith(b'fLaC'):
+                file_extension = ".flac"
+            # Если формат не определен, используем .webm по умолчанию для данных из браузера
+            # так как st.audio_input обычно возвращает WebM
+            elif len(audio_data) > 0:
+                # Проверяем, не является ли это WebM по содержимому
+                if b'webm' in audio_data[:500].lower() or b'matroska' in audio_data[:500].lower():
+                    file_extension = ".webm"
+                else:
+                    # По умолчанию для неизвестных форматов из браузера используем webm
+                    file_extension = ".webm"
             
             # Сохраняем во временный файл с правильным расширением
             with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
@@ -97,27 +111,47 @@ def transcribe_audio_assemblyai(audio_file, api_key):
             if file_size == 0:
                 return "❌ Созданный файл пуст"
             
-            # Загружаем файл через AssemblyAI
-            # Для локальных файлов используем прямой upload через API, затем транскрибируем по URL
-            # Это более надежный метод для работы с локальными файлами
+            # Пробуем использовать прямой метод транскрипции через SDK (более надежно для локальных файлов)
             try:
-                # Читаем файл в бинарном режиме
-                with open(tmp_path, 'rb') as f:
-                    upload_response = requests.post(
-                        'https://api.assemblyai.com/v2/upload',
-                        headers={'authorization': api_key},
-                        files={'file': (os.path.basename(tmp_path), f, 'audio/' + file_extension[1:])},
-                        timeout=300  # 5 минут на загрузку
-                    )
-                
-                if upload_response.status_code != 200:
-                    error_text = upload_response.text
-                    return f"❌ Ошибка загрузки файла (код {upload_response.status_code}): {error_text}\n💡 Проверьте:\n- Формат файла (MP3, WAV, M4A, WEBM, OGG, FLAC)\n- Размер файла (максимум 2GB)\n- Интернет-соединение"
-                
-                upload_data = upload_response.json()
-                upload_url = upload_data.get('upload_url')
-                if not upload_url:
-                    return f"❌ Не удалось получить URL загруженного файла: {upload_response.text}"
+                transcript = transcriber.transcribe(tmp_path, config)
+            except Exception as direct_error:
+                # Если прямой метод не сработал, пробуем загрузку через API
+                try:
+                    # Определяем правильный MIME-тип
+                    mime_types = {
+                        '.webm': 'audio/webm',
+                        '.wav': 'audio/wav',
+                        '.mp3': 'audio/mpeg',
+                        '.m4a': 'audio/mp4',
+                        '.ogg': 'audio/ogg',
+                        '.flac': 'audio/flac',
+                        '.wma': 'audio/x-ms-wma',
+                        '.aac': 'audio/aac',
+                        '.opus': 'audio/opus'
+                    }
+                    mime_type = mime_types.get(file_extension, 'audio/webm')
+                    
+                    with open(tmp_path, 'rb') as f:
+                        upload_response = requests.post(
+                            'https://api.assemblyai.com/v2/upload',
+                            headers={'authorization': api_key},
+                            files={'file': (os.path.basename(tmp_path), f, mime_type)},
+                            timeout=300  # 5 минут на загрузку
+                        )
+                    
+                    if upload_response.status_code != 200:
+                        error_text = upload_response.text
+                        return f"❌ Ошибка загрузки файла (код {upload_response.status_code}): {error_text}\n💡 Проверьте:\n- Формат файла (MP3, WAV, M4A, WEBM, OGG, FLAC)\n- Размер файла (максимум 2GB)\n- Интернет-соединение"
+                    
+                    upload_data = upload_response.json()
+                    upload_url = upload_data.get('upload_url')
+                    if not upload_url:
+                        return f"❌ Не удалось получить URL загруженного файла: {upload_response.text}"
+                    
+                    # Транскрибируем по URL
+                    transcript = transcriber.transcribe(upload_url, config)
+                except Exception as upload_error:
+                    return f"❌ Ошибка при транскрипции: {str(direct_error)}\n💡 Попробуйте:\n- Конвертировать файл в MP3 или WAV\n- Проверить размер файла\n- Проверить интернет-соединение"
                 
                 # Теперь транскрибируем по URL
                 transcript = transcriber.transcribe(upload_url, config)
@@ -158,6 +192,10 @@ def transcribe_audio_assemblyai(audio_file, api_key):
         if transcript.status != aai.TranscriptStatus.completed:
             return f"❌ Транскрипция не завершена. Статус: {transcript.status}"
 
+        # Детальная диагностика перед извлечением текста
+        transcript_status = getattr(transcript, 'status', 'unknown')
+        transcript_id = getattr(transcript, 'id', 'unknown')
+        
         # Проверка utterances - если доступны, используем их, иначе используем обычный текст
         if hasattr(transcript, 'utterances') and transcript.utterances is not None:
             if isinstance(transcript.utterances, list) and len(transcript.utterances) > 0:
@@ -168,19 +206,35 @@ def transcribe_audio_assemblyai(audio_file, api_key):
                     text = getattr(utterance, 'text', '')
                     if text:
                         result += f"**{speaker}**: {text}\n\n"
-                return result
+                if result.strip() != "🎙️ **Расшифровка разговора**\n\n":
+                    return result
         
         # Fallback: используем обычный текст без разделения по говорящим
-        if hasattr(transcript, 'text') and transcript.text:
-            return f"🎙️ **Расшифровка аудио**\n\n{transcript.text}"
+        transcript_text = getattr(transcript, 'text', None)
+        if transcript_text and transcript_text.strip():
+            return f"🎙️ **Расшифровка аудио**\n\n{transcript_text}"
         
-        # Если ничего не найдено
-        return "❌ Не удалось получить текст из транскрипции"
+        # Если ничего не найдено - детальная диагностика
+        error_details = f"Статус: {transcript_status}, ID: {transcript_id}"
+        if hasattr(transcript, 'error'):
+            error_details += f", Ошибка: {transcript.error}"
+        if hasattr(transcript, 'words_confidence'):
+            error_details += f", Слов распознано: {len(transcript.words_confidence) if transcript.words_confidence else 0}"
+        
+        return f"❌ Не удалось получить текст из транскрипции.\n💡 {error_details}\n💡 Возможные причины:\n- Аудио содержит только тишину или шум\n- Транскрипция еще обрабатывается (попробуйте подождать и повторить)\n- Проблема с качеством записи"
 
-    except aai.error.UploadError as e:
-        return f"❌ Ошибка загрузки файла в AssemblyAI: {str(e)}\n💡 Попробуйте:\n- Проверить формат файла (поддерживаются: MP3, WAV, M4A, WEBM, OGG, FLAC)\n- Убедиться, что файл не поврежден\n- Проверить размер файла (максимум 2GB)"
-    except aai.error.TranscriptionError as e:
-        return f"❌ Ошибка транскрипции: {str(e)}"
+    except aai.types.TranscriptError as e:
+        # Унифицированная ошибка AssemblyAI (в т.ч. проблемы загрузки/транскрипции)
+        error_msg = str(e)
+        if "Upload failed" in error_msg or "Failed to upload" in error_msg:
+            return (
+                f"❌ Ошибка загрузки файла в AssemblyAI: {error_msg}\n💡 Попробуйте:\n"
+                "- Проверить формат файла (поддерживаются: MP3, WAV, M4A, WEBM, OGG, FLAC)\n"
+                "- Убедиться, что файл не поврежден и не пустой\n"
+                "- Проверить размер файла (максимум 2GB)\n"
+                "- Повторить запись ещё раз (мог быть сетевой сбой)"
+            )
+        return f"❌ Ошибка транскрипции AssemblyAI: {error_msg}"
     except Exception as e:
         error_msg = str(e)
         # Добавляем более понятное сообщение для ошибок загрузки
