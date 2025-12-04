@@ -112,6 +112,7 @@ def transcribe_audio_assemblyai(audio_file, api_key):
                 return "❌ Созданный файл пуст"
             
             # Пробуем использовать прямой метод транскрипции через SDK (более надежно для локальных файлов)
+            transcript = None
             try:
                 transcript = transcriber.transcribe(tmp_path, config)
             except Exception as direct_error:
@@ -150,19 +151,13 @@ def transcribe_audio_assemblyai(audio_file, api_key):
                     
                     # Транскрибируем по URL
                     transcript = transcriber.transcribe(upload_url, config)
+                except requests.exceptions.RequestException as req_error:
+                    return f"❌ Ошибка при загрузке файла: {str(req_error)}\n💡 Проверьте интернет-соединение и попробуйте снова"
                 except Exception as upload_error:
                     return f"❌ Ошибка при транскрипции: {str(direct_error)}\n💡 Попробуйте:\n- Конвертировать файл в MP3 или WAV\n- Проверить размер файла\n- Проверить интернет-соединение"
-                
-                # Теперь транскрибируем по URL
-                transcript = transcriber.transcribe(upload_url, config)
-            except requests.exceptions.RequestException as req_error:
-                return f"❌ Ошибка при загрузке файла: {str(req_error)}\n💡 Проверьте интернет-соединение и попробуйте снова"
-            except Exception as upload_error:
-                # Если upload не сработал, пробуем прямой путь (для некоторых версий SDK)
-                try:
-                    transcript = transcriber.transcribe(tmp_path, config)
-                except Exception as direct_error:
-                    return f"❌ Ошибка при транскрипции: {str(direct_error)}\n💡 Попробуйте:\n- Конвертировать файл в MP3 или WAV\n- Проверить размер файла\n- Проверить интернет-соединение"
+            
+            if transcript is None:
+                return "❌ Не удалось создать транскрипцию. Попробуйте снова."
 
         # Ждем завершения транскрипции (если она еще не завершена)
         # AssemblyAI может вернуть объект сразу, но транскрипция может быть в процессе
@@ -171,16 +166,27 @@ def transcribe_audio_assemblyai(audio_file, api_key):
         wait_interval = 2  # Проверяем каждые 2 секунды
         elapsed_time = 0
         
-        while transcript.status not in [aai.TranscriptStatus.completed, aai.TranscriptStatus.error]:
+        # Проверяем статус транскрипции
+        current_status = getattr(transcript, 'status', None)
+        
+        # Если транскрипция еще не завершена, ждем
+        while current_status not in [aai.TranscriptStatus.completed, aai.TranscriptStatus.error]:
             if elapsed_time >= max_wait_time:
-                return f"❌ Транскрипция не завершена за {max_wait_time} секунд. Статус: {transcript.status}"
+                return f"❌ Транскрипция не завершена за {max_wait_time} секунд. Статус: {current_status}"
+            
             time.sleep(wait_interval)
             elapsed_time += wait_interval
+            
             # Обновляем статус транскрипции
-            transcript = transcriber.get_transcript(transcript.id)
+            try:
+                transcript = transcriber.get_transcript(transcript.id)
+                current_status = getattr(transcript, 'status', None)
+            except Exception as status_error:
+                return f"❌ Ошибка при проверке статуса транскрипции: {str(status_error)}"
         
         # Проверка статуса
-        if transcript.status == aai.TranscriptStatus.error:
+        final_status = getattr(transcript, 'status', None)
+        if final_status == aai.TranscriptStatus.error:
             error_msg = getattr(transcript, 'error', 'Неизвестная ошибка')
             return f"❌ Ошибка AssemblyAI: {error_msg}"
 
@@ -189,8 +195,8 @@ def transcribe_audio_assemblyai(audio_file, api_key):
             return "❌ Ошибка: transcript не является объектом Transcript"
 
         # Проверка, что транскрипция завершена
-        if transcript.status != aai.TranscriptStatus.completed:
-            return f"❌ Транскрипция не завершена. Статус: {transcript.status}"
+        if final_status != aai.TranscriptStatus.completed:
+            return f"❌ Транскрипция не завершена. Статус: {final_status}"
 
         # Детальная диагностика перед извлечением текста
         transcript_status = getattr(transcript, 'status', 'unknown')
