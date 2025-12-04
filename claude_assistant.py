@@ -38,6 +38,27 @@ def check_deprecated(model_name):
             return True
     return False
 
+# Ленивая загрузка промптов для видео (загружаются только при необходимости)
+_video_prompts_cache = None
+
+def _get_video_prompt(study_type: str):
+    """Ленивая загрузка промпта для видео-анализа"""
+    global _video_prompts_cache
+    if _video_prompts_cache is None:
+        try:
+            from prompts.video_prompts import get_video_prompt as _load_prompt
+            _video_prompts_cache = _load_prompt
+        except ImportError:
+            # Если файл не найден, возвращаем None
+            _video_prompts_cache = lambda x: None
+    
+    if _video_prompts_cache:
+        return _video_prompts_cache(study_type)
+    return None
+
+# УДАЛЕН: Большой словарь VIDEO_ANALYSIS_PROMPTS (537 строк) перенесен в prompts/video_prompts.py
+# для оптимизации производительности (ленивая загрузка вместо загрузки при импорте)
+
 class OpenRouterAssistant:
     def __init__(self, api_key=None):
         self.api_key = api_key or OPENROUTER_API_KEY
@@ -941,6 +962,201 @@ class OpenRouterAssistant:
         img.save(buffered, format="PNG", optimize=True)
         img_str = base64.b64encode(buffered.getvalue()).decode()
         return img_str
+    
+    def send_video_request(self, prompt: str = None, video_data=None, video_path=None, metadata=None, study_type=None):
+        """Анализ видео через Gemini 2.5 Flash
+        
+        Args:
+            prompt: Промпт для анализа видео (опционально, если не указан - используется специализированный промпт по study_type)
+            video_data: Видео в виде bytes (из st.file_uploader)
+            video_path: Путь к видео-файлу (альтернатива video_data)
+            metadata: Метаданные (опционально)
+            study_type: Тип исследования ('fgds', 'colonoscopy', 'echo', 'abdominal_us', 'gynecology_us', 'mri_brain', 'mri_universal', 'chest_ct')
+        
+        Returns:
+            Результат анализа видео
+        """
+        model = "google/gemini-2.5-flash"
+        
+        # Определяем источник видео
+        video_bytes = None
+        video_mime = "video/mp4"
+        
+        if video_data:
+            video_bytes = video_data if isinstance(video_data, bytes) else video_data.read()
+            # Определяем MIME-тип по расширению или содержимому
+            if hasattr(video_data, 'name'):
+                filename = video_data.name.lower()
+                if filename.endswith('.mov'):
+                    video_mime = "video/quicktime"
+                elif filename.endswith('.avi'):
+                    video_mime = "video/x-msvideo"
+                elif filename.endswith('.webm'):
+                    video_mime = "video/webm"
+                elif filename.endswith('.mkv'):
+                    video_mime = "video/x-matroska"
+        elif video_path:
+            with open(video_path, 'rb') as f:
+                video_bytes = f.read()
+            # Определяем MIME по расширению файла
+            ext = os.path.splitext(video_path)[1].lower()
+            mime_map = {
+                '.mov': 'video/quicktime',
+                '.avi': 'video/x-msvideo',
+                '.webm': 'video/webm',
+                '.mkv': 'video/x-matroska',
+                '.mp4': 'video/mp4'
+            }
+            video_mime = mime_map.get(ext, 'video/mp4')
+        else:
+            return "❌ Ошибка: Не предоставлены данные видео (video_data или video_path)"
+        
+        if not video_bytes or len(video_bytes) == 0:
+            return "❌ Ошибка: Видео-файл пуст"
+        
+        # Проверка размера (максимум 100MB)
+        max_size = 100 * 1024 * 1024  # 100MB
+        video_size_mb = len(video_bytes) / 1024 / 1024
+        if len(video_bytes) > max_size:
+            return f"❌ Ошибка: Размер видео превышает 100MB ({video_size_mb:.1f}MB)"
+        
+        # Предупреждение для больших файлов
+        if video_size_mb > 50:
+            import warnings
+            warnings.warn(f"Большой файл ({video_size_mb:.1f}MB) - кодирование может занять время")
+        
+        # Кодируем видео в base64 (может занять время для больших файлов)
+        try:
+            video_base64 = base64.b64encode(video_bytes).decode()
+        except Exception as e:
+            return f"❌ Ошибка кодирования видео: {str(e)}"
+        
+        # Формируем промпт для видео-анализа
+        # Если указан study_type, используем специализированный промпт (ленивая загрузка)
+        specialized_prompt = None
+        if study_type is not None and isinstance(study_type, str) and study_type.strip():
+            specialized_prompt = _get_video_prompt(study_type)
+        
+        if specialized_prompt:
+            # Добавляем дополнительный контекст, если передан
+            context_suffix = ""
+            if prompt:
+                context_suffix = f"\n\nДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ:\n{prompt}"
+            video_prompt = f"""{self.system_prompt}
+
+### АНАЛИЗ МЕДИЦИНСКОГО ВИДЕО
+
+{specialized_prompt}{context_suffix}"""
+        elif prompt:
+            # Используем переданный промпт
+            video_prompt = f"""{self.system_prompt}
+
+### АНАЛИЗ МЕДИЦИНСКОГО ВИДЕО
+
+Ты — эксперт по анализу медицинских видео-записей (процедуры, функциональные тесты, динамические исследования).
+
+Твоя задача — проанализировать предоставленное видео и дать подробное заключение в формате «Клиническая директива».
+
+Обрати внимание на:
+1. **Динамические изменения:** движения, изменения состояния в процессе записи
+2. **Техника выполнения процедуры:** правильность, качество, возможные ошибки
+3. **Патологические изменения:** видимые отклонения от нормы в динамике
+4. **Функциональные тесты:** оценка подвижности, координации, функциональных возможностей
+5. **Временные характеристики:** длительность процедуры, скорость изменений
+
+{prompt}
+"""
+        else:
+            # Базовый промпт по умолчанию
+            video_prompt = f"""{self.system_prompt}
+
+### АНАЛИЗ МЕДИЦИНСКОГО ВИДЕО
+
+Ты — эксперт по анализу медицинских видео-записей (процедуры, функциональные тесты, динамические исследования).
+
+Твоя задача — проанализировать предоставленное видео и дать подробное заключение в формате «Клиническая директива».
+
+Обрати внимание на:
+1. **Динамические изменения:** движения, изменения состояния в процессе записи
+2. **Техника выполнения процедуры:** правильность, качество, возможные ошибки
+3. **Патологические изменения:** видимые отклонения от нормы в динамике
+4. **Функциональные тесты:** оценка подвижности, координации, функциональных возможностей
+5. **Временные характеристики:** длительность процедуры, скорость изменений
+
+Проанализируй предоставленное видео максимально подробно.
+"""
+        
+        # Формируем контент для API в правильном формате для OpenRouter/Gemini
+        # Используем формат video_url с data URI (как в примере пользователя)
+        content = [
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": f"data:{video_mime};base64,{video_base64}"
+                }
+            },
+            {
+                "type": "text",
+                "text": video_prompt
+            }
+        ]
+        
+        # Добавляем метаданные, если есть
+        if metadata:
+            metadata_str = str(metadata) if not isinstance(metadata, dict) else str(metadata)
+            content.append({"type": "text", "text": f"\n\nМетаданные:\n{metadata_str}"})
+        
+        # Формируем запрос
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": content}
+        ]
+        
+        payload = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": 4000,
+            "temperature": 0.1
+        }
+        
+        try:
+            start_time = time.time()
+            # Уменьшаем таймаут до 120 секунд (2 минуты) для видео
+            # Если видео большое, может потребоваться больше времени, но 5 минут - слишком долго
+            response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
+            latency = time.time() - start_time
+            
+            if response.status_code == 200:
+                result_data = response.json()
+                result = result_data["choices"][0]["message"]["content"]
+                
+                # Логирование
+                tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                log_api_call(model, True, latency, None)
+                track_model_usage(model, True, tokens_used)
+                
+                return f"**🎬 Анализ видео (Gemini 2.5 Flash):**\n\n{result}"
+            else:
+                error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                log_api_call(model, False, latency, error_msg)
+                track_model_usage(model, False)
+                return f"❌ Ошибка анализа видео: {error_msg}"
+                
+        except requests.exceptions.Timeout:
+            error_msg = "Таймаут запроса (превышено 2 минуты). Видео слишком большое или API не отвечает."
+            log_api_call(model, False, 120, error_msg)
+            track_model_usage(model, False)
+            return f"❌ Ошибка: {error_msg}\n\n💡 Попробуйте:\n- Уменьшить размер видео\n- Использовать более короткий фрагмент\n- Проверить подключение к интернету"
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Ошибка сети: {str(e)}"
+            log_api_call(model, False, 0, error_msg)
+            track_model_usage(model, False)
+            return f"❌ Ошибка сети: {error_msg}"
+        except Exception as e:
+            error_msg = handle_error(e, "send_video_request", show_to_user=False)
+            log_api_call(model, False, 0, error_msg)
+            track_model_usage(model, False)
+            return f"❌ Ошибка при анализе видео: {error_msg}"
     
     def get_response(self, user_message: str, context: str = "", use_sonnet_4_5: bool = False) -> str:
         """Текстовый запрос с использованием лучшей доступной модели"""
