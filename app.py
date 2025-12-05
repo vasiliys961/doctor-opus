@@ -5128,35 +5128,144 @@ def show_video_analysis():
                     if context_parts:
                         context_prompt = "\n\nКОНТЕКСТ:\n" + "\n".join(context_parts)
                 
-                status_text.info("🔄 Отправка запроса к API (это может занять 1-2 минуты)...")
-                progress_bar.progress(30)
+                # Двухэтапный анализ видео
+                status_text.info("🔄 Этап 1: Специализированный анализ через Gemini 2.5 Flash...")
+                progress_bar.progress(20)
                 
-                # Вызываем анализ видео с указанием типа исследования
-                with st.spinner("⏳ Ожидание ответа от API..."):
-                    result = assistant.send_video_request(
+                # Этап 1: Специализированный анализ
+                with st.spinner("⏳ Анализ видео через Gemini..."):
+                    results = assistant.send_video_request_two_stage(
                         prompt=context_prompt,
                         video_data=uploaded_video,
                         metadata=metadata if metadata else None,
                         study_type=study_type_for_request
                     )
                 
-                progress_bar.progress(100)
-                status_text.empty()
-                progress_bar.empty()
+                progress_bar.progress(50)
                 
-                # Показываем результат
-                st.subheader("📊 Результат анализа")
-                st.markdown(result)
+                # Показываем промежуточный результат (специализированный анализ)
+                if results.get('specialized'):
+                    st.subheader("📋 Промежуточный результат: Специализированный анализ")
+                    with st.expander("🔍 Показать специализированный анализ (Gemini 2.5 Flash)", expanded=True):
+                        st.markdown(results['specialized'])
                 
-                # Кнопка скачивания результата
+                # Этап 2: Итоговое заключение от профессора
+                if results.get('final') and not results['final'].startswith("❌"):
+                    status_text.info("🔄 Этап 2: Итоговое заключение от профессора (Claude Opus)...")
+                    progress_bar.progress(70)
+                    
+                    # Результат уже получен в двухэтапном методе, просто показываем прогресс
+                    time.sleep(0.5)  # Небольшая задержка для визуализации прогресса
+                    
+                    progress_bar.progress(100)
+                    status_text.empty()
+                    progress_bar.empty()
+                    
+                    # Показываем финальное заключение
+                    st.subheader("🎓 Итоговое заключение")
+                    st.markdown(results['final'])
+                elif results.get('final') and results['final'].startswith("❌"):
+                    # Если была ошибка на этапе 2, показываем её
+                    progress_bar.progress(100)
+                    status_text.empty()
+                    progress_bar.empty()
+                    st.warning(f"⚠️ {results['final']}")
+                    st.info("💡 Специализированный анализ доступен выше")
+                else:
+                    progress_bar.progress(100)
+                    status_text.empty()
+                    progress_bar.empty()
+                    st.info("💡 Итоговое заключение не было сформировано. Доступен только специализированный анализ.")
+                
+                # Экспорт в DOC формат
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"video_analysis_{timestamp}.txt"
-                st.download_button(
-                    label="📥 Скачать результат анализа",
-                    data=result,
-                    file_name=filename,
-                    mime="text/plain"
-                )
+                
+                # Формируем содержимое для DOC
+                study_type_names = {
+                    "fgds": "ФГДС",
+                    "colonoscopy": "Колоноскопия",
+                    "echo": "ЭхоКГ",
+                    "abdominal_us": "УЗИ органов брюшной полости",
+                    "gynecology_us": "Гинекологическое УЗИ",
+                    "mri_brain": "МРТ головного мозга",
+                    "mri_universal": "МРТ (универсальный)",
+                    "chest_ct": "КТ органов грудной клетки"
+                }
+                study_name = study_type_names.get(study_type_for_request, "Видео-анализ") if study_type_for_request else "Видео-анализ"
+                
+                # Создаем DOC документ
+                try:
+                    from docx import Document
+                    from docx.shared import Pt, Inches
+                    from docx.enum.text import WD_ALIGN_PARAGRAPH
+                    
+                    doc = Document()
+                    
+                    # Заголовок
+                    title = doc.add_heading(f"Анализ видео: {study_name}", level=0)
+                    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    
+                    # Метаданные
+                    doc.add_paragraph(f"Дата анализа: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}")
+                    if patient_age:
+                        doc.add_paragraph(f"Возраст пациента: {patient_age} лет")
+                    if specialty:
+                        doc.add_paragraph(f"Специализация: {specialty}")
+                    if urgency:
+                        doc.add_paragraph(f"Срочность: {urgency}")
+                    doc.add_paragraph()
+                    
+                    # Раздел 1: Специализированный анализ
+                    if results.get('specialized'):
+                        doc.add_heading("СПЕЦИАЛИЗИРОВАННЫЙ АНАЛИЗ (Gemini 2.5 Flash)", level=1)
+                        # Убираем markdown форматирование для чистого текста
+                        specialized_text = results['specialized'].replace('**', '').replace('🎬', '').strip()
+                        doc.add_paragraph(specialized_text)
+                        doc.add_paragraph()
+                    
+                    # Раздел 2: Итоговое заключение
+                    if results.get('final'):
+                        doc.add_heading("ИТОГОВОЕ ЗАКЛЮЧЕНИЕ (Профессор, Claude Opus 4.5)", level=1)
+                        final_text = results['final'].replace('**', '').replace('🎓', '').strip()
+                        doc.add_paragraph(final_text)
+                    
+                    # Сохраняем в BytesIO для скачивания
+                    doc_buffer = io.BytesIO()
+                    doc.save(doc_buffer)
+                    doc_buffer.seek(0)
+                    
+                    # Кнопка скачивания DOC
+                    doc_filename = f"video_analysis_{study_name.replace(' ', '_')}_{timestamp}.docx"
+                    st.download_button(
+                        label="📥 Скачать полный отчет (.docx)",
+                        data=doc_buffer.getvalue(),
+                        file_name=doc_filename,
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+                except ImportError:
+                    # Если python-docx не установлен, предлагаем TXT
+                    st.warning("⚠️ Для экспорта в DOC формат требуется python-docx. Установите: pip install python-docx")
+                    # Альтернатива: TXT файл
+                    full_text = f"АНАЛИЗ ВИДЕО: {study_name}\n"
+                    full_text += f"Дата: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
+                    if results.get('specialized'):
+                        full_text += "=" * 50 + "\n"
+                        full_text += "СПЕЦИАЛИЗИРОВАННЫЙ АНАЛИЗ (Gemini 2.5 Flash)\n"
+                        full_text += "=" * 50 + "\n"
+                        full_text += results['specialized'] + "\n\n"
+                    if results.get('final'):
+                        full_text += "=" * 50 + "\n"
+                        full_text += "ИТОГОВОЕ ЗАКЛЮЧЕНИЕ (Профессор, Claude Opus 4.5)\n"
+                        full_text += "=" * 50 + "\n"
+                        full_text += results['final'] + "\n"
+                    
+                    txt_filename = f"video_analysis_{timestamp}.txt"
+                    st.download_button(
+                        label="📥 Скачать отчет (.txt)",
+                        data=full_text,
+                        file_name=txt_filename,
+                        mime="text/plain"
+                    )
                 
             except Exception as e:
                 progress_bar.empty()
