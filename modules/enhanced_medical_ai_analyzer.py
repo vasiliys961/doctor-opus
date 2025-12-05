@@ -45,11 +45,10 @@ class EnhancedMedicalAIAnalyzer:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
-        # Для расширенного анализа используем те же принципы, что и в основном ассистенте:
-        # Opus — основная модель для клинической интерпретации, без устаревших Sonnet-конфигураций.
         self.models = [
-            "anthropic/claude-opus-4.5",
-            # При необходимости сюда можно добавить дешевые fallback-модели
+            "anthropic/claude-3-5-sonnet-20241022",
+            "anthropic/claude-3-5-sonnet",
+            "anthropic/claude-3-sonnet-20240229",
         ]
         
         self.headers = {
@@ -458,20 +457,11 @@ JSON обязательно!
         
         # Анализ цветовых характеристик
         if len(image_array.shape) == 3:
-            # Проверяем, действительно ли изображение "цветное",
-            # или по сути это градации серого в трех каналах (типично для рентгена в PNG/JPEG).
-            per_pixel_std = np.std(image_array.astype(np.float32), axis=2)
-            color_std = float(np.mean(per_pixel_std))
-            if color_std < 5.0:
-                # Почти монохромное изображение – считаем его рентгеноподобным / КТ / УЗИ, а не дерматоскопией
-                is_color = False
-                mean_intensity = float(np.mean(image_array))
-            else:
-                is_color = True
-                mean_color = np.mean(image_array, axis=(0, 1))
+            is_color = True
+            mean_color = np.mean(image_array, axis=(0, 1))
         else:
             is_color = False
-            mean_intensity = float(np.mean(image_array))
+            mean_intensity = np.mean(image_array)
         
         # Анализ текстурных особенностей
         gradient_x = np.gradient(image_array, axis=1)
@@ -480,19 +470,15 @@ JSON обязательно!
         
         # Правила определения типа
         if aspect_ratio > 2.0 and not is_color:
-            # Вытянутое монохромное – чаще всего ЭКГ
             return ImageType.ECG, 0.8
         elif aspect_ratio < 1.5 and not is_color and edge_density > 50:
-            # Компактное монохромное с высокой детализацией – рентген
             return ImageType.XRAY, 0.7
-        elif is_color:
-            # Для расширенного анализа убираем автоматическую дерматоскопию,
-            # чтобы не путать рентгены/КТ/прочие с кожей.
-            # Любые "по-настоящему" цветные снимки считаем эндоскопией/общей визуализацией.
-            return ImageType.ENDOSCOPY, 0.5
+        elif is_color and edge_density < 30:
+            return ImageType.ENDOSCOPY, 0.6
+        elif is_color and edge_density > 30:
+            return ImageType.DERMATOSCOPY, 0.6
         else:
-            # По умолчанию – МРТ/прочая радиология для монохромных, если не сработали правила выше
-            return ImageType.MRI, 0.5
+            return ImageType.MRI, 0.5  # По умолчанию
 
     def preprocess_image(self, image_array: np.ndarray, image_type: ImageType) -> np.ndarray:
         """Предобработка изображения в зависимости от типа"""
@@ -591,11 +577,7 @@ JSON обязательно!
         metadata = self.extract_metadata(processed_image, image_type)
         
         # Формирование промпта
-        base_prompt = self.specialized_prompts.get(
-            image_type,
-            "Ты — профессор клинической медицины и профильный специалист по интерпретации медицинских изображений. "
-            "Проанализируй это изображение и подготовь клинически значимое заключение."
-        )
+        base_prompt = self.specialized_prompts.get(image_type, "Проанализируйте медицинское изображение.")
         
         if additional_context:
             base_prompt += f"\n\nДополнительный контекст: {additional_context}"
@@ -622,7 +604,7 @@ JSON обязательно!
         ]
     },
     "diagnosis": {
-        "primary_diagnosis": "основной клинический диагноз по результатам визуализации",
+        "primary_diagnosis": "основной диагноз",
         "differential_diagnosis": ["список дифференциальных диагнозов"],
         "icd10_codes": ["коды по МКБ-10"]
     },
@@ -637,11 +619,6 @@ JSON обязательно!
         "prognosis": "прогноз"
     }
 }
-
-ОБЯЗАТЕЛЬНО:
-- Поле "diagnosis.primary_diagnosis" не может быть пустым. Если по данным визуализации диагноз установить невозможно,
-  укажите "Невозможно определить" и кратко опишите причину (например: "ограниченное поле зрения", "низкое качество изображения").
-- Если патологических изменений нет, явно запишите это в "primary_diagnosis" (например: "Признаков острой патологии не выявлено").
 
 НЕ ДОБАВЛЯЙТЕ никакого текста до или после JSON!
 """

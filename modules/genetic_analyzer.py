@@ -10,10 +10,25 @@ import json
 import gzip
 import re
 import datetime
+import io
 from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass, asdict
 from enum import Enum
 import os
+
+# Импорты для OCR
+try:
+    import pytesseract
+    from PIL import Image
+    TESSERACT_AVAILABLE = True
+except ImportError:
+    TESSERACT_AVAILABLE = False
+
+try:
+    import fitz  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
 
 class GeneticDataType(Enum):
     """Типы генетических данных"""
@@ -725,196 +740,6 @@ class GeneticAnalyzer:
         self.parser = VCFParser()
         self.analysis_cache = {}
     
-    def analyze_text_report(
-        self,
-        report_text: str,
-        patient_info: Optional[Dict[str, Any]] = None,
-        clinical_context: str = "",
-        source: str = "text_report"
-    ) -> GeneticAnalysisResult:
-        """
-        Анализ текстового генетического отчета (PDF после извлечения текста или OCR).
-        
-        Цель: аккуратно извлечь строки, содержащие потенциальные генетические варианты
-        (гены, cDNA/p-перемены, rsID), и оформить результат в стандартной структуре
-        GeneticAnalysisResult, чтобы он корректно отображался в интерфейсе.
-        
-        ВНИМАНИЕ: На этом этапе мы НЕ пытаемся реконструировать полноценные VCF-варианты,
-        а лишь собираем кандидатные строки и кладем их в metadata['text_variants_raw'].
-        """
-        analysis_id = f"genetic_text_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
-        # Базовая предосторожность
-        text = report_text or ""
-        
-        # Ищем строки, где с высокой вероятностью описаны варианты:
-        # содержат c.- или p.-нотацию, rsID или явные генные символы в контексте варианта
-        variant_lines: List[str] = []
-        all_lines = text.splitlines()
-        
-        variant_pattern = re.compile(
-            r"(?:\b[A-Z0-9]{2,10}\b.*?(c\.[A-Za-z0-9_\-*>+/]+|p\.[A-Za-z0-9_\-*>+/]+))"
-            r"|rs\d+",
-            re.IGNORECASE
-        )
-        
-        for line in all_lines:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if variant_pattern.search(stripped):
-                variant_lines.append(stripped)
-        
-        total_variants = len(variant_lines)
-        
-        # Формируем метаданные
-        metadata: Dict[str, Any] = {
-            "analysis_id": analysis_id,
-            "patient_info": patient_info or {},
-            "clinical_context": clinical_context,
-            "source": source,
-            "raw_text_preview": text[:5000],
-            "text_variants_raw": variant_lines,
-        }
-        
-        # Базовый результат без структурированных VCF-вариантов,
-        # но с полезной информацией в metadata
-        result = GeneticAnalysisResult(
-            analysis_id=analysis_id,
-            timestamp=datetime.datetime.now().isoformat(),
-            total_variants=total_variants,
-            pathogenic_variants=[],
-            likely_pathogenic_variants=[],
-            pharmacogenetic_variants=[],
-            trait_variants=[],
-            clinical_interpretations=[],
-            pharmacogenetic_interpretations=[],
-            risk_assessment=GeneticRiskAssessment(
-                overall_risk_level="неопределен",
-                high_penetrance_diseases=[],
-                moderate_risk_conditions=[],
-                pharmacogenetic_considerations=[],
-                reproductive_risks=[],
-                surveillance_recommendations=[],
-                lifestyle_recommendations=[]
-            ),
-            recommendations=[
-                "Проверить извлеченные строки вариантов в metadata['text_variants_raw'] "
-                "и при необходимости сопоставить их с VCF или клинической базой."
-            ],
-            urgent_flags=[],
-            icd10_codes=[],
-            confidence_score=0.0,
-            metadata=metadata,
-        )
-        
-        # Кэшируем результат
-        self.analysis_cache[analysis_id] = result
-        return result
-    
-    def analyze_pdf_file(
-        self,
-        file_path: str,
-        patient_info: Optional[Dict[str, Any]] = None,
-        clinical_context: str = ""
-    ) -> GeneticAnalysisResult:
-        """
-        Анализ генетического PDF-отчета.
-        
-        Стратегия:
-        1. Попробовать извлечь текст через AdvancedLabProcessor._extract_from_pdf (таблицы + текст).
-        2. Если текст пустой/слабый, вернуть результат с подсказкой.
-        3. Передать извлеченный текст в analyze_text_report для поиска строк с вариантами.
-        """
-        extracted_text = ""
-        extract_errors: List[str] = []
-        
-        # 1) Пытаемся извлечь текст стандартным способом (pdfplumber/PyPDF2)
-        try:
-            from modules.advanced_lab_processor import AdvancedLabProcessor
-            processor = AdvancedLabProcessor()
-            extracted_text = processor._extract_from_pdf(file_path)
-        except Exception as e:
-            extract_errors.append(str(e))
-        
-        # 2) Дополнительно пробуем OCR по страницам через vision-модуль (doc_ocr),
-        # даже если текст извлечь удалось — чтобы не потерять гены/SNP в табличках-картинках.
-        ocr_text_parts: List[str] = []
-        try:
-            import pdfplumber
-            from claude_assistant import OpenRouterAssistant
-            import numpy as np
-            from PIL import Image
-            
-            assistant = OpenRouterAssistant()
-            
-            with pdfplumber.open(file_path) as pdf:
-                total_pages = len(pdf.pages)
-                # Ограничимся первыми 8 страницами — там обычно основная табличная часть (гены/SNP)
-                max_pages = min(total_pages, 8)
-                
-                for page_num in range(max_pages):
-                    page = pdf.pages[page_num]
-                    try:
-                        # Рендер страницы в изображение
-                        page_image = page.to_image(resolution=200).original  # PIL.Image
-                        image_array = np.array(page_image)
-                        
-                        ocr_prompt = """
-Вы — эксперт по OCR генетических отчетов.
-Аккуратно извлеките ВЕСЬ текст с этой страницы PDF (особенно таблицы с генами, SNP/rsID и генотипами).
-Верните ТОЛЬКО распознанный текст без интерпретации и без клинических выводов.
-"""
-                        ocr_result = assistant.send_vision_request(
-                            ocr_prompt,
-                            image_array,
-                            metadata={"task": "doc_ocr", "page": page_num + 1}
-                        )
-                        if isinstance(ocr_result, list):
-                            ocr_result = "\n\n".join(str(x.get("result", x)) for x in ocr_result)
-                        
-                        if ocr_result and str(ocr_result).strip():
-                            ocr_text_parts.append(
-                                f"\n--- OCR страница {page_num + 1}/{total_pages} ---\n{str(ocr_result).strip()}\n"
-                            )
-                    except Exception as pe:
-                        extract_errors.append(f"OCR page {page_num+1}: {str(pe)}")
-                        continue
-        except Exception as e:
-            extract_errors.append(f"OCR init error: {str(e)}")
-        
-        full_ocr_text = "\n".join(ocr_text_parts).strip()
-        
-        # 3) Объединяем текст, полученный напрямую из PDF, и OCR-текст
-        combined_text_parts: List[str] = []
-        if extracted_text and str(extracted_text).strip():
-            combined_text_parts.append(str(extracted_text))
-        if full_ocr_text:
-            combined_text_parts.append(full_ocr_text)
-        
-        combined_text = "\n\n".join(combined_text_parts).strip()
-        
-        if combined_text:
-            # Анализируем объединенный текстовой отчет
-            return self.analyze_text_report(
-                report_text=combined_text,
-                patient_info=patient_info,
-                clinical_context=clinical_context,
-                source="pdf_report_combined" if extracted_text and full_ocr_text else (
-                    "pdf_report" if extracted_text else "pdf_report_ocr"
-                )
-            )
-        
-        # 4) Ничего не удалось извлечь — возвращаем "пустой" анализ с понятным предупреждением
-        warn_text = "Не удалось извлечь текст из PDF (ни прямым способом, ни через OCR). " \
-                    "Отчет может содержать нестандартный или сильно зашумленный формат."
-        return self.analyze_text_report(
-            report_text="",
-            patient_info=patient_info,
-            clinical_context=clinical_context + f"\n\n[PDF extraction warning] {warn_text}",
-            source="pdf_report_empty"
-        )
-    
     def analyze_vcf_file(self, file_path: str, 
                         patient_info: Optional[Dict[str, Any]] = None,
                         clinical_context: str = "") -> GeneticAnalysisResult:
@@ -1035,6 +860,250 @@ class GeneticAnalyzer:
                 confidence_score=0.0,
                 metadata=error_metadata
             )
+    
+    def analyze_text_report(
+        self,
+        report_text: str,
+        patient_info: Optional[Dict[str, Any]] = None,
+        clinical_context: str = "",
+        source: str = "text_report"
+    ) -> GeneticAnalysisResult:
+        """
+        Анализ текстового генетического отчета (PDF после извлечения текста или OCR).
+        
+        Цель: аккуратно извлечь строки, содержащие потенциальные генетические варианты
+        (гены, cDNA/p-перемены, rsID), и оформить результат в стандартной структуре
+        GeneticAnalysisResult.
+        """
+        analysis_id = f"genetic_text_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        text = report_text or ""
+        
+        # Ищем строки, где с высокой вероятностью описаны варианты:
+        # содержат c.- или p.-нотацию, rsID или явные генные символы в контексте варианта
+        variant_lines: List[str] = []
+        all_lines = text.splitlines()
+        
+        # Паттерны для поиска генетических вариантов
+        rsid_pattern = re.compile(r'rs\d+', re.IGNORECASE)
+        gene_pattern = re.compile(r'\b(CYP|SLC|MTHFR|BRCA|TP53|APOE|F5|F2|COMT|ESR1|ESR2|GNRH1|AMH|PGR|FSHR|LHCGR|AMHR2)\w*\b', re.IGNORECASE)
+        genotype_pattern = re.compile(r'\b([ATCG])/([ATCG])\b')
+        protein_pattern = re.compile(r'p\.([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2})', re.IGNORECASE)
+        cdna_pattern = re.compile(r'c\.(\d+)([ATCG])>([ATCG])', re.IGNORECASE)
+        
+        for line in all_lines:
+            line_lower = line.lower()
+            # Проверяем наличие признаков генетического варианта
+            has_rsid = bool(rsid_pattern.search(line))
+            has_gene = bool(gene_pattern.search(line))
+            has_genotype = bool(genotype_pattern.search(line))
+            has_protein = bool(protein_pattern.search(line))
+            has_cdna = bool(cdna_pattern.search(line))
+            
+            # Если есть хотя бы один признак - добавляем строку
+            if has_rsid or (has_gene and (has_genotype or has_protein or has_cdna)):
+                variant_lines.append(line.strip())
+        
+        # Формируем метаданные
+        metadata = {
+            'analysis_id': analysis_id,
+            'source': source,
+            'total_lines': len(all_lines),
+            'variant_lines_count': len(variant_lines),
+            'text_variants_raw': variant_lines,
+            'patient_info': patient_info or {},
+            'clinical_context': clinical_context
+        }
+        
+        # Формируем результат
+        return GeneticAnalysisResult(
+            analysis_id=analysis_id,
+            timestamp=datetime.datetime.now().isoformat(),
+            total_variants=len(variant_lines),
+            pathogenic_variants=[],
+            likely_pathogenic_variants=[],
+            pharmacogenetic_variants=[],
+            trait_variants=[],
+            clinical_interpretations=[],
+            pharmacogenetic_interpretations=[],
+            risk_assessment=GeneticRiskAssessment(
+                overall_risk_level="неопределен",
+                high_penetrance_diseases=[],
+                moderate_risk_conditions=[],
+                pharmacogenetic_considerations=[],
+                reproductive_risks=[],
+                surveillance_recommendations=[],
+                lifestyle_recommendations=[]
+            ),
+            recommendations=["Для детального анализа используйте функцию ИИ-интерпретации"],
+            urgent_flags=[],
+            icd10_codes=[],
+            confidence_score=0.5 if variant_lines else 0.0,
+            metadata=metadata
+        )
+    
+    def _extract_text_with_tesseract(self, file_path: str, max_pages: int = 8) -> Tuple[str, List[str]]:
+        """
+        Извлечение текста из PDF с помощью Tesseract OCR.
+        
+        Returns:
+            Tuple[str, List[str]]: (extracted_text, errors)
+        """
+        if not TESSERACT_AVAILABLE:
+            return "", ["Tesseract OCR не установлен (pip install pytesseract)"]
+        
+        if not PYMUPDF_AVAILABLE:
+            return "", ["PyMuPDF не установлен (pip install PyMuPDF)"]
+        
+        ocr_text_parts = []
+        errors = []
+        
+        try:
+            pdf_document = fitz.open(file_path)
+            total_pages = len(pdf_document)
+            max_pages = min(total_pages, max_pages)
+            
+            for page_num in range(max_pages):
+                try:
+                    page = pdf_document.load_page(page_num)
+                    # Конвертируем страницу в изображение с высоким разрешением
+                    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom для лучшего качества
+                    img_bytes = pix.tobytes("png")
+                    image = Image.open(io.BytesIO(img_bytes))
+                    
+                    # Применяем OCR с поддержкой английского и русского
+                    try:
+                        text = pytesseract.image_to_string(image, lang='eng+rus')
+                    except Exception as lang_error:
+                        # Если мультиязычный режим не работает, пробуем только английский
+                        try:
+                            text = pytesseract.image_to_string(image, lang='eng')
+                        except Exception:
+                            text = pytesseract.image_to_string(image)
+                    
+                    if text.strip():
+                        ocr_text_parts.append(f"\n--- OCR страница {page_num + 1}/{total_pages} ---\n{text.strip()}\n")
+                        
+                except Exception as e:
+                    errors.append(f"OCR страница {page_num+1}: {str(e)}")
+                    continue
+            
+            pdf_document.close()
+            return "\n".join(ocr_text_parts).strip(), errors
+            
+        except Exception as e:
+            return "", [f"Ошибка Tesseract OCR: {str(e)}"]
+    
+    def analyze_pdf_file(
+        self,
+        file_path: str,
+        patient_info: Optional[Dict[str, Any]] = None,
+        clinical_context: str = ""
+    ) -> GeneticAnalysisResult:
+        """
+        Анализ генетического PDF-отчета.
+        
+        Стратегия:
+        1. Попробовать извлечь текст через AdvancedLabProcessor._extract_from_pdf (таблицы + текст).
+        2. Применить Tesseract OCR к страницам с изображениями (если доступен).
+        3. Если Tesseract недоступен - fallback на Vision API (старый метод).
+        4. Передать извлеченный текст в analyze_text_report для поиска строк с вариантами.
+        """
+        extracted_text = ""
+        extract_errors: List[str] = []
+        
+        # 1) Пытаемся извлечь текст стандартным способом (pdfplumber/PyPDF2)
+        try:
+            from modules.advanced_lab_processor import AdvancedLabProcessor
+            processor = AdvancedLabProcessor()
+            extracted_text = processor._extract_from_pdf(file_path)
+        except Exception as e:
+            extract_errors.append(f"Стандартное извлечение: {str(e)}")
+        
+        # 2) Tesseract OCR (новый метод - приоритетный)
+        tesseract_text = ""
+        tesseract_errors = []
+        if TESSERACT_AVAILABLE and PYMUPDF_AVAILABLE:
+            tesseract_text, tesseract_errors = self._extract_text_with_tesseract(file_path, max_pages=8)
+            extract_errors.extend(tesseract_errors)
+        else:
+            extract_errors.append("Tesseract OCR недоступен, используется fallback на Vision API")
+        
+        # 3) Fallback на Vision API только если Tesseract не дал результатов
+        vision_text = ""
+        if not tesseract_text and TESSERACT_AVAILABLE:
+            # Vision API как резервный вариант (старая реализация)
+            try:
+                import pdfplumber
+                from claude_assistant import OpenRouterAssistant
+                import numpy as np
+                
+                assistant = OpenRouterAssistant()
+                
+                with pdfplumber.open(file_path) as pdf:
+                    total_pages = len(pdf.pages)
+                    max_pages = min(total_pages, 8)
+                    
+                    for page_num in range(max_pages):
+                        page = pdf.pages[page_num]
+                        try:
+                            page_image = page.to_image(resolution=200).original
+                            image_array = np.array(page_image)
+                            
+                            ocr_prompt = """
+Вы — эксперт по OCR генетических отчетов.
+Аккуратно извлеките ВЕСЬ текст с этой страницы PDF (особенно таблицы с генами, SNP/rsID и генотипами).
+Верните ТОЛЬКО распознанный текст без интерпретации и без клинических выводов.
+"""
+                            ocr_result = assistant.send_vision_request(
+                                ocr_prompt,
+                                image_array,
+                                metadata={"task": "doc_ocr", "page": page_num + 1}
+                            )
+                            if isinstance(ocr_result, list):
+                                ocr_result = "\n\n".join(str(x.get("result", x)) for x in ocr_result)
+                            
+                            if ocr_result and str(ocr_result).strip():
+                                vision_text += f"\n--- Vision API страница {page_num + 1}/{total_pages} ---\n{str(ocr_result).strip()}\n"
+                        except Exception as pe:
+                            extract_errors.append(f"Vision API page {page_num+1}: {str(pe)}")
+                            continue
+            except Exception as e:
+                extract_errors.append(f"Vision API init error: {str(e)}")
+        
+        # 4) Объединяем все результаты
+        combined_text_parts: List[str] = []
+        if extracted_text and str(extracted_text).strip():
+            combined_text_parts.append(str(extracted_text))
+        if tesseract_text:
+            combined_text_parts.append(tesseract_text)
+        if vision_text:
+            combined_text_parts.append(vision_text)
+        
+        combined_text = "\n\n".join(combined_text_parts).strip()
+        
+        if combined_text:
+            # Анализируем объединенный текстовой отчет
+            source = "pdf_report_combined" if (extracted_text and (tesseract_text or vision_text)) else (
+                "pdf_report_tesseract" if tesseract_text else (
+                    "pdf_report_vision" if vision_text else "pdf_report"
+                )
+            )
+            return self.analyze_text_report(
+                report_text=combined_text,
+                patient_info=patient_info,
+                clinical_context=clinical_context,
+                source=source
+            )
+        
+        # 5) Ничего не удалось извлечь
+        warn_text = "Не удалось извлечь текст из PDF. " + "; ".join(extract_errors[:3])
+        return self.analyze_text_report(
+            report_text="",
+            patient_info=patient_info,
+            clinical_context=clinical_context + f"\n\n[PDF extraction warning] {warn_text}",
+            source="pdf_report_empty"
+        )
     
     def _classify_variants(self, variants: List[VCFVariant]) -> Dict[str, List[VCFVariant]]:
         """Классификация вариантов по клинической значимости"""
