@@ -104,3 +104,39 @@ test_*.py
 *КАЧЕСТВО*.md
 *ВСЕ_СОХРАНЕНО.md
 requirements-cloud.txt
+
+
+# === КРИТИЧЕСКИ ВАЖНО: МЕДИЦИНСКИЕ ДАННЫЕ ===
+# База данных с данными пациентов
+data/medical_data.db
+medical_data.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Пользовательские загруженные файлы
+uploads/*
+!uploads/.gitignore
+
+# Генерируемые документы
+generated_documents/*
+!generated_documents/.gitignore
+
+# === ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА СЕКРЕТОВ ===
+.streamlit/secrets.toml
+**/secrets.toml
+.env
+.env.local
+*КЛЮЧ*.md
+*СЕКРЕТ*.md
+*API*.txt
+
+# === ВРЕМЕННЫЕ И ЛОГИ ===
+*.log
+*.tmp
+*.bak
+.cache/
+
+# === OS-SPECIFIC ===
+.DS_Store
+Thumbs.db

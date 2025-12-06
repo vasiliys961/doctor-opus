@@ -243,14 +243,6 @@ def init_db():
     conn = sqlite3.connect('medical_data.db')
     cursor = conn.cursor()
 
-    # Проверяем и добавляем колонки
-    cursor.execute("PRAGMA table_info(patients)")
-    columns = [col[1] for col in cursor.fetchall()]
-    if 'age' not in columns:
-        cursor.execute("ALTER TABLE patients ADD COLUMN age INTEGER")
-    if 'sex' not in columns:
-        cursor.execute("ALTER TABLE patients ADD COLUMN sex TEXT")
-
     # Создаём таблицы
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS patients (

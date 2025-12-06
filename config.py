@@ -38,7 +38,7 @@ UPLOADS_DIR = BASE_DIR / "uploads"
 LOGS_DIR = BASE_DIR / "logs"
 TEMP_DIR = BASE_DIR / "temp"
 
-# Создание директорий если не существуют
+# Create directories if they don't exist
 for dir_path in [DATA_DIR, UPLOADS_DIR, LOGS_DIR, TEMP_DIR]:
     dir_path.mkdir(exist_ok=True)
 
@@ -104,20 +104,35 @@ if not ASSEMBLYAI_API_KEY:
     print("⚠️ ВНИМАНИЕ: ASSEMBLYAI_API_KEY не найден!")
     print("   Установите ключ в .streamlit/secrets.toml или переменную окружения ASSEMBLYAI_API_KEY")
 
-# Настройки для Replit
+if not ASSEMBLYAI_API_KEY:
+    raise RuntimeError(
+        "ASSEMBLYAI_API_KEY environment variable is required. "
+        "Set it using: export ASSEMBLYAI_API_KEY='your-key-here'"
+    )
+
+# Optional configuration from environment
+MODEL_PREFERENCE = os.getenv("MODEL_PREFERENCE", "anthropic/claude-3-5-sonnet-20241022")
+TIMEOUT = int(os.getenv("TIMEOUT", "90"))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
+
+# Platform detection
 IS_REPLIT = os.getenv("REPL_ID") is not None
 PORT = int(os.getenv("PORT", 8501))
 
-# Настройки загрузки файлов
+# File upload settings
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
-ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.heic', '.heif', 
-                           '.webp', '.dcm', '.dicom', '.zip', '.pdf']
-ALLOWED_LAB_EXTENSIONS = ['.pdf', '.xlsx', '.xls', '.csv', '.json', '.xml', 
-                         '.jpg', '.jpeg', '.png']
+ALLOWED_IMAGE_EXTENSIONS = [
+    '.jpg', '.jpeg', '.png', '.tiff', '.tif', '.heic', '.heif',
+    '.webp', '.dcm', '.dicom', '.zip', '.pdf'
+]
+ALLOWED_LAB_EXTENSIONS = [
+    '.pdf', '.xlsx', '.xls', '.csv', '.json', '.xml',
+    '.jpg', '.jpeg', '.png'
+]
 
-# Мобильные настройки
+# Mobile settings
 MOBILE_OPTIMIZED = True
 MOBILE_MAX_IMAGE_SIZE = (1024, 1024)
 
-# Настройки базы данных
+# Database
 DB_PATH = DATA_DIR / "medical_data.db"
