@@ -1103,7 +1103,7 @@ class GeneticAnalyzer:
             patient_info=patient_info,
             clinical_context=clinical_context + f"\n\n[PDF extraction warning] {warn_text}",
             source="pdf_report_empty"
-        )
+            )
     
     def _classify_variants(self, variants: List[VCFVariant]) -> Dict[str, List[VCFVariant]]:
         """Классификация вариантов по клинической значимости"""
