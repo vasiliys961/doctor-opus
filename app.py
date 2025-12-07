@@ -2305,15 +2305,26 @@ def show_consultation_protocol():
                 except Exception as e:
                     st.error(f"❌ Ошибка чтения PDF: {e}")
             
-            # Кнопка сразу после загрузки файла - большая и заметная
-            if raw_text:
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col2:
-                    if st.button("📝 **СОЗДАТЬ ПРОТОКОЛ**", use_container_width=True, type="primary", key="create_protocol_file"):
-                        st.session_state.raw_text = raw_text
-                        st.session_state.structured_note = ''  # Сбрасываем старый протокол
-                        st.session_state['protocol_generating'] = True
-                        st.rerun()  # Перезагружаем для генерацию протокола
+            # Кнопка ВСЕГДА видна сразу после загрузки файла - большая и заметная
+            st.markdown("")  # Небольшой отступ
+            col1, col2, col3 = st.columns([1, 3, 1])
+            with col2:
+                # Кнопка всегда видна, но активна только если есть текст
+                button_disabled = not raw_text or len(raw_text.strip()) == 0
+                if st.button(
+                    "📝 **СОЗДАТЬ ПРОТОКОЛ**", 
+                    use_container_width=True, 
+                    type="primary", 
+                    key="create_protocol_file",
+                    disabled=button_disabled
+                ):
+                    st.session_state.raw_text = raw_text
+                    st.session_state.structured_note = ''  # Сбрасываем старый протокол
+                    st.session_state['protocol_generating'] = True
+                    st.rerun()  # Перезагружаем для генерацию протокола
+                
+                if button_disabled:
+                    st.caption("💡 Загрузите файл выше, чтобы активировать кнопку")
     
     # Голосовой ввод
     elif input_method == "🎤 Голосовой ввод":
