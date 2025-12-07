@@ -2211,7 +2211,8 @@ def show_consultation_protocol():
         
         if raw_text and st.button("📝 Создать протокол из текста", use_container_width=True):
             st.session_state.raw_text = raw_text
-            # Продолжаем с генерацией протокола (код ниже)
+            st.session_state.structured_note = ''  # Сбрасываем старый протокол
+            st.rerun()  # Перезагружаем для генерации протокола
     
     # Загрузка готового файла
     elif input_method == "📁 Загрузить готовый файл":
@@ -2262,7 +2263,8 @@ def show_consultation_protocol():
             
             if raw_text and st.button("📝 Создать протокол из файла", use_container_width=True):
                 st.session_state.raw_text = raw_text
-                # Продолжаем с генерацией протокола (код ниже)
+                st.session_state.structured_note = ''  # Сбрасываем старый протокол
+                st.rerun()  # Перезагружаем для генерации протокола
     
     # Голосовой ввод
     elif input_method == "🎤 Голосовой ввод":
@@ -2342,6 +2344,7 @@ def show_consultation_protocol():
                             return
                         
                         st.session_state.raw_text = raw_text
+                        st.rerun()  # Перезагружаем для генерации протокола
                     except Exception as e:
                         import traceback
                         st.error(f"❌ Ошибка AssemblyAI: {e}")
@@ -2352,8 +2355,10 @@ def show_consultation_protocol():
                 st.error("❌ AssemblyAI недоступен")
                 return
 
-            st.subheader("📝 Расшифрованный текст:")
-            st.text_area("Расшифрованный текст", value=raw_text, height=150, disabled=True, key="transcribed_text_display")
+            # Показываем расшифрованный текст если есть
+            if raw_text:
+                st.subheader("📝 Расшифрованный текст:")
+                st.text_area("Расшифрованный текст", value=raw_text, height=150, disabled=True, key="transcribed_text_display")
     
     # Генерация протокола (если есть raw_text)
     if raw_text or st.session_state.get('raw_text'):
