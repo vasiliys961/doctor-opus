@@ -1562,6 +1562,75 @@ class OpenRouterAssistant:
         img_str = base64.b64encode(buffered.getvalue()).decode()
         return img_str
     
+    def get_response_streaming(self, user_message: str, context: str = "", use_sonnet_4_5: bool = False):
+        """Текстовый запрос с streaming - текст появляется постепенно
+        
+        Args:
+            user_message: Вопрос пользователя
+            context: Дополнительный контекст
+            use_sonnet_4_5: Использовать Sonnet 4.5 (для ИИ-консультанта)
+        
+        Yields:
+            str: Части ответа по мере генерации
+        """
+        full_message = f"{context}\n\nВопрос: {user_message}" if context else user_message
+        
+        # Если запрошена модель Sonnet 4.5 для ИИ-ассистента, ставим её в приоритет
+        if use_sonnet_4_5:
+            models_to_try = ["anthropic/claude-sonnet-4.5"] + [m for m in self.models if m != "anthropic/claude-sonnet-4.5"]
+        else:
+            models_to_try = self.models
+        
+        # Пробуем модели по порядку
+        for model in models_to_try:
+            try:
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": full_message}
+                    ],
+                    "max_tokens": 8000,
+                    "temperature": 0.2,
+                    "stream": True  # Включаем streaming
+                }
+                
+                response = requests.post(
+                    self.base_url, 
+                    headers=self.headers, 
+                    json=payload, 
+                    timeout=300,
+                    stream=True  # Важно для streaming
+                )
+                
+                if response.status_code == 200:
+                    self.model = model  # Запоминаем рабочую модель
+                    # Читаем stream
+                    for line in response.iter_lines():
+                        if line:
+                            line_text = line.decode('utf-8')
+                            if line_text.startswith('data: '):
+                                data_str = line_text[6:]  # Убираем "data: "
+                                if data_str.strip() == '[DONE]':
+                                    break
+                                try:
+                                    data = json.loads(data_str)
+                                    if 'choices' in data and len(data['choices']) > 0:
+                                        delta = data['choices'][0].get('delta', {})
+                                        if 'content' in delta:
+                                            yield delta['content']
+                                except json.JSONDecodeError:
+                                    continue
+                    return  # Успешно завершили
+                else:
+                    continue
+                    
+            except Exception as e:
+                continue
+        
+        # Если все модели не сработали, возвращаем ошибку
+        yield "❌ Ошибка: Все модели Claude недоступны для streaming. Попробуйте обычный режим."
+    
     def get_response(self, user_message: str, context: str = "", use_sonnet_4_5: bool = False) -> str:
         """Текстовый запрос с использованием лучшей доступной модели"""
         full_message = f"{context}\n\nВопрос: {user_message}" if context else user_message

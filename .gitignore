@@ -140,3 +140,12 @@ generated_documents/*
 # === OS-SPECIFIC ===
 .DS_Store
 Thumbs.db
+
+# === FEEDBACK SYSTEM ===
+# Сырые отзывы содержат ПИ и не должны попадать в git
+data/raw_feedback/
+data/models/
+*.ckpt
+*.pt
+*.pth
+# Анонимизированные данные МОГУТ быть в git (решение принимается пользователем)

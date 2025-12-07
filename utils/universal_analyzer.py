@@ -69,8 +69,15 @@ class UniversalMedicalAnalyzer:
         }
         
         if analysis_mode == "⚡ Быстрый (одна модель)":
-            result = self.assistant.send_vision_request(prompt, image_array, str(metadata or {}))
-            results['result'] = result
+            # Используем streaming для Opus
+            try:
+                text_generator = self.assistant.send_vision_request_streaming(prompt, image_array, str(metadata or {}))
+                result = st.write_stream(text_generator)
+                results['result'] = result
+            except Exception as e:
+                # Fallback на обычный режим
+                result = self.assistant.send_vision_request(prompt, image_array, str(metadata or {}))
+                results['result'] = result
             
         elif analysis_mode == "🎯 Консенсус (несколько моделей)":
             consensus_result = self.consensus_engine.analyze_with_consensus(prompt, image_array, str(metadata or {}))
@@ -79,8 +86,15 @@ class UniversalMedicalAnalyzer:
                 consensus_result['consensus'].get('single_opinion', 'Ошибка получения консенсуса'))
             
         elif analysis_mode == "✅ С валидацией":
-            result = self.assistant.send_vision_request(prompt, image_array, str(metadata or {}))
-            results['result'] = result
+            # Используем streaming для Opus
+            try:
+                text_generator = self.assistant.send_vision_request_streaming(prompt, image_array, str(metadata or {}))
+                result = st.write_stream(text_generator)
+                results['result'] = result
+            except Exception as e:
+                # Fallback на обычный режим
+                result = self.assistant.send_vision_request(prompt, image_array, str(metadata or {}))
+                results['result'] = result
             
             # Проверка на критические находки
             critical_findings = self.notifier.check_critical_findings(result)
@@ -118,7 +132,7 @@ class UniversalMedicalAnalyzer:
         
         return results
     
-    def display_results(self, results: Dict[str, Any]):
+    def display_results(self, results: Dict[str, Any], show_feedback: bool = True):
         """Отображение результатов анализа в Streamlit"""
         specialist_info = results['specialist']
         
@@ -140,6 +154,77 @@ class UniversalMedicalAnalyzer:
                     st.warning("⚠️ Обнаружены расхождения между моделями:")
                     for disc in consensus_data['discrepancies']:
                         st.warning(f"• {disc}")
+        
+        # Форма обратной связи (автоматически)
+        if show_feedback and results.get('result'):
+            try:
+                from utils.feedback_widget import show_feedback_form
+                import datetime
+                import hashlib
+                
+                # Определяем тип анализа из image_type
+                image_type_obj = results.get('image_type')
+                analysis_type = 'UNKNOWN'
+                
+                # Пытаемся получить из ImageType enum
+                if image_type_obj:
+                    try:
+                        # Для enum используем .name
+                        if hasattr(image_type_obj, 'name'):
+                            analysis_type = image_type_obj.name.upper()
+                        # Альтернативно через value
+                        elif hasattr(image_type_obj, 'value'):
+                            type_value = str(image_type_obj.value).upper()
+                            # Маппинг значений enum на типы
+                            type_mapping = {
+                                'ECG': 'ECG', 'EKG': 'ECG',
+                                'XRAY': 'XRAY', 'X-RAY': 'XRAY', 'X_RAY': 'XRAY',
+                                'MRI': 'MRI',
+                                'CT': 'CT', 'CT_SCAN': 'CT', 'CT-SCAN': 'CT',
+                                'ULTRASOUND': 'ULTRASOUND', 'US': 'ULTRASOUND',
+                                'DERMATOSCOPY': 'DERMATOSCOPY', 'DERMA': 'DERMATOSCOPY'
+                            }
+                            analysis_type = type_mapping.get(type_value, 'UNKNOWN')
+                        elif isinstance(image_type_obj, str):
+                            analysis_type = str(image_type_obj).upper()
+                    except Exception as e1:
+                        pass
+                
+                # Если не определили, пытаемся по специалисту
+                if analysis_type == 'UNKNOWN':
+                    try:
+                        specialist_role = str(specialist_info.get('role', '')).lower()
+                        if 'экг' in specialist_role or 'кардиолог' in specialist_role or 'ecg' in specialist_role:
+                            analysis_type = 'ECG'
+                        elif 'рентген' in specialist_role or 'радиолог' in specialist_role or 'xray' in specialist_role or 'x-ray' in specialist_role:
+                            analysis_type = 'XRAY'
+                        elif 'мрт' in specialist_role or 'mri' in specialist_role:
+                            analysis_type = 'MRI'
+                        elif 'кт' in specialist_role or 'ct' in specialist_role:
+                            analysis_type = 'CT'
+                        elif 'узи' in specialist_role or 'ультразвук' in specialist_role or 'ultrasound' in specialist_role:
+                            analysis_type = 'ULTRASOUND'
+                        elif 'дерматолог' in specialist_role or 'кож' in specialist_role or 'дерма' in specialist_role or 'dermatoscopy' in specialist_role:
+                            analysis_type = 'DERMATOSCOPY'
+                    except:
+                        pass
+                
+                # Генерируем уникальный ID
+                result_text = str(results['result'])
+                timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                content_hash = hashlib.md5(result_text.encode()).hexdigest()[:8]
+                analysis_id = f"{analysis_type}_{timestamp}_{content_hash}"
+                
+                # Показываем форму всегда, если есть результат
+                show_feedback_form(
+                    analysis_type=analysis_type,
+                    analysis_result=result_text,
+                    analysis_id=analysis_id
+                )
+            except Exception as e:
+                # Логируем ошибку, но не ломаем основной функционал
+                import sys
+                print(f"⚠️ Ошибка формы обратной связи: {e}", file=sys.stderr)
         
         # Оценка качества (если есть)
         if results.get('scorecard'):

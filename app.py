@@ -217,6 +217,19 @@ except ImportError as e:
     EVIDENCE_RANKER_AVAILABLE = False
     EvidenceRanker = None
 
+# --- Форма обратной связи ---
+try:
+    from utils.feedback_widget import show_feedback_form
+    FEEDBACK_WIDGET_AVAILABLE = True
+    print("✅ Модуль обратной связи загружен успешно", file=sys.stderr)
+except ImportError as e:
+    print(f"⚠️ Предупреждение: feedback_widget недоступен: {e}", file=sys.stderr)
+    FEEDBACK_WIDGET_AVAILABLE = False
+    def show_feedback_form(*args, **kwargs):
+        # Заглушка, которая показывает информацию для отладки
+        st.warning("⚠️ Модуль обратной связи недоступен. Проверьте логи.")
+        pass
+
 # --- Проверка доступности ИИ ---
 try:
     from claude_assistant import OpenRouterAssistant
@@ -378,6 +391,13 @@ def init_db():
 
     conn.commit()
     conn.close()
+    
+    # Создаём таблицу для обратной связи
+    try:
+        from database import init_feedback_table
+        init_feedback_table()
+    except Exception as e:
+        print(f"⚠️ Предупреждение: не удалось создать таблицу обратной связи: {e}", file=sys.stderr)
 
 # --- Страницы ---
 def show_home_page():
@@ -689,6 +709,41 @@ def show_ecg_analysis():
             price_diff = metrics['opus']['price_multiplier']
             st.info(f"💰 Opus в {price_diff} раз дороже")
         
+        # Форма обратной связи - ДО анализа, всегда видна и активна!
+        st.markdown("---")
+        st.markdown("### 💬 Обратная связь")
+        
+        # Показываем форму ВСЕГДА, даже без результата (она активна всегда)
+        last_result = st.session_state.get('ecg_analysis_result', '')
+        
+        # Используем ФИКСИРОВАННЫЙ ID для формы, чтобы ключи виджетов не менялись
+        # Это позволяет форме работать стабильно и не терять данные при рендере
+        analysis_id_base = "ECG_feedback_form"
+        
+        # Показываем форму всегда (даже с пустым результатом до анализа)
+        # Формируем input_case из метаданных ЭКГ
+        input_case_data = st.session_state.get('ecg_input_case', '')
+        if not input_case_data:
+            # Пытаемся сформировать из метаданных
+            analysis_meta = st.session_state.get('ecg_analysis', {})
+            if analysis_meta:
+                input_case_data = f"ЭКГ: ЧСС={analysis_meta.get('heart_rate', 'N/A')}, Ритм={analysis_meta.get('rhythm_assessment', 'N/A')}, Качество={analysis_meta.get('signal_quality', 'N/A')}"
+        
+        # Всегда вызываем форму, даже если модуль недоступен (покажет заглушку)
+        try:
+            show_feedback_form(
+                analysis_type="ECG",
+                analysis_result=str(last_result) if last_result else "",
+                analysis_id=analysis_id_base,
+                input_case=input_case_data
+            )
+        except Exception as e:
+            st.error(f"Ошибка формы обратной связи: {e}")
+            st.info("💡 Форма обратной связи временно недоступна")
+        
+        if not last_result:
+            st.info("💡 После проведения анализа ЭКГ форма автоматически обновится с новым результатом.")
+        
         st.markdown("---")
         st.markdown("### ⚙️ Режимы анализа")
         
@@ -707,6 +762,8 @@ def show_ecg_analysis():
                 if result:
                     st.session_state.ecg_analysis_result = result
                     st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # Форма под метриками обновится автоматически при следующем рендере
+                    # Не вызываем st.rerun() здесь, так как результат уже выведен через perform_analysis_with_streaming
         
         with col_precise:
             opus_accuracy = metrics['opus']['accuracy']
@@ -721,6 +778,8 @@ def show_ecg_analysis():
                 if result:
                     st.session_state.ecg_analysis_result = result
                     st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # Форма под метриками обновится автоматически при следующем рендере
+                    # Не вызываем st.rerun() здесь, так как результат уже выведен через perform_analysis_with_streaming
         
         st.markdown("---")
         st.markdown("### ⚙️ Расширенные режимы анализа")
@@ -744,32 +803,45 @@ def show_ecg_analysis():
         st.markdown("---")
         
         if st.button("🔍 ИИ-анализ ЭКГ (с контекстом)", use_container_width=True):
-            with st.spinner("ИИ анализирует ЭКГ..."):
-                # Промпт уже определен выше, используем его
-                
-                if analysis_mode == "⚡ Быстрый (одна модель)":
+            # Промпт уже определен выше, используем его
+            
+            if analysis_mode == "⚡ Быстрый (одна модель)":
+                result = None
+                with st.spinner("ИИ анализирует ЭКГ..."):
                     try:
                         # Opus 4.5 используется по умолчанию для клинического анализа ЭКГ
                         result = assistant.send_vision_request(prompt, image_array, str(analysis))
-                        st.markdown(f"### 🧠 Ответ ИИ ({specialist_info['role']}):")
-                        st.write(result)
-                        
-                        # Сохраняем результат для пересылки консультанту
-                        st.session_state.ecg_analysis_result = result
-                        st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                     except Exception as e:
                         st.error(f"❌ Ошибка анализа: {str(e)}")
                         st.info("💡 Попробуйте еще раз или выберите другой режим анализа")
                 
-                
-                elif analysis_mode == "🎯 Консенсус (несколько моделей)":
+                # Отображаем результат ВНЕ спиннера
+                if result:
+                    # Сохраняем результат СРАЗУ для формы обратной связи
+                    st.session_state.ecg_analysis_result = result
+                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    
+                    st.markdown(f"### 🧠 Ответ ИИ ({specialist_info['role']}):")
+                    st.write(result)
+                    
+                    # Сохраняем результат в session_state чтобы форма под метриками обновилась
+                    st.session_state.ecg_analysis_result = result
+                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # Обновляем страницу чтобы форма обновилась
+                    st.rerun()
+            
+            elif analysis_mode == "🎯 Консенсус (несколько моделей)":
+                consensus_result = None
+                with st.spinner("ИИ анализирует ЭКГ..."):
                     # Используем стандартный набор моделей консенсуса из ConsensusEngine
                     st.info("🔄 Используется консенсус моделей: Sonnet + Llama Vision + Gemini (по настройкам движка консенсуса)")
                     
                     consensus_result = consensus_engine.analyze_with_consensus(
                         prompt, image_array, str(analysis)
                     )
-                    
+                
+                # Отображаем результат ВНЕ спиннера
+                if consensus_result:
                     st.markdown("### 🎯 Консенсусное заключение:")
                     if consensus_result['consensus']['consensus_available']:
                         result = consensus_result['consensus']['consensus_response']
@@ -780,20 +852,38 @@ def show_ecg_analysis():
                             st.warning("⚠️ Обнаружены расхождения между моделями:")
                             for disc in consensus_result['consensus']['discrepancies']:
                                 st.warning(f"• {disc}")
-                        
-                        # Сохраняем результат для пересылки консультанту
-                        st.session_state.ecg_analysis_result = result
-                        st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                     else:
                         result = consensus_result['consensus'].get('single_opinion', 'Ошибка получения консенсуса')
                         st.write(result)
-                        # Сохраняем даже если консенсус недоступен
-                        st.session_state.ecg_analysis_result = result
-                        st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    
+                    # Сохраняем результат СРАЗУ для формы обратной связи
+                    st.session_state.ecg_analysis_result = result
+                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # Форма под метриками обновится автоматически при следующем рендере
+                    # Обновляем страницу только после вывода результата
+                    st.rerun()
                 
-                elif analysis_mode == "✅ С валидацией":
-                    # Opus 4.5 используется по умолчанию для клинического анализа ЭКГ
-                    result = assistant.send_vision_request(prompt, image_array, str(analysis))
+            elif analysis_mode == "✅ С валидацией":
+                # Opus 4.5 используется по умолчанию для клинического анализа ЭКГ
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(analysis), use_streaming=True,
+                    analysis_type="точный", model_type="opus",
+                    title=f"### 🧠 Ответ ИИ ({specialist_info['role']}):"
+                )
+                
+                # Обработка результата ВНЕ спиннера
+                if result:
+                    # Отображение результатов - СРАЗУ!
+                    st.markdown(f"### 🧠 Ответ ИИ ({specialist_info['role']}):")
+                    st.write(result)
+                    
+                    # Сохраняем результат для пересылки консультанту
+                    st.session_state.ecg_analysis_result = result
+                    timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    st.session_state.ecg_analysis_timestamp = timestamp_str
+                    
+                    # Обновляем страницу чтобы форма под метриками обновилась
+                    st.rerun()
                     
                     # Проверка на критические находки
                     critical_findings = notifier.check_critical_findings(result)
@@ -813,14 +903,6 @@ def show_ecg_analysis():
                     # Оценка доказательности
                     evidence_ranking = evidence_ranker.rank_evidence(result)
                     evidence_report = evidence_ranker.generate_evidence_report(evidence_ranking)
-                    
-                    # Отображение результатов
-                    st.markdown(f"### 🧠 Ответ ИИ ({specialist_info['role']}):")
-                    st.write(result)
-                    
-                    # Сохраняем результат для пересылки консультанту
-                    st.session_state.ecg_analysis_result = result
-                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                     
                     # Сохранение результатов ЭКГ в контекст пациента
                     if 'selected_patient_id' in locals() and selected_patient_id:
@@ -993,6 +1075,28 @@ def show_xray_analysis():
             price_diff = metrics['opus']['price_multiplier']
             st.info(f"💰 Opus в {price_diff} раз дороже")
         
+        # Форма обратной связи - ДО анализа, всегда видна и активна!
+        st.markdown("---")
+        st.markdown("### 💬 Обратная связь")
+        
+        last_result = st.session_state.get('xray_analysis_result', '')
+        analysis_id_base = "XRAY_feedback_form"
+        xray_input = f"Рентген: Качество={analysis.get('quality_assessment', 'N/A')}, Контраст={analysis.get('contrast', 'N/A')}"
+        
+        try:
+            show_feedback_form(
+                analysis_type="XRAY",
+                analysis_result=str(last_result) if last_result else "",
+                analysis_id=analysis_id_base,
+                input_case=xray_input
+            )
+        except Exception as e:
+            st.error(f"Ошибка формы обратной связи: {e}")
+            st.info("💡 Форма обратной связи временно недоступна")
+        
+        if not last_result:
+            st.info("💡 После проведения анализа форма автоматически обновится с новым результатом.")
+        
         st.markdown("---")
         
         # Получение промпта для рентгена
@@ -1022,13 +1126,15 @@ def show_xray_analysis():
             gemini_accuracy = metrics['gemini']['accuracy']
             accuracy_diff = opus_accuracy - gemini_accuracy
             if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary", key="xray_precise"):
-                with st.spinner("Opus 4.5 анализирует рентген..."):
-                    try:
-                        result = assistant.send_vision_request(prompt, image_array)
-                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
-                        st.write(result)
-                    except Exception as e:
-                        st.error(f"❌ Ошибка анализа: {str(e)}")
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
+                    analysis_type="точный", model_type="opus",
+                    title="🎯 Точный анализ (Opus 4.5):"
+                )
+                if result:
+                    st.session_state.xray_analysis_result = result
+                    st.session_state.xray_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    st.rerun()
         
         st.markdown("---")
         st.markdown("### ⚙️ Расширенные режимы анализа")
@@ -1079,6 +1185,18 @@ def show_xray_analysis():
                 if results.get('result'):
                     st.session_state.xray_analysis_result = results['result']
                     st.session_state.xray_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                
+                # Дополнительно показываем форму (на случай если display_results не показала)
+                if FEEDBACK_WIDGET_AVAILABLE and results.get('result'):
+                    try:
+                        show_feedback_form(
+                            analysis_type="XRAY",
+                            analysis_result=results['result'],
+                            analysis_id=f"XRAY_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                        )
+                    except Exception as e:
+                        import sys
+                        print(f"⚠️ Ошибка формы обратной связи XRAY: {e}", file=sys.stderr)
 
     except Exception as e:
         handle_error(e, "show_xray_analysis", show_to_user=True)
@@ -1186,6 +1304,27 @@ def show_mri_analysis():
             price_diff = metrics['opus']['price_multiplier']
             st.info(f"💰 Opus в {price_diff} раз дороже")
         
+        # Форма обратной связи - ДО анализа, всегда видна и активна!
+        st.markdown("---")
+        st.markdown("### 💬 Обратная связь")
+        
+        last_result = st.session_state.get('mri_analysis_result', '')
+        analysis_id_base = "MRI_feedback_form"
+        mri_input = "МРТ: Магнитно-резонансная томография"
+        
+        try:
+            show_feedback_form(
+                analysis_type="MRI",
+                analysis_result=str(last_result) if last_result else "",
+                analysis_id=analysis_id_base,
+                input_case=mri_input
+            )
+        except Exception as e:
+            st.error(f"Ошибка формы обратной связи: {e}")
+        
+        if not last_result:
+            st.info("💡 После проведения анализа форма автоматически обновится с новым результатом.")
+        
         st.markdown("---")
         
         # Получение промпта для МРТ
@@ -1215,13 +1354,15 @@ def show_mri_analysis():
             gemini_accuracy = metrics['gemini']['accuracy']
             accuracy_diff = opus_accuracy - gemini_accuracy
             if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary", key="mri_precise"):
-                with st.spinner("Opus 4.5 анализирует МРТ..."):
-                    try:
-                        result = assistant.send_vision_request(prompt, image_array)
-                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
-                        st.write(result)
-                    except Exception as e:
-                        st.error(f"❌ Ошибка анализа: {str(e)}")
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
+                    analysis_type="точный", model_type="opus",
+                    title="🎯 Точный анализ (Opus 4.5):"
+                )
+                if result:
+                    st.session_state.mri_analysis_result = result
+                    st.session_state.mri_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    st.rerun()
         
         st.markdown("---")
         st.markdown("### ⚙️ Расширенные режимы анализа")
@@ -1262,6 +1403,20 @@ def show_mri_analysis():
                 )
                 
                 analyzer.display_results(results)
+                
+                # Форма обратной связи (дополнительно для МРТ, если display_results не показала)
+                if FEEDBACK_WIDGET_AVAILABLE and results.get('result'):
+                    try:
+                        # Формируем input_case для МРТ
+                        mri_input = f"МРТ: Тип={results.get('image_type', 'UNKNOWN')}"
+                        show_feedback_form(
+                            analysis_type="MRI",
+                            analysis_result=results['result'],
+                            analysis_id=f"MRI_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                            input_case=mri_input
+                        )
+                    except:
+                        pass
 
     except Exception as e:
         handle_error(e, "show_mri_analysis", show_to_user=True)
@@ -1348,7 +1503,30 @@ def show_dermatoscopy_analysis():
             price_diff = metrics['opus']['price_multiplier']
             st.info(f"💰 Opus в {price_diff} раз дороже")
         
+        # Форма обратной связи - ДО анализа, всегда видна и активна!
         st.markdown("---")
+        st.markdown("### 💬 Обратная связь")
+        
+        if FEEDBACK_WIDGET_AVAILABLE:
+            last_result = st.session_state.get('derma_analysis_result', '')
+            analysis_id_base = "DERMA_feedback_form"
+            derma_input = "Дерматоскопия: Изображение кожи/родинки"
+            
+            show_feedback_form(
+                analysis_type="DERMATOSCOPY",
+                analysis_result=str(last_result) if last_result else "",
+                analysis_id=analysis_id_base,
+                input_case=derma_input
+            )
+            
+            if not last_result:
+                st.info("💡 После проведения анализа форма автоматически обновится с новым результатом.")
+        
+        st.markdown("---")
+        st.markdown("### ⚙️ Режимы анализа")
+        
+        # Опция streaming
+        use_streaming = st.checkbox("📺 Постепенное появление текста (streaming)", value=True, key="derma_streaming")
         
         assistant = OpenRouterAssistant()
         
@@ -1384,36 +1562,43 @@ def show_dermatoscopy_analysis():
             gemini_accuracy = metrics['gemini']['accuracy']
             accuracy_diff = opus_accuracy - gemini_accuracy
             if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее [Рекомендуется]", use_container_width=True, type="primary", key="derm_precise"):
-                with st.spinner("Opus 4.5 анализирует дерматоскопию..."):
-                    try:
-                        result = assistant.send_vision_request(prompt, image_array, str(metadata))
-                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
-                        st.write(result)
-                    except Exception as e:
-                        st.error(f"❌ Ошибка анализа: {str(e)}")
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming,
+                    analysis_type="точный", model_type="opus",
+                    title="🎯 Точный анализ (Opus 4.5):"
+                )
+                if result:
+                    st.session_state.derma_analysis_result = result
+                    st.session_state.derma_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # Обновляем страницу чтобы форма под метриками обновилась
+                    st.rerun()
         
         with col_fast:
             if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, key="derm_fast"):
-                with st.spinner("Gemini Flash анализирует дерматоскопию..."):
-                    try:
-                        result = assistant.send_vision_request_gemini_fast(prompt, image_array, str(metadata))
-                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
-                        st.write(result)
-                    except Exception as e:
-                        st.error(f"❌ Ошибка анализа: {str(e)}")
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming,
+                    analysis_type="быстрый", model_type="gemini",
+                    title="⚡ Быстрый анализ (Gemini Flash):"
+                )
+                if result:
+                    st.session_state.derma_analysis_result = result
+                    st.session_state.derma_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # Обновляем страницу чтобы форма под метриками обновилась
+                    st.rerun()
         
         st.markdown("---")
         
         if st.button("🔬 ИИ-анализ дерматоскопии", use_container_width=True):
-            with st.spinner("ИИ анализирует изображение..."):
-                try:
-                    # Opus 4.5 используется по умолчанию для клинического анализа изображений
-                    result = assistant.send_vision_request(prompt, image_array, str(metadata))
-                    st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
-                    st.write(result)
-                except Exception as e:
-                    st.error(f"❌ Ошибка анализа: {str(e)}")
-                    st.info("💡 Попробуйте еще раз или выберите другой режим анализа")
+            result = perform_analysis_with_streaming(
+                assistant, prompt, image_array, str(metadata), use_streaming,
+                analysis_type="точный", model_type="opus",
+                title=f"### 🧠 Заключение ({specialist_info['role']}):"
+            )
+            if result:
+                st.session_state.derma_analysis_result = result
+                st.session_state.derma_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                # Обновляем страницу чтобы форма под метриками обновилась
+                st.rerun()
 
     except Exception as e:
         st.error(f"Ошибка обработки дерматоскопии: {e}")
@@ -1518,6 +1703,27 @@ def show_ct_analysis():
             price_diff = metrics['opus']['price_multiplier']
             st.info(f"💰 Opus в {price_diff} раз дороже")
         
+        # Форма обратной связи - ДО анализа, всегда видна и активна!
+        st.markdown("---")
+        st.markdown("### 💬 Обратная связь")
+        
+        last_result = st.session_state.get('ct_analysis_result', '')
+        analysis_id_base = "CT_feedback_form"
+        ct_input = "КТ: Компьютерная томография"
+        
+        try:
+            show_feedback_form(
+                analysis_type="CT",
+                analysis_result=str(last_result) if last_result else "",
+                analysis_id=analysis_id_base,
+                input_case=ct_input
+            )
+        except Exception as e:
+            st.error(f"Ошибка формы обратной связи: {e}")
+        
+        if not last_result:
+            st.info("💡 После проведения анализа форма автоматически обновится с новым результатом.")
+        
         st.markdown("---")
         
         specialist_info = get_specialist_info(ImageType.CT)
@@ -1541,13 +1747,15 @@ def show_ct_analysis():
             gemini_accuracy = metrics['gemini']['accuracy']
             accuracy_diff = opus_accuracy - gemini_accuracy
             if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary", key="ct_precise"):
-                with st.spinner("Opus 4.5 анализирует КТ..."):
-                    try:
-                        result = assistant.send_vision_request(prompt, image_array, str(metadata))
-                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
-                        st.write(result)
-                    except Exception as e:
-                        st.error(f"❌ Ошибка анализа: {str(e)}")
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
+                    analysis_type="точный", model_type="opus",
+                    title="🎯 Точный анализ (Opus 4.5):"
+                )
+                if result:
+                    st.session_state.ct_analysis_result = result
+                    st.session_state.ct_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    st.rerun()
         
         st.markdown("---")
         st.markdown("### ⚙️ Расширенные режимы анализа")
@@ -1561,18 +1769,19 @@ def show_ct_analysis():
         )
         
         if st.button("🩻 ИИ-анализ КТ", use_container_width=True):
-            with st.spinner("ИИ анализирует КТ..."):
-                if analysis_mode == "⚡ Быстрый (одна модель)":
-                    try:
-                        # Opus 4.5 используется по умолчанию для клинического анализа КТ
-                        result = assistant.send_vision_request(prompt, image_array, str(metadata))
-                        st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
-                        st.write(result)
-                    except Exception as e:
-                        st.error(f"❌ Ошибка анализа: {str(e)}")
-                        st.info("💡 Попробуйте еще раз или выберите другой режим анализа")
+            if analysis_mode == "⚡ Быстрый (одна модель)":
+                # Opus 4.5 используется по умолчанию для клинического анализа КТ
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
+                    analysis_type="точный", model_type="opus",
+                    title=f"### 🧠 Заключение ({specialist_info['role']}):"
+                )
+                if result:
+                    st.session_state.ct_analysis_result = result
+                    st.session_state.ct_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    st.rerun()
                     
-                elif analysis_mode == "🎯 Консенсус (несколько моделей)":
+            elif analysis_mode == "🎯 Консенсус (несколько моделей)":
                     consensus_result = consensus_engine.analyze_with_consensus(prompt, image_array, str(metadata))
                     st.markdown("### 🎯 Консенсус-анализ:")
                     
@@ -1597,31 +1806,40 @@ def show_ct_analysis():
                             else:
                                 st.error(f"**Модель {i} ({opinion['model']}):** Ошибка: {opinion.get('error', 'Неизвестная ошибка')}")
                     
-                elif analysis_mode == "✅ С валидацией":
-                    # Используем Opus, если выбрано
-                    force_model = "opus" if use_opus else None
-                    result = assistant.send_vision_request(prompt, image_array, str(metadata), force_model=force_model)
-                    
-                    # Валидация
-                    validation = validator.validate_response(result)
-                    
-                    # Оценка качества
-                    evaluation = scorecard.evaluate_response(result, ImageType.CT)
-                    
-                    # Детекция пробелов
-                    gaps = gap_detector.detect_gaps(result, ImageType.CT)
-                    
-                    # Критические находки
-                    critical_findings = notifier.check_critical_findings(result)
-                    
-                    # Оценка доказательности
-                    evidence = evidence_ranker.rank_evidence(result)
-                    
-                    # Отображение результатов
-                    st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
-                    st.write(result)
-                    
-                    # Уведомления о критических находках
+            elif analysis_mode == "✅ С валидацией":
+                # Используем Opus с streaming
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
+                    analysis_type="точный", model_type="opus",
+                    title=f"### 🧠 Ответ ИИ ({specialist_info['role']}):"
+                )
+                
+                if not result:
+                    st.error("❌ Не удалось получить результат анализа")
+                    return
+                
+                # Валидация
+                validation = validator.validate_response(result)
+                
+                # Оценка качества
+                evaluation = scorecard.evaluate_response(result, ImageType.CT)
+                
+                # Детекция пробелов
+                gaps = gap_detector.detect_gaps(result, ImageType.CT)
+                
+                # Критические находки
+                critical_findings = notifier.check_critical_findings(result)
+                
+                # Оценка доказательности
+                evidence = evidence_ranker.rank_evidence(result)
+                
+                # Сохраняем результат
+                if result:
+                    st.session_state.ct_analysis_result = result
+                    st.session_state.ct_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    st.rerun()
+                
+                # Уведомления о критических находках
                     notifier.display_notifications(critical_findings)
                     
                     # Валидация
@@ -1760,6 +1978,27 @@ def show_ultrasound_analysis():
             price_diff = metrics['opus']['price_multiplier']
             st.info(f"💰 Opus в {price_diff} раз дороже")
         
+        # Форма обратной связи - ДО анализа, всегда видна и активна!
+        st.markdown("---")
+        st.markdown("### 💬 Обратная связь")
+        
+        last_result = st.session_state.get('ultrasound_analysis_result', '')
+        analysis_id_base = "ULTRASOUND_feedback_form"
+        us_input = "УЗИ: Ультразвуковое исследование"
+        
+        try:
+            show_feedback_form(
+                analysis_type="ULTRASOUND",
+                analysis_result=str(last_result) if last_result else "",
+                analysis_id=analysis_id_base,
+                input_case=us_input
+            )
+        except Exception as e:
+            st.error(f"Ошибка формы обратной связи: {e}")
+        
+        if not last_result:
+            st.info("💡 После проведения анализа форма автоматически обновится с новым результатом.")
+        
         st.markdown("---")
         
         specialist_info = get_specialist_info(ImageType.ULTRASOUND)
@@ -1783,13 +2022,15 @@ def show_ultrasound_analysis():
             gemini_accuracy = metrics['gemini']['accuracy']
             accuracy_diff = opus_accuracy - gemini_accuracy
             if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary", key="us_precise"):
-                with st.spinner("Opus 4.5 анализирует УЗИ..."):
-                    try:
-                        result = assistant.send_vision_request(prompt, image_array, str(metadata))
-                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
-                        st.write(result)
-                    except Exception as e:
-                        st.error(f"❌ Ошибка анализа: {str(e)}")
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
+                    analysis_type="точный", model_type="opus",
+                    title="🎯 Точный анализ (Opus 4.5):"
+                )
+                if result:
+                    st.session_state.ultrasound_analysis_result = result
+                    st.session_state.ultrasound_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    st.rerun()
         
         st.markdown("---")
         st.markdown("### ⚙️ Расширенные режимы анализа")
@@ -1805,14 +2046,16 @@ def show_ultrasound_analysis():
         if st.button("🔊 ИИ-анализ УЗИ", use_container_width=True):
             with st.spinner("ИИ анализирует УЗИ..."):
                 if analysis_mode == "⚡ Быстрый (одна модель)":
-                    try:
-                        # Opus 4.5 используется по умолчанию для клинического анализа УЗИ
-                        result = assistant.send_vision_request(prompt, image_array, str(metadata))
-                        st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
-                        st.write(result)
-                    except Exception as e:
-                        st.error(f"❌ Ошибка анализа: {str(e)}")
-                        st.info("💡 Попробуйте еще раз или выберите другой режим анализа")
+                    # Opus 4.5 используется по умолчанию для клинического анализа УЗИ
+                    result = perform_analysis_with_streaming(
+                        assistant, prompt, image_array, str(metadata), use_streaming=True,
+                        analysis_type="точный", model_type="opus",
+                        title=f"### 🧠 Заключение ({specialist_info['role']}):"
+                    )
+                    if result:
+                        st.session_state.ultrasound_analysis_result = result
+                        st.session_state.ultrasound_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        st.rerun()
                     
                 elif analysis_mode == "🎯 Консенсус (несколько моделей)":
                     consensus_result = consensus_engine.analyze_with_consensus(prompt, image_array, str(metadata))
@@ -1840,9 +2083,16 @@ def show_ultrasound_analysis():
                                 st.error(f"**Модель {i} ({opinion['model']}):** Ошибка: {opinion.get('error', 'Неизвестная ошибка')}")
                     
                 elif analysis_mode == "✅ С валидацией":
-                    # Используем Opus, если выбрано
-                    force_model = "opus" if use_opus_us else None
-                    result = assistant.send_vision_request(prompt, image_array, str(metadata), force_model=force_model)
+                    # Используем Opus с streaming
+                    result = perform_analysis_with_streaming(
+                        assistant, prompt, image_array, str(metadata), use_streaming=True,
+                        analysis_type="точный", model_type="opus",
+                        title=f"### 🧠 Ответ ИИ ({specialist_info['role']}):"
+                    )
+                    
+                    if not result:
+                        st.error("❌ Не удалось получить результат анализа")
+                        return
                     
                     # Валидация
                     validation = validator.validate_response(result)
@@ -1862,6 +2112,18 @@ def show_ultrasound_analysis():
                     # Отображение результатов
                     st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
                     st.write(result)
+                    
+                    # Формируем input_case для УЗИ
+                    us_input = "УЗИ: Ультразвуковое исследование"
+                    
+                    # Форма обратной связи
+                    if FEEDBACK_WIDGET_AVAILABLE:
+                        show_feedback_form(
+                            analysis_type="ULTRASOUND",
+                            analysis_result=result,
+                            analysis_id=f"ULTRASOUND_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                            input_case=us_input
+                        )
                     
                     # Уведомления о критических находках
                     notifier.display_notifications(critical_findings)
@@ -2606,11 +2868,20 @@ def show_ai_chat():
                     for file_info in files_info:
                         st.write(f"**{file_info['name']}** ({file_info['type']})")
             
-            with st.spinner("ИИ анализирует контекст и отвечает..."):
-                # Используем get_response с контекстом и Claude Sonnet 4.5 для ИИ-ассистента
-                response = assistant.get_response(user_input, context=context, use_sonnet_4_5=True)
+            # Используем streaming для более комфортного общения
+            with st.chat_message("assistant"):
+                try:
+                    text_generator = assistant.get_response_streaming(user_input, context=context, use_sonnet_4_5=True)
+                    response = st.write_stream(text_generator)
+                except Exception as e:
+                    # Fallback на обычный режим если streaming не работает
+                    st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
+                    response = assistant.get_response(user_input, context=context, use_sonnet_4_5=True)
+                    st.write(response)
             
-            st.chat_message("assistant").write(response)
+            # Убеждаемся что response - строка
+            if not isinstance(response, str):
+                response = str(response) if response else ""
             
             # Сохраняем в историю
             timestamp = datetime.datetime.now().isoformat()
@@ -2817,6 +3088,27 @@ def show_lab_analysis():
                                 
                                 st.markdown(f"{status_emoji} **{param['name']}:** {param['value']} {param['unit']} ({param['status']})")
                     
+                    # Форма обратной связи - ДО анализа, всегда видна и активна!
+                    st.markdown("---")
+                    st.markdown("### 💬 Обратная связь")
+                    
+                    last_result = st.session_state.get('lab_analysis_result', '')
+                    analysis_id_base = "LAB_feedback_form"
+                    lab_input = f"Лабораторные данные: {len(lab_report.parameters)} параметров, Критические: {len(lab_report.critical_values) if lab_report.critical_values else 0}"
+                    
+                    try:
+                        show_feedback_form(
+                            analysis_type="LAB",
+                            analysis_result=str(last_result) if last_result else "",
+                            analysis_id=analysis_id_base,
+                            input_case=lab_input
+                        )
+                    except Exception as e:
+                        st.error(f"Ошибка формы обратной связи: {e}")
+                    
+                    if not last_result:
+                        st.info("💡 После проведения анализа форма автоматически обновится с новым результатом.")
+                    
                     # ИИ-интерпретация с полной интеграцией компонентов
                     st.subheader("🤖 ИИ-интерпретация результатов")
                     
@@ -2864,6 +3156,10 @@ def show_lab_analysis():
                                     st.markdown("### 🧠 ИИ-интерпретация (Врач-лаборант-консультант)")
                                     st.write(interpretation)
                                     
+                                    # Сохраняем результат (форма обновится при следующем рендере)
+                                    st.session_state.lab_analysis_result = interpretation
+                                    st.session_state.lab_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                    
                                 elif lab_analysis_mode == "🎯 Консенсус (несколько моделей)":
                                     # Для текстового анализа используем get_multiple_opinions
                                     opinions = consensus_engine.get_multiple_opinions(base_prompt)
@@ -2887,6 +3183,10 @@ def show_lab_analysis():
                                             st.markdown(f"**Модель {i}:**")
                                             st.write(opinion['response'][:500] + "...")
                                     
+                                    # Сохраняем результат (форма обновится при следующем рендере)
+                                    st.session_state.lab_analysis_result = consensus_report
+                                    st.session_state.lab_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                    
                                 elif lab_analysis_mode == "✅ С валидацией":
                                     interpretation = assistant.get_response(base_prompt)
                                     
@@ -2905,6 +3205,10 @@ def show_lab_analysis():
                                     # Отображение результатов
                                     st.markdown("### 🧠 ИИ-интерпретация (Врач-лаборант-консультант)")
                                     st.write(interpretation)
+                                    
+                                    # Сохраняем результат (форма обновится при следующем рендере)
+                                    st.session_state.lab_analysis_result = interpretation
+                                    st.session_state.lab_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                                     
                                     # Уведомления о критических находках
                                     notifier.display_notifications(critical_findings)
@@ -5388,6 +5692,46 @@ def main():
     )
 
     init_db()
+
+    # === АВТОМАТИЧЕСКАЯ ПРОВЕРКА FEEDBACK ===
+    try:
+        from feedback.auto_analyzer import AutoFeedbackAnalyzer
+        auto_analyzer = AutoFeedbackAnalyzer()
+        threshold_check = auto_analyzer.check_thresholds()
+        
+        # Показываем уведомления если есть рекомендации
+        if threshold_check.get("recommendations"):
+            for rec in threshold_check["recommendations"]:
+                if rec["type"] == "basic_analysis":
+                    st.info(f"📊 {rec['message']}")
+                    if st.button(f"🔍 Проанализировать {', '.join(rec['types'][:2])}...", key="btn_auto_analysis"):
+                        selected_type = rec['types'][0] if rec['types'] else None
+                        if selected_type:
+                            with st.spinner(f"Анализирую {selected_type}..."):
+                                result = auto_analyzer.run_basic_analysis(selected_type)
+                                st.success(f"✅ Анализ завершен: {result.get('total_feedback', 0)} отзывов")
+                                if result.get("top_errors"):
+                                    st.subheader("⚠️ Топ ошибок:")
+                                    for i, error in enumerate(result["top_errors"][:5], 1):
+                                        st.text(f"{i}. {error.get('correct_diagnosis', 'N/A')}")
+                
+                elif rec["type"] == "optimization":
+                    st.warning(f"💡 {rec['message']}")
+                    if st.button("🎯 Получить предложения по оптимизации", key="btn_optimization"):
+                        with st.spinner("Анализирую паттерны и формирую предложения..."):
+                            opt_results = auto_analyzer.run_optimization_analysis()
+                            report = auto_analyzer.generate_optimization_report(opt_results)
+                            st.text_area("📋 Отчет по оптимизации", report, height=400)
+                
+                elif rec["type"] == "deep_analysis":
+                    st.success(f"🎯 {rec['message']}")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("📥 Скачать с GitHub и проанализировать", key="btn_deep_analysis"):
+                            st.info("💡 Используйте: git pull для скачивания данных с GitHub, затем python scripts/get_feedback_data.py --export json")
+    except Exception as e:
+        # Игнорируем ошибки автоанализа (чтобы не ломать приложение)
+        pass
 
     # ОБНОВЛЕННЫЙ список страниц
     pages = [
