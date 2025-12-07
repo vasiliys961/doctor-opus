@@ -6,6 +6,7 @@ import os
 import numpy as np
 from PIL import Image
 from typing import Optional
+import json
 from utils.error_handler import handle_error, log_api_call
 from utils.performance_monitor import track_model_usage
 import time
@@ -1299,6 +1300,228 @@ class OpenRouterAssistant:
             error_message += f"\n\nПоследняя ошибка: {last_error}"
         error_message += f"\n\n💡 Попробуйте:\n- Проверить API ключ OpenRouter\n- Проверить баланс кредитов\n- Использовать точный анализ через Opus 4.5"
         return error_message
+    
+    def send_vision_request_streaming(self, prompt: str, image_array=None, metadata=None, 
+                                     use_cache: bool = False, force_model: Optional[str] = None):
+        """Анализ изображения с streaming - текст появляется постепенно
+        
+        Возвращает генератор для использования с st.write_stream() в Streamlit
+        
+        Args:
+            prompt: Промпт для анализа
+            image_array: Массив изображения
+            metadata: Метаданные
+            use_cache: Использовать ли кеш (для streaming не используется)
+            force_model: Принудительный выбор модели ('opus'/'sonnet'/'haiku'/None)
+        """
+        # Используем ту же логику подготовки промпта что и в основном методе
+        prompt_lower = prompt.lower()
+        is_ecg = "экг" in prompt_lower or "ecg" in prompt_lower
+        is_lab = "лаборатор" in prompt_lower or (
+            "анализ" in prompt_lower and any(k in prompt_lower for k in ["кров", "моч", "биохим", "lab"])
+        )
+        
+        # Специальный режим сканирования
+        scan_only_mode = isinstance(metadata, dict) and metadata.get("task") in ("lab_ocr", "doc_ocr")
+        
+        # Определяем промпт (упрощенная версия основной логики)
+        if scan_only_mode:
+            medical_prompt = prompt
+        elif "экг" in prompt_lower or "ecg" in prompt_lower:
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'ecg' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['ecg'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        elif "рентген" in prompt_lower or "xray" in prompt_lower or "грудн" in prompt_lower:
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'xray' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['xray'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        elif "мрт" in prompt_lower or "mri" in prompt_lower:
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'mri' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['mri'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        elif "кт" in prompt_lower or "ct" in prompt_lower or "компьютерн" in prompt_lower:
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'ct' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['ct'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        elif "узи" in prompt_lower or "ультразвук" in prompt_lower or "ultrasound" in prompt_lower:
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'ultrasound' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['ultrasound'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        elif "дерматоскопия" in prompt_lower or "дерматоскоп" in prompt_lower or "dermatoscopy" in prompt_lower:
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'dermatoscopy' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['dermatoscopy'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        else:
+            medical_prompt = f"""{self.system_prompt}
+
+Проанализируйте это медицинское изображение как врач-специалист с большим опытом работы.
+Дайте подробное заключение в формате «Клиническая директива».
+
+{prompt}
+"""
+        
+        # Собираем контент
+        content = [{"type": "text", "text": medical_prompt}]
+        
+        if metadata:
+            metadata_str = str(metadata) if not isinstance(metadata, dict) else str(metadata)
+            content.append({"type": "text", "text": f"\n\nТехнические данные изображения:\n{metadata_str}"})
+        
+        if image_array is not None:
+            base64_str = self.encode_image(image_array)
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{base64_str}"}
+            })
+        
+        # Определяем модель для использования
+        active_models = [m for m in self.models if not check_deprecated(m)]
+        
+        is_document = any(keyword in prompt_lower for keyword in [
+            "документ", "справка", "рецепт", "направление", "выписка", 
+            "больничный", "извлеките", "распознавание", "document", "extract",
+            "медицинской справки", "медицинских документов"
+        ])
+        
+        if force_model:
+            fm = force_model.lower()
+            if fm == "opus":
+                models_to_try = ["anthropic/claude-opus-4.5"]
+            elif fm == "sonnet":
+                models_to_try = ["anthropic/claude-sonnet-4.5"]
+            elif fm == "haiku":
+                models_to_try = ["anthropic/claude-haiku-4.5"]
+            else:
+                models_to_try = active_models
+        elif is_document:
+            models_to_try = ["anthropic/claude-haiku-4.5"]
+        elif is_lab:
+            models_to_try = ["anthropic/claude-sonnet-4.5", "anthropic/claude-opus-4.5"]
+        else:
+            models_to_try = ["anthropic/claude-opus-4.5", "anthropic/claude-sonnet-4.5"]
+        
+        max_tokens = 2500 if is_ecg else 4000
+        
+        # Пробуем модели по порядку
+        for model in models_to_try:
+            try:
+                start_time = time.time()
+                messages = [
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": content}
+                ]
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": 0.1,
+                    "stream": True  # ВКЛЮЧАЕМ STREAMING
+                }
+                
+                # Streaming запрос
+                response = requests.post(
+                    self.base_url, 
+                    headers=self.headers, 
+                    json=payload, 
+                    stream=True,  # ВАЖНО: stream=True для requests
+                    timeout=120
+                )
+                
+                if response.status_code == 200:
+                    # Генератор для Streamlit st.write_stream()
+                    def generate_text():
+                        full_text = ""
+                        tokens_count = 0
+                        
+                        try:
+                            for line in response.iter_lines():
+                                if line:
+                                    line_str = line.decode('utf-8')
+                                    
+                                    # Пропускаем пустые строки и комментарии
+                                    if not line_str.strip() or line_str.startswith(':'):
+                                        continue
+                                    
+                                    # OpenRouter использует формат: data: {...}
+                                    if line_str.startswith('data: '):
+                                        data_str = line_str[6:].strip()  # Убираем "data: "
+                                        
+                                        if data_str == '[DONE]':
+                                            break
+                                        
+                                        try:
+                                            chunk_data = json.loads(data_str)
+                                            
+                                            # Парсим chunk
+                                            if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
+                                                choice = chunk_data['choices'][0]
+                                                
+                                                # Проверяем на завершение
+                                                if choice.get('finish_reason'):
+                                                    # Получаем финальный текст если есть
+                                                    if 'message' in choice and 'content' in choice['message']:
+                                                        final_content = choice['message']['content']
+                                                        if final_content and final_content not in full_text:
+                                                            full_text += final_content
+                                                            yield final_content
+                                                    break
+                                                
+                                                # Получаем delta (инкрементальные изменения)
+                                                delta = choice.get('delta', {})
+                                                content_chunk = delta.get('content', '')
+                                                
+                                                if content_chunk:
+                                                    full_text += content_chunk
+                                                    tokens_count += len(content_chunk.split())
+                                                    yield content_chunk
+                                                    
+                                        except json.JSONDecodeError as e:
+                                            # Игнорируем ошибки парсинга отдельных chunk'ов
+                                            continue
+                            
+                            # Логирование после завершения
+                            latency = time.time() - start_time
+                            log_api_call(model, True, latency, None)
+                            track_model_usage(model, True, tokens_count)
+                            
+                        except Exception as e:
+                            error_msg = handle_error(e, f"send_vision_request_streaming ({model})", show_to_user=False)
+                            log_api_call(model, False, time.time() - start_time, error_msg)
+                            track_model_usage(model, False)
+                            yield f"\n\n❌ Ошибка streaming: {error_msg}"
+                    
+                    return generate_text()
+                    
+                elif response.status_code == 402:
+                    continue  # Пробуем следующую модель
+                else:
+                    error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                    log_api_call(model, False, time.time() - start_time, error_msg)
+                    track_model_usage(model, False)
+                    continue
+                    
+            except Exception as e:
+                error_msg = handle_error(e, f"send_vision_request_streaming ({model})", show_to_user=False)
+                log_api_call(model, False, time.time() - start_time if 'start_time' in locals() else 0, error_msg)
+                track_model_usage(model, False)
+                continue
+        
+        # Если все модели не сработали, возвращаем генератор с ошибкой
+        def error_generator():
+            yield "❌ Ошибка: Все модели недоступны для streaming. Попробуйте обычный режим анализа."
+        return error_generator()
     
     def _get_model_name(self, model):
         """Получить читаемое название модели (только актуальные)"""

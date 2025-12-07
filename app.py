@@ -238,6 +238,68 @@ def transcribe_audio(audio_file):
     """Заглушка - используйте AssemblyAI"""
     return "❌ Используйте AssemblyAI для расшифровки"
 
+# --- Вспомогательная функция для анализа с streaming ---
+def perform_analysis_with_streaming(assistant, prompt, image_array, metadata, use_streaming, 
+                                   analysis_type="точный", model_type="opus", title=""):
+    """Универсальная функция для выполнения анализа с поддержкой streaming
+    
+    Args:
+        assistant: Экземпляр OpenRouterAssistant
+        prompt: Промпт для анализа
+        image_array: Массив изображения
+        metadata: Метаданные
+        use_streaming: Использовать ли streaming
+        analysis_type: Тип анализа ("быстрый" или "точный")
+        model_type: Тип модели ("gemini" или "opus")
+        title: Заголовок для отображения
+    """
+    if use_streaming:
+        # Streaming режим
+        if title:
+            st.markdown(f"### {title}")
+        try:
+            # Для streaming используем основной метод (поддерживает Opus)
+            # Для Gemini пока используем обычный метод
+            if analysis_type == "быстрый" and model_type == "gemini":
+                # Gemini пока без streaming - используем обычный метод
+                result = assistant.send_vision_request_gemini_fast(prompt, image_array, metadata)
+                st.write(result)
+                return result
+            else:
+                # Opus с streaming
+                text_generator = assistant.send_vision_request_streaming(prompt, image_array, metadata)
+                result = st.write_stream(text_generator)
+                return result
+        except Exception as e:
+            st.error(f"❌ Ошибка streaming: {str(e)}")
+            # Fallback на обычный режим
+            try:
+                with st.spinner(f"{'Gemini Flash' if model_type == 'gemini' else 'Opus 4.5'} анализирует..."):
+                    if analysis_type == "быстрый":
+                        result = assistant.send_vision_request_gemini_fast(prompt, image_array, metadata)
+                    else:
+                        result = assistant.send_vision_request(prompt, image_array, metadata)
+                    st.write(result)
+                    return result
+            except Exception as e2:
+                st.error(f"❌ Ошибка анализа: {str(e2)}")
+                return None
+    else:
+        # Обычный режим
+        with st.spinner(f"{'Gemini Flash' if model_type == 'gemini' else 'Opus 4.5'} анализирует..."):
+            try:
+                if analysis_type == "быстрый":
+                    result = assistant.send_vision_request_gemini_fast(prompt, image_array, metadata)
+                else:
+                    result = assistant.send_vision_request(prompt, image_array, metadata)
+                if title:
+                    st.markdown(f"### {title}")
+                st.write(result)
+                return result
+            except Exception as e:
+                st.error(f"❌ Ошибка анализа: {str(e)}")
+                return None
+
 # --- Метрики моделей для отображения ---
 def get_model_metrics_display(category: str):
     """Получить метрики моделей для отображения (иллюстрация)"""
@@ -630,34 +692,35 @@ def show_ecg_analysis():
         st.markdown("---")
         st.markdown("### ⚙️ Режимы анализа")
         
+        # Опция streaming
+        use_streaming = st.checkbox("📺 Постепенное появление текста (streaming)", value=True, key="ecg_streaming")
+        
         # Кнопки быстрого и точного анализа
         col_fast, col_precise = st.columns(2)
         with col_fast:
             if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, type="primary"):
-                with st.spinner("Gemini Flash анализирует ЭКГ..."):
-                    try:
-                        result = assistant.send_vision_request_gemini_fast(prompt, image_array, str(analysis))
-                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
-                        st.write(result)
-                        st.session_state.ecg_analysis_result = result
-                        st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    except Exception as e:
-                        st.error(f"❌ Ошибка анализа: {str(e)}")
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(analysis), use_streaming,
+                    analysis_type="быстрый", model_type="gemini", 
+                    title="⚡ Быстрый анализ (Gemini Flash):"
+                )
+                if result:
+                    st.session_state.ecg_analysis_result = result
+                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         
         with col_precise:
             opus_accuracy = metrics['opus']['accuracy']
             gemini_accuracy = metrics['gemini']['accuracy']
             accuracy_diff = opus_accuracy - gemini_accuracy
             if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary"):
-                with st.spinner("Opus 4.5 анализирует ЭКГ..."):
-                    try:
-                        result = assistant.send_vision_request(prompt, image_array, str(analysis))
-                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
-                        st.write(result)
-                        st.session_state.ecg_analysis_result = result
-                        st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    except Exception as e:
-                        st.error(f"❌ Ошибка анализа: {str(e)}")
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(analysis), use_streaming,
+                    analysis_type="точный", model_type="opus",
+                    title=f"🎯 Точный анализ (Opus 4.5):"
+                )
+                if result:
+                    st.session_state.ecg_analysis_result = result
+                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         
         st.markdown("---")
         st.markdown("### ⚙️ Расширенные режимы анализа")
