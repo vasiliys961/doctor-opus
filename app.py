@@ -2288,8 +2288,6 @@ def show_consultation_protocol():
                 
                 if audio_bytes:
                     # Сохраняем во временный файл для AssemblyAI
-                    import tempfile
-                    import os
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
                         tmp_file.write(audio_bytes)
                         audio = tmp_file.name
@@ -2319,7 +2317,6 @@ def show_consultation_protocol():
                 with st.spinner("🔄 Расшифровка через AssemblyAI..."):
                     try:
                         from config import ASSEMBLYAI_API_KEY
-                        import os
                         
                         api_key = ASSEMBLYAI_API_KEY or st.secrets.get("ASSEMBLYAI_API_KEY", "")
                         if not api_key:
