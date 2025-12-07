@@ -2618,12 +2618,18 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
                     filepath, message = create_local_doc(f"Протокол - {selected_patient}", structured_note)
                     st.success(message)
                     with open(filepath, "rb") as f:
+                        # Используем правильное расширение для macOS Pages
+                        file_name = os.path.basename(filepath)
+                        if not file_name.endswith('.docx'):
+                            file_name = file_name.replace('.doc', '.docx')
+                        
                         st.download_button(
                             label="📥 Скачать протокол (.docx)",
                             data=f,
-                            file_name=os.path.basename(filepath),
+                            file_name=file_name,
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         )
+                        st.info("💡 **Совет для macOS:** Если Pages открывает файл неправильно, щелкните правой кнопкой на файл → «Открыть с помощью» → выберите Pages или Word. Или измените настройки по умолчанию в Finder.")
 
                 st.subheader("📄 Сгенерированный протокол")
                 st.write(structured_note)
@@ -2660,17 +2666,24 @@ def show_patient_database():
             phone = st.text_input("Телефон")
             submitted = st.form_submit_button("Добавить")
 
-            if submitted and name:
-                conn = sqlite3.connect('medical_data.db')
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO patients (name, age, sex, phone)
-                    VALUES (?, ?, ?, ?)
-                ''', (name, age, sex, phone))
-                conn.commit()
-                conn.close()
-                st.success(f"✅ Пациент {name} добавлен!")
-                st.rerun()
+            if submitted:
+                if not name or not name.strip():
+                    st.error("❌ Пожалуйста, укажите ФИО пациента")
+                else:
+                    try:
+                        conn = sqlite3.connect('medical_data.db')
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            INSERT INTO patients (name, age, sex, phone)
+                            VALUES (?, ?, ?, ?)
+                        ''', (name.strip(), age, sex, phone))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"✅ Пациент {name.strip()} успешно добавлен в базу данных!")
+                        st.rerun()
+                    except sqlite3.Error as e:
+                        st.error(f"❌ Ошибка при добавлении пациента: {e}")
+                        st.info("💡 Попробуйте обновить страницу и попробовать снова")
 
     with tab2:
         st.subheader("Поиск пациентов")
@@ -5703,10 +5716,13 @@ def show_document_scanner_page():
                     filepath, message = create_local_doc(f"Извлеченные данные - {doc_type}", doc_text)
                     st.success(message)
                     with open(filepath, "rb") as f:
+                        file_name = os.path.basename(filepath)
+                        if not file_name.endswith('.docx'):
+                            file_name = file_name.replace('.doc', '.docx')
                         st.download_button(
                             label="📥 Скачать документ",
                             data=f,
-                            file_name=os.path.basename(filepath),
+                            file_name=file_name,
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         )
                 except Exception as e:

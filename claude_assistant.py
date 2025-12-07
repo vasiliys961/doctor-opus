@@ -1666,14 +1666,21 @@ class OpenRouterAssistant:
                 if response.status_code == 200:
                     result_data = response.json()
                     result = result_data["choices"][0]["message"]["content"]
-                    
+
                     # Логирование
                     tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
                     log_api_call(model, True, latency, None)
                     track_model_usage(model, True, tokens_used)
-                    
+
                     self.model = model
                     return result
+                elif response.status_code == 402:
+                    # Ошибка недостатка кредитов
+                    error_msg = f"HTTP 402: Недостаточно кредитов на OpenRouter для модели {model}"
+                    log_api_call(model, False, latency, error_msg)
+                    track_model_usage(model, False)
+                    print(f"⚠️ {error_msg}. Пробую следующую модель...")
+                    continue
                 else:
                     error_msg = f"HTTP {response.status_code}"
                     log_api_call(model, False, latency, error_msg)
@@ -1735,6 +1742,13 @@ class OpenRouterAssistant:
 
                     self.model = model
                     return result
+                elif response.status_code == 402:
+                    # Ошибка недостатка кредитов
+                    error_msg = f"HTTP 402: Недостаточно кредитов на OpenRouter для модели {model}"
+                    log_api_call(model, False, latency, error_msg)
+                    track_model_usage(model, False)
+                    print(f"⚠️ {error_msg}. Пробую следующую модель...")
+                    continue
                 else:
                     error_msg = f"HTTP {response.status_code}"
                     log_api_call(model, False, latency, error_msg)
