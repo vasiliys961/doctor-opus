@@ -2176,6 +2176,22 @@ def show_consultation_protocol():
 
     init_db()
     
+    # Кнопка сброса всех данных протокола
+    if st.button("🗑️ Очистить все данные протокола", type="secondary", use_container_width=True):
+        # Очищаем все данные протокола из session_state
+        if 'raw_text' in st.session_state:
+            del st.session_state['raw_text']
+        if 'structured_note' in st.session_state:
+            del st.session_state['structured_note']
+        if 'protocol_patient_name' in st.session_state:
+            del st.session_state['protocol_patient_name']
+        if 'transcribed_text_display' in st.session_state:
+            del st.session_state['transcribed_text_display']
+        if 'transcribed_genetic_question' in st.session_state:
+            del st.session_state['transcribed_genetic_question']
+        st.success("✅ Все данные протокола очищены")
+        st.rerun()
+    
     # Выбор пациента (опционально, можно создать после генерации протокола)
     conn = sqlite3.connect('medical_data.db')
     patients = pd.read_sql_query("SELECT id, name FROM patients", conn)
@@ -2692,6 +2708,17 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
 
                 st.subheader("📄 Сгенерированный протокол")
                 st.write(structured_note)
+                
+                # Кнопка для очистки протокола после просмотра
+                if st.button("🗑️ Очистить протокол и начать заново", type="secondary", use_container_width=True):
+                    if 'structured_note' in st.session_state:
+                        del st.session_state['structured_note']
+                    if 'raw_text' in st.session_state:
+                        del st.session_state['raw_text']
+                    if 'protocol_patient_name' in st.session_state:
+                        del st.session_state['protocol_patient_name']
+                    st.success("✅ Протокол очищен. Можете создать новый.")
+                    st.rerun()
             
             # Кнопка для сохранения в контекст (если не сохранилось автоматически)
             if st.button("💾 Сохранить протокол в контекст пациента"):
