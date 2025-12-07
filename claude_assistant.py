@@ -1050,6 +1050,84 @@ class OpenRouterAssistant:
         
         return "❌ Ошибка: Все модели недоступны. Проверьте подключение к интернету и API ключи."
 
+    def get_response_streaming(self, user_message: str, context: str = "", use_sonnet_4_5: bool = False):
+        """Текстовый запрос с streaming - текст появляется постепенно
+        
+        Args:
+            user_message: Вопрос пользователя
+            context: Дополнительный контекст
+            use_sonnet_4_5: Использовать Sonnet 4.5 (для протоколов)
+        
+        Yields:
+            str: Части ответа по мере генерации
+        """
+        full_message = f"{context}\n\nВопрос: {user_message}" if context else user_message
+        
+        # Если запрошена модель Sonnet 4.5, ставим её в приоритет
+        if use_sonnet_4_5:
+            models_to_try = ["anthropic/claude-sonnet-4.5"] + [m for m in self.models if m != "anthropic/claude-sonnet-4.5"]
+        else:
+            models_to_try = self.models
+        
+        # Пробуем модели по порядку
+        for model in models_to_try:
+            try:
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": full_message}
+                    ],
+                    "max_tokens": 8000,
+                    "temperature": 0.2,
+                    "stream": True  # Включаем streaming
+                }
+                
+                response = requests.post(
+                    self.base_url,
+                    headers=self.headers,
+                    json=payload,
+                    timeout=180,
+                    stream=True  # Важно для streaming
+                )
+                
+                if response.status_code == 200:
+                    self.model = model  # Запоминаем рабочую модель
+                    # Читаем stream
+                    for line in response.iter_lines():
+                        if line:
+                            line_text = line.decode('utf-8')
+                            if line_text.startswith('data: '):
+                                data_str = line_text[6:]  # Убираем "data: "
+                                if data_str.strip() == '[DONE]':
+                                    break
+                                try:
+                                    data = json.loads(data_str)
+                                    if 'choices' in data and len(data['choices']) > 0:
+                                        delta = data['choices'][0].get('delta', {})
+                                        content = delta.get('content', '')
+                                        if content:
+                                            yield content
+                                except json.JSONDecodeError:
+                                    continue
+                    return  # Успешно завершили streaming
+                elif response.status_code == 402:
+                    print(f"⚠️ HTTP 402: Недостаточно кредитов для {model}. Пробую следующую модель...")
+                    continue
+                else:
+                    print(f"⚠️ HTTP {response.status_code} для {model}. Пробую следующую модель...")
+                    continue
+                    
+            except requests.exceptions.Timeout:
+                print(f"⚠️ Таймаут для модели {model}")
+                continue
+            except Exception as e:
+                print(f"⚠️ Ошибка с моделью {model}: {e}")
+                continue
+        
+        # Если все модели не сработали, возвращаем ошибку
+        yield "❌ Ошибка: Все модели недоступны для streaming. Проверьте подключение к интернету и API ключи."
+
     def get_response_without_system(self, user_message: str, force_opus: bool = False) -> str:
         """
         Текстовый запрос БЕЗ глобального системного промпта (например, для узкоспециализированных ролей,
