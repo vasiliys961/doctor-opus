@@ -29,7 +29,7 @@ OPENROUTER_API_KEY = "sk-or-v1-ваш_ключ_здесь"
 ASSEMBLYAI_API_KEY = "ваш_ключ_здесь"  # Опциональный
 
 [medical_analyzer]
-model_preference = "anthropic/claude-3-5-sonnet-20241022"
+model_preference = "anthropic/claude-opus-4.5"
 timeout = 180
 max_retries = 3
 ```
