@@ -69,7 +69,11 @@ def _get_diagnostic_prompts():
                 get_mri_diagnostic_prompt,
                 get_ct_diagnostic_prompt,
                 get_ultrasound_diagnostic_prompt,
-                get_dermatoscopy_diagnostic_prompt
+                get_dermatoscopy_diagnostic_prompt,
+                get_genetics_diagnostic_prompt,
+                get_histology_diagnostic_prompt,
+                get_retinal_diagnostic_prompt,
+                get_mammography_diagnostic_prompt
             )
             _diagnostic_prompts_cache = {
                 'ecg': get_ecg_diagnostic_prompt,
@@ -77,7 +81,11 @@ def _get_diagnostic_prompts():
                 'mri': get_mri_diagnostic_prompt,
                 'ct': get_ct_diagnostic_prompt,
                 'ultrasound': get_ultrasound_diagnostic_prompt,
-                'dermatoscopy': get_dermatoscopy_diagnostic_prompt
+                'dermatoscopy': get_dermatoscopy_diagnostic_prompt,
+                'genetics': get_genetics_diagnostic_prompt,
+                'histology': get_histology_diagnostic_prompt,
+                'retinal': get_retinal_diagnostic_prompt,
+                'mammography': get_mammography_diagnostic_prompt
             }
         except ImportError:
             _diagnostic_prompts_cache = {}
@@ -183,12 +191,7 @@ class OpenRouterAssistant:
    - **Профилактика:** Вторичная профилактика и обучение пациента.
 
 4. **Ссылки**
-   (Список цитируемых гайдлайнов и статей).
-
-5. **Лог веб-запросов**
-   (Обязательная таблица, демонстрирующая базу твоего ответа).
-   | Запрос | Дата источника | Источник (Орг/Журнал) | Название статьи/Гайдлайна | DOI/URL (если есть) | Комментарий |
-   | --- | --- | --- | --- | --- | --- |
+   (Список цитируемых гайдлайнов и статей с указанием авторов, журналов и года публикации).
 
 ### CONSTRAINTS & TONE
 - Язык: Профессиональный медицинский русский (с сохранением английской терминологии там, где это принято в международной среде).
