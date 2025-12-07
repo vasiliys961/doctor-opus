@@ -37,11 +37,27 @@ class MedicalAnonymizer:
             return ""
         
         anonymized = text
-        for category, pattern in self.PII_PATTERNS.items():
-            matches = list(re.finditer(pattern, anonymized, re.IGNORECASE))
-            if matches:
-                self.stats["pii_found"] += len(matches)
-                anonymized = re.sub(pattern, f"[{category.upper()}]", anonymized, flags=re.IGNORECASE)
+        # Обрабатываем паттерны в порядке от более специфичных к менее специфичным
+        # Сначала полное ФИО, потом фамилия+отчество, потом фамилия+имя
+        pattern_order = [
+            "фио_полное",
+            "фио_фамилия_отчество", 
+            "фио_фамилия_имя",
+            "дата_рождения",
+            "медкарта",
+            "телефон",
+            "email",
+            "адрес",
+            "паспорт"
+        ]
+        
+        for category in pattern_order:
+            if category in self.PII_PATTERNS:
+                pattern = self.PII_PATTERNS[category]
+                matches = list(re.finditer(pattern, anonymized, re.IGNORECASE))
+                if matches:
+                    self.stats["pii_found"] += len(matches)
+                    anonymized = re.sub(pattern, f"[{category.upper()}]", anonymized, flags=re.IGNORECASE)
         
         return anonymized
 
