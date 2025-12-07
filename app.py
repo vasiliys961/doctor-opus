@@ -2237,15 +2237,26 @@ def show_consultation_protocol():
             key="protocol_text_input"
         )
         
-        # Кнопка сразу под текстовым полем - большая и заметная
-        if raw_text:
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                if st.button("📝 **СОЗДАТЬ ПРОТОКОЛ**", use_container_width=True, type="primary", key="create_protocol_text"):
-                    st.session_state.raw_text = raw_text
-                    st.session_state.structured_note = ''  # Сбрасываем старый протокол
-                    st.session_state['protocol_generating'] = True
-                    st.rerun()  # Перезагружаем для генерации протокола
+        # Кнопка ВСЕГДА видна сразу под текстовым полем - большая и заметная
+        st.markdown("")  # Небольшой отступ
+        col1, col2, col3 = st.columns([1, 3, 1])
+        with col2:
+            # Кнопка всегда видна, но активна только если есть текст
+            button_disabled = not raw_text or len(raw_text.strip()) == 0
+            if st.button(
+                "📝 **СОЗДАТЬ ПРОТОКОЛ**", 
+                use_container_width=True, 
+                type="primary", 
+                key="create_protocol_text",
+                disabled=button_disabled
+            ):
+                st.session_state.raw_text = raw_text
+                st.session_state.structured_note = ''  # Сбрасываем старый протокол
+                st.session_state['protocol_generating'] = True
+                st.rerun()  # Перезагружаем для генерации протокола
+            
+            if button_disabled:
+                st.caption("💡 Введите данные пациента выше, чтобы активировать кнопку")
     
     # Загрузка готового файла
     elif input_method == "📁 Загрузить готовый файл":
