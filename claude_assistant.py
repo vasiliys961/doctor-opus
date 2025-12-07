@@ -1660,7 +1660,9 @@ class OpenRouterAssistant:
                 if prompt_size > 50000:
                     print(f"⚠️ Большой промпт: {prompt_size} символов. Может потребоваться больше времени.")
                 
-                response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=300)  # Увеличен таймаут для очень длинных промптов
+                # Уменьшаем таймаут для более быстрого fallback на другие модели
+                timeout_value = 180 if 'opus' in model.lower() else 120
+                response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=timeout_value)
                 latency = time.time() - start_time
                 
                 if response.status_code == 200:
@@ -1920,9 +1922,9 @@ class OpenRouterAssistant:
         
         try:
             start_time = time.time()
-            # Уменьшаем таймаут до 120 секунд (2 минуты) для видео
-            # Если видео большое, может потребоваться больше времени, но 5 минут - слишком долго
-            response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
+            # Уменьшаем таймаут для более быстрого fallback
+            timeout_value = 90 if 'opus' in model.lower() else 60
+            response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=timeout_value)
             latency = time.time() - start_time
             
             if response.status_code == 200:
