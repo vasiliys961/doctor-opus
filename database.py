@@ -124,3 +124,89 @@ def delete_specialist_prompt(prompt_id):
     cursor.execute('DELETE FROM specialist_prompts WHERE id = ?', (prompt_id,))
     conn.commit()
     conn.close()
+
+def init_feedback_table():
+    """Создание таблицы для обратной связи от врачей"""
+    conn = sqlite3.connect('medical_data.db')
+    cursor = conn.cursor()
+    
+    # Создаем таблицу с расширенными полями
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS analysis_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            analysis_type TEXT NOT NULL,
+            analysis_id TEXT,
+            ai_response TEXT,
+            feedback_type TEXT NOT NULL,
+            doctor_comment TEXT,
+            correct_diagnosis TEXT,
+            specialty TEXT,
+            correctness TEXT,
+            consent INTEGER DEFAULT 0,
+            input_case TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Добавляем новые колонки если их нет (для обратной совместимости)
+    cursor.execute("PRAGMA table_info(analysis_feedback)")
+    columns = [row[1] for row in cursor.fetchall()]
+    
+    if 'specialty' not in columns:
+        cursor.execute('ALTER TABLE analysis_feedback ADD COLUMN specialty TEXT')
+    if 'correctness' not in columns:
+        cursor.execute('ALTER TABLE analysis_feedback ADD COLUMN correctness TEXT')
+    if 'consent' not in columns:
+        cursor.execute('ALTER TABLE analysis_feedback ADD COLUMN consent INTEGER DEFAULT 0')
+    if 'input_case' not in columns:
+        cursor.execute('ALTER TABLE analysis_feedback ADD COLUMN input_case TEXT')
+    
+    # Создаем индексы для быстрого поиска
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_analysis_type ON analysis_feedback(analysis_type)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_created_at ON analysis_feedback(created_at)')
+    
+    conn.commit()
+    conn.close()
+
+def init_feedback_table():
+    """Создание таблицы для обратной связи от врачей"""
+    conn = sqlite3.connect('medical_data.db')
+    cursor = conn.cursor()
+    
+    # Создаем таблицу с расширенными полями
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS analysis_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            analysis_type TEXT NOT NULL,
+            analysis_id TEXT,
+            ai_response TEXT,
+            feedback_type TEXT NOT NULL,
+            doctor_comment TEXT,
+            correct_diagnosis TEXT,
+            specialty TEXT,
+            correctness TEXT,
+            consent INTEGER DEFAULT 0,
+            input_case TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Добавляем новые колонки если их нет (для обратной совместимости)
+    cursor.execute("PRAGMA table_info(analysis_feedback)")
+    columns = [row[1] for row in cursor.fetchall()]
+    
+    if 'specialty' not in columns:
+        cursor.execute('ALTER TABLE analysis_feedback ADD COLUMN specialty TEXT')
+    if 'correctness' not in columns:
+        cursor.execute('ALTER TABLE analysis_feedback ADD COLUMN correctness TEXT')
+    if 'consent' not in columns:
+        cursor.execute('ALTER TABLE analysis_feedback ADD COLUMN consent INTEGER DEFAULT 0')
+    if 'input_case' not in columns:
+        cursor.execute('ALTER TABLE analysis_feedback ADD COLUMN input_case TEXT')
+    
+    # Создаем индексы для быстрого поиска
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_analysis_type ON analysis_feedback(analysis_type)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_created_at ON analysis_feedback(created_at)')
+    
+    conn.commit()
+    conn.close()
