@@ -2636,7 +2636,10 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
                     conn.close()
                     
                     st.success(f"✅ Пациент '{patient_name}' автоматически создан в базе данных")
+                    st.session_state['protocol_patient_name'] = patient_name
                     selected_patient = patient_name
+                else:
+                    st.session_state['protocol_patient_name'] = selected_patient
                 
                 # Автоматическое сохранение протокола в контекст пациента
                 try:
@@ -2659,7 +2662,7 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
             structured_note = st.session_state.get('structured_note', '')
             if structured_note:
                 # Используем имя пациента из session_state или временное
-                patient_name_for_doc = selected_patient if selected_patient else "Пациент"
+                patient_name_for_doc = st.session_state.get('protocol_patient_name', selected_patient if 'selected_patient' in locals() and selected_patient else "Пациент")
                 with st.spinner("📄 Создание документа..."):
                     filepath, message = create_local_doc(f"Протокол - {patient_name_for_doc}", structured_note)
                     st.success(message)
