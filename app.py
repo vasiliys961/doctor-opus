@@ -2626,21 +2626,21 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
 
 Медицинские рекомендации - опираться только на проверенные международные источники; для каждого ключевого лечебного шага указывать ссылку и год публикации (предпочтительно ≤5 лет).
 """
-                # Используем Sonnet 4.5 для протокола с streaming (текст появляется постепенно)
-                st.markdown("### 📄 Генерация протокола...")
-                try:
-                    # Пробуем streaming
-                    text_generator = assistant.get_response_streaming(prompt, use_sonnet_4_5=True)
-                    structured_note = st.write_stream(text_generator)
+            # Используем Sonnet 4.5 для протокола с streaming (текст появляется постепенно)
+            st.markdown("### 📄 Генерация протокола...")
+            try:
+                # Пробуем streaming
+                text_generator = assistant.get_response_streaming(prompt, use_sonnet_4_5=True)
+                structured_note = st.write_stream(text_generator)
+                st.session_state.structured_note = structured_note
+            except Exception as e:
+                # Fallback на обычный режим если streaming не работает
+                st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
+                with st.spinner("🤖 Генерация протокола..."):
+                    structured_note = assistant.get_response(prompt, use_sonnet_4_5=True)
                     st.session_state.structured_note = structured_note
-                except Exception as e:
-                    # Fallback на обычный режим если streaming не работает
-                    st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
-                    with st.spinner("🤖 Генерация протокола..."):
-                        structured_note = assistant.get_response(prompt, use_sonnet_4_5=True)
-                        st.session_state.structured_note = structured_note
-                
-                # Автоматическое создание/получение пациента, если не выбран
+            
+            # Автоматическое создание/получение пациента, если не выбран
                 if not patient_id:
                     # Извлекаем имя пациента из протокола или создаем временное
                     import re
