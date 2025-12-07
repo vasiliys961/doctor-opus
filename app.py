@@ -2175,16 +2175,28 @@ def show_consultation_protocol():
     st.header("📝 Автоматический протокол приёма")
 
     init_db()
+    
+    # Выбор пациента (опционально, можно создать после генерации протокола)
     conn = sqlite3.connect('medical_data.db')
     patients = pd.read_sql_query("SELECT id, name FROM patients", conn)
     conn.close()
-
-    if patients.empty:
-        st.warning("❌ База пациентов пуста. Добавьте пациента в разделе 'База данных'.")
-        return
-
-    selected_patient = st.selectbox("Выберите пациента", patients['name'])
-    patient_id = patients[patients['name'] == selected_patient].iloc[0]['id']
+    
+    selected_patient = None
+    patient_id = None
+    
+    if not patients.empty:
+        # Если есть пациенты, можно выбрать, но не обязательно
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            selected_patient = st.selectbox(
+                "Выберите пациента (опционально, можно создать после генерации протокола)",
+                ["--- Создать нового ---"] + list(patients['name']),
+                key="protocol_patient_select"
+            )
+        if selected_patient and selected_patient != "--- Создать нового ---":
+            patient_id = patients[patients['name'] == selected_patient].iloc[0]['id']
+    else:
+        st.info("💡 Пациент будет создан автоматически после генерации протокола")
 
     st.subheader("📝 Ввод данных для протокола")
     
@@ -2209,10 +2221,12 @@ def show_consultation_protocol():
             key="protocol_text_input"
         )
         
-        if raw_text and st.button("📝 Создать протокол из текста", use_container_width=True):
-            st.session_state.raw_text = raw_text
-            st.session_state.structured_note = ''  # Сбрасываем старый протокол
-            st.rerun()  # Перезагружаем для генерации протокола
+        # Кнопка показывается сразу, если есть текст
+        if raw_text:
+            if st.button("📝 Создать протокол из текста", use_container_width=True, type="primary"):
+                st.session_state.raw_text = raw_text
+                st.session_state.structured_note = ''  # Сбрасываем старый протокол
+                st.rerun()  # Перезагружаем для генерации протокола
     
     # Загрузка готового файла
     elif input_method == "📁 Загрузить готовый файл":
@@ -2261,10 +2275,12 @@ def show_consultation_protocol():
                 except Exception as e:
                     st.error(f"❌ Ошибка чтения PDF: {e}")
             
-            if raw_text and st.button("📝 Создать протокол из файла", use_container_width=True):
-                st.session_state.raw_text = raw_text
-                st.session_state.structured_note = ''  # Сбрасываем старый протокол
-                st.rerun()  # Перезагружаем для генерации протокола
+            # Кнопка показывается сразу, если есть текст
+            if raw_text:
+                if st.button("📝 Создать протокол из файла", use_container_width=True, type="primary"):
+                    st.session_state.raw_text = raw_text
+                    st.session_state.structured_note = ''  # Сбрасываем старый протокол
+                    st.rerun()  # Перезагружаем для генерацию протокола
     
     # Голосовой ввод
     elif input_method == "🎤 Голосовой ввод":
@@ -2595,6 +2611,33 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
                 structured_note = assistant.get_response(prompt, use_sonnet_4_5=True)
                 st.session_state.structured_note = structured_note
                 
+                # Автоматическое создание/получение пациента, если не выбран
+                if not patient_id:
+                    # Извлекаем имя пациента из протокола или создаем временное
+                    import re
+                    # Пытаемся найти имя в тексте (например, "Пациент: Иван Иванов" или "ФИО: ...")
+                    name_match = re.search(r'(?:пациент|фио|ф\.и\.о\.|имя)[\s:]+([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)', raw_text, re.IGNORECASE)
+                    if name_match:
+                        patient_name = name_match.group(1).strip()
+                    else:
+                        # Создаем имя на основе даты и времени
+                        from datetime import datetime
+                        patient_name = f"Пациент {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+                    
+                    # Создаем пациента в базе
+                    conn = sqlite3.connect('medical_data.db')
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        INSERT INTO patients (name, age, sex, phone)
+                        VALUES (?, ?, ?, ?)
+                    ''', (patient_name, None, None, None))
+                    patient_id = cursor.lastrowid
+                    conn.commit()
+                    conn.close()
+                    
+                    st.success(f"✅ Пациент '{patient_name}' автоматически создан в базе данных")
+                    selected_patient = patient_name
+                
                 # Автоматическое сохранение протокола в контекст пациента
                 try:
                     context_store = ContextStore()
@@ -2615,8 +2658,10 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
             # Показываем сгенерированный протокол
             structured_note = st.session_state.get('structured_note', '')
             if structured_note:
+                # Используем имя пациента из session_state или временное
+                patient_name_for_doc = selected_patient if selected_patient else "Пациент"
                 with st.spinner("📄 Создание документа..."):
-                    filepath, message = create_local_doc(f"Протокол - {selected_patient}", structured_note)
+                    filepath, message = create_local_doc(f"Протокол - {patient_name_for_doc}", structured_note)
                     st.success(message)
                     with open(filepath, "rb") as f:
                         # Используем правильное расширение для macOS Pages
