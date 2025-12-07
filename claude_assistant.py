@@ -62,6 +62,15 @@ class OpenRouterAssistant:
     
     def __init__(self, api_key=None):
         self.api_key = api_key or OPENROUTER_API_KEY
+        
+        # Проверка и логирование ключа (первые и последние 5 символов для безопасности)
+        if self.api_key:
+            key_preview = f"{self.api_key[:8]}...{self.api_key[-5:]}" if len(self.api_key) > 13 else "***"
+            print(f"✅ OpenRouter API ключ загружен: {key_preview}")
+        else:
+            print("❌ ОШИБКА: OpenRouter API ключ не найден!")
+            print("   Проверьте .streamlit/secrets.toml или переменную окружения OPENROUTER_API_KEY")
+        
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         
         # Актуальные модели: Claude 4.5 серия + Llama
