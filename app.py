@@ -2524,9 +2524,11 @@ def show_consultation_protocol():
                     f"(шаблон врача: {template_preset}):\n{protocol_template.strip()}\n"
                 )
 
-            with st.spinner("🤖 Генерация протокола..."):
-                structured_note = None
-                assistant = OpenRouterAssistant()
+            # Генерация протокола происходит автоматически после обработки аудио/текста
+            # (как в main ветке - сразу после обработки, без отдельной кнопки)
+            if not st.session_state.get('structured_note'):
+                with st.spinner("🤖 Генерация протокола..."):
+                    assistant = OpenRouterAssistant()
                 prompt = f"""
 Вы - опытный терапевт, американский профессор клинической медицины и ведущий специалист университетской клиники с многолетним клиническим опытом.
 
@@ -2608,19 +2610,22 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
                 except Exception as e:
                     st.warning(f"⚠️ Не удалось сохранить протокол в контекст: {e}")
 
-            with st.spinner("📄 Создание документа..."):
-                filepath, message = create_local_doc(f"Протокол - {selected_patient}", structured_note)
-                st.success(message)
-                with open(filepath, "rb") as f:
-                    st.download_button(
-                        label="📥 Скачать протокол (.docx)",
-                        data=f,
-                        file_name=os.path.basename(filepath),
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
+            # Показываем сгенерированный протокол, если он есть
+            structured_note = st.session_state.get('structured_note', '')
+            if structured_note:
+                with st.spinner("📄 Создание документа..."):
+                    filepath, message = create_local_doc(f"Протокол - {selected_patient}", structured_note)
+                    st.success(message)
+                    with open(filepath, "rb") as f:
+                        st.download_button(
+                            label="📥 Скачать протокол (.docx)",
+                            data=f,
+                            file_name=os.path.basename(filepath),
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        )
 
-            st.subheader("📄 Сгенерированный протокол")
-            st.write(structured_note)
+                st.subheader("📄 Сгенерированный протокол")
+                st.write(structured_note)
             
             # Кнопка для сохранения в контекст (если не сохранилось автоматически)
             if st.button("💾 Сохранить протокол в контекст пациента"):
