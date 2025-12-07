@@ -2636,17 +2636,34 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
                     text_generator = assistant.get_response_streaming(prompt, use_sonnet_4_5=True)
                     structured_note = st.write_stream(text_generator)
                     st.session_state.structured_note = structured_note
+                    
+                    # Показываем информацию о модели, которая использовалась
+                    if assistant.model:
+                        model_name = assistant.model.replace("anthropic/claude-", "").replace("-4.5", " 4.5")
+                        if "sonnet" in assistant.model.lower():
+                            st.success(f"✅ Протокол сгенерирован моделью Claude Sonnet 4.5")
+                        elif "haiku" in assistant.model.lower():
+                            st.info(f"ℹ️ Протокол сгенерирован моделью Claude Haiku 4.5 (Sonnet был недоступен)")
+                        elif "opus" in assistant.model.lower():
+                            st.info(f"ℹ️ Протокол сгенерирован моделью Claude Opus 4.5")
                 except Exception as e:
                     # Fallback на обычный режим если streaming не работает
                     st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
                     with st.spinner("🤖 Генерация протокола..."):
                         structured_note = assistant.get_response(prompt, use_sonnet_4_5=True)
                         st.session_state.structured_note = structured_note
+                        
+                        # Показываем информацию о модели
+                        if assistant.model:
+                            model_name = assistant.model.replace("anthropic/claude-", "").replace("-4.5", " 4.5")
+                            if "sonnet" in assistant.model.lower():
+                                st.success(f"✅ Протокол сгенерирован моделью Claude Sonnet 4.5")
+                            elif "haiku" in assistant.model.lower():
+                                st.info(f"ℹ️ Протокол сгенерирован моделью Claude Haiku 4.5 (Sonnet был недоступен)")
+                            elif "opus" in assistant.model.lower():
+                                st.info(f"ℹ️ Протокол сгенерирован моделью Claude Opus 4.5")
                 
                 # Автоматическое создание/получение пациента, если не выбран
-                if not patient_id:
-            
-            # Автоматическое создание/получение пациента, если не выбран
                 if not patient_id:
                     # Извлекаем имя пациента из протокола или создаем временное
                     import re

@@ -1113,7 +1113,14 @@ class OpenRouterAssistant:
                                     continue
                     return  # Успешно завершили streaming
                 elif response.status_code == 402:
-                    print(f"⚠️ HTTP 402: Недостаточно кредитов для {model}. Пробую следующую модель...")
+                    # Ошибка недостатка кредитов - логируем и пробуем следующую модель
+                    error_msg = f"HTTP 402: Недостаточно кредитов на OpenRouter для модели {model}"
+                    log_api_call(model, False, 0, error_msg)
+                    track_model_usage(model, False)
+                    print(f"⚠️ {error_msg}. Пробую следующую модель...")
+                    # Для streaming показываем сообщение через yield
+                    if model == "anthropic/claude-sonnet-4.5":
+                        yield f"\n⚠️ **Sonnet 4.5 недоступен (недостаточно кредитов). Переключаюсь на другую модель...**\n\n"
                     continue
                 else:
                     print(f"⚠️ HTTP {response.status_code} для {model}. Пробую следующую модель...")
