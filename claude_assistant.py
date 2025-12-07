@@ -1599,7 +1599,7 @@ class OpenRouterAssistant:
                     self.base_url, 
                     headers=self.headers, 
                     json=payload, 
-                    timeout=300,
+                    timeout=180,  # Уменьшен для быстрого fallback
                     stream=True  # Важно для streaming
                 )
                 
@@ -1731,7 +1731,9 @@ class OpenRouterAssistant:
                     "temperature": 0.2,
                 }
 
-                response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=300)
+                # Уменьшаем таймаут для более быстрого fallback
+                timeout_value = 180 if 'opus' in model.lower() else 120
+                response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=timeout_value)
                 latency = time.time() - start_time
 
                 if response.status_code == 200:
@@ -2022,7 +2024,9 @@ class OpenRouterAssistant:
                         "temperature": 0.2
                     }
                     
-                    response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=300)
+                    # Уменьшаем таймаут для более быстрого fallback
+                timeout_value = 180 if 'opus' in model.lower() else 120
+                response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=timeout_value)
                     latency = time.time() - start_time
                     
                     if response.status_code == 200:
