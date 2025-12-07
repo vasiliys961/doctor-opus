@@ -87,7 +87,8 @@ class OpenRouterAssistant:
     _router_warning_shown = False
     
     def __init__(self, api_key=None):
-        self.api_key = api_key or OPENROUTER_API_KEY
+        # Загружаем ключ с возможностью перезагрузки из secrets
+        self._load_api_key(api_key)
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         
         # Актуальные модели: Claude 4.5 серия + Llama
@@ -105,6 +106,47 @@ class OpenRouterAssistant:
         # По умолчанию используем Opus как основной клинический ассистент
         self.model = self.models[0]
         
+        self._update_headers()
+    
+    def _load_api_key(self, api_key=None):
+        """Загрузка API ключа с приоритетом: переданный ключ > st.secrets > config > env"""
+        if api_key:
+            self.api_key = api_key
+            return
+        
+        # Попытка загрузить из st.secrets (самый приоритетный в Streamlit)
+        try:
+            import streamlit as st
+            if hasattr(st, 'secrets') and st.secrets:
+                try:
+                    if hasattr(st.secrets, 'api_keys'):
+                        self.api_key = st.secrets.api_keys.get("OPENROUTER_API_KEY")
+                    elif hasattr(st.secrets, 'get'):
+                        api_keys = st.secrets.get("api_keys", {})
+                        self.api_key = api_keys.get("OPENROUTER_API_KEY") if isinstance(api_keys, dict) else None
+                    else:
+                        self.api_key = getattr(st.secrets, "OPENROUTER_API_KEY", None)
+                    
+                    if self.api_key:
+                        logging.info(f"✅ API ключ загружен из st.secrets (длина: {len(self.api_key)})")
+                        return
+                except Exception as e:
+                    logging.warning(f"⚠️ Ошибка загрузки из st.secrets: {e}")
+        except (ImportError, RuntimeError):
+            pass
+        
+        # Fallback на config или переменные окружения
+        from config import load_secrets
+        secrets = load_secrets()
+        self.api_key = secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
+        
+        if self.api_key:
+            logging.info(f"✅ API ключ загружен из config/env (длина: {len(self.api_key)})")
+        else:
+            logging.error("❌ API ключ НЕ найден ни в st.secrets, ни в config, ни в env!")
+    
+    def _update_headers(self):
+        """Обновление headers с текущим API ключом"""
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -1093,13 +1135,182 @@ class OpenRouterAssistant:
         
         return "❌ Ошибка: Все модели недоступны"
     
+    def send_vision_request_gemini_fast(self, prompt: str, image_array=None, metadata=None):
+        """Быстрый анализ изображения через Gemini Flash
+        
+        Использует те же промпты что и основной метод, но модель Gemini Flash для скорости.
+        Подходит для: ЭКГ, Рентген, МРТ, КТ, УЗИ (не для дерматографии и сканирования).
+        
+        Args:
+            prompt: Промпт для анализа
+            image_array: Массив изображения
+            metadata: Метаданные
+        """
+        # Определяем тип медицинского изображения и используем специализированный промпт
+        prompt_lower = prompt.lower()
+        
+        # Специальный режим «только сканирование» (OCR/извлечение данных)
+        scan_only_mode = isinstance(metadata, dict) and metadata.get("task") in ("lab_ocr", "doc_ocr")
+        
+        # Для документов и сканирования не используем Gemini Flash
+        is_document = isinstance(metadata, dict) and metadata.get("router_model") and "llama" in metadata.get("router_model", "").lower()
+        if not is_document:
+            is_document = any(keyword in prompt_lower for keyword in [
+                "документ", "справка", "рецепт", "направление", "выписка", 
+                "больничный", "извлеките", "распознавание", "document", "extract",
+                "медицинской справки", "медицинских документов"
+            ])
+        
+        if scan_only_mode or is_document:
+            return "❌ Gemini Flash не используется для сканирования документов. Используйте Haiku 4.5."
+        
+        # Используем те же промпты что и в основном методе
+        if scan_only_mode:
+            medical_prompt = prompt
+        elif "экг" in prompt_lower or "ecg" in prompt_lower:
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'ecg' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['ecg'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        elif "рентген" in prompt_lower or "xray" in prompt_lower or "грудн" in prompt_lower:
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'xray' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['xray'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        elif "мрт" in prompt_lower or "mri" in prompt_lower:
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'mri' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['mri'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        elif "кт" in prompt_lower or "ct" in prompt_lower or "компьютерн" in prompt_lower:
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'ct' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['ct'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        elif "узи" in prompt_lower or "ультразвук" in prompt_lower or "ultrasound" in prompt_lower:
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'ultrasound' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['ultrasound'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        elif "дерматоскопия" in prompt_lower or "дерматоскоп" in prompt_lower or "dermatoscopy" in prompt_lower:
+            # Для дерматографии лучше использовать Opus, но можем дать опцию
+            diagnostic_prompts = _get_diagnostic_prompts()
+            if 'dermatoscopy' in diagnostic_prompts:
+                medical_prompt = diagnostic_prompts['dermatoscopy'](self.system_prompt)
+            else:
+                medical_prompt = f"{self.system_prompt}\n\n{prompt}"
+        else:
+            medical_prompt = f"""{self.system_prompt}
+
+Проанализируйте это медицинское изображение как врач-специалист с большим опытом работы.
+Дайте подробное заключение в формате «Клиническая директива».
+
+{prompt}
+"""
+        
+        # Собираем контент
+        content = [{"type": "text", "text": medical_prompt}]
+        
+        if metadata:
+            metadata_str = str(metadata) if not isinstance(metadata, dict) else str(metadata)
+            content.append({"type": "text", "text": f"\n\nТехнические данные изображения:\n{metadata_str}"})
+        
+        if image_array is not None:
+            base64_str = self.encode_image(image_array)
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{base64_str}"}
+            })
+        
+        # Модель Gemini Flash - используем ту же, что и для видео (работает точно)
+        models_to_try = [
+            "google/gemini-2.5-flash",          # Gemini 2.5 Flash (та же что в send_video_request)
+            "google/gemini-2.0-flash-exp",      # Gemini 2.0 Flash Experimental (fallback)
+            "google/gemini-1.5-flash"           # Gemini 1.5 Flash (fallback)
+        ]
+        
+        max_tokens_list = [4000, 2000, 1000]
+        
+        last_error = None
+        response = None
+        
+        for model in models_to_try:
+            for max_tokens in max_tokens_list:
+                try:
+                    start_time = time.time()
+                    messages = [
+                        {"role": "user", "content": content}
+                    ]
+                    payload = {
+                        "model": model,
+                        "messages": messages,
+                        "max_tokens": max_tokens,
+                        "temperature": 0.1
+                    }
+                    
+                    response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
+                    latency = time.time() - start_time
+                    
+                    if response.status_code == 200:
+                        result_data = response.json()
+                        result = result_data["choices"][0]["message"]["content"]
+                        
+                        # Логирование
+                        tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                        log_api_call(model, True, latency, None)
+                        track_model_usage(model, True, tokens_used)
+                        
+                        model_name = self._get_model_name(model)
+                        return f"**⚡ Быстрый анализ ({model_name}):**\n\n{result}"
+                    elif response.status_code == 402:
+                        last_error = f"Недостаточно кредитов для модели {model}"
+                        if max_tokens == max_tokens_list[-1]:
+                            # Последняя попытка, пробуем следующую модель
+                            break
+                        else:
+                            continue
+                    else:
+                        error_text = response.text[:500] if response.text else "Нет деталей"
+                        last_error = f"HTTP {response.status_code}: {error_text}"
+                        log_api_call(model, False, latency, last_error)
+                        track_model_usage(model, False)
+                        # Пробуем следующую модель
+                        break
+                        
+                except Exception as e:
+                    latency = time.time() - start_time if 'start_time' in locals() else 0
+                    last_error = handle_error(e, f"send_vision_request_gemini_fast ({model})", show_to_user=False)
+                    log_api_call(model, False, latency, last_error)
+                    track_model_usage(model, False)
+                    continue
+            
+            # Если модель работает, выходим из цикла
+            if response and response.status_code == 200:
+                break
+        
+        # Возвращаем детальное сообщение об ошибке
+        error_message = f"❌ Ошибка: Gemini Flash недоступен"
+        if last_error:
+            error_message += f"\n\nПоследняя ошибка: {last_error}"
+        error_message += f"\n\n💡 Попробуйте:\n- Проверить API ключ OpenRouter\n- Проверить баланс кредитов\n- Использовать точный анализ через Opus 4.5"
+        return error_message
+    
     def _get_model_name(self, model):
         """Получить читаемое название модели (только актуальные)"""
         model_names = {
             "anthropic/claude-opus-4.5": "Claude Opus 4.5",
             "anthropic/claude-sonnet-4.5": "Claude Sonnet 4.5",
             "anthropic/claude-haiku-4.5": "Claude Haiku 4.5",
-            "meta-llama/llama-3.2-90b-vision-instruct": "Llama 3.2 90B Vision"
+            "meta-llama/llama-3.2-90b-vision-instruct": "Llama 3.2 90B Vision",
+            "google/gemini-2.5-flash": "Gemini 2.5 Flash",
+            "google/gemini-2.0-flash-exp": "Gemini 2.0 Flash",
+            "google/gemini-flash-1.5": "Gemini Flash 1.5",
+            "google/gemini-1.5-flash": "Gemini 1.5 Flash"
         }
         return model_names.get(model, model)
     
@@ -1583,6 +1794,17 @@ class OpenRouterAssistant:
                     if not hasattr(self, '_best_model'):
                         self._best_model = model
                         self.model = model
+                elif response.status_code == 401:
+                    # Детальная диагностика для 401 ошибки
+                    model_name = self._get_model_name(model)
+                    error_detail = response.text[:200] if response.text else "Нет деталей"
+                    api_key_preview = f"{self.api_key[:20]}..." if self.api_key else "НЕТ КЛЮЧА"
+                    working_models.append(f"❌ {model_name}: 401 (Unauthorized)")
+                    logging.error(f"❌ 401 для {model}: Ключ: {api_key_preview}, Ответ: {error_detail}")
+                    
+                    # Попытка перезагрузить ключ и обновить headers
+                    self._load_api_key()
+                    self._update_headers()
                 else:
                     model_name = self._get_model_name(model)
                     working_models.append(f"❌ {model_name}: {response.status_code}")

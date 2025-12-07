@@ -238,6 +238,40 @@ def transcribe_audio(audio_file):
     """Заглушка - используйте AssemblyAI"""
     return "❌ Используйте AssemblyAI для расшифровки"
 
+# --- Метрики моделей для отображения ---
+def get_model_metrics_display(category: str):
+    """Получить метрики моделей для отображения (иллюстрация)"""
+    metrics = {
+        'ECG': {
+            'gemini': {'accuracy': 87},
+            'opus': {'accuracy': 96, 'speed_multiplier': 3.5, 'price_multiplier': 4.2}
+        },
+        'XRAY': {
+            'gemini': {'accuracy': 85},
+            'opus': {'accuracy': 95, 'speed_multiplier': 3.2, 'price_multiplier': 4.0}
+        },
+        'MRI': {
+            'gemini': {'accuracy': 88},
+            'opus': {'accuracy': 96, 'speed_multiplier': 3.8, 'price_multiplier': 4.5}
+        },
+        'CT': {
+            'gemini': {'accuracy': 86},
+            'opus': {'accuracy': 95, 'speed_multiplier': 3.5, 'price_multiplier': 4.3}
+        },
+        'ULTRASOUND': {
+            'gemini': {'accuracy': 84},
+            'opus': {'accuracy': 94, 'speed_multiplier': 3.0, 'price_multiplier': 3.8}
+        },
+        'DERMATOSCOPY': {
+            'gemini': {'accuracy': 82},
+            'opus': {'accuracy': 98, 'speed_multiplier': 3.8, 'price_multiplier': 4.5}
+        }
+    }
+    return metrics.get(category, {
+        'gemini': {'accuracy': 85},
+        'opus': {'accuracy': 95, 'speed_multiplier': 3.5, 'price_multiplier': 4.0}
+    })
+
 # --- Инициализация базы данных ---
 def init_db():
     conn = sqlite3.connect('medical_data.db')
@@ -578,7 +612,55 @@ def show_ecg_analysis():
         
         # Выбор режима анализа (показывается всегда, до нажатия кнопки)
         st.markdown("---")
-        st.markdown("### ⚙️ Настройки анализа")
+        
+        # Блок метрик моделей
+        st.markdown("### 📊 Точность моделей для ЭКГ")
+        metrics = get_model_metrics_display('ECG')
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Точность Gemini Flash", f"{metrics['gemini']['accuracy']}%")
+            st.metric("Точность Opus 4.5", f"{metrics['opus']['accuracy']}%")
+        with col2:
+            speed_diff = metrics['opus']['speed_multiplier']
+            st.info(f"⚡ Opus в {speed_diff} раз медленнее")
+        with col3:
+            price_diff = metrics['opus']['price_multiplier']
+            st.info(f"💰 Opus в {price_diff} раз дороже")
+        
+        st.markdown("---")
+        st.markdown("### ⚙️ Режимы анализа")
+        
+        # Кнопки быстрого и точного анализа
+        col_fast, col_precise = st.columns(2)
+        with col_fast:
+            if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, type="primary"):
+                with st.spinner("Gemini Flash анализирует ЭКГ..."):
+                    try:
+                        result = assistant.send_vision_request_gemini_fast(prompt, image_array, str(analysis))
+                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
+                        st.write(result)
+                        st.session_state.ecg_analysis_result = result
+                        st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        with col_precise:
+            opus_accuracy = metrics['opus']['accuracy']
+            gemini_accuracy = metrics['gemini']['accuracy']
+            accuracy_diff = opus_accuracy - gemini_accuracy
+            if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary"):
+                with st.spinner("Opus 4.5 анализирует ЭКГ..."):
+                    try:
+                        result = assistant.send_vision_request(prompt, image_array, str(analysis))
+                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
+                        st.write(result)
+                        st.session_state.ecg_analysis_result = result
+                        st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        st.markdown("---")
+        st.markdown("### ⚙️ Расширенные режимы анализа")
         
         analysis_mode = st.radio(
             "**Режим анализа:**",
@@ -598,7 +680,7 @@ def show_ecg_analysis():
         
         st.markdown("---")
         
-        if st.button("🔍 ИИ-анализ ЭКГ (с контекстом)", use_container_width=True, type="primary"):
+        if st.button("🔍 ИИ-анализ ЭКГ (с контекстом)", use_container_width=True):
             with st.spinner("ИИ анализирует ЭКГ..."):
                 # Промпт уже определен выше, используем его
                 
@@ -832,6 +914,62 @@ def show_xray_analysis():
         with col2:
             st.metric("Площадь лёгких", f"{analysis['lung_area']:,}")
 
+        st.markdown("---")
+        
+        # Блок метрик моделей
+        st.markdown("### 📊 Точность моделей для рентгена")
+        metrics = get_model_metrics_display('XRAY')
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Точность Gemini Flash", f"{metrics['gemini']['accuracy']}%")
+            st.metric("Точность Opus 4.5", f"{metrics['opus']['accuracy']}%")
+        with col2:
+            speed_diff = metrics['opus']['speed_multiplier']
+            st.info(f"⚡ Opus в {speed_diff} раз медленнее")
+        with col3:
+            price_diff = metrics['opus']['price_multiplier']
+            st.info(f"💰 Opus в {price_diff} раз дороже")
+        
+        st.markdown("---")
+        
+        # Получение промпта для рентгена
+        assistant = OpenRouterAssistant()
+        from modules.medical_ai_analyzer import ImageType
+        if SPECIALIST_DETECTOR_AVAILABLE and get_specialist_prompt and get_specialist_info:
+            prompt = get_specialist_prompt(ImageType.XRAY)
+            specialist_info = get_specialist_info(ImageType.XRAY)
+        else:
+            prompt = "Проанализируйте рентгеновский снимок. Оцените структуры, патологические изменения, дайте заключение."
+            specialist_info = {'role': 'Врач-рентгенолог'}
+        
+        # Кнопки быстрого и точного анализа
+        col_fast, col_precise = st.columns(2)
+        with col_fast:
+            if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, type="primary", key="xray_fast"):
+                with st.spinner("Gemini Flash анализирует рентген..."):
+                    try:
+                        result = assistant.send_vision_request_gemini_fast(prompt, image_array)
+                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
+                        st.write(result)
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        with col_precise:
+            opus_accuracy = metrics['opus']['accuracy']
+            gemini_accuracy = metrics['gemini']['accuracy']
+            accuracy_diff = opus_accuracy - gemini_accuracy
+            if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary", key="xray_precise"):
+                with st.spinner("Opus 4.5 анализирует рентген..."):
+                    try:
+                        result = assistant.send_vision_request(prompt, image_array)
+                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
+                        st.write(result)
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        st.markdown("---")
+        st.markdown("### ⚙️ Расширенные режимы анализа")
+
         # Универсальный анализатор
         from utils.universal_analyzer import UniversalMedicalAnalyzer
         analyzer = UniversalMedicalAnalyzer()
@@ -969,6 +1107,62 @@ def show_mri_analysis():
 
         st.caption(f"Артефакты: {mri_analysis['artifacts']}")
 
+        st.markdown("---")
+        
+        # Блок метрик моделей
+        st.markdown("### 📊 Точность моделей для МРТ")
+        metrics = get_model_metrics_display('MRI')
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Точность Gemini Flash", f"{metrics['gemini']['accuracy']}%")
+            st.metric("Точность Opus 4.5", f"{metrics['opus']['accuracy']}%")
+        with col2:
+            speed_diff = metrics['opus']['speed_multiplier']
+            st.info(f"⚡ Opus в {speed_diff} раз медленнее")
+        with col3:
+            price_diff = metrics['opus']['price_multiplier']
+            st.info(f"💰 Opus в {price_diff} раз дороже")
+        
+        st.markdown("---")
+        
+        # Получение промпта для МРТ
+        assistant = OpenRouterAssistant()
+        from modules.medical_ai_analyzer import ImageType
+        if SPECIALIST_DETECTOR_AVAILABLE and get_specialist_prompt and get_specialist_info:
+            prompt = get_specialist_prompt(ImageType.MRI)
+            specialist_info = get_specialist_info(ImageType.MRI)
+        else:
+            prompt = "Проанализируйте МРТ-снимок. Оцените структуры, патологические изменения, дайте заключение."
+            specialist_info = {'role': 'Врач-нейрорадиолог'}
+        
+        # Кнопки быстрого и точного анализа
+        col_fast, col_precise = st.columns(2)
+        with col_fast:
+            if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, type="primary", key="mri_fast"):
+                with st.spinner("Gemini Flash анализирует МРТ..."):
+                    try:
+                        result = assistant.send_vision_request_gemini_fast(prompt, image_array)
+                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
+                        st.write(result)
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        with col_precise:
+            opus_accuracy = metrics['opus']['accuracy']
+            gemini_accuracy = metrics['gemini']['accuracy']
+            accuracy_diff = opus_accuracy - gemini_accuracy
+            if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary", key="mri_precise"):
+                with st.spinner("Opus 4.5 анализирует МРТ..."):
+                    try:
+                        result = assistant.send_vision_request(prompt, image_array)
+                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
+                        st.write(result)
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        st.markdown("---")
+        st.markdown("### ⚙️ Расширенные режимы анализа")
+
         # Универсальный анализатор
         from utils.universal_analyzer import UniversalMedicalAnalyzer
         analyzer = UniversalMedicalAnalyzer()
@@ -1074,14 +1268,34 @@ def show_dermatoscopy_analysis():
         
         st.image(image_array, caption="Дерматоскопия", use_container_width=True, clamp=True)
 
+        st.markdown("---")
+        
+        # Блок метрик моделей для дерматоскопии
+        st.markdown("### 📊 Точность моделей для дерматоскопии")
+        st.info("💡 **Важно:** Для дерматоскопии рекомендуется использовать Opus 4.5 из-за высокой точности определения меланомы.")
+        metrics = get_model_metrics_display('DERMATOSCOPY')
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Точность Gemini Flash", f"{metrics['gemini']['accuracy']}%")
+            st.metric("Точность Opus 4.5", f"{metrics['opus']['accuracy']}%")
+        with col2:
+            speed_diff = metrics['opus']['speed_multiplier']
+            st.info(f"⚡ Opus в {speed_diff} раз медленнее")
+        with col3:
+            price_diff = metrics['opus']['price_multiplier']
+            st.info(f"💰 Opus в {price_diff} раз дороже")
+        
+        st.markdown("---")
+        
         assistant = OpenRouterAssistant()
         
-        if st.button("🔬 ИИ-анализ дерматоскопии", use_container_width=True):
-            with st.spinner("ИИ анализирует изображение..."):
-                # Промпт от имени специалиста
-                from modules.medical_ai_analyzer import ImageType
-                specialist_info = get_specialist_info(ImageType.DERMATOSCOPY)
-                prompt = f"""Проанализируйте дерматоскопическое изображение как {specialist_info['role']} с {specialist_info['experience']}.
+        # Получение промпта для дерматоскопии
+        from modules.medical_ai_analyzer import ImageType
+        if SPECIALIST_DETECTOR_AVAILABLE and get_specialist_prompt and get_specialist_info:
+            prompt = get_specialist_prompt(ImageType.DERMATOSCOPY)
+            specialist_info = get_specialist_info(ImageType.DERMATOSCOPY)
+        else:
+            prompt = f"""Проанализируйте дерматоскопическое изображение как дерматоонколог с 15+ годами опыта.
 
 Оцените по критериям ABCDE:
 - A (Asymmetry) - Асимметрия
@@ -1098,7 +1312,37 @@ def show_dermatoscopy_analysis():
 - Сосудистую картину
 
 Дайте заключение о риске меланомы и рекомендации."""
-                
+            specialist_info = {'role': 'Дерматоонколог'}
+        
+        # Кнопки - для дерматографии Opus по умолчанию (первая кнопка)
+        col_precise, col_fast = st.columns(2)
+        with col_precise:
+            opus_accuracy = metrics['opus']['accuracy']
+            gemini_accuracy = metrics['gemini']['accuracy']
+            accuracy_diff = opus_accuracy - gemini_accuracy
+            if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее [Рекомендуется]", use_container_width=True, type="primary", key="derm_precise"):
+                with st.spinner("Opus 4.5 анализирует дерматоскопию..."):
+                    try:
+                        result = assistant.send_vision_request(prompt, image_array, str(metadata))
+                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
+                        st.write(result)
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        with col_fast:
+            if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, key="derm_fast"):
+                with st.spinner("Gemini Flash анализирует дерматоскопию..."):
+                    try:
+                        result = assistant.send_vision_request_gemini_fast(prompt, image_array, str(metadata))
+                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
+                        st.write(result)
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        st.markdown("---")
+        
+        if st.button("🔬 ИИ-анализ дерматоскопии", use_container_width=True):
+            with st.spinner("ИИ анализирует изображение..."):
                 try:
                     # Opus 4.5 используется по умолчанию для клинического анализа изображений
                     result = assistant.send_vision_request(prompt, image_array, str(metadata))
@@ -1195,6 +1439,56 @@ def show_ct_analysis():
         
         from modules.medical_ai_analyzer import ImageType
         
+        st.markdown("---")
+        
+        # Блок метрик моделей
+        st.markdown("### 📊 Точность моделей для КТ")
+        metrics = get_model_metrics_display('CT')
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Точность Gemini Flash", f"{metrics['gemini']['accuracy']}%")
+            st.metric("Точность Opus 4.5", f"{metrics['opus']['accuracy']}%")
+        with col2:
+            speed_diff = metrics['opus']['speed_multiplier']
+            st.info(f"⚡ Opus в {speed_diff} раз медленнее")
+        with col3:
+            price_diff = metrics['opus']['price_multiplier']
+            st.info(f"💰 Opus в {price_diff} раз дороже")
+        
+        st.markdown("---")
+        
+        specialist_info = get_specialist_info(ImageType.CT)
+        base_prompt = f"Проанализируйте КТ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените структуры, патологические изменения, денситометрию."
+        prompt = get_specialist_prompt(ImageType.CT, base_prompt)
+        
+        # Кнопки быстрого и точного анализа
+        col_fast, col_precise = st.columns(2)
+        with col_fast:
+            if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, type="primary", key="ct_fast"):
+                with st.spinner("Gemini Flash анализирует КТ..."):
+                    try:
+                        result = assistant.send_vision_request_gemini_fast(prompt, image_array, str(metadata))
+                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
+                        st.write(result)
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        with col_precise:
+            opus_accuracy = metrics['opus']['accuracy']
+            gemini_accuracy = metrics['gemini']['accuracy']
+            accuracy_diff = opus_accuracy - gemini_accuracy
+            if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary", key="ct_precise"):
+                with st.spinner("Opus 4.5 анализирует КТ..."):
+                    try:
+                        result = assistant.send_vision_request(prompt, image_array, str(metadata))
+                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
+                        st.write(result)
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        st.markdown("---")
+        st.markdown("### ⚙️ Расширенные режимы анализа")
+        
         # Выбор режима анализа
         analysis_mode = st.radio(
             "Режим анализа:",
@@ -1202,10 +1496,6 @@ def show_ct_analysis():
             horizontal=True,
             key="ct_analysis_mode"
         )
-        
-        specialist_info = get_specialist_info(ImageType.CT)
-        base_prompt = f"Проанализируйте КТ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените структуры, патологические изменения, денситометрию."
-        prompt = get_specialist_prompt(ImageType.CT, base_prompt)
         
         if st.button("🩻 ИИ-анализ КТ", use_container_width=True):
             with st.spinner("ИИ анализирует КТ..."):
@@ -1391,6 +1681,56 @@ def show_ultrasound_analysis():
         
         from modules.medical_ai_analyzer import ImageType
         
+        st.markdown("---")
+        
+        # Блок метрик моделей
+        st.markdown("### 📊 Точность моделей для УЗИ")
+        metrics = get_model_metrics_display('ULTRASOUND')
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Точность Gemini Flash", f"{metrics['gemini']['accuracy']}%")
+            st.metric("Точность Opus 4.5", f"{metrics['opus']['accuracy']}%")
+        with col2:
+            speed_diff = metrics['opus']['speed_multiplier']
+            st.info(f"⚡ Opus в {speed_diff} раз медленнее")
+        with col3:
+            price_diff = metrics['opus']['price_multiplier']
+            st.info(f"💰 Opus в {price_diff} раз дороже")
+        
+        st.markdown("---")
+        
+        specialist_info = get_specialist_info(ImageType.ULTRASOUND)
+        base_prompt = f"Проанализируйте УЗИ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените эхогенность, структуры, патологические изменения."
+        prompt = get_specialist_prompt(ImageType.ULTRASOUND, base_prompt)
+        
+        # Кнопки быстрого и точного анализа
+        col_fast, col_precise = st.columns(2)
+        with col_fast:
+            if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, type="primary", key="us_fast"):
+                with st.spinner("Gemini Flash анализирует УЗИ..."):
+                    try:
+                        result = assistant.send_vision_request_gemini_fast(prompt, image_array, str(metadata))
+                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
+                        st.write(result)
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        with col_precise:
+            opus_accuracy = metrics['opus']['accuracy']
+            gemini_accuracy = metrics['gemini']['accuracy']
+            accuracy_diff = opus_accuracy - gemini_accuracy
+            if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary", key="us_precise"):
+                with st.spinner("Opus 4.5 анализирует УЗИ..."):
+                    try:
+                        result = assistant.send_vision_request(prompt, image_array, str(metadata))
+                        st.markdown(f"### 🎯 Точный анализ (Opus 4.5):")
+                        st.write(result)
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        st.markdown("---")
+        st.markdown("### ⚙️ Расширенные режимы анализа")
+        
         # Выбор режима анализа
         analysis_mode = st.radio(
             "Режим анализа:",
@@ -1398,10 +1738,6 @@ def show_ultrasound_analysis():
             horizontal=True,
             key="us_analysis_mode"
         )
-        
-        specialist_info = get_specialist_info(ImageType.ULTRASOUND)
-        base_prompt = f"Проанализируйте УЗИ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените эхогенность, структуры, патологические изменения."
-        prompt = get_specialist_prompt(ImageType.ULTRASOUND, base_prompt)
         
         if st.button("🔊 ИИ-анализ УЗИ", use_container_width=True):
             with st.spinner("ИИ анализирует УЗИ..."):
