@@ -70,3 +70,4 @@ print(f'   Готовых для обучения: {stats[\"training_data_count\
 "
 
 
+

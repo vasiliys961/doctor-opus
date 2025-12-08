@@ -11,26 +11,31 @@ class ModelRouter:
         # Специализация моделей по типам задач
         self.model_specialization = {
             ImageType.ECG: [
-                "anthropic/claude-3-5-sonnet-20241022",  # Лучше для детального анализа
+                "anthropic/claude-sonnet-4.5",  # Лучше для детального анализа
+                "anthropic/claude-3-5-sonnet-20241022",
                 "anthropic/claude-3-5-sonnet",
                 "meta-llama/llama-3.2-90b-vision-instruct"  # Vision для ЭКГ изображений
             ],
             ImageType.XRAY: [
+                "anthropic/claude-sonnet-4.5",
                 "anthropic/claude-3-5-sonnet-20241022",
                 "google/gemini-pro-vision",  # Хорошо для рентгенов
                 "meta-llama/llama-3.2-90b-vision-instruct"
             ],
             ImageType.MRI: [
-                "anthropic/claude-3-5-sonnet-20241022",  # Лучше для сложных структур
+                "anthropic/claude-sonnet-4.5",  # Лучше для сложных структур
+                "anthropic/claude-3-5-sonnet-20241022",
                 "anthropic/claude-3-5-sonnet",
                 "qwen/qwen2-vl-72b-instruct"  # Vision для МРТ
             ],
             ImageType.DERMATOSCOPY: [
                 "google/gemini-pro-vision",  # Хорошо для цветных изображений
                 "meta-llama/llama-3.2-90b-vision-instruct",
+                "anthropic/claude-sonnet-4.5",
                 "anthropic/claude-3-5-sonnet-20241022"
             ],
             ImageType.CT: [
+                "anthropic/claude-sonnet-4.5",
                 "anthropic/claude-3-5-sonnet-20241022",
                 "qwen/qwen2-vl-72b-instruct",
                 "google/gemini-pro-vision"
@@ -38,15 +43,16 @@ class ModelRouter:
             ImageType.ULTRASOUND: [
                 "meta-llama/llama-3.2-90b-vision-instruct",
                 "google/gemini-pro-vision",
+                "anthropic/claude-sonnet-4.5",
                 "anthropic/claude-3-5-sonnet-20241022"
             ]
         }
         
         # Модели для текстовых задач
         self.text_models = [
+            "anthropic/claude-sonnet-4.5",
             "anthropic/claude-3-5-sonnet-20241022",
-            "anthropic/claude-3-5-sonnet",
-            "anthropic/claude-3-sonnet-20240229"
+            "anthropic/claude-3-5-sonnet"
         ]
     
     def get_optimal_models(self, image_type: Optional[ImageType] = None, 

@@ -61,32 +61,15 @@ def show_enhanced_analysis_page():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        auto_detect = st.checkbox("Автоопределение типа", value=True)
-        if not auto_detect:
-            selected_type = st.selectbox(
-                "Тип изображения",
-                options=[t.value for t in ImageType],
-                format_func=lambda x: {
-                    'ecg': '📈 ЭКГ',
-                    'xray': '🩻 Рентген',
-                    'mri': '🧠 МРТ',
-                    'ct': '🔍 КТ',
-                    'ultrasound': '📡 УЗИ',
-                    'endoscopy': '🔬 Эндоскопия',
-                    'dermatoscopy': '🔍 Дерматоскопия',
-                    'histology': '🧬 Гистология',
-                    'retinal': '👁️ Глазное дно',
-                    'mammography': '🎗️ Маммография'
-                }.get(x, x)
-            )
-    
-    with col2:
         preprocessing = st.checkbox("Предобработка изображения", value=True)
         batch_mode = st.checkbox("Пакетный режим", value=False)
     
-    with col3:
+    with col2:
         confidence_threshold = st.slider("Порог достоверности", 0.0, 1.0, 0.7, 0.1)
         show_metadata = st.checkbox("Показать метаданные", value=False)
+    
+    with col3:
+        st.info("💡 Анализ выполняется автоматически для любого типа медицинского изображения")
     
     # Загрузка файлов
     if batch_mode:
@@ -123,11 +106,8 @@ def show_enhanced_analysis_page():
                     
                     image_array = np.array(image)
                     
-                    # Определение типа
-                    if auto_detect:
-                        image_type = None
-                    else:
-                        image_type = ImageType(selected_type)
+                    # Всегда используем универсальный анализ без определения типа
+                    image_type = None
                     
                     images_data.append((image_array, image_type, uploaded_file.name))
                     
@@ -256,18 +236,28 @@ def show_detailed_analysis_result(result: AnalysisResult, show_metadata: bool = 
     with st.expander(f"🔍 Детальный анализ: {filename}", expanded=True):
         
         # Основная информация
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("Тип изображения", result.image_type.value.upper())
-        with col2:
             confidence_color = "green" if result.confidence > 0.8 else "orange" if result.confidence > 0.6 else "red"
             st.markdown(f"**Достоверность:** :{confidence_color}[{result.confidence:.1%}]")
-        with col3:
+        with col2:
             if result.urgent_flags:
                 st.error(f"⚠️ Срочно: {len(result.urgent_flags)} предупреждений")
             else:
                 st.success("✅ Плановое наблюдение")
+        with col3:
+            # Информация о модели
+            if hasattr(result, 'model_name') and result.model_name:
+                st.info(f"🤖 **Модель:** {result.model_name}")
+        with col4:
+            # Информация о токенах
+            if hasattr(result, 'tokens_used') and result.tokens_used > 0:
+                st.metric("📊 Токенов", result.tokens_used)
+        
+        # Дополнительная информация о модели и токенах
+        if hasattr(result, 'model_name') and result.model_name and hasattr(result, 'tokens_used') and result.tokens_used > 0:
+            st.caption(f"🤖 Анализ выполнен моделью: **{result.model_name}** | 📊 Использовано токенов: **{result.tokens_used}**")
         
         # Структурированные находки
         if result.structured_findings:
@@ -438,91 +428,111 @@ def show_comparative_analysis_page():
                 except Exception as e:
                     st.error(f"Ошибка загрузки {uploaded_file.name}: {e}")
         
-        if st.button("🔄 Выполнить сравнительный анализ"):
+        # Проверяем, есть ли сохраненные результаты анализа
+        analysis_key = f"comparative_analysis_{len(uploaded_files)}_{comparison_type}"
+        saved_results = st.session_state.get('comparative_analysis_results', {}).get(analysis_key)
+        saved_images = st.session_state.get('comparative_analysis_images', {}).get(analysis_key)
+        
+        # Если есть сохраненные результаты, используем их
+        if saved_results and saved_images:
+            results = saved_results
+            images = saved_images
+            st.info(f"💡 Используются сохраненные результаты анализа ({len(results)} изображений)")
             
-            # Проверка доступности анализатора
-            if EnhancedMedicalAIAnalyzer is None:
-                st.error("❌ Модуль EnhancedMedicalAIAnalyzer недоступен")
-                return
-            
-            # Инициализация анализатора
-            if 'enhanced_analyzer' not in st.session_state:
-                # Получаем ключ из config или secrets
-                try:
-                    from config import OPENROUTER_API_KEY
-                    api_key = OPENROUTER_API_KEY
-                except ImportError:
-                    api_key = st.secrets.get("api_keys", {}).get("OPENROUTER_API_KEY") or st.secrets.get("OPENROUTER_API_KEY")
+            # Кнопка для повторного анализа
+            if st.button("🔄 Выполнить анализ заново", key="rerun_analysis"):
+                # Очищаем сохраненные результаты
+                if 'comparative_analysis_results' in st.session_state:
+                    if analysis_key in st.session_state.comparative_analysis_results:
+                        del st.session_state.comparative_analysis_results[analysis_key]
+                if 'comparative_analysis_images' in st.session_state:
+                    if analysis_key in st.session_state.comparative_analysis_images:
+                        del st.session_state.comparative_analysis_images[analysis_key]
+                st.rerun()
+        else:
+            # Выполняем новый анализ только если нет сохраненных результатов
+            if st.button("🔄 Выполнить сравнительный анализ", key="run_analysis"):
                 
-                try:
-                    st.session_state.enhanced_analyzer = EnhancedMedicalAIAnalyzer(api_key)
-                except Exception as e:
-                    st.error(f"❌ Ошибка инициализации анализатора: {e}")
+                # Проверка доступности анализатора
+                if EnhancedMedicalAIAnalyzer is None:
+                    st.error("❌ Модуль EnhancedMedicalAIAnalyzer недоступен")
                     return
-            
-            analyzer = st.session_state.enhanced_analyzer
-            
-            # Анализ каждого изображения
-            results = []
-            images = []
-            detected_types = []
-            
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            for i, uploaded_file in enumerate(uploaded_files):
-                status_text.text(f"Анализ изображения {i+1}/{len(uploaded_files)}: {uploaded_file.name}")
-                progress_bar.progress((i + 1) / len(uploaded_files))
                 
-                try:
-                    # Загрузка и обработка изображения
-                    image = Image.open(uploaded_file)
-                    if image.mode not in ['RGB', 'L']:
-                        image = image.convert('RGB')
+                # Инициализация анализатора
+                if 'enhanced_analyzer' not in st.session_state:
+                    # Получаем ключ из config или secrets
+                    try:
+                        from config import OPENROUTER_API_KEY
+                        api_key = OPENROUTER_API_KEY
+                    except ImportError:
+                        api_key = st.secrets.get("api_keys", {}).get("OPENROUTER_API_KEY") or st.secrets.get("OPENROUTER_API_KEY")
                     
-                    image_array = np.array(image)
-                    images.append(image_array)
+                    try:
+                        st.session_state.enhanced_analyzer = EnhancedMedicalAIAnalyzer(api_key)
+                    except Exception as e:
+                        st.error(f"❌ Ошибка инициализации анализатора: {e}")
+                        return
+                
+                analyzer = st.session_state.enhanced_analyzer
+                
+                # Анализ каждого изображения
+                results = []
+                images = []
+                
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                for i, uploaded_file in enumerate(uploaded_files):
+                    status_text.text(f"Анализ изображения {i+1}/{len(uploaded_files)}: {uploaded_file.name}")
+                    progress_bar.progress((i + 1) / len(uploaded_files))
                     
-                    # Определение типа изображения
-                    detected_type, type_confidence = analyzer.detect_image_type(image_array)
-                    detected_types.append((detected_type, type_confidence))
-                    
-                    if show_debug_info:
-                        st.write(f"🔍 {uploaded_file.name}: {detected_type.value} (уверенность: {type_confidence:.1%})")
-                    
-                    # Анализ с учетом настроек
-                    if force_same_type and i > 0:
-                        # Используем тип первого изображения для всех остальных
-                        analysis_type = detected_types[0][0]
-                    else:
-                        analysis_type = detected_type
-                    
-                    # Выполняем анализ
-                    result = analyzer.analyze_image(
-                        image_array,
-                        analysis_type,
-                        additional_context=f"Сравнительный анализ ({comparison_type}), изображение {i+1} из {len(uploaded_files)}"
-                    )
-                    result.filename = uploaded_file.name
-                    result.detected_type = detected_type
-                    result.type_confidence = type_confidence
-                    results.append(result)
-                    
-                except Exception as e:
-                    st.error(f"Ошибка обработки {uploaded_file.name}: {e}")
-                    continue
-            
-            progress_bar.empty()
-            status_text.empty()
+                    try:
+                        # Загрузка и обработка изображения
+                        image = Image.open(uploaded_file)
+                        if image.mode not in ['RGB', 'L']:
+                            image = image.convert('RGB')
+                        
+                        image_array = np.array(image)
+                        images.append(image_array)
+                        
+                        # Универсальный анализ без определения типа
+                        result = analyzer.analyze_image(
+                            image_array,
+                            None,  # Не определяем тип - универсальный анализ
+                            additional_context=f"Сравнительный анализ ({comparison_type}), изображение {i+1} из {len(uploaded_files)}"
+                        )
+                        result.filename = uploaded_file.name
+                        results.append(result)
+                        
+                    except Exception as e:
+                        st.error(f"Ошибка обработки {uploaded_file.name}: {e}")
+                        import traceback
+                        st.error(f"Детали ошибки: {traceback.format_exc()}")
+                        continue
+                
+                progress_bar.empty()
+                status_text.empty()
+                
+                # Сохраняем результаты в session_state
+                if 'comparative_analysis_results' not in st.session_state:
+                    st.session_state.comparative_analysis_results = {}
+                if 'comparative_analysis_images' not in st.session_state:
+                    st.session_state.comparative_analysis_images = {}
+                
+                st.session_state.comparative_analysis_results[analysis_key] = results
+                st.session_state.comparative_analysis_images[analysis_key] = images
+                
+                st.success(f"✅ Анализ завершен! Обработано изображений: {len(results)}")
+                st.rerun()  # Перезагружаем страницу для отображения результатов
+                return
+        
+        # Отображаем результаты, если они есть
+        if saved_results and saved_images:
+            results = saved_results
+            images = saved_images
             
             if results:
                 st.success(f"✅ Анализ завершен! Обработано изображений: {len(results)}")
-                
-                # Проверка совместимости типов
-                unique_types = list(set([r.detected_type.value for r in results]))
-                if len(unique_types) > 1 and not force_same_type:
-                    st.warning(f"⚠️ Обнаружены разные типы изображений: {', '.join(unique_types)}")
-                    st.info("💡 Включите 'Принудительно одинаковый тип' для корректного сравнения")
                 
                 # Отображение результатов анализа
                 st.subheader("🖼️ Результаты анализа")
@@ -539,14 +549,11 @@ def show_comparative_analysis_page():
                         # Метрики анализа
                         st.metric("Достоверность", f"{result.confidence:.1%}")
                         
-                        # Определенный тип
-                        type_emoji = {
-                            'ecg': '📈', 'xray': '🩻', 'mri': '🧠', 'ct': '🔍',
-                            'ultrasound': '📡', 'endoscopy': '🔬', 'dermatoscopy': '🔍',
-                            'histology': '🧬', 'retinal': '👁️', 'mammography': '🎗️'
-                        }
-                        emoji = type_emoji.get(result.detected_type.value, '📄')
-                        st.caption(f"{emoji} {result.detected_type.value} ({result.type_confidence:.1%})")
+                        # Информация о модели и токенах
+                        if hasattr(result, 'model_name') and result.model_name:
+                            st.caption(f"🤖 {result.model_name}")
+                        if hasattr(result, 'tokens_used') and result.tokens_used > 0:
+                            st.caption(f"📊 Токенов: {result.tokens_used}")
                         
                         # Размер изображения для отладки
                         if show_debug_info:
@@ -561,7 +568,6 @@ def show_comparative_analysis_page():
                     
                     comparison_data.append({
                         "Файл": result.filename,
-                        "Тип": result.detected_type.value,
                         "Достоверность": f"{result.confidence:.1%}",
                         "Основной диагноз": findings.get("diagnosis", {}).get("primary_diagnosis", "Не определен"),
                         "Качество": findings.get("technical_assessment", {}).get("quality", "Не оценено"),
@@ -609,29 +615,86 @@ def show_comparative_analysis_page():
                         st.warning(f"⚠️ Обнаружены изменения в диагнозах ({unique_diagnoses} различных)")
                 
                 # ИИ-заключение по сравнению
+                st.markdown("---")
                 st.subheader("🤖 ИИ-заключение по сравнительному анализу")
                 
-                if st.button("📝 Сгенерировать сравнительное заключение"):
+                # Проверяем, есть ли сохраненное заключение
+                saved_conclusion_key = f"{comparison_type}_{len(results)}"
+                saved_conclusion = st.session_state.get('comparative_analysis_result', {}).get(saved_conclusion_key, '')
+                
+                if saved_conclusion:
+                    st.info("💡 Отображается сохраненное заключение. Нажмите кнопку ниже, чтобы сгенерировать новое.")
+                    st.markdown("### 📋 Сравнительное заключение")
+                    st.markdown(saved_conclusion)
+                    st.markdown("---")
+                    st.download_button(
+                        label="💾 Скачать заключение",
+                        data=saved_conclusion,
+                        file_name=f"comparative_analysis_{comparison_type}_{len(results)}_images.txt",
+                        mime="text/plain",
+                        use_container_width=True
+                    )
+                    st.markdown("---")
+                
+                # Автоматически генерируем заключение или показываем кнопку
+                if st.button("📝 Сгенерировать сравнительное заключение", use_container_width=True, type="primary", key="generate_conclusion"):
                     
-                    with st.spinner("Генерация сравнительного заключения..."):
+                    # Получаем анализатор из session_state
+                    if 'enhanced_analyzer' not in st.session_state:
+                        st.error("❌ Анализатор не инициализирован. Выполните анализ изображений сначала.")
+                    else:
+                        analyzer = st.session_state.enhanced_analyzer
                         
-                        # Формируем промпт для сравнительного анализа
-                        comparison_prompt = f"""
-Проведите детальный сравнительный анализ {len(results)} медицинских изображений.
+                    # Формируем промпт для сравнительного анализа (работает для любого количества изображений)
+                    comparison_prompt = f"""
+Вы - опытный врач-диагност. Проведите детальный {'сравнительный' if len(results) > 1 else 'детальный'} анализ {len(results)} медицинских {'изображений' if len(results) > 1 else 'изображения'}.
 Тип сравнения: {comparison_type}
 
 Результаты анализа каждого изображения:
 """
-                        
-                        for i, result in enumerate(results, 1):
-                            comparison_prompt += f"""
+                    
+                    for i, result in enumerate(results, 1):
+                        comparison_prompt += f"""
 Изображение {i} ({result.filename}):
-- Тип: {result.detected_type.value}
 - Достоверность анализа: {result.confidence:.1%}
 - Основные находки: {json.dumps(result.structured_findings, ensure_ascii=False, indent=2)}
 
 """
-                        
+                    
+                    if len(results) == 1:
+                        comparison_prompt += f"""
+Предоставьте ДЕТАЛЬНОЕ клиническое заключение, включающее:
+
+1. ТЕХНИЧЕСКАЯ ОЦЕНКА:
+   - Качество изображения
+   - Технические параметры
+   - Ограничения исследования
+
+2. ДЕТАЛЬНЫЕ КЛИНИЧЕСКИЕ НАХОДКИ:
+   - Все видимые анатомические структуры
+   - Патологические изменения (если есть)
+   - Локализация и выраженность изменений
+   - Измерения и количественные параметры
+
+3. ДИАГНОСТИЧЕСКАЯ ОЦЕНКА:
+   - Основной диагноз с обоснованием
+   - Дифференциальная диагностика
+   - Вероятность диагноза
+
+4. РЕКОМЕНДАЦИИ:
+   - Срочные действия (если необходимы)
+   - Дополнительные исследования
+   - Тактика ведения пациента
+   - План наблюдения
+
+5. ПРОГНОЗ И РИСКИ:
+   - Оценка тяжести состояния
+   - Факторы риска
+   - Прогноз
+
+ВАЖНО: Дайте максимально подробный и детальный анализ. Не ограничивайтесь общими фразами - опишите все видимые структуры, изменения и дайте конкретные рекомендации.
+"""
+                    else:
                         comparison_prompt += f"""
 Предоставьте детальное сравнительное заключение, включающее:
 
@@ -641,47 +704,95 @@ def show_comparative_analysis_page():
    - Технические ограничения
 
 2. КЛИНИЧЕСКИЕ НАХОДКИ:
-   - Сравнение выявленных изменений
+   - Сравнение выявленных изменений между всеми изображениями
    - Динамика патологического процесса
    - Стабильные и изменившиеся параметры
+   - Количественные изменения (если применимо)
 
 3. ДИАГНОСТИЧЕСКАЯ ОЦЕНКА:
    - Подтверждение или изменение диагноза
-   - Прогрессирование заболевания
+   - Прогрессирование/регрессия заболевания
    - Эффективность лечения (если применимо)
+   - Сравнение диагнозов по каждому изображению
 
 4. РЕКОМЕНДАЦИИ:
-   - Клинические выводы
+   - Клинические выводы на основе сравнения
    - Необходимость дополнительных исследований
    - Тактика ведения пациента
+   - План динамического наблюдения
 
 5. ПРОГНОЗ:
-   - Оценка динамики
+   - Оценка динамики на основе всех изображений
    - Риски и перспективы
+   - Прогноз течения заболевания
 
-Ответ структурируйте четко по разделам на русском языке.
+ВАЖНО: Сравните ВСЕ изображения детально. Опишите изменения между каждым изображением, динамику процесса, количественные и качественные изменения.
 """
-                        
-                        try:
-                            # Отправка запроса к ИИ для сравнительного анализа
-                            comparative_analysis = analyzer._send_ai_request(
+                    
+                    comparison_prompt += "\n\nОтвет структурируйте четко по разделам на русском языке."
+                    
+                    try:
+                        # Используем streaming для сравнительного анализа
+                        st.markdown("### 📋 Сравнительное заключение")
+                        with st.spinner("🤖 Генерирую сравнительное заключение (Opus 4.5)..."):
+                            text_generator = analyzer._send_ai_request_streaming(
                                 comparison_prompt, 
                                 images[0],  # Используем первое изображение как базовое
                                 {"comparison_type": comparison_type, "images_count": len(results)}
                             )
                             
-                            st.markdown(comparative_analysis)
+                            # Отображаем streaming результат
+                            comparative_analysis = st.write_stream(text_generator)
+                            
+                            # Проверяем, что результат не пустой
+                            if not comparative_analysis or len(comparative_analysis.strip()) == 0:
+                                st.warning("⚠️ Получен пустой ответ. Пробую обычный режим...")
+                                raise ValueError("Пустой ответ от streaming")
+                        
+                        # Сохраняем результат в session_state для возможности скачать
+                        if comparative_analysis and len(comparative_analysis.strip()) > 0:
+                            if 'comparative_analysis_result' not in st.session_state:
+                                st.session_state.comparative_analysis_result = {}
+                            st.session_state.comparative_analysis_result[f"{comparison_type}_{len(results)}"] = comparative_analysis
                             
                             # Возможность скачать заключение
+                            st.markdown("---")
                             st.download_button(
                                 label="💾 Скачать заключение",
                                 data=comparative_analysis,
                                 file_name=f"comparative_analysis_{comparison_type}_{len(results)}_images.txt",
-                                mime="text/plain"
+                                mime="text/plain",
+                                use_container_width=True
                             )
+                        else:
+                            st.error("❌ Не удалось получить заключение. Попробуйте еще раз.")
+                        
+                    except Exception as e:
+                        st.error(f"❌ Ошибка генерации сравнительного анализа: {e}")
+                        # Fallback на обычный режим
+                        try:
+                            st.warning("⚠️ Streaming недоступен, используем обычный режим...")
+                            comparative_analysis = analyzer._send_ai_request(
+                                comparison_prompt, 
+                                images[0],
+                                {"comparison_type": comparison_type, "images_count": len(results)}
+                            )
+                            st.markdown(comparative_analysis)
                             
-                        except Exception as e:
-                            st.error(f"Ошибка генерации сравнительного анализа: {e}")
+                            # Сохраняем результат
+                            if 'comparative_analysis_result' not in st.session_state:
+                                st.session_state.comparative_analysis_result = {}
+                            st.session_state.comparative_analysis_result[f"{comparison_type}_{len(results)}"] = comparative_analysis
+                            
+                            st.download_button(
+                                label="💾 Скачать заключение",
+                                data=comparative_analysis,
+                                file_name=f"comparative_analysis_{comparison_type}_{len(results)}_images.txt",
+                                mime="text/plain",
+                                use_container_width=True
+                            )
+                        except Exception as e2:
+                            st.error(f"❌ Критическая ошибка: {e2}")
             else:
                 st.error("❌ Не удалось обработать ни одного изображения")
     

@@ -221,7 +221,8 @@ except ImportError as e:
 try:
     from utils.feedback_widget import show_feedback_form
     FEEDBACK_WIDGET_AVAILABLE = True
-    print("✅ Модуль обратной связи загружен успешно", file=sys.stderr)
+    # Убираем повторяющееся сообщение - оно не нужно в терминале
+    # print("✅ Модуль обратной связи загружен успешно", file=sys.stderr)
 except ImportError as e:
     print(f"⚠️ Предупреждение: feedback_widget недоступен: {e}", file=sys.stderr)
     FEEDBACK_WIDGET_AVAILABLE = False
@@ -1109,6 +1110,26 @@ def show_xray_analysis():
             prompt = "Проанализируйте рентгеновский снимок. Оцените структуры, патологические изменения, дайте заключение."
             specialist_info = {'role': 'Врач-рентгенолог'}
         
+        # Отображение сохраненных результатов анализа (если есть)
+        gemini_result = st.session_state.get('xray_gemini_result', '')
+        opus_result = st.session_state.get('xray_analysis_result', '')
+        
+        if gemini_result or opus_result:
+            st.markdown("---")
+            st.markdown("### 📋 Результаты анализа")
+            
+            if gemini_result:
+                gemini_timestamp = st.session_state.get('xray_gemini_timestamp', '')
+                st.markdown(f"#### ⚡ Быстрый анализ (Gemini Flash){f' - {gemini_timestamp}' if gemini_timestamp else ''}")
+                st.write(gemini_result)
+                st.markdown("---")
+            
+            if opus_result:
+                opus_timestamp = st.session_state.get('xray_analysis_timestamp', '')
+                st.markdown(f"#### 🎯 Точный анализ (Opus 4.5){f' - {opus_timestamp}' if opus_timestamp else ''}")
+                st.write(opus_result)
+                st.markdown("---")
+        
         # Кнопки быстрого и точного анализа
         col_fast, col_precise = st.columns(2)
         with col_fast:
@@ -1116,8 +1137,10 @@ def show_xray_analysis():
                 with st.spinner("Gemini Flash анализирует рентген..."):
                     try:
                         result = assistant.send_vision_request_gemini_fast(prompt, image_array)
-                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
-                        st.write(result)
+                        # Сохраняем результат Gemini
+                        st.session_state.xray_gemini_result = result
+                        st.session_state.xray_gemini_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        st.rerun()
                     except Exception as e:
                         st.error(f"❌ Ошибка анализа: {str(e)}")
         
@@ -1337,6 +1360,26 @@ def show_mri_analysis():
             prompt = "Проанализируйте МРТ-снимок. Оцените структуры, патологические изменения, дайте заключение."
             specialist_info = {'role': 'Врач-нейрорадиолог'}
         
+        # Отображение сохраненных результатов анализа (если есть)
+        gemini_result = st.session_state.get('mri_gemini_result', '')
+        opus_result = st.session_state.get('mri_analysis_result', '')
+        
+        if gemini_result or opus_result:
+            st.markdown("---")
+            st.markdown("### 📋 Результаты анализа")
+            
+            if gemini_result:
+                gemini_timestamp = st.session_state.get('mri_gemini_timestamp', '')
+                st.markdown(f"#### ⚡ Быстрый анализ (Gemini Flash){f' - {gemini_timestamp}' if gemini_timestamp else ''}")
+                st.write(gemini_result)
+                st.markdown("---")
+            
+            if opus_result:
+                opus_timestamp = st.session_state.get('mri_analysis_timestamp', '')
+                st.markdown(f"#### 🎯 Точный анализ (Opus 4.5){f' - {opus_timestamp}' if opus_timestamp else ''}")
+                st.write(opus_result)
+                st.markdown("---")
+        
         # Кнопки быстрого и точного анализа
         col_fast, col_precise = st.columns(2)
         with col_fast:
@@ -1344,8 +1387,10 @@ def show_mri_analysis():
                 with st.spinner("Gemini Flash анализирует МРТ..."):
                     try:
                         result = assistant.send_vision_request_gemini_fast(prompt, image_array)
-                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
-                        st.write(result)
+                        # Сохраняем результат Gemini
+                        st.session_state.mri_gemini_result = result
+                        st.session_state.mri_gemini_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        st.rerun()
                     except Exception as e:
                         st.error(f"❌ Ошибка анализа: {str(e)}")
         
@@ -1730,6 +1775,26 @@ def show_ct_analysis():
         base_prompt = f"Проанализируйте КТ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените структуры, патологические изменения, денситометрию."
         prompt = get_specialist_prompt(ImageType.CT, base_prompt)
         
+        # Отображение сохраненных результатов анализа (если есть)
+        gemini_result = st.session_state.get('ct_gemini_result', '')
+        opus_result = st.session_state.get('ct_analysis_result', '')
+        
+        if gemini_result or opus_result:
+            st.markdown("---")
+            st.markdown("### 📋 Результаты анализа")
+            
+            if gemini_result:
+                gemini_timestamp = st.session_state.get('ct_gemini_timestamp', '')
+                st.markdown(f"#### ⚡ Быстрый анализ (Gemini Flash){f' - {gemini_timestamp}' if gemini_timestamp else ''}")
+                st.write(gemini_result)
+                st.markdown("---")
+            
+            if opus_result:
+                opus_timestamp = st.session_state.get('ct_analysis_timestamp', '')
+                st.markdown(f"#### 🎯 Точный анализ (Opus 4.5){f' - {opus_timestamp}' if opus_timestamp else ''}")
+                st.write(opus_result)
+                st.markdown("---")
+        
         # Кнопки быстрого и точного анализа
         col_fast, col_precise = st.columns(2)
         with col_fast:
@@ -1737,8 +1802,10 @@ def show_ct_analysis():
                 with st.spinner("Gemini Flash анализирует КТ..."):
                     try:
                         result = assistant.send_vision_request_gemini_fast(prompt, image_array, str(metadata))
-                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
-                        st.write(result)
+                        # Сохраняем результат Gemini
+                        st.session_state.ct_gemini_result = result
+                        st.session_state.ct_gemini_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        st.rerun()
                     except Exception as e:
                         st.error(f"❌ Ошибка анализа: {str(e)}")
         
@@ -2005,6 +2072,26 @@ def show_ultrasound_analysis():
         base_prompt = f"Проанализируйте УЗИ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените эхогенность, структуры, патологические изменения."
         prompt = get_specialist_prompt(ImageType.ULTRASOUND, base_prompt)
         
+        # Отображение сохраненных результатов анализа (если есть)
+        gemini_result = st.session_state.get('ultrasound_gemini_result', '')
+        opus_result = st.session_state.get('ultrasound_analysis_result', '')
+        
+        if gemini_result or opus_result:
+            st.markdown("---")
+            st.markdown("### 📋 Результаты анализа")
+            
+            if gemini_result:
+                gemini_timestamp = st.session_state.get('ultrasound_gemini_timestamp', '')
+                st.markdown(f"#### ⚡ Быстрый анализ (Gemini Flash){f' - {gemini_timestamp}' if gemini_timestamp else ''}")
+                st.write(gemini_result)
+                st.markdown("---")
+            
+            if opus_result:
+                opus_timestamp = st.session_state.get('ultrasound_analysis_timestamp', '')
+                st.markdown(f"#### 🎯 Точный анализ (Opus 4.5){f' - {opus_timestamp}' if opus_timestamp else ''}")
+                st.write(opus_result)
+                st.markdown("---")
+        
         # Кнопки быстрого и точного анализа
         col_fast, col_precise = st.columns(2)
         with col_fast:
@@ -2012,8 +2099,10 @@ def show_ultrasound_analysis():
                 with st.spinner("Gemini Flash анализирует УЗИ..."):
                     try:
                         result = assistant.send_vision_request_gemini_fast(prompt, image_array, str(metadata))
-                        st.markdown(f"### ⚡ Быстрый анализ (Gemini Flash):")
-                        st.write(result)
+                        # Сохраняем результат Gemini
+                        st.session_state.ultrasound_gemini_result = result
+                        st.session_state.ultrasound_gemini_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        st.rerun()
                     except Exception as e:
                         st.error(f"❌ Ошибка анализа: {str(e)}")
         
@@ -2860,7 +2949,7 @@ def show_ai_chat():
                     else:
                         st.error(msg)
         with col2:
-            st.info("💡 Используется Claude Sonnet 4.5")
+            st.info("💡 Используется Claude Opus 4.5")
         with col3:
             if st.button("🗑️ Очистить историю"):
                 # Удаляем из session_state
@@ -3236,12 +3325,12 @@ def show_ai_chat():
             # Используем streaming для более комфортного общения
             with st.chat_message("assistant"):
                 try:
-                    text_generator = assistant.get_response_streaming(user_input, context=context, use_sonnet_4_5=True)
+                    text_generator = assistant.get_response_streaming(user_input, context=context, use_sonnet_4_5=False)
                     response = st.write_stream(text_generator)
                 except Exception as e:
                     # Fallback на обычный режим если streaming не работает
                     st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
-                    response = assistant.get_response(user_input, context=context, use_sonnet_4_5=True)
+                    response = assistant.get_response(user_input, context=context, use_sonnet_4_5=False)
                     st.write(response)
             
             # Убеждаемся что response - строка
@@ -4121,34 +4210,46 @@ def show_genetic_analysis_page():
 {full_text_block}
 {questions_block}
 """
-                        with st.spinner("🤖 Врач-генетик (Opus) формирует заключение..."):
-                            try:
-                                # Используем специализированный промпт генетика ЧЕРЕЗ профессорский system_prompt
-                                # Профессорский промпт обеспечит единый стандарт клинической директивы
-                                # Специализированный промпт добавляется как дополнительный контекст
-                                genetic_context = f"""{genetic_system_prompt}
+                        try:
+                            # Используем специализированный промпт генетика ЧЕРЕЗ профессорский system_prompt
+                            # Профессорский промпт обеспечит единый стандарт клинической директивы
+                            # Специализированный промпт добавляется как дополнительный контекст
+                            genetic_context = f"""{genetic_system_prompt}
 
 Исходные данные по пациенту и отчету:
 {user_message}"""
-                                genetic_question = "Проведи комплексную интерпретацию генетического анализа согласно специализированному контексту выше и сформулируй клиническую директиву в формате профессора."
+                            genetic_question = "Проведи комплексную интерпретацию генетического анализа согласно специализированному контексту выше и сформулируй клиническую директиву в формате профессора."
+                            
+                            st.subheader("🧬 Заключение врача-генетика (ИИ)")
+                            
+                            # Используем streaming для консультации генетика
+                            try:
+                                text_generator = assistant.get_response_streaming(
+                                    genetic_question,
+                                    context=genetic_context,
+                                    use_sonnet_4_5=False
+                                )
+                                genetic_opinion = st.write_stream(text_generator)
+                            except Exception as e:
+                                # Fallback на обычный режим если streaming не работает
+                                st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
                                 genetic_opinion = assistant.get_response(
                                     genetic_question,
                                     context=genetic_context
                                 )
-                                st.subheader("🧬 Заключение врача-генетика (ИИ)")
                                 st.write(genetic_opinion)
 
-                                # Сохраняем заключение генетика в сессию, чтобы при необходимости отправить профессору
-                                if "genetic_specialist_conclusion" not in st.session_state:
-                                    st.session_state["genetic_specialist_conclusion"] = {}
-                                st.session_state["genetic_specialist_conclusion"][analysis_result.analysis_id] = {
-                                    "conclusion": genetic_opinion,
-                                    "patient_info": patient_info,
-                                    "clinical_context": clinical_context,
-                                    "text_variants_raw": analysis_result.metadata.get("text_variants_raw", []),
-                                }
-                            except Exception as e:
-                                st.error(f"❌ Ошибка ИИ-консультации: {e}")
+                            # Сохраняем заключение генетика в сессию, чтобы при необходимости отправить профессору
+                            if "genetic_specialist_conclusion" not in st.session_state:
+                                st.session_state["genetic_specialist_conclusion"] = {}
+                            st.session_state["genetic_specialist_conclusion"][analysis_result.analysis_id] = {
+                                "conclusion": genetic_opinion,
+                                "patient_info": patient_info,
+                                "clinical_context": clinical_context,
+                                "text_variants_raw": analysis_result.metadata.get("text_variants_raw", []),
+                            }
+                        except Exception as e:
+                            st.error(f"❌ Ошибка ИИ-консультации: {e}")
             
             # Если есть сохраненное заключение генетика для этого анализа — даем опцию отправить его профессору
             specialist_data = None

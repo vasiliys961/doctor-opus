@@ -15,6 +15,7 @@ class ConsensusEngine:
         self.assistant = assistant
         # Модели для консенсуса (разные типы для разнообразия)
         self.consensus_models = [
+            "anthropic/claude-sonnet-4.5",
             "anthropic/claude-3-5-sonnet-20241022",
             "meta-llama/llama-3.2-90b-vision-instruct",
             "google/gemini-pro-vision"

@@ -8,6 +8,8 @@
 import json
 import base64
 import io
+import time
+import sys
 from PIL import Image
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
@@ -40,6 +42,8 @@ class AnalysisResult:
     icd10_codes: List[str]
     timestamp: str
     metadata: Dict[str, Any]
+    model_name: str = ""  # Название модели, которая выполнила анализ
+    tokens_used: int = 0  # Количество использованных токенов
 
 class EnhancedMedicalAIAnalyzer:
     """Улучшенный анализатор медицинских изображений"""
@@ -48,9 +52,10 @@ class EnhancedMedicalAIAnalyzer:
         self.api_key = api_key
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         self.models = [
+            "anthropic/claude-opus-4.5",  # Opus для расширенного анализа
+            "anthropic/claude-sonnet-4.5",
             "anthropic/claude-3-5-sonnet-20241022",
             "anthropic/claude-3-5-sonnet",
-            "anthropic/claude-3-sonnet-20240229",
         ]
         
         self.headers = {
@@ -553,16 +558,24 @@ JSON обязательно!
             scores[ImageType.ECG] = 0.6
         
         # Рентген: костные структуры + высокий контраст + монохром
+        # ПРИОРИТЕТ: рентген должен определяться ПЕРЕД дерматоскопией для монохромных изображений
         if not is_color and has_bones:
-            base_score = 0.7 + bone_score * 0.3
+            base_score = 0.8 + bone_score * 0.2  # Увеличиваем базовый скор
             # Бонус за типичные рентгеновские характеристики
             if len(hist_peaks) >= 2 and intensity_std > 40:
-                base_score += 0.1
+                base_score += 0.15
             if aspect_ratio < 2.0:  # рентген обычно не очень вытянутый
-                base_score += 0.05
-            scores[ImageType.XRAY] = min(base_score, 0.95)
+                base_score += 0.1
+            # Дополнительный бонус за большие размеры (рентген обычно крупнее дерматоскопии)
+            if max(width, height) > 1000:
+                base_score += 0.1
+            scores[ImageType.XRAY] = min(base_score, 0.98)  # Очень высокий приоритет
         elif not is_color and intensity_std > 50 and edge_density > 30:
-            scores[ImageType.XRAY] = 0.5
+            # Даже без явных костей, если есть признаки рентгена
+            if max(width, height) > 800:  # Рентген обычно крупнее
+                scores[ImageType.XRAY] = 0.65
+            else:
+                scores[ImageType.XRAY] = 0.5
         
         # МРТ/КТ: мозговые структуры + монохром + средняя интенсивность
         if not is_color and has_brain and mean_intensity > 60 and mean_intensity < 200:
@@ -576,7 +589,8 @@ JSON обязательно!
         elif not is_color and mean_intensity < 100 and edge_density < 40:
             scores[ImageType.ULTRASOUND] = 0.5
         
-        # Дерматоскопия: цветное + высокая детализация + небольшой размер
+        # Дерматоскопия: ТОЛЬКО для цветных изображений + высокая детализация + небольшой размер
+        # ВАЖНО: дерматоскопия НЕ должна определяться для монохромных изображений
         if is_color and color_variance > 20 and edge_density > 40:
             if max(width, height) < 1500:  # обычно небольшие изображения
                 scores[ImageType.DERMATOSCOPY] = 0.75
@@ -586,12 +600,15 @@ JSON обязательно!
             scores[ImageType.HISTOLOGY] = 0.7
         
         # Офтальмология: круглые структуры + средний размер
+        # ВАЖНО: офтальмология только если НЕТ признаков рентгена (костных структур)
         if aspect_ratio > 0.8 and aspect_ratio < 1.3:
             if max(width, height) < 1000:
+                # Офтальмология имеет низкий приоритет для монохромных изображений
+                # и только если нет признаков рентгена
                 if is_color:
                     scores[ImageType.RETINAL] = 0.65
-                else:
-                    scores[ImageType.RETINAL] = 0.55
+                elif not has_bones:  # Только если нет костных структур (не рентген)
+                    scores[ImageType.RETINAL] = 0.4  # Снижаем приоритет для монохромных
         
         # Маммография: специфический контраст + монохром + большой размер
         if (not is_color and intensity_std > 35 and mean_intensity > 70 and 
@@ -609,10 +626,12 @@ JSON обязательно!
             if aspect_ratio > 2.0:
                 return ImageType.ECG, 0.3
             elif intensity_std > 40:
-                return ImageType.XRAY, 0.4
+                # Для монохромных изображений с высоким контрастом - скорее всего рентген
+                return ImageType.XRAY, 0.5  # Увеличиваем уверенность
             else:
                 return ImageType.ULTRASOUND, 0.3
         else:
+            # Только для цветных изображений - дерматоскопия
             return ImageType.DERMATOSCOPY, 0.3
 
     def preprocess_image(self, image_array: np.ndarray, image_type: ImageType) -> np.ndarray:
@@ -770,22 +789,43 @@ JSON обязательно!
                 raise ValueError("Пустое изображение")
             
             # Автоопределение типа, если не указан
+            # Универсальный анализ без определения типа
             if image_type is None:
-                image_type, confidence = self.detect_image_type(image_array)
-                print(f"Автоопределение: {image_type.value} (уверенность: {confidence:.2f})")
+                # Используем универсальный тип для анализа, но не определяем его явно
+                # Это позволяет анализировать любое изображение без привязки к типу
+                image_type = ImageType.XRAY  # Используем как базовый тип для обработки
+                confidence = 1.0
+                print(f"Универсальный анализ без определения типа")
             else:
                 confidence = 1.0
                 print(f"Указанный тип: {image_type.value}")
             
-            # Предобработка изображения
-            processed_image = self.preprocess_image(image_array, image_type)
+            # Предобработка изображения (минимальная для универсального анализа)
+            processed_image = image_array.copy()
+            if len(processed_image.shape) == 3:
+                # Для цветных изображений оставляем как есть
+                pass
+            else:
+                # Для монохромных - нормализация
+                min_val, max_val = np.min(processed_image), np.max(processed_image)
+                if max_val > min_val:
+                    processed_image = ((processed_image - min_val) / (max_val - min_val) * 255).astype(np.uint8)
             
             # Извлечение метаданных
             metadata = self.extract_metadata(processed_image, image_type)
             
-            # Формирование промпта
-            base_prompt = self.specialized_prompts.get(image_type, 
-                "Проанализируйте медицинское изображение максимально подробно.")
+            # Универсальный промпт для анализа любого медицинского изображения
+            base_prompt = """Вы - опытный врач-диагност с многолетним клиническим опытом. Проанализируйте представленное медицинское изображение максимально подробно и детально.
+
+Оцените:
+1. Технические параметры изображения (качество, артефакты, контрастность)
+2. Все видимые анатомические структуры
+3. Патологические изменения и отклонения от нормы
+4. Клиническую значимость находок
+5. Дифференциальную диагностику
+6. Рекомендации по дальнейшему обследованию и тактике ведения
+
+Дайте подробное заключение в формате клинической директивы."""
             
             if additional_context:
                 base_prompt += f"\n\nДополнительный клинический контекст: {additional_context}"
@@ -845,7 +885,7 @@ JSON обязательно!
             
             # Отправка запроса к ИИ
             print("Отправка запроса к ИИ...")
-            ai_response = self._send_ai_request(full_prompt, processed_image, metadata)
+            ai_response, model_name, tokens_used = self._send_ai_request(full_prompt, processed_image, metadata)
             
             # Парсинг ответа
             try:
@@ -910,8 +950,9 @@ JSON обязательно!
                 }
             
             # Создание результата
+            # Используем универсальный тип для результата, но не отображаем его
             result = AnalysisResult(
-                image_type=image_type,
+                image_type=ImageType.XRAY,  # Базовый тип для структуры, но не используется для отображения
                 confidence=confidence * response_data.get("confidence_score", 0.5),
                 structured_findings=response_data,
                 clinical_interpretation=ai_response,
@@ -919,7 +960,9 @@ JSON обязательно!
                 urgent_flags=response_data.get("recommendations", {}).get("urgent_actions", []),
                 icd10_codes=response_data.get("diagnosis", {}).get("icd10_codes", []),
                 timestamp=datetime.datetime.now().isoformat(),
-                metadata=metadata
+                metadata=metadata,
+                model_name=model_name,
+                tokens_used=tokens_used
             )
             
             print(f"Анализ завершен успешно. Тип: {image_type.value}, Уверенность: {result.confidence:.2f}")
@@ -937,12 +980,18 @@ JSON обязательно!
                 urgent_flags=["Ошибка системы"],
                 icd10_codes=[],
                 timestamp=datetime.datetime.now().isoformat(),
-                metadata={}
+                metadata={},
+                model_name="Ошибка",
+                tokens_used=0
             )
             return error_result
 
-    def _send_ai_request(self, prompt: str, image_array: np.ndarray, metadata: Dict) -> str:
-        """Отправка запроса к ИИ с улучшенной обработкой ошибок"""
+    def _send_ai_request(self, prompt: str, image_array: np.ndarray, metadata: Dict) -> tuple:
+        """Отправка запроса к ИИ с улучшенной обработкой ошибок
+        
+        Returns:
+            tuple: (ответ, название_модели, токены)
+        """
         try:
             # Кодирование изображения
             base64_image = self.encode_image_optimized(image_array)
@@ -963,7 +1012,9 @@ JSON обязательно!
             last_error = None
             for i, model in enumerate(self.models):
                 try:
-                    print(f"Пробуем модель {i+1}/{len(self.models)}: {model}")
+                    # Определяем читаемое название модели
+                    model_name = self._get_model_display_name(model)
+                    print(f"🤖 [РАСШИРЕННЫЙ АНАЛИЗ] Пробуем модель {i+1}/{len(self.models)}: {model_name} ({model})", file=sys.stderr, flush=True)
                     
                     payload = {
                         "model": model,
@@ -973,19 +1024,23 @@ JSON обязательно!
                         "top_p": 0.9
                     }
                     
+                    start_time = time.time()
                     response = requests.post(
                         self.base_url, 
                         headers=self.headers, 
                         json=payload, 
                         timeout=180
                     )
+                    latency = time.time() - start_time
                     
                     if response.status_code == 200:
                         result = response.json()
                         if "choices" in result and len(result["choices"]) > 0:
                             content = result["choices"][0]["message"]["content"]
-                            print(f"Успешный ответ от модели: {model}")
-                            return content
+                            tokens_used = result.get("usage", {}).get("total_tokens", 0)
+                            print(f"✅ [РАСШИРЕННЫЙ АНАЛИЗ] Успешный ответ от модели: {model_name}", file=sys.stderr, flush=True)
+                            print(f"📊 [РАСШИРЕННЫЙ АНАЛИЗ] Задержка: {latency:.2f}с, Токенов: {tokens_used}, Символов ответа: {len(content)}", file=sys.stderr, flush=True)
+                            return content, model_name, tokens_used
                         else:
                             print(f"Пустой ответ от модели: {model}")
                             continue
@@ -1043,11 +1098,142 @@ JSON обязательно!
                 }
             }
             
-            return json.dumps(error_response, ensure_ascii=False, indent=2)
+            return json.dumps(error_response, ensure_ascii=False, indent=2), "Ошибка", 0
             
         except Exception as e:
             print(f"Критическая ошибка в _send_ai_request: {e}")
-            return '{"error": "Критическая ошибка ИИ-анализа"}'
+            return '{"error": "Критическая ошибка ИИ-анализа"}', "Ошибка", 0
+    
+    def _get_model_display_name(self, model: str) -> str:
+        """Получить читаемое название модели"""
+        if "claude-opus-4.5" in model or "claude-opus-4" in model:
+            return "Claude Opus 4.5"
+        elif "claude-sonnet-4.5" in model or "claude-sonnet-4" in model:
+            return "Claude Sonnet 4.5"
+        elif "claude-3-5-sonnet-20241022" in model:
+            return "Claude 3.5 Sonnet (Latest)"
+        elif "claude-3-5-sonnet" in model:
+            return "Claude 3.5 Sonnet"
+        elif "claude-3-sonnet" in model:
+            return "Claude 3 Sonnet"
+        elif "claude-3-haiku" in model:
+            return "Claude 3 Haiku"
+        elif "gemini" in model.lower():
+            return "Gemini"
+        elif "llama" in model.lower():
+            return "Llama"
+        else:
+            return model.split("/")[-1] if "/" in model else model
+
+    def _send_ai_request_streaming(self, prompt: str, image_array: np.ndarray, metadata: Dict):
+        """Отправка запроса к ИИ с streaming - текст появляется постепенно
+        
+        Yields:
+            str: Части ответа по мере генерации
+        """
+        try:
+            # Кодирование изображения
+            base64_image = self.encode_image_optimized(image_array)
+            
+            # Формирование контента
+            content = [
+                {
+                    "type": "text", 
+                    "text": f"Технические метаданные изображения:\n{json.dumps(metadata, ensure_ascii=False, indent=2)}\n\n{prompt}"
+                },
+                {
+                    "type": "image_url", 
+                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+                }
+            ]
+            
+            # Пробуем модели по порядку
+            last_error = None
+            for i, model in enumerate(self.models):
+                try:
+                    print(f"🤖 [STREAMING] Пробуем модель {i+1}/{len(self.models)}: {model}")
+                    
+                    payload = {
+                        "model": model,
+                        "messages": [{"role": "user", "content": content}],
+                        "max_tokens": 4000,
+                        "temperature": 0.1,
+                        "top_p": 0.9,
+                        "stream": True  # Включаем streaming
+                    }
+                    
+                    response = requests.post(
+                        self.base_url, 
+                        headers=self.headers, 
+                        json=payload, 
+                        timeout=180,
+                        stream=True
+                    )
+                    
+                    if response.status_code == 200:
+                        model_name = self._get_model_display_name(model)
+                        print(f"✅ [STREAMING РАСШИРЕННЫЙ АНАЛИЗ] Успешное подключение к модели: {model_name} ({model})")
+                        full_response = ""
+                        start_time = time.time()
+                        for line in response.iter_lines():
+                            if line:
+                                line_str = line.decode('utf-8')
+                                if line_str.startswith('data: '):
+                                    data_str = line_str[6:]
+                                    if data_str == '[DONE]':
+                                        break
+                                    try:
+                                        data = json.loads(data_str)
+                                        if 'choices' in data and len(data['choices']) > 0:
+                                            delta = data['choices'][0].get('delta', {})
+                                            if 'content' in delta:
+                                                content_chunk = delta['content']
+                                                full_response += content_chunk
+                                                yield content_chunk
+                                    except json.JSONDecodeError:
+                                        continue
+                        latency = time.time() - start_time
+                        print(f"✅ [STREAMING РАСШИРЕННЫЙ АНАЛИЗ] Завершено. Модель: {model_name}, символов: {len(full_response)}, время: {latency:.2f}с")
+                        # Не делаем return здесь, чтобы генератор мог продолжить работу
+                        if full_response:
+                            return  # Успешно завершили, выходим из цикла моделей
+                        else:
+                            continue  # Если ответ пустой, пробуем следующую модель
+                    elif response.status_code == 402:
+                        print(f"⚠️ [STREAMING] HTTP 402 (недостаточно средств) для модели: {model}")
+                        yield f"⚠️ Модель {model} недоступна из-за недостатка средств. Пробую следующую модель...\n\n"
+                        last_error = f"HTTP 402: недостаточно средств"
+                        continue
+                    else:
+                        print(f"❌ [STREAMING] HTTP ошибка {response.status_code} для модели {model}: {response.text[:200]}")
+                        last_error = f"HTTP {response.status_code}: {response.text[:200]}"
+                        continue
+                        
+                except requests.exceptions.Timeout:
+                    print(f"⏱️ [STREAMING] Таймаут для модели: {model}")
+                    yield f"⏱️ Таймаут для модели {model}. Пробую следующую...\n\n"
+                    last_error = "Таймаут запроса"
+                    continue
+                except requests.exceptions.RequestException as e:
+                    print(f"❌ [STREAMING] Ошибка соединения для модели {model}: {e}")
+                    yield f"❌ Ошибка соединения для модели {model}. Пробую следующую...\n\n"
+                    last_error = f"Ошибка соединения: {str(e)}"
+                    continue
+                except Exception as e:
+                    print(f"❌ [STREAMING] Неожиданная ошибка для модели {model}: {e}")
+                    yield f"❌ Неожиданная ошибка для модели {model}. Пробую следующую...\n\n"
+                    last_error = f"Неожиданная ошибка: {str(e)}"
+                    continue
+            
+            # Если все модели недоступны
+            error_msg = f"❌ Все модели недоступны. Последняя ошибка: {last_error}"
+            print(error_msg)
+            yield error_msg
+            
+        except Exception as e:
+            error_msg = f"❌ Критическая ошибка в streaming: {e}"
+            print(error_msg)
+            yield error_msg
 
     def batch_analyze(self, images: List[Tuple[np.ndarray, Optional[ImageType]]], 
                     context: str = "") -> List[AnalysisResult]:

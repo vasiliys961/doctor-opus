@@ -46,9 +46,10 @@ class EnhancedMedicalAIAnalyzer:
         self.api_key = api_key
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         self.models = [
+            "anthropic/claude-opus-4.5",  # Opus для расширенного анализа
+            "anthropic/claude-sonnet-4.5",
             "anthropic/claude-3-5-sonnet-20241022",
             "anthropic/claude-3-5-sonnet",
-            "anthropic/claude-3-sonnet-20240229",
         ]
         
         self.headers = {

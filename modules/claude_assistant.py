@@ -24,9 +24,10 @@ class OpenRouterAssistant:
             raise ValueError("API ключ не найден. Установите OPENROUTER_API_KEY в config.py или .streamlit/secrets.toml")
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         
-        # Модели с приоритетом Claude Sonnet 4 + Gemini 3 Pro
+        # Модели с приоритетом Claude Sonnet 4.5 + Gemini 3 Pro
         self.models = [
-            "anthropic/claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (latest)
+            "anthropic/claude-sonnet-4.5",            # Claude Sonnet 4.5 (latest)
+            "anthropic/claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (fallback)
             "anthropic/claude-3-5-sonnet",           # Claude 3.5 Sonnet
             "google/gemini-3-pro-preview",           # Gemini 3 Pro Preview (новейшая модель Google)
             "anthropic/claude-3-sonnet-20240229",    # Claude 3 Sonnet
@@ -34,7 +35,7 @@ class OpenRouterAssistant:
             "google/gemini-pro-vision"               # Gemini Pro Vision (дополнительно)
         ]
         
-        self.model = self.models[0]  # Claude 3.5 Sonnet latest по умолчанию
+        self.model = self.models[0]  # Claude Sonnet 4.5 по умолчанию
         
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -129,9 +130,10 @@ class OpenRouterAssistant:
                 "image_url": {"url": f"data:image/png;base64,{base64_str}"}
             })
         
-        # Для ЭКГ используем только Claude 3.5 Sonnet
+        # Для ЭКГ используем Claude Sonnet 4.5
         if "экг" in prompt_lower or "ecg" in prompt_lower:
             ecg_models = [
+                "anthropic/claude-sonnet-4.5",
                 "anthropic/claude-3-5-sonnet-20241022",
                 "anthropic/claude-3-5-sonnet"
             ]
@@ -167,7 +169,11 @@ class OpenRouterAssistant:
     
     def _get_model_name(self, model):
         """Получить читаемое название модели"""
-        if "claude-3-5-sonnet-20241022" in model:
+        if "claude-opus-4.5" in model or "claude-opus-4" in model:
+            return "Claude Opus 4.5"
+        elif "claude-sonnet-4.5" in model or "claude-sonnet-4" in model:
+            return "Claude Sonnet 4.5"
+        elif "claude-3-5-sonnet-20241022" in model:
             return "Claude 3.5 Sonnet (Latest)"
         elif "claude-3-5-sonnet" in model:
             return "Claude 3.5 Sonnet"
