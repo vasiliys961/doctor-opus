@@ -38,8 +38,22 @@ def validate_image(image_array: np.ndarray, min_size: Tuple[int, int] = (100, 10
     
     return True, ""
 
-def validate_file_size(file_size: int, max_size_mb: int = 50) -> Tuple[bool, str]:
-    """Валидация размера файла"""
+def validate_file_size(file_size: int, max_size_mb: int = 50, file_type: Optional[str] = None) -> Tuple[bool, str]:
+    """
+    Валидация размера файла
+    
+    Args:
+        file_size: Размер файла в байтах
+        max_size_mb: Максимальный размер в MB (по умолчанию 50 MB)
+        file_type: Тип файла (например, 'csv') для применения специальных лимитов
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Для CSV файлов (особенно ЭКГ данные) увеличиваем лимит до 200 MB
+    if file_type and file_type.lower() == 'csv':
+        max_size_mb = 200
+    
     max_size_bytes = max_size_mb * 1024 * 1024
     
     if file_size > max_size_bytes:

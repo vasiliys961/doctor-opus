@@ -13,12 +13,6 @@ import requests
 import tempfile
 import os
 from io import BytesIO
-# import librosa  # Опционально, если нужна обработка аудио
-try:
-    import librosa
-    LIBROSA_AVAILABLE = True
-except ImportError:
-    LIBROSA_AVAILABLE = False
 import datetime
 from pathlib import Path
 import time
@@ -29,239 +23,311 @@ import re
 import logging
 
 # Безопасные импорты модулей
-try:
-    from modules.medical_ai_analyzer import EnhancedMedicalAIAnalyzer, ImageType
-    MEDICAL_AI_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: medical_ai_analyzer недоступен: {e}", file=sys.stderr)
-    MEDICAL_AI_AVAILABLE = False
-    ImageType = None
-    EnhancedMedicalAIAnalyzer = None
+from utils.safe_imports import safe_import_module
 
-try:
-    from modules.streamlit_enhanced_pages import (
-        show_enhanced_analysis_page,
-        show_comparative_analysis_page, 
-        show_medical_protocols_page
-    )
-    ENHANCED_PAGES_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: streamlit_enhanced_pages недоступен: {e}", file=sys.stderr)
-    ENHANCED_PAGES_AVAILABLE = False
-    show_enhanced_analysis_page = None
-    show_comparative_analysis_page = None
-    show_medical_protocols_page = None
+# Импорт librosa (опционально, если нужна обработка аудио)
+LIBROSA_AVAILABLE, librosa_values = safe_import_module(
+    'librosa',
+    ['librosa'],
+    {'librosa': None},
+    'librosa'
+)
+librosa = librosa_values.get('librosa', None)
 
-try:
-    from modules.advanced_lab_processor import AdvancedLabProcessor
-    LAB_PROCESSOR_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: advanced_lab_processor недоступен: {e}", file=sys.stderr)
-    LAB_PROCESSOR_AVAILABLE = False
-    AdvancedLabProcessor = None
+# Импорт medical_ai_analyzer
+MEDICAL_AI_AVAILABLE, medical_ai_values = safe_import_module(
+    'modules.medical_ai_analyzer',
+    ['EnhancedMedicalAIAnalyzer', 'ImageType'],
+    {'EnhancedMedicalAIAnalyzer': None, 'ImageType': None},
+    'medical_ai_analyzer'
+)
+EnhancedMedicalAIAnalyzer = medical_ai_values['EnhancedMedicalAIAnalyzer']
+ImageType = medical_ai_values['ImageType']
 
-try:
-    from utils.image_processor import ImageFormatProcessor, optimize_image_for_ai
-    IMAGE_PROCESSOR_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: image_processor недоступен: {e}", file=sys.stderr)
-    IMAGE_PROCESSOR_AVAILABLE = False
-    ImageFormatProcessor = None
-    optimize_image_for_ai = None
+# Импорт streamlit_enhanced_pages
+ENHANCED_PAGES_AVAILABLE, enhanced_pages_values = safe_import_module(
+    'modules.streamlit_enhanced_pages',
+    ['show_enhanced_analysis_page', 'show_comparative_analysis_page', 'show_medical_protocols_page'],
+    {'show_enhanced_analysis_page': None, 'show_comparative_analysis_page': None, 'show_medical_protocols_page': None},
+    'streamlit_enhanced_pages'
+)
+show_enhanced_analysis_page = enhanced_pages_values['show_enhanced_analysis_page']
+show_comparative_analysis_page = enhanced_pages_values['show_comparative_analysis_page']
+show_medical_protocols_page = enhanced_pages_values['show_medical_protocols_page']
 
-try:
-    from utils.specialist_detector import get_specialist_prompt, get_specialist_info
-    SPECIALIST_DETECTOR_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: specialist_detector недоступен: {e}", file=sys.stderr)
-    SPECIALIST_DETECTOR_AVAILABLE = False
-    get_specialist_prompt = None
-    get_specialist_info = None
+# Импорт advanced_lab_processor
+LAB_PROCESSOR_AVAILABLE, lab_processor_values = safe_import_module(
+    'modules.advanced_lab_processor',
+    ['AdvancedLabProcessor'],
+    {'AdvancedLabProcessor': None},
+    'advanced_lab_processor'
+)
+AdvancedLabProcessor = lab_processor_values['AdvancedLabProcessor']
 
-try:
-    from config import IS_REPLIT, MOBILE_MAX_IMAGE_SIZE, ALLOWED_IMAGE_EXTENSIONS
-    CONFIG_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: config недоступен: {e}", file=sys.stderr)
-    CONFIG_AVAILABLE = False
-    IS_REPLIT = False
-    MOBILE_MAX_IMAGE_SIZE = (1024, 1024)
-    ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png']
+# Импорт image_processor
+IMAGE_PROCESSOR_AVAILABLE, image_processor_values = safe_import_module(
+    'utils.image_processor',
+    ['ImageFormatProcessor', 'optimize_image_for_ai'],
+    {'ImageFormatProcessor': None, 'optimize_image_for_ai': None},
+    'image_processor'
+)
+ImageFormatProcessor = image_processor_values['ImageFormatProcessor']
+optimize_image_for_ai = image_processor_values['optimize_image_for_ai']
 
-try:
-    from utils.error_handler import handle_error, log_api_call
-    ERROR_HANDLER_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: error_handler недоступен: {e}", file=sys.stderr)
-    ERROR_HANDLER_AVAILABLE = False
-    def handle_error(error, context="", show_to_user=True):
-        return str(error)
-    def log_api_call(*args, **kwargs):
-        pass
+# Импорт specialist_detector
+SPECIALIST_DETECTOR_AVAILABLE, specialist_detector_values = safe_import_module(
+    'utils.specialist_detector',
+    ['get_specialist_prompt', 'get_specialist_info'],
+    {'get_specialist_prompt': None, 'get_specialist_info': None},
+    'specialist_detector'
+)
+get_specialist_prompt = specialist_detector_values['get_specialist_prompt']
+get_specialist_info = specialist_detector_values['get_specialist_info']
 
-try:
-    from utils.performance_monitor import track_model_usage
-    PERFORMANCE_MONITOR_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: performance_monitor недоступен: {e}", file=sys.stderr)
-    PERFORMANCE_MONITOR_AVAILABLE = False
-    def track_model_usage(*args, **kwargs):
-        pass
+# Импорт config
+CONFIG_AVAILABLE, config_values = safe_import_module(
+    'config',
+    ['IS_REPLIT', 'MOBILE_MAX_IMAGE_SIZE', 'ALLOWED_IMAGE_EXTENSIONS'],
+    {
+        'IS_REPLIT': False,
+        'MOBILE_MAX_IMAGE_SIZE': (1024, 1024),
+        'ALLOWED_IMAGE_EXTENSIONS': ['.jpg', '.jpeg', '.png']
+    },
+    'config'
+)
+IS_REPLIT = config_values['IS_REPLIT']
+MOBILE_MAX_IMAGE_SIZE = config_values['MOBILE_MAX_IMAGE_SIZE']
+ALLOWED_IMAGE_EXTENSIONS = config_values['ALLOWED_IMAGE_EXTENSIONS']
 
-try:
-    from utils.validators import validate_image, validate_file_size
-    VALIDATORS_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: validators недоступен: {e}", file=sys.stderr)
-    VALIDATORS_AVAILABLE = False
-    def validate_image(*args, **kwargs):
-        return True, ""
-    def validate_file_size(*args, **kwargs):
-        return True, ""
+# Импорт error_handler
+def _fallback_handle_error(error, context="", show_to_user=True):
+    return str(error)
 
-try:
-    from utils.url_downloader import download_from_url, convert_google_drive_link
-    URL_DOWNLOADER_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: url_downloader недоступен: {e}", file=sys.stderr)
-    URL_DOWNLOADER_AVAILABLE = False
-    def download_from_url(*args, **kwargs):
-        return None, None
-    def convert_google_drive_link(*args, **kwargs):
-        return None
+def _fallback_log_api_call(*args, **kwargs):
+    pass
 
-try:
-    from utils.cache_manager import get_image_hash, get_cache_key, get_cached_result, save_to_cache, clear_old_cache
-    CACHE_MANAGER_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: cache_manager недоступен: {e}", file=sys.stderr)
-    CACHE_MANAGER_AVAILABLE = False
-    def get_image_hash(*args, **kwargs):
-        return ""
-    def get_cache_key(*args, **kwargs):
-        return ""
-    def get_cached_result(*args, **kwargs):
-        return None
-    def save_to_cache(*args, **kwargs):
-        pass
-    def clear_old_cache(*args, **kwargs):
-        pass
+ERROR_HANDLER_AVAILABLE, error_handler_values = safe_import_module(
+    'utils.error_handler',
+    ['handle_error', 'log_api_call'],
+    {'handle_error': _fallback_handle_error, 'log_api_call': _fallback_log_api_call},
+    'error_handler'
+)
+handle_error = error_handler_values['handle_error']
+log_api_call = error_handler_values['log_api_call']
 
-try:
-    from utils.export_manager import export_analysis_to_json, export_analysis_to_csv, export_lab_results_to_excel
-    EXPORT_MANAGER_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: export_manager недоступен: {e}", file=sys.stderr)
-    EXPORT_MANAGER_AVAILABLE = False
-    def export_analysis_to_json(*args, **kwargs):
-        return ""
-    def export_analysis_to_csv(*args, **kwargs):
-        return ""
-    def export_lab_results_to_excel(*args, **kwargs):
-        return ""
+# Импорт performance_monitor
+def _fallback_track_model_usage(*args, **kwargs):
+    pass
 
-try:
-    from services.consensus_engine import ConsensusEngine
-    CONSENSUS_ENGINE_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: consensus_engine недоступен: {e}", file=sys.stderr)
-    CONSENSUS_ENGINE_AVAILABLE = False
-    ConsensusEngine = None
+PERFORMANCE_MONITOR_AVAILABLE, performance_monitor_values = safe_import_module(
+    'utils.performance_monitor',
+    ['track_model_usage'],
+    {'track_model_usage': _fallback_track_model_usage},
+    'performance_monitor'
+)
+track_model_usage = performance_monitor_values['track_model_usage']
 
-try:
-    from services.validation_pipeline import ValidationPipeline
-    VALIDATION_PIPELINE_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: validation_pipeline недоступен: {e}", file=sys.stderr)
-    VALIDATION_PIPELINE_AVAILABLE = False
-    ValidationPipeline = None
+# Импорт validators
+def _fallback_validate_image(*args, **kwargs):
+    return True, ""
 
-try:
-    from storages.context_store import ContextStore
-    CONTEXT_STORE_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: context_store недоступен: {e}", file=sys.stderr)
-    CONTEXT_STORE_AVAILABLE = False
-    ContextStore = None
+def _fallback_validate_file_size(*args, **kwargs):
+    return True, ""
 
-try:
-    from evaluators.scorecards import MedicalScorecard
-    SCORECARDS_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: scorecards недоступен: {e}", file=sys.stderr)
-    SCORECARDS_AVAILABLE = False
-    MedicalScorecard = None
+VALIDATORS_AVAILABLE, validators_values = safe_import_module(
+    'utils.validators',
+    ['validate_image', 'validate_file_size'],
+    {'validate_image': _fallback_validate_image, 'validate_file_size': _fallback_validate_file_size},
+    'validators'
+)
+validate_image = validators_values['validate_image']
+validate_file_size = validators_values['validate_file_size']
 
-try:
-    from prompts.prompt_registry import PromptRegistry
-    PROMPT_REGISTRY_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: prompt_registry недоступен: {e}", file=sys.stderr)
-    PROMPT_REGISTRY_AVAILABLE = False
-    PromptRegistry = None
+# Импорт url_downloader
+def _fallback_download_from_url(*args, **kwargs):
+    return None, None
 
-try:
-    from utils.gap_detector import DiagnosticGapDetector
-    GAP_DETECTOR_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: gap_detector недоступен: {e}", file=sys.stderr)
-    GAP_DETECTOR_AVAILABLE = False
-    DiagnosticGapDetector = None
+def _fallback_convert_google_drive_link(*args, **kwargs):
+    return None
 
-try:
-    from utils.notification_system import NotificationSystem
-    NOTIFICATION_SYSTEM_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: notification_system недоступен: {e}", file=sys.stderr)
-    NOTIFICATION_SYSTEM_AVAILABLE = False
-    NotificationSystem = None
+URL_DOWNLOADER_AVAILABLE, url_downloader_values = safe_import_module(
+    'utils.url_downloader',
+    ['download_from_url', 'convert_google_drive_link'],
+    {'download_from_url': _fallback_download_from_url, 'convert_google_drive_link': _fallback_convert_google_drive_link},
+    'url_downloader'
+)
+download_from_url = url_downloader_values['download_from_url']
+convert_google_drive_link = url_downloader_values['convert_google_drive_link']
 
-try:
-    from services.model_router import ModelRouter
-    MODEL_ROUTER_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: model_router недоступен: {e}", file=sys.stderr)
-    MODEL_ROUTER_AVAILABLE = False
-    ModelRouter = None
+# Импорт cache_manager
+def _fallback_get_image_hash(*args, **kwargs):
+    return ""
 
-try:
-    from utils.evidence_ranker import EvidenceRanker
-    EVIDENCE_RANKER_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: evidence_ranker недоступен: {e}", file=sys.stderr)
-    EVIDENCE_RANKER_AVAILABLE = False
-    EvidenceRanker = None
+def _fallback_get_cache_key(*args, **kwargs):
+    return ""
 
-# --- Форма обратной связи ---
-try:
-    from utils.feedback_widget import show_feedback_form
-    FEEDBACK_WIDGET_AVAILABLE = True
-    # Убираем повторяющееся сообщение - оно не нужно в терминале
-    # print("✅ Модуль обратной связи загружен успешно", file=sys.stderr)
-except ImportError as e:
-    print(f"⚠️ Предупреждение: feedback_widget недоступен: {e}", file=sys.stderr)
-    FEEDBACK_WIDGET_AVAILABLE = False
-    def show_feedback_form(*args, **kwargs):
-        # Заглушка, которая показывает информацию для отладки
-        st.warning("⚠️ Модуль обратной связи недоступен. Проверьте логи.")
-        pass
+def _fallback_get_cached_result(*args, **kwargs):
+    return None
 
-# --- Проверка доступности ИИ ---
-try:
-    from claude_assistant import OpenRouterAssistant
-    AI_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Предупреждение: ИИ-модуль недоступен: {e}", file=sys.stderr)
-    AI_AVAILABLE = False
-    OpenRouterAssistant = None
+def _fallback_save_to_cache(*args, **kwargs):
+    pass
 
-# --- AssemblyAI для голосового ввода ---
-try:
-    from assemblyai_transcriber import transcribe_audio_assemblyai
-    ASSEMBLYAI_AVAILABLE = True
-except ImportError:
-    ASSEMBLYAI_AVAILABLE = False
-    transcribe_audio_assemblyai = None
+def _fallback_clear_old_cache(*args, **kwargs):
+    pass
+
+CACHE_MANAGER_AVAILABLE, cache_manager_values = safe_import_module(
+    'utils.cache_manager',
+    ['get_image_hash', 'get_cache_key', 'get_cached_result', 'save_to_cache', 'clear_old_cache'],
+    {
+        'get_image_hash': _fallback_get_image_hash,
+        'get_cache_key': _fallback_get_cache_key,
+        'get_cached_result': _fallback_get_cached_result,
+        'save_to_cache': _fallback_save_to_cache,
+        'clear_old_cache': _fallback_clear_old_cache
+    },
+    'cache_manager'
+)
+get_image_hash = cache_manager_values['get_image_hash']
+get_cache_key = cache_manager_values['get_cache_key']
+get_cached_result = cache_manager_values['get_cached_result']
+save_to_cache = cache_manager_values['save_to_cache']
+clear_old_cache = cache_manager_values['clear_old_cache']
+
+# Импорт export_manager
+def _fallback_export_analysis_to_json(*args, **kwargs):
+    return ""
+
+def _fallback_export_analysis_to_csv(*args, **kwargs):
+    return ""
+
+def _fallback_export_lab_results_to_excel(*args, **kwargs):
+    return ""
+
+EXPORT_MANAGER_AVAILABLE, export_manager_values = safe_import_module(
+    'utils.export_manager',
+    ['export_analysis_to_json', 'export_analysis_to_csv', 'export_lab_results_to_excel'],
+    {
+        'export_analysis_to_json': _fallback_export_analysis_to_json,
+        'export_analysis_to_csv': _fallback_export_analysis_to_csv,
+        'export_lab_results_to_excel': _fallback_export_lab_results_to_excel
+    },
+    'export_manager'
+)
+export_analysis_to_json = export_manager_values['export_analysis_to_json']
+export_analysis_to_csv = export_manager_values['export_analysis_to_csv']
+export_lab_results_to_excel = export_manager_values['export_lab_results_to_excel']
+
+# Импорт consensus_engine
+CONSENSUS_ENGINE_AVAILABLE, consensus_engine_values = safe_import_module(
+    'services.consensus_engine',
+    ['ConsensusEngine'],
+    {'ConsensusEngine': None},
+    'consensus_engine'
+)
+ConsensusEngine = consensus_engine_values['ConsensusEngine']
+
+# Импорт validation_pipeline
+VALIDATION_PIPELINE_AVAILABLE, validation_pipeline_values = safe_import_module(
+    'services.validation_pipeline',
+    ['ValidationPipeline'],
+    {'ValidationPipeline': None},
+    'validation_pipeline'
+)
+ValidationPipeline = validation_pipeline_values['ValidationPipeline']
+
+# Импорт context_store
+CONTEXT_STORE_AVAILABLE, context_store_values = safe_import_module(
+    'storages.context_store',
+    ['ContextStore'],
+    {'ContextStore': None},
+    'context_store'
+)
+ContextStore = context_store_values['ContextStore']
+
+# Импорт scorecards
+SCORECARDS_AVAILABLE, scorecards_values = safe_import_module(
+    'evaluators.scorecards',
+    ['MedicalScorecard'],
+    {'MedicalScorecard': None},
+    'scorecards'
+)
+MedicalScorecard = scorecards_values['MedicalScorecard']
+
+# Импорт prompt_registry
+PROMPT_REGISTRY_AVAILABLE, prompt_registry_values = safe_import_module(
+    'prompts.prompt_registry',
+    ['PromptRegistry'],
+    {'PromptRegistry': None},
+    'prompt_registry'
+)
+PromptRegistry = prompt_registry_values['PromptRegistry']
+
+# Импорт gap_detector
+GAP_DETECTOR_AVAILABLE, gap_detector_values = safe_import_module(
+    'utils.gap_detector',
+    ['DiagnosticGapDetector'],
+    {'DiagnosticGapDetector': None},
+    'gap_detector'
+)
+DiagnosticGapDetector = gap_detector_values['DiagnosticGapDetector']
+
+# Импорт notification_system
+NOTIFICATION_SYSTEM_AVAILABLE, notification_system_values = safe_import_module(
+    'utils.notification_system',
+    ['NotificationSystem'],
+    {'NotificationSystem': None},
+    'notification_system'
+)
+NotificationSystem = notification_system_values['NotificationSystem']
+
+# Импорт model_router
+MODEL_ROUTER_AVAILABLE, model_router_values = safe_import_module(
+    'services.model_router',
+    ['ModelRouter'],
+    {'ModelRouter': None},
+    'model_router'
+)
+ModelRouter = model_router_values['ModelRouter']
+
+# Импорт evidence_ranker
+EVIDENCE_RANKER_AVAILABLE, evidence_ranker_values = safe_import_module(
+    'utils.evidence_ranker',
+    ['EvidenceRanker'],
+    {'EvidenceRanker': None},
+    'evidence_ranker'
+)
+EvidenceRanker = evidence_ranker_values['EvidenceRanker']
+
+# Импорт feedback_widget
+def _fallback_show_feedback_form(*args, **kwargs):
+    st.warning("⚠️ Модуль обратной связи недоступен. Проверьте логи.")
+    pass
+
+FEEDBACK_WIDGET_AVAILABLE, feedback_widget_values = safe_import_module(
+    'utils.feedback_widget',
+    ['show_feedback_form'],
+    {'show_feedback_form': _fallback_show_feedback_form},
+    'feedback_widget'
+)
+show_feedback_form = feedback_widget_values['show_feedback_form']
+
+# Импорт claude_assistant
+AI_AVAILABLE, claude_assistant_values = safe_import_module(
+    'claude_assistant',
+    ['OpenRouterAssistant'],
+    {'OpenRouterAssistant': None},
+    'claude_assistant'
+)
+OpenRouterAssistant = claude_assistant_values['OpenRouterAssistant']
+
+# Импорт assemblyai_transcriber
+ASSEMBLYAI_AVAILABLE, assemblyai_values = safe_import_module(
+    'assemblyai_transcriber',
+    ['transcribe_audio_assemblyai'],
+    {'transcribe_audio_assemblyai': None},
+    'assemblyai_transcriber'
+)
+transcribe_audio_assemblyai = assemblyai_values['transcribe_audio_assemblyai']
 
 def transcribe_audio(audio_file):
     """Заглушка - используйте AssemblyAI"""
@@ -601,7 +667,6 @@ def show_home_page():
 
 # Функция show_ecg_analysis() вынесена в pages/ecg_page.py
 from pages.ecg_page import show_ecg_analysis
-
 def show_xray_analysis():
     if not AI_AVAILABLE:
         st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")

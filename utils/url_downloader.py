@@ -124,3 +124,4 @@ def download_from_url(url: str, max_size_mb: int = 200, show_progress: bool = Tr
     except Exception as e:
         raise ValueError(f"Неожиданная ошибка при загрузке файла: {str(e)}")
 
+
