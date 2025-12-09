@@ -6,6 +6,9 @@ import sqlite3
 import pandas as pd
 import numpy as np
 from PIL import Image
+# Увеличиваем лимит PIL для больших изображений из CSV (защита от decompression bomb)
+# Для медицинских данных мы доверяем источнику, поэтому увеличиваем лимит
+Image.MAX_IMAGE_PIXELS = 500000000  # ~500M пикселей (было ~179M по умолчанию)
 import requests
 import tempfile
 import os
@@ -23,6 +26,7 @@ import sys
 import gzip
 import json
 import re
+import logging
 
 # Безопасные импорты модулей
 try:
@@ -114,6 +118,17 @@ except ImportError as e:
         return True, ""
     def validate_file_size(*args, **kwargs):
         return True, ""
+
+try:
+    from utils.url_downloader import download_from_url, convert_google_drive_link
+    URL_DOWNLOADER_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Предупреждение: url_downloader недоступен: {e}", file=sys.stderr)
+    URL_DOWNLOADER_AVAILABLE = False
+    def download_from_url(*args, **kwargs):
+        return None, None
+    def convert_google_drive_link(*args, **kwargs):
+        return None
 
 try:
     from utils.cache_manager import get_image_hash, get_cache_key, get_cached_result, save_to_cache, clear_old_cache
@@ -252,6 +267,71 @@ def transcribe_audio(audio_file):
     """Заглушка - используйте AssemblyAI"""
     return "❌ Используйте AssemblyAI для расшифровки"
 
+# --- Безопасная инициализация компонентов ---
+def safe_init_components(assistant):
+    """Безопасная инициализация компонентов с обработкой ошибок"""
+    components = {
+        'consensus_engine': None,
+        'validator': None,
+        'scorecard': None,
+        'context_store': None,
+        'gap_detector': None,
+        'notifier': None,
+        'model_router': None,
+        'evidence_ranker': None
+    }
+    
+    # Прямые вызовы с обработкой ошибок - если модуль доступен, используем его
+    if CONSENSUS_ENGINE_AVAILABLE and ConsensusEngine:
+        try:
+            components['consensus_engine'] = ConsensusEngine(assistant)
+        except Exception as e:
+            print(f"⚠️ Ошибка инициализации ConsensusEngine: {e}", file=sys.stderr)
+    
+    if VALIDATION_PIPELINE_AVAILABLE and ValidationPipeline:
+        try:
+            components['validator'] = ValidationPipeline(assistant)
+        except Exception as e:
+            print(f"⚠️ Ошибка инициализации ValidationPipeline: {e}", file=sys.stderr)
+    
+    if SCORECARDS_AVAILABLE and MedicalScorecard:
+        try:
+            components['scorecard'] = MedicalScorecard()
+        except Exception as e:
+            print(f"⚠️ Ошибка инициализации MedicalScorecard: {e}", file=sys.stderr)
+    
+    if CONTEXT_STORE_AVAILABLE and ContextStore:
+        try:
+            components['context_store'] = ContextStore()
+        except Exception as e:
+            print(f"⚠️ Ошибка инициализации ContextStore: {e}", file=sys.stderr)
+    
+    if GAP_DETECTOR_AVAILABLE and DiagnosticGapDetector:
+        try:
+            components['gap_detector'] = DiagnosticGapDetector()
+        except Exception as e:
+            print(f"⚠️ Ошибка инициализации DiagnosticGapDetector: {e}", file=sys.stderr)
+    
+    if NOTIFICATION_SYSTEM_AVAILABLE and NotificationSystem:
+        try:
+            components['notifier'] = NotificationSystem()
+        except Exception as e:
+            print(f"⚠️ Ошибка инициализации NotificationSystem: {e}", file=sys.stderr)
+    
+    if MODEL_ROUTER_AVAILABLE and ModelRouter:
+        try:
+            components['model_router'] = ModelRouter()
+        except Exception as e:
+            print(f"⚠️ Ошибка инициализации ModelRouter: {e}", file=sys.stderr)
+    
+    if EVIDENCE_RANKER_AVAILABLE and EvidenceRanker:
+        try:
+            components['evidence_ranker'] = EvidenceRanker()
+        except Exception as e:
+            print(f"⚠️ Ошибка инициализации EvidenceRanker: {e}", file=sys.stderr)
+    
+    return components
+
 # --- Вспомогательная функция для анализа с streaming ---
 def perform_analysis_with_streaming(assistant, prompt, image_array, metadata, use_streaming, 
                                    analysis_type="точный", model_type="opus", title=""):
@@ -282,8 +362,35 @@ def perform_analysis_with_streaming(assistant, prompt, image_array, metadata, us
             else:
                 # Opus с streaming
                 text_generator = assistant.send_vision_request_streaming(prompt, image_array, metadata)
+                # st.write_stream отображает текст и возвращает весь накопленный текст
                 result = st.write_stream(text_generator)
-                return result
+                
+                # Логируем для отладки
+                result_str = str(result) if result else ""
+                print(f"📝 [STREAMING] Получен результат длиной {len(result_str)} символов", file=sys.stderr)
+                
+                # Показываем информацию о модели после завершения streaming
+                if hasattr(assistant, 'model') and assistant.model:
+                    # Используем метод для получения читаемого названия модели
+                    if hasattr(assistant, '_get_model_name'):
+                        model_display_name = assistant._get_model_name(assistant.model)
+                    else:
+                        # Fallback если метод недоступен
+                        model_display_name = assistant.model.replace("anthropic/claude-", "").replace("-4.5", " 4.5")
+                    
+                    # Определяем тип модели для цветового кодирования
+                    if "opus" in assistant.model.lower():
+                        st.caption(f"🤖 **Анализ выполнен моделью: {model_display_name}**")
+                    elif "sonnet" in assistant.model.lower():
+                        st.caption(f"🤖 **Анализ выполнен моделью: {model_display_name}** (fallback)")
+                    elif "haiku" in assistant.model.lower():
+                        st.caption(f"🤖 **Анализ выполнен моделью: {model_display_name}** (fallback)")
+                    else:
+                        st.caption(f"🤖 **Анализ выполнен моделью: {model_display_name}**")
+                
+                # Возвращаем результат - st.write_stream возвращает весь накопленный текст
+                # Если result None или пустой, возвращаем пустую строку
+                return result_str
         except Exception as e:
             st.error(f"❌ Ошибка streaming: {str(e)}")
             # Fallback на обычный режим
@@ -492,491 +599,8 @@ def show_home_page():
         st.markdown("**🧬 Генетика & фармакогеномика**")
         st.caption("Разбор VCF/PDF, заключение генетика и профессорский обзор.")
 
-def show_ecg_analysis():
-    if not AI_AVAILABLE:
-        st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
-        return
-
-    st.header("📈 Анализ ЭКГ")
-    
-    # Мобильная поддержка: выбор источника
-    source_type = st.radio(
-        "Выберите источник изображения:",
-        ["📁 Загрузить файл", "📷 Сделать фото"],
-        horizontal=True
-    )
-    
-    image_array = None
-    metadata = {}
-    
-    if source_type == "📷 Сделать фото":
-        # Использование камеры смартфона
-        camera_image = st.camera_input("Сфотографируйте ЭКГ", key="ecg_camera")
-        if camera_image:
-            try:
-                # Конвертация в numpy array
-                image = Image.open(camera_image)
-                image_array = np.array(image)
-                metadata = {'source': 'camera', 'format': 'mobile_photo'}
-            except Exception as e:
-                st.error(f"Ошибка обработки фото: {e}")
-                return
-    else:
-        # Загрузка файла с расширенной поддержкой форматов
-        uploaded_file = st.file_uploader(
-            "Загрузите ЭКГ", 
-            type=["jpg", "jpeg", "png", "pdf", "dcm", "dicom", "tiff", "tif", "heic", "heif", "webp", "zip"],
-            help="Поддерживаются: JPG, PNG, TIFF, HEIC, WEBP, DICOM, ZIP"
-        )
-        
-        if uploaded_file:
-            try:
-                # Сохранение во временный файл
-                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
-                    tmp.write(uploaded_file.getvalue())
-                    tmp_path = tmp.name
-                
-                # Загрузка через процессор форматов
-                if IMAGE_PROCESSOR_AVAILABLE and ImageFormatProcessor:
-                    processor = ImageFormatProcessor()
-                    image_array, file_metadata = processor.load_image(tmp_path, MOBILE_MAX_IMAGE_SIZE)
-                    metadata = {**metadata, **file_metadata, 'source': 'upload'}
-                else:
-                    # Fallback - простая загрузка через PIL
-                    image = Image.open(tmp_path)
-                    image_array = np.array(image)
-                    metadata = {**metadata, 'source': 'upload'}
-                
-                # Очистка
-                os.unlink(tmp_path)
-                if IMAGE_PROCESSOR_AVAILABLE and ImageFormatProcessor and 'processor' in locals():
-                    processor.cleanup_temp_files()
-                
-            except Exception as e:
-                st.error(f"Ошибка обработки файла: {e}")
-                return
-
-    if image_array is None:
-        st.info("Загрузите файл или сделайте фото для анализа.")
-        return
-
-    # Валидация изображения
-    if VALIDATORS_AVAILABLE and validate_image:
-        is_valid, error_msg = validate_image(image_array)
-        if not is_valid:
-            st.error(f"❌ Ошибка валидации изображения: {error_msg}")
-            return
-    else:
-        # Простая проверка без валидатора
-        if image_array is None or image_array.size == 0:
-            st.error("❌ Ошибка: изображение пустое или не загружено")
-            return
-
-    try:
-        # Оптимизация для мобильных устройств
-        if (IS_REPLIT or st.session_state.get('mobile_mode', False)) and IMAGE_PROCESSOR_AVAILABLE and optimize_image_for_ai:
-            image_array = optimize_image_for_ai(image_array)
-        
-        st.image(image_array, caption="ЭКГ", use_container_width=True, clamp=True)
-
-        # Базовый анализ
-        analysis = {
-            "heart_rate": 75,
-            "rhythm_assessment": "Синусовый",
-            "num_beats": 12,
-            "duration": 10,
-            "signal_quality": "Хорошее"
-        }
-        
-        st.subheader("📊 Результаты анализа")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("ЧСС", f"{analysis['heart_rate']} уд/мин")
-            st.metric("Ритм", analysis['rhythm_assessment'])
-        with col2:
-            st.metric("Длительность", f"{analysis['duration']:.1f} с")
-            st.metric("Комплексы", analysis['num_beats'])
-
-        assistant = OpenRouterAssistant()
-        
-        # Инициализация новых компонентов
-        consensus_engine = ConsensusEngine(assistant)
-        validator = ValidationPipeline(assistant)
-        scorecard = MedicalScorecard()
-        context_store = ContextStore()
-        
-        gap_detector = DiagnosticGapDetector()
-        notifier = NotificationSystem()
-        model_router = ModelRouter()
-        
-        evidence_ranker = EvidenceRanker()
-
-        # Выбор пациента для сохранения в контекст
-        st.subheader("👤 Связь с пациентом (опционально)")
-        init_db()
-        conn = sqlite3.connect('medical_data.db')
-        patients = pd.read_sql_query("SELECT id, name FROM patients", conn)
-        conn.close()
-        
-        selected_patient_id = None
-        if not patients.empty:
-            save_to_context = st.checkbox("💾 Сохранить результаты в контекст пациента", value=False)
-            if save_to_context:
-                selected_patient_name = st.selectbox("Выберите пациента:", patients['name'], key="ecg_patient_select")
-                selected_patient_id = patients[patients['name'] == selected_patient_name].iloc[0]['id']
-        else:
-            save_to_context = False
-            st.info("💡 Добавьте пациента в разделе 'База данных', чтобы сохранять результаты в контекст")
-
-        # Использование контекста пациента (если загружен)
-        patient_context = None
-        if 'patient_context' in st.session_state and 'selected_patient_id' in st.session_state:
-            patient_context = st.session_state['patient_context']
-            st.info(f"💡 Используется клинический контекст пациента")
-        
-        # Получение промпта специалиста (выносим за пределы кнопок, чтобы был доступен для всех)
-        from modules.medical_ai_analyzer import ImageType
-        if SPECIALIST_DETECTOR_AVAILABLE and get_specialist_prompt and get_specialist_info:
-            prompt = get_specialist_prompt(ImageType.ECG)
-            specialist_info = get_specialist_info(ImageType.ECG)
-        else:
-            # Fallback промпт для ЭКГ - детальная дешифровка
-            prompt = """Ты — ведущий кардиолог-электрофизиолог с 20+ летним опытом. Проведи ПОЛНУЮ дешифровку ЭКГ по международным стандартам (AHA/ACC/HRS, ESC).
-
-ОБЯЗАТЕЛЬНО проанализируй и опиши:
-
-1. **КАЧЕСТВО ЗАПИСИ:**
-   - Скорость записи (25 или 50 мм/с)
-   - Калибровка
-   - Артефакты (если есть)
-
-2. **РИТМ И ПРОВОДИМОСТЬ:**
-   - Основной ритм (синусовый/несинусовый/фибрилляция/трепетание)
-   - Регулярность
-   - AV-проводимость (норма/блокада 1-3 степени)
-   - Внутрижелудочковая проводимость (норма/блокада ножек)
-
-3. **ЧСС:** точное значение в уд/мин
-
-4. **ЭЛЕКТРИЧЕСКАЯ ОСЬ:** угол в градусах и направление
-
-5. **ИНТЕРВАЛЫ (в мс):**
-   - PR: значение, норма 120-200 мс
-   - QRS: ширина, норма <120 мс
-   - QT и QTc: значение, норма <450 мс (муж) / <470 мс (жен)
-   - RR: среднее значение
-
-6. **СЕГМЕНТЫ И ВОЛНЫ:**
-   - **ST:** для КАЖДОГО отведения укажи элевацию/депрессию в мм, форму, локализацию
-   - **T:** полярность, амплитуда, морфология в каждом отведении
-   - **P:** наличие, морфология, амплитуда (<2.5 мм), длительность (<120 мс)
-   - **Q:** патологические Q (глубина >25% R, ширина >40 мс) с указанием отведений
-
-7. **АНАЛИЗ ПО ОТВЕДЕНИЯМ:**
-   - **I, II, III, aVR, aVL, aVF:** амплитуды, патологии
-   - **V1-V6:** переходная зона, прогрессия R, патологии в каждом
-
-8. **ПАТОЛОГИИ:** все отклонения с указанием конкретных отведений
-
-9. **КЛИНИЧЕСКАЯ ИНТЕРПРЕТАЦИЯ:**
-   - Основные находки
-   - Дифференциальный диагноз
-   - Оценка остроты
-   - Рекомендации (неотложные меры, обследования, консультации)
-
-10. **КОДЫ МКБ-10** для выявленных патологий
-
-ВАЖНО: измеряй ВСЕ параметры ТОЧНО, анализируй ВСЕ 12 отведений, указывай конкретные отведения для каждого отклонения, не используй общие фразы."""
-            specialist_info = {'role': 'Кардиолог', 'specialization': 'ЭКГ'}
-        
-        # Добавляем контекст в промпт если есть
-        if patient_context:
-            prompt += f"\n\nКЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n{patient_context}\n\nУчтите этот контекст при анализе."
-        
-        # Выбор режима анализа (показывается всегда, до нажатия кнопки)
-        st.markdown("---")
-        
-        # Блок метрик моделей
-        st.markdown("### 📊 Точность моделей для ЭКГ")
-        metrics = get_model_metrics_display('ECG')
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Точность Gemini Flash", f"{metrics['gemini']['accuracy']}%")
-            st.metric("Точность Opus 4.5", f"{metrics['opus']['accuracy']}%")
-        with col2:
-            speed_diff = metrics['opus']['speed_multiplier']
-            st.info(f"⚡ Opus в {speed_diff} раз медленнее")
-        with col3:
-            price_diff = metrics['opus']['price_multiplier']
-            st.info(f"💰 Opus в {price_diff} раз дороже")
-        
-        # Форма обратной связи - ДО анализа, всегда видна и активна!
-        st.markdown("---")
-        st.markdown("### 💬 Обратная связь")
-        
-        # Показываем форму ВСЕГДА, даже без результата (она активна всегда)
-        last_result = st.session_state.get('ecg_analysis_result', '')
-        
-        # Используем ФИКСИРОВАННЫЙ ID для формы, чтобы ключи виджетов не менялись
-        # Это позволяет форме работать стабильно и не терять данные при рендере
-        analysis_id_base = "ECG_feedback_form"
-        
-        # Показываем форму всегда (даже с пустым результатом до анализа)
-        # Формируем input_case из метаданных ЭКГ
-        input_case_data = st.session_state.get('ecg_input_case', '')
-        if not input_case_data:
-            # Пытаемся сформировать из метаданных
-            analysis_meta = st.session_state.get('ecg_analysis', {})
-            if analysis_meta:
-                input_case_data = f"ЭКГ: ЧСС={analysis_meta.get('heart_rate', 'N/A')}, Ритм={analysis_meta.get('rhythm_assessment', 'N/A')}, Качество={analysis_meta.get('signal_quality', 'N/A')}"
-        
-        # Всегда вызываем форму, даже если модуль недоступен (покажет заглушку)
-        try:
-            show_feedback_form(
-                analysis_type="ECG",
-                analysis_result=str(last_result) if last_result else "",
-                analysis_id=analysis_id_base,
-                input_case=input_case_data
-            )
-        except Exception as e:
-            st.error(f"Ошибка формы обратной связи: {e}")
-            st.info("💡 Форма обратной связи временно недоступна")
-        
-        if not last_result:
-            st.info("💡 После проведения анализа ЭКГ форма автоматически обновится с новым результатом.")
-        
-        st.markdown("---")
-        st.markdown("### ⚙️ Режимы анализа")
-        
-        # Опция streaming
-        use_streaming = st.checkbox("📺 Постепенное появление текста (streaming)", value=True, key="ecg_streaming")
-        
-        # Кнопки быстрого и точного анализа
-        col_fast, col_precise = st.columns(2)
-        with col_fast:
-            if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, type="primary"):
-                result = perform_analysis_with_streaming(
-                    assistant, prompt, image_array, str(analysis), use_streaming,
-                    analysis_type="быстрый", model_type="gemini", 
-                    title="⚡ Быстрый анализ (Gemini Flash):"
-                )
-                if result:
-                    st.session_state.ecg_analysis_result = result
-                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    # Форма под метриками обновится автоматически при следующем рендере
-                    # Не вызываем st.rerun() здесь, так как результат уже выведен через perform_analysis_with_streaming
-        
-        with col_precise:
-            opus_accuracy = metrics['opus']['accuracy']
-            gemini_accuracy = metrics['gemini']['accuracy']
-            accuracy_diff = opus_accuracy - gemini_accuracy
-            if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary"):
-                result = perform_analysis_with_streaming(
-                    assistant, prompt, image_array, str(analysis), use_streaming,
-                    analysis_type="точный", model_type="opus",
-                    title=f"🎯 Точный анализ (Opus 4.5):"
-                )
-                if result:
-                    st.session_state.ecg_analysis_result = result
-                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    # Форма под метриками обновится автоматически при следующем рендере
-                    # Не вызываем st.rerun() здесь, так как результат уже выведен через perform_analysis_with_streaming
-        
-        st.markdown("---")
-        st.markdown("### ⚙️ Расширенные режимы анализа")
-        
-        analysis_mode = st.radio(
-            "**Режим анализа:**",
-            ["⚡ Быстрый (одна модель)", "🎯 Консенсус (несколько моделей)", "✅ С валидацией"],
-            horizontal=True,
-            key="ecg_analysis_mode",
-            help="Выберите режим анализа перед запуском"
-        )
-        
-        # Показываем информацию о выбранном режиме
-        if analysis_mode == "🎯 Консенсус (несколько моделей)":
-            st.info("💡 **Консенсус:** Несколько моделей проанализируют ЭКГ, затем будет сформировано общее заключение")
-        elif analysis_mode == "✅ С валидацией":
-            st.info("💡 **С валидацией:** Анализ будет проверен на логичность и полноту")
-        else:
-            st.info("💡 **Быстрый анализ:** Одна модель быстро проанализирует ЭКГ")
-        
-        st.markdown("---")
-        
-        if st.button("🔍 ИИ-анализ ЭКГ (с контекстом)", use_container_width=True):
-            # Промпт уже определен выше, используем его
-            
-            if analysis_mode == "⚡ Быстрый (одна модель)":
-                result = None
-                with st.spinner("ИИ анализирует ЭКГ..."):
-                    try:
-                        # Opus 4.5 используется по умолчанию для клинического анализа ЭКГ
-                        result = assistant.send_vision_request(prompt, image_array, str(analysis))
-                    except Exception as e:
-                        st.error(f"❌ Ошибка анализа: {str(e)}")
-                        st.info("💡 Попробуйте еще раз или выберите другой режим анализа")
-                
-                # Отображаем результат ВНЕ спиннера
-                if result:
-                    # Сохраняем результат СРАЗУ для формы обратной связи
-                    st.session_state.ecg_analysis_result = result
-                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    
-                    st.markdown(f"### 🧠 Ответ ИИ ({specialist_info['role']}):")
-                    st.write(result)
-                    
-                    # Сохраняем результат в session_state чтобы форма под метриками обновилась
-                    st.session_state.ecg_analysis_result = result
-                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    # Обновляем страницу чтобы форма обновилась
-                    st.rerun()
-            
-            elif analysis_mode == "🎯 Консенсус (несколько моделей)":
-                consensus_result = None
-                with st.spinner("ИИ анализирует ЭКГ..."):
-                    # Используем стандартный набор моделей консенсуса из ConsensusEngine
-                    st.info("🔄 Используется консенсус моделей: Sonnet + Llama Vision + Gemini (по настройкам движка консенсуса)")
-                    
-                    consensus_result = consensus_engine.analyze_with_consensus(
-                        prompt, image_array, str(analysis)
-                    )
-                
-                # Отображаем результат ВНЕ спиннера
-                if consensus_result:
-                    st.markdown("### 🎯 Консенсусное заключение:")
-                    if consensus_result['consensus']['consensus_available']:
-                        result = consensus_result['consensus']['consensus_response']
-                        st.write(result)
-                        st.metric("Уровень согласия", f"{consensus_result['consensus']['agreement_level']:.1%}")
-                        
-                        if consensus_result['consensus']['discrepancies']:
-                            st.warning("⚠️ Обнаружены расхождения между моделями:")
-                            for disc in consensus_result['consensus']['discrepancies']:
-                                st.warning(f"• {disc}")
-                    else:
-                        result = consensus_result['consensus'].get('single_opinion', 'Ошибка получения консенсуса')
-                        st.write(result)
-                    
-                    # Сохраняем результат СРАЗУ для формы обратной связи
-                    st.session_state.ecg_analysis_result = result
-                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    # Форма под метриками обновится автоматически при следующем рендере
-                    # Обновляем страницу только после вывода результата
-                    st.rerun()
-                
-            elif analysis_mode == "✅ С валидацией":
-                # Opus 4.5 используется по умолчанию для клинического анализа ЭКГ
-                result = perform_analysis_with_streaming(
-                    assistant, prompt, image_array, str(analysis), use_streaming=True,
-                    analysis_type="точный", model_type="opus",
-                    title=f"### 🧠 Ответ ИИ ({specialist_info['role']}):"
-                )
-                
-                # Обработка результата ВНЕ спиннера
-                if result:
-                    # Отображение результатов - СРАЗУ!
-                    st.markdown(f"### 🧠 Ответ ИИ ({specialist_info['role']}):")
-                    st.write(result)
-                    
-                    # Сохраняем результат для пересылки консультанту
-                    st.session_state.ecg_analysis_result = result
-                    timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    st.session_state.ecg_analysis_timestamp = timestamp_str
-                    
-                    # Обновляем страницу чтобы форма под метриками обновилась
-                    st.rerun()
-                    
-                    # Проверка на критические находки
-                    critical_findings = notifier.check_critical_findings(result)
-                    if critical_findings:
-                        notifier.display_notifications(critical_findings)
-                    
-                    # Валидация
-                    validation_result = validator.validate_response(result, {'image_type': 'ECG'})
-                    
-                    # Оценка
-                    scorecard_result = scorecard.evaluate_response(result, ImageType.ECG)
-                    
-                    # Выявление пробелов
-                    gaps = gap_detector.detect_gaps(result, ImageType.ECG)
-                    gap_report = gap_detector.generate_gap_report(gaps)
-                    
-                    # Оценка доказательности
-                    evidence_ranking = evidence_ranker.rank_evidence(result)
-                    evidence_report = evidence_ranker.generate_evidence_report(evidence_ranking)
-                    
-                    # Сохранение результатов ЭКГ в контекст пациента
-                    if 'selected_patient_id' in locals() and selected_patient_id:
-                        try:
-                            context_store.add_context(
-                                patient_id=selected_patient_id,
-                                context_type='imaging',
-                                context_data={
-                                    'type': 'ECG',
-                                    'analysis': result,
-                                    'specialist': specialist_info['role'],
-                                    'mode': analysis_mode,
-                                    'validation': validation_result,
-                                    'scorecard': scorecard_result
-                                },
-                                source='ai_analysis'
-                            )
-                            st.success("✅ Результаты ЭКГ сохранены в клинический контекст пациента!")
-                        except Exception as e:
-                            st.warning(f"⚠️ Не удалось сохранить в контекст: {e}")
-                    
-                    # Оценка качества
-                    st.markdown("### 📊 Оценка качества:")
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("Общая оценка", scorecard_result['grade'])
-                    with col2:
-                        st.metric("Полнота", f"{scorecard_result['completeness']:.1%}")
-                    with col3:
-                        st.metric("Валидация", "✅ Пройдена" if validation_result['is_valid'] else "❌ Не пройдена")
-                    with col4:
-                        st.metric("Заполненность", f"{gaps['completeness_percentage']:.1f}%")
-                    
-                    # Отчет о пробелах
-                    if gaps['completeness_percentage'] < 80:
-                        with st.expander("📋 Отчет о пробелах в ответе"):
-                            st.text(gap_report)
-                    
-                    # Рекомендации
-                    if scorecard_result['recommendations']:
-                        st.info("💡 Рекомендации по улучшению:")
-                        for rec in scorecard_result['recommendations']:
-                            st.write(f"• {rec}")
-                    
-                    # Предупреждения валидации
-                    if validation_result['warnings']:
-                        st.warning("⚠️ Предупреждения валидации:")
-                        for warning in validation_result['warnings']:
-                            st.warning(f"• {warning}")
-                    
-                    # Оценка доказательности
-                    with st.expander("📚 Оценка доказательности"):
-                        st.text(evidence_report)
-
-        # Возможность скачать стандартный протокол описания ЭКГ
-        if 'ecg_analysis_result' in st.session_state and st.session_state.ecg_analysis_result:
-            st.markdown("---")
-            st.markdown("### 💾 Экспорт протокола ЭКГ")
-            timestamp = st.session_state.get('ecg_analysis_timestamp', '')
-            header = "Стандартный протокол описания ЭКГ"
-            if timestamp:
-                header += f"\nВремя анализа: {timestamp}"
-            report_text = f"{header}\n\n{st.session_state.ecg_analysis_result}"
-            st.download_button(
-                label="📥 Скачать протокол ЭКГ (.txt)",
-                data=report_text,
-                file_name=f"ECG_report_{timestamp.replace(' ', '_').replace(':', '-') if timestamp else 'latest'}.txt",
-                mime="text/plain"
-            )
-
-    except Exception as e:
-        handle_error(e, "show_ecg_analysis", show_to_user=True)
-        return
+# Функция show_ecg_analysis() вынесена в pages/ecg_page.py
+from pages.ecg_page import show_ecg_analysis
 
 def show_xray_analysis():
     if not AI_AVAILABLE:
@@ -1014,7 +638,18 @@ def show_xray_analysis():
         
         if uploaded_file:
             try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                # Валидация размера файла (безопасность и производительность)
+                if VALIDATORS_AVAILABLE and validate_file_size:
+                    is_valid, error_msg = validate_file_size(uploaded_file.size)
+                    if not is_valid:
+                        st.error(f"❌ {error_msg}")
+                        return
+                
+                # Безопасное извлечение расширения файла (защита от path traversal)
+                file_name = os.path.basename(uploaded_file.name) if uploaded_file.name else "upload"
+                file_ext = file_name.split('.')[-1].lower() if '.' in file_name else ""
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
                     tmp.write(uploaded_file.getvalue())
                     tmp_path = tmp.name
                 
@@ -1260,7 +895,18 @@ def show_mri_analysis():
         
         if uploaded_file:
             try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                # Валидация размера файла (безопасность и производительность)
+                if VALIDATORS_AVAILABLE and validate_file_size:
+                    is_valid, error_msg = validate_file_size(uploaded_file.size)
+                    if not is_valid:
+                        st.error(f"❌ {error_msg}")
+                        return
+                
+                # Безопасное извлечение расширения файла (защита от path traversal)
+                file_name = os.path.basename(uploaded_file.name) if uploaded_file.name else "upload"
+                file_ext = file_name.split('.')[-1].lower() if '.' in file_name else ""
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
                     tmp.write(uploaded_file.getvalue())
                     tmp_path = tmp.name
                 
@@ -1460,8 +1106,11 @@ def show_mri_analysis():
                             analysis_id=f"MRI_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
                             input_case=mri_input
                         )
-                    except:
-                        pass
+                    except Exception as cleanup_error:
+                        # Логируем ошибку очистки, но не прерываем выполнение
+                        if ERROR_HANDLER_AVAILABLE:
+                            logger = logging.getLogger(__name__)
+                            logger.warning(f"Ошибка при очистке: {cleanup_error}")
 
     except Exception as e:
         handle_error(e, "show_mri_analysis", show_to_user=True)
@@ -1600,6 +1249,26 @@ def show_dermatoscopy_analysis():
 Дайте заключение о риске меланомы и рекомендации."""
             specialist_info = {'role': 'Дерматоонколог'}
         
+        # Отображение сохраненных результатов анализа (если есть) - ПЕРЕД кнопками
+        gemini_result = st.session_state.get('derma_gemini_result', '')
+        opus_result = st.session_state.get('derma_analysis_result', '')
+        
+        if gemini_result or opus_result:
+            st.markdown("---")
+            st.markdown("### 📋 Результаты анализа")
+            
+            if gemini_result:
+                gemini_timestamp = st.session_state.get('derma_gemini_timestamp', '')
+                st.markdown(f"#### ⚡ Быстрый анализ (Gemini Flash){f' - {gemini_timestamp}' if gemini_timestamp else ''}")
+                st.write(gemini_result)
+                st.markdown("---")
+            
+            if opus_result:
+                opus_timestamp = st.session_state.get('derma_analysis_timestamp', '')
+                st.markdown(f"#### 🎯 Точный анализ (Opus 4.5){f' - {opus_timestamp}' if opus_timestamp else ''}")
+                st.write(opus_result)
+                st.markdown("---")
+        
         # Кнопки - для дерматографии Opus по умолчанию (первая кнопка)
         col_precise, col_fast = st.columns(2)
         with col_precise:
@@ -1608,15 +1277,18 @@ def show_dermatoscopy_analysis():
             accuracy_diff = opus_accuracy - gemini_accuracy
             if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее [Рекомендуется]", use_container_width=True, type="primary", key="derm_precise"):
                 result = perform_analysis_with_streaming(
-                    assistant, prompt, image_array, str(metadata), use_streaming,
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
                     analysis_type="точный", model_type="opus",
                     title="🎯 Точный анализ (Opus 4.5):"
                 )
-                if result:
-                    st.session_state.derma_analysis_result = result
-                    st.session_state.derma_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    # Обновляем страницу чтобы форма под метриками обновилась
-                    st.rerun()
+                # Сохраняем результат ВСЕГДА
+                result_str = str(result) if result else ""
+                st.session_state.derma_analysis_result = result_str
+                st.session_state.derma_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                # Логируем для отладки
+                print(f"💾 [DERMA] Сохранен результат длиной {len(result_str)} символов", file=sys.stderr)
+                # Обновляем страницу чтобы результат отобразился в блоке "Результаты анализа"
+                st.rerun()
         
         with col_fast:
             if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, key="derm_fast"):
@@ -1626,8 +1298,8 @@ def show_dermatoscopy_analysis():
                     title="⚡ Быстрый анализ (Gemini Flash):"
                 )
                 if result:
-                    st.session_state.derma_analysis_result = result
-                    st.session_state.derma_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    st.session_state.derma_gemini_result = result
+                    st.session_state.derma_gemini_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                     # Обновляем страницу чтобы форма под метриками обновилась
                     st.rerun()
         
@@ -1635,15 +1307,18 @@ def show_dermatoscopy_analysis():
         
         if st.button("🔬 ИИ-анализ дерматоскопии", use_container_width=True):
             result = perform_analysis_with_streaming(
-                assistant, prompt, image_array, str(metadata), use_streaming,
+                assistant, prompt, image_array, str(metadata), use_streaming=True,
                 analysis_type="точный", model_type="opus",
                 title=f"### 🧠 Заключение ({specialist_info['role']}):"
             )
-            if result:
-                st.session_state.derma_analysis_result = result
-                st.session_state.derma_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                # Обновляем страницу чтобы форма под метриками обновилась
-                st.rerun()
+            # Сохраняем результат ВСЕГДА
+            result_str = str(result) if result else ""
+            st.session_state.derma_analysis_result = result_str
+            st.session_state.derma_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            # Логируем для отладки
+            print(f"💾 [DERMA] Сохранен результат длиной {len(result_str)} символов", file=sys.stderr)
+            # Обновляем страницу чтобы результат отобразился в блоке "Результаты анализа"
+            st.rerun()
 
     except Exception as e:
         st.error(f"Ошибка обработки дерматоскопии: {e}")
@@ -1720,15 +1395,17 @@ def show_ct_analysis():
         
         st.image(image_array, caption="КТ-срез", use_container_width=True, clamp=True)
 
-        # Инициализация компонентов
+        # Инициализация компонентов (безопасная)
         assistant = OpenRouterAssistant()
-        consensus_engine = ConsensusEngine(assistant)
-        validator = ValidationPipeline(assistant)
-        scorecard = MedicalScorecard()
-        gap_detector = DiagnosticGapDetector()
-        notifier = NotificationSystem()
-        model_router = ModelRouter()
-        evidence_ranker = EvidenceRanker()
+        components = safe_init_components(assistant)
+        consensus_engine = components['consensus_engine']
+        validator = components['validator']
+        scorecard = components['scorecard']
+        context_store = components['context_store']
+        gap_detector = components['gap_detector']
+        notifier = components['notifier']
+        model_router = components['model_router']
+        evidence_ranker = components['evidence_ranker']
         
         from modules.medical_ai_analyzer import ImageType
         
@@ -1849,95 +1526,147 @@ def show_ct_analysis():
                     st.rerun()
                     
             elif analysis_mode == "🎯 Консенсус (несколько моделей)":
-                    consensus_result = consensus_engine.analyze_with_consensus(prompt, image_array, str(metadata))
-                    st.markdown("### 🎯 Консенсус-анализ:")
-                    
-                    # Правильная структура: consensus_result['consensus']['consensus_response']
-                    if consensus_result['consensus']['consensus_available']:
-                        st.write(consensus_result['consensus']['consensus_response'])
-                        st.metric("Уровень согласия", f"{consensus_result['consensus']['agreement_level']:.1%}")
-                        
-                        if consensus_result['consensus'].get('discrepancies'):
-                            st.warning("⚠️ Обнаружены расхождения между моделями:")
-                            for disc in consensus_result['consensus']['discrepancies']:
-                                st.warning(f"• {disc}")
+                    if consensus_engine:
+                        consensus_result = consensus_engine.analyze_with_consensus(prompt, image_array, str(metadata))
                     else:
-                        st.write(consensus_result['consensus'].get('single_opinion', 'Ошибка получения консенсуса'))
+                        st.warning("⚠️ Модуль консенсуса недоступен. Используется стандартный анализ.")
+                        consensus_result = None
                     
-                    with st.expander("📊 Детали мнений моделей"):
-                        for i, opinion in enumerate(consensus_result['individual_opinions'], 1):
-                            if opinion['success']:
-                                st.markdown(f"**Модель {i} ({opinion['model']}):**")
-                                response_text = opinion['response'] if isinstance(opinion['response'], str) else str(opinion['response'])
-                                st.write(response_text[:500] + "..." if len(response_text) > 500 else response_text)
-                            else:
-                                st.error(f"**Модель {i} ({opinion['model']}):** Ошибка: {opinion.get('error', 'Неизвестная ошибка')}")
+                    if consensus_result:
+                        st.markdown("### 🎯 Консенсус-анализ:")
+                        
+                        # Правильная структура: consensus_result['consensus']['consensus_response']
+                        if consensus_result.get('consensus', {}).get('consensus_available'):
+                            st.write(consensus_result['consensus']['consensus_response'])
+                            st.metric("Уровень согласия", f"{consensus_result['consensus']['agreement_level']:.1%}")
+                            
+                            if consensus_result['consensus'].get('discrepancies'):
+                                st.warning("⚠️ Обнаружены расхождения между моделями:")
+                                for disc in consensus_result['consensus']['discrepancies']:
+                                    st.warning(f"• {disc}")
+                        else:
+                            st.write(consensus_result.get('consensus', {}).get('single_opinion', 'Ошибка получения консенсуса'))
+                        
+                        if consensus_result.get('individual_opinions'):
+                            with st.expander("📊 Детали мнений моделей"):
+                                for i, opinion in enumerate(consensus_result['individual_opinions'], 1):
+                                    if opinion['success']:
+                                        st.markdown(f"**Модель {i} ({opinion['model']}):**")
+                                        response_text = opinion['response'] if isinstance(opinion['response'], str) else str(opinion['response'])
+                                        st.write(response_text[:500] + "..." if len(response_text) > 500 else response_text)
+                                    else:
+                                        st.error(f"**Модель {i} ({opinion['model']}):** Ошибка: {opinion.get('error', 'Неизвестная ошибка')}")
                     
             elif analysis_mode == "✅ С валидацией":
-                # Используем Opus с streaming
+                # Сначала Flash, потом Opus - оба результата остаются
+                print("🔄 Запуск Gemini Flash для первичного анализа...", file=sys.stderr)
+                flash_result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
+                    analysis_type="быстрый", model_type="gemini",
+                    title=f"### ⚡ Gemini Flash ({specialist_info['role']}):"
+                )
+                
+                if flash_result:
+                    st.session_state.ct_flash_result = flash_result
+                    st.session_state.ct_flash_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                
+                print("🔄 Запуск Opus 4.5 для детального анализа...", file=sys.stderr)
                 result = perform_analysis_with_streaming(
                     assistant, prompt, image_array, str(metadata), use_streaming=True,
                     analysis_type="точный", model_type="opus",
-                    title=f"### 🧠 Ответ ИИ ({specialist_info['role']}):"
+                    title=f"### 🧠 Opus 4.5 ({specialist_info['role']}):"
                 )
                 
                 if not result:
-                    st.error("❌ Не удалось получить результат анализа")
+                    st.error("❌ Не удалось получить результат анализа от Opus")
+                    if flash_result:
+                        st.info("ℹ️ Результат Flash сохранен выше")
                     return
                 
                 # Валидация
-                validation = validator.validate_response(result)
+                validation = None
+                if validator:
+                    try:
+                        validation = validator.validate_response(result)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка валидации: {e}", file=sys.stderr)
                 
                 # Оценка качества
-                evaluation = scorecard.evaluate_response(result, ImageType.CT)
+                evaluation = None
+                if scorecard:
+                    try:
+                        evaluation = scorecard.evaluate_response(result, ImageType.CT)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка оценки: {e}", file=sys.stderr)
                 
                 # Детекция пробелов
-                gaps = gap_detector.detect_gaps(result, ImageType.CT)
+                gaps = None
+                if gap_detector:
+                    try:
+                        gaps = gap_detector.detect_gaps(result, ImageType.CT)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка выявления пробелов: {e}", file=sys.stderr)
                 
                 # Критические находки
-                critical_findings = notifier.check_critical_findings(result)
+                critical_findings = None
+                if notifier:
+                    try:
+                        critical_findings = notifier.check_critical_findings(result)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка проверки критических находок: {e}", file=sys.stderr)
                 
                 # Оценка доказательности
-                evidence = evidence_ranker.rank_evidence(result)
+                evidence = None
+                if evidence_ranker:
+                    try:
+                        evidence = evidence_ranker.rank_evidence(result)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка оценки доказательности: {e}", file=sys.stderr)
                 
-                # Сохраняем результат
+                # Сохраняем результат (без rerun, чтобы оба результата остались)
                 if result:
                     st.session_state.ct_analysis_result = result
                     st.session_state.ct_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    st.rerun()
+                if flash_result:
+                    st.session_state.ct_flash_result = flash_result
+                    st.session_state.ct_flash_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                 
                 # Уведомления о критических находках
+                if notifier and critical_findings:
                     notifier.display_notifications(critical_findings)
-                    
-                    # Валидация
+                
+                # Валидация
+                if validator and validation:
                     with st.expander("✅ Результаты валидации"):
-                        if validation['is_valid']:
+                        if validation.get('is_valid'):
                             st.success("✅ Валидация пройдена")
                         else:
                             st.error("❌ Обнаружены проблемы")
-                        st.write(f"Полнота: {validation['completeness_score']:.1%}")
-                        if validation['warnings']:
+                        st.write(f"Полнота: {validation.get('completeness_score', 0):.1%}")
+                        if validation.get('warnings'):
                             for warning in validation['warnings']:
                                 st.warning(warning)
-                        if validation['errors']:
+                        if validation.get('errors'):
                             for error in validation['errors']:
                                 st.error(error)
-                    
-                    # Оценка качества
+                
+                # Оценка качества
+                if scorecard and evaluation:
                     with st.expander("📊 Оценка качества"):
-                        st.write(f"**Оценка:** {evaluation['grade']}")
-                        st.write(f"**Балл:** {evaluation['score']:.1%}")
-                        if evaluation['recommendations']:
+                        st.write(f"**Оценка:** {evaluation.get('grade', 'N/A')}")
+                        st.write(f"**Балл:** {evaluation.get('score', 0):.1%}")
+                        if evaluation.get('recommendations'):
                             st.write("**Рекомендации:**")
                             for rec in evaluation['recommendations']:
                                 st.write(f"• {rec}")
-                    
-                    # Пробелы
-                    if gaps['completeness_percentage'] < 100:
-                        with st.expander("⚠️ Обнаруженные пробелы"):
-                            st.write(gap_detector.generate_gap_report(gaps))
-                    
-                    # Доказательность
+                
+                # Пробелы
+                if gap_detector and gaps and gaps.get('completeness_percentage', 100) < 100:
+                    with st.expander("⚠️ Обнаруженные пробелы"):
+                        st.write(gap_detector.generate_gap_report(gaps))
+                
+                # Доказательность
+                if evidence_ranker and evidence:
                     with st.expander("📚 Оценка доказательности"):
                         st.write(evidence_ranker.generate_evidence_report(evidence))
 
@@ -2017,15 +1746,17 @@ def show_ultrasound_analysis():
         
         st.image(image_array, caption="УЗИ-снимок", use_container_width=True, clamp=True)
 
-        # Инициализация компонентов
+        # Инициализация компонентов (безопасная)
         assistant = OpenRouterAssistant()
-        consensus_engine = ConsensusEngine(assistant)
-        validator = ValidationPipeline(assistant)
-        scorecard = MedicalScorecard()
-        gap_detector = DiagnosticGapDetector()
-        notifier = NotificationSystem()
-        model_router = ModelRouter()
-        evidence_ranker = EvidenceRanker()
+        components = safe_init_components(assistant)
+        consensus_engine = components['consensus_engine']
+        validator = components['validator']
+        scorecard = components['scorecard']
+        context_store = components['context_store']
+        gap_detector = components['gap_detector']
+        notifier = components['notifier']
+        model_router = components['model_router']
+        evidence_ranker = components['evidence_ranker']
         
         from modules.medical_ai_analyzer import ImageType
         
@@ -2147,60 +1878,111 @@ def show_ultrasound_analysis():
                         st.rerun()
                     
                 elif analysis_mode == "🎯 Консенсус (несколько моделей)":
-                    consensus_result = consensus_engine.analyze_with_consensus(prompt, image_array, str(metadata))
-                    st.markdown("### 🎯 Консенсус-анализ:")
-                    
-                    # Правильная структура: consensus_result['consensus']['consensus_response']
-                    if consensus_result['consensus']['consensus_available']:
-                        st.write(consensus_result['consensus']['consensus_response'])
-                        st.metric("Уровень согласия", f"{consensus_result['consensus']['agreement_level']:.1%}")
+                    try:
+                        if consensus_engine:
+                            consensus_result = consensus_engine.analyze_with_consensus(prompt, image_array, str(metadata))
+                        else:
+                            st.warning("⚠️ Модуль консенсуса недоступен. Используется стандартный анализ.")
+                            consensus_result = None
+                    except Exception as e:
+                        st.error(f"❌ Ошибка консенсуса: {e}")
+                        consensus_result = None
+                    if consensus_result:
+                        st.markdown("### 🎯 Консенсус-анализ:")
                         
-                        if consensus_result['consensus'].get('discrepancies'):
-                            st.warning("⚠️ Обнаружены расхождения между моделями:")
-                            for disc in consensus_result['consensus']['discrepancies']:
-                                st.warning(f"• {disc}")
-                    else:
-                        st.write(consensus_result['consensus'].get('single_opinion', 'Ошибка получения консенсуса'))
-                    
-                    with st.expander("📊 Детали мнений моделей"):
-                        for i, opinion in enumerate(consensus_result['individual_opinions'], 1):
-                            if opinion['success']:
-                                st.markdown(f"**Модель {i} ({opinion['model']}):**")
-                                response_text = opinion['response'] if isinstance(opinion['response'], str) else str(opinion['response'])
-                                st.write(response_text[:500] + "..." if len(response_text) > 500 else response_text)
-                            else:
-                                st.error(f"**Модель {i} ({opinion['model']}):** Ошибка: {opinion.get('error', 'Неизвестная ошибка')}")
+                        # Правильная структура: consensus_result['consensus']['consensus_response']
+                        if consensus_result.get('consensus', {}).get('consensus_available'):
+                            st.write(consensus_result['consensus']['consensus_response'])
+                            st.metric("Уровень согласия", f"{consensus_result['consensus']['agreement_level']:.1%}")
+                            
+                            if consensus_result['consensus'].get('discrepancies'):
+                                st.warning("⚠️ Обнаружены расхождения между моделями:")
+                                for disc in consensus_result['consensus']['discrepancies']:
+                                    st.warning(f"• {disc}")
+                        else:
+                            st.write(consensus_result.get('consensus', {}).get('single_opinion', 'Ошибка получения консенсуса'))
+                        
+                        if consensus_result.get('individual_opinions'):
+                            with st.expander("📊 Детали мнений моделей"):
+                                for i, opinion in enumerate(consensus_result['individual_opinions'], 1):
+                                    if opinion['success']:
+                                        st.markdown(f"**Модель {i} ({opinion['model']}):**")
+                                        response_text = opinion['response'] if isinstance(opinion['response'], str) else str(opinion['response'])
+                                        st.write(response_text[:500] + "..." if len(response_text) > 500 else response_text)
+                                    else:
+                                        st.error(f"**Модель {i} ({opinion['model']}):** Ошибка: {opinion.get('error', 'Неизвестная ошибка')}")
                     
                 elif analysis_mode == "✅ С валидацией":
-                    # Используем Opus с streaming
+                    # Сначала Flash, потом Opus - оба результата остаются
+                    print("🔄 Запуск Gemini Flash для первичного анализа УЗИ...", file=sys.stderr)
+                    flash_result = perform_analysis_with_streaming(
+                        assistant, prompt, image_array, str(metadata), use_streaming=True,
+                        analysis_type="быстрый", model_type="gemini",
+                        title=f"### ⚡ Gemini Flash ({specialist_info['role']}):"
+                    )
+                    
+                    if flash_result:
+                        st.session_state.ultrasound_flash_result = flash_result
+                        st.session_state.ultrasound_flash_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    
+                    print("🔄 Запуск Opus 4.5 для детального анализа УЗИ...", file=sys.stderr)
                     result = perform_analysis_with_streaming(
                         assistant, prompt, image_array, str(metadata), use_streaming=True,
                         analysis_type="точный", model_type="opus",
-                        title=f"### 🧠 Ответ ИИ ({specialist_info['role']}):"
+                        title=f"### 🧠 Opus 4.5 ({specialist_info['role']}):"
                     )
                     
                     if not result:
-                        st.error("❌ Не удалось получить результат анализа")
+                        st.error("❌ Не удалось получить результат анализа от Opus")
+                        if flash_result:
+                            st.info("ℹ️ Результат Flash сохранен выше")
                         return
                     
                     # Валидация
-                    validation = validator.validate_response(result)
+                    validation = None
+                    if validator:
+                        try:
+                            validation = validator.validate_response(result)
+                        except Exception as e:
+                            print(f"⚠️ Ошибка валидации: {e}", file=sys.stderr)
                     
                     # Оценка качества
-                    evaluation = scorecard.evaluate_response(result, ImageType.ULTRASOUND)
+                    evaluation = None
+                    if scorecard:
+                        try:
+                            evaluation = scorecard.evaluate_response(result, ImageType.ULTRASOUND)
+                        except Exception as e:
+                            print(f"⚠️ Ошибка оценки: {e}", file=sys.stderr)
                     
                     # Детекция пробелов
-                    gaps = gap_detector.detect_gaps(result, ImageType.ULTRASOUND)
+                    gaps = None
+                    if gap_detector:
+                        try:
+                            gaps = gap_detector.detect_gaps(result, ImageType.ULTRASOUND)
+                        except Exception as e:
+                            print(f"⚠️ Ошибка выявления пробелов: {e}", file=sys.stderr)
                     
                     # Критические находки
-                    critical_findings = notifier.check_critical_findings(result)
+                    critical_findings = None
+                    if notifier:
+                        try:
+                            critical_findings = notifier.check_critical_findings(result)
+                        except Exception as e:
+                            print(f"⚠️ Ошибка проверки критических находок: {e}", file=sys.stderr)
                     
                     # Оценка доказательности
-                    evidence = evidence_ranker.rank_evidence(result)
+                    evidence = None
+                    if evidence_ranker:
+                        try:
+                            evidence = evidence_ranker.rank_evidence(result)
+                        except Exception as e:
+                            print(f"⚠️ Ошибка оценки доказательности: {e}", file=sys.stderr)
                     
-                    # Отображение результатов
-                    st.markdown(f"### 🧠 Заключение ({specialist_info['role']}):")
-                    st.write(result)
+                    # Отображение результатов (без rerun, чтобы оба результата остались)
+                    # Сохраняем результат
+                    if result:
+                        st.session_state.ultrasound_analysis_result = result
+                        st.session_state.ultrasound_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                     
                     # Формируем input_case для УЗИ
                     us_input = "УЗИ: Ультразвуковое исследование"
@@ -2209,45 +1991,49 @@ def show_ultrasound_analysis():
                     if FEEDBACK_WIDGET_AVAILABLE:
                         show_feedback_form(
                             analysis_type="ULTRASOUND",
-                            analysis_result=result,
+                            analysis_result=result or flash_result,
                             analysis_id=f"ULTRASOUND_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
                             input_case=us_input
                         )
                     
                     # Уведомления о критических находках
-                    notifier.display_notifications(critical_findings)
+                    if notifier and critical_findings:
+                        notifier.display_notifications(critical_findings)
                     
                     # Валидация
-                    with st.expander("✅ Результаты валидации"):
-                        if validation['is_valid']:
-                            st.success("✅ Валидация пройдена")
-                        else:
-                            st.error("❌ Обнаружены проблемы")
-                        st.write(f"Полнота: {validation['completeness_score']:.1%}")
-                        if validation['warnings']:
-                            for warning in validation['warnings']:
-                                st.warning(warning)
-                        if validation['errors']:
-                            for error in validation['errors']:
-                                st.error(error)
+                    if validator and validation:
+                        with st.expander("✅ Результаты валидации"):
+                            if validation.get('is_valid'):
+                                st.success("✅ Валидация пройдена")
+                            else:
+                                st.error("❌ Обнаружены проблемы")
+                            st.write(f"Полнота: {validation.get('completeness_score', 0):.1%}")
+                            if validation.get('warnings'):
+                                for warning in validation['warnings']:
+                                    st.warning(warning)
+                            if validation.get('errors'):
+                                for error in validation['errors']:
+                                    st.error(error)
                     
                     # Оценка качества
-                    with st.expander("📊 Оценка качества"):
-                        st.write(f"**Оценка:** {evaluation['grade']}")
-                        st.write(f"**Балл:** {evaluation['score']:.1%}")
-                        if evaluation['recommendations']:
-                            st.write("**Рекомендации:**")
-                            for rec in evaluation['recommendations']:
-                                st.write(f"• {rec}")
+                    if scorecard and evaluation:
+                        with st.expander("📊 Оценка качества"):
+                            st.write(f"**Оценка:** {evaluation.get('grade', 'N/A')}")
+                            st.write(f"**Балл:** {evaluation.get('score', 0):.1%}")
+                            if evaluation.get('recommendations'):
+                                st.write("**Рекомендации:**")
+                                for rec in evaluation['recommendations']:
+                                    st.write(f"• {rec}")
                     
                     # Пробелы
-                    if gaps['completeness_percentage'] < 100:
+                    if gap_detector and gaps and gaps.get('completeness_percentage', 100) < 100:
                         with st.expander("⚠️ Обнаруженные пробелы"):
                             st.write(gap_detector.generate_gap_report(gaps))
                     
                     # Доказательность
-                    with st.expander("📚 Оценка доказательности"):
-                        st.write(evidence_ranker.generate_evidence_report(evidence))
+                    if evidence_ranker and evidence:
+                        with st.expander("📚 Оценка доказательности"):
+                            st.write(evidence_ranker.generate_evidence_report(evidence))
 
     except Exception as e:
         error_msg = handle_error(e, "show_ultrasound_analysis", show_to_user=True)
@@ -2806,8 +2592,9 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
                 
                 # Автоматическое сохранение протокола в контекст пациента
                 try:
-                    context_store = ContextStore()
-                    context_store.add_context(
+                    if CONTEXT_STORE_AVAILABLE and ContextStore:
+                        context_store = ContextStore()
+                        context_store.add_context(
                         patient_id=patient_id,
                         context_type='protocol',
                         context_data={
@@ -2854,7 +2641,13 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
                         st.code(f"Путь к файлу: {filepath}", language=None)
 
                 st.subheader("📄 Сгенерированный протокол")
-                st.write(structured_note)
+                st.text_area(
+                    "Протокол",
+                    value=structured_note,
+                    height=600,
+                    disabled=True,
+                    key="protocol_display"
+                )
                 
                 # Кнопка для очистки протокола после просмотра
                 if st.button("🗑️ Очистить протокол и начать заново", type="secondary", use_container_width=True):
@@ -2870,8 +2663,9 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
             # Кнопка для сохранения в контекст (если не сохранилось автоматически)
             if st.button("💾 Сохранить протокол в контекст пациента"):
                 try:
-                    context_store = ContextStore()
-                    context_store.add_context(
+                    if CONTEXT_STORE_AVAILABLE and ContextStore:
+                        context_store = ContextStore()
+                        context_store.add_context(
                         patient_id=patient_id,
                         context_type='protocol',
                         context_data={
@@ -3157,7 +2951,16 @@ def show_ai_chat():
             
             if uploaded_files:
                 for uploaded_file in uploaded_files:
-                    file_ext = uploaded_file.name.split('.')[-1].lower()
+                    # Валидация размера файла (безопасность и производительность)
+                    if VALIDATORS_AVAILABLE and validate_file_size:
+                        is_valid, error_msg = validate_file_size(uploaded_file.size)
+                        if not is_valid:
+                            st.error(f"❌ {uploaded_file.name}: {error_msg}")
+                            continue
+                    
+                    # Безопасное извлечение расширения файла (защита от path traversal)
+                    file_name = os.path.basename(uploaded_file.name) if uploaded_file.name else "upload"
+                    file_ext = file_name.split('.')[-1].lower() if '.' in file_name else ""
                     
                     if file_ext == 'pdf':
                         try:
@@ -3598,12 +3401,13 @@ def show_lab_analysis():
                             
                             try:
                                 assistant = OpenRouterAssistant()
-                                consensus_engine = ConsensusEngine(assistant)
-                                validator = ValidationPipeline(assistant)
-                                scorecard = MedicalScorecard()
-                                gap_detector = DiagnosticGapDetector()
-                                notifier = NotificationSystem()
-                                evidence_ranker = EvidenceRanker()
+                                components = safe_init_components(assistant)
+                                consensus_engine = components['consensus_engine']
+                                validator = components['validator']
+                                scorecard = components['scorecard']
+                                gap_detector = components['gap_detector']
+                                notifier = components['notifier']
+                                evidence_ranker = components['evidence_ranker']
                                 
                                 if lab_analysis_mode == "⚡ Быстрый (одна модель)":
                                     interpretation = assistant.get_response(base_prompt)
@@ -3691,8 +3495,9 @@ def show_lab_analysis():
                                                 st.write(f"• {rec}")
                                     
                                     # Доказательность
-                                    with st.expander("📚 Оценка доказательности"):
-                                        st.write(evidence_ranker.generate_evidence_report(evidence))
+                                    if evidence_ranker and evidence:
+                                        with st.expander("📚 Оценка доказательности"):
+                                            st.write(evidence_ranker.generate_evidence_report(evidence))
                                 
                             except Exception as e:
                                 error_msg = handle_error(e, "show_lab_analysis", show_to_user=True)
@@ -3746,7 +3551,7 @@ def show_lab_analysis():
                     # Показываем извлеченный текст для диагностики
                     if lab_report.raw_text:
                         st.info("📄 **Извлеченный текст из файла:**")
-                        st.text_area("", lab_report.raw_text, height=300, key="raw_text_display")
+                        st.text_area("Извлеченный текст", lab_report.raw_text, height=300, key="raw_text_display", label_visibility="collapsed")
                         
                         # Попытка ручного парсинга
                         if st.button("🔍 Попробовать извлечь параметры вручную"):
@@ -3793,9 +3598,13 @@ def show_lab_analysis():
             finally:
                 # Удаляем временный файл
                 try:
-                    os.unlink(tmp_path)
-                except:
-                    pass
+                    if 'tmp_path' in locals() and tmp_path and os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                except (OSError, FileNotFoundError, PermissionError) as e:
+                    # Логируем ошибку удаления файла, но не прерываем выполнение
+                    if ERROR_HANDLER_AVAILABLE:
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"Не удалось удалить временный файл {tmp_path}: {e}")
 
 def show_genetic_analysis_page():
     """Страница анализа генетических данных с поддержкой VCF"""
@@ -3985,10 +3794,13 @@ def show_genetic_analysis_page():
             finally:
                 # Очистка временного файла
                 try:
-                    if os.path.exists(tmp_path):
+                    if 'tmp_path' in locals() and tmp_path and os.path.exists(tmp_path):
                         os.unlink(tmp_path)
-                except:
-                    pass
+                except (OSError, FileNotFoundError, PermissionError) as e:
+                    # Логируем ошибку удаления файла, но не прерываем выполнение
+                    if ERROR_HANDLER_AVAILABLE:
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"Не удалось удалить временный файл {tmp_path}: {e}")
         
         # Получаем сохраненный результат анализа
         analysis_result = None
@@ -4222,17 +4034,28 @@ def show_genetic_analysis_page():
                             
                             st.subheader("🧬 Заключение врача-генетика (ИИ)")
                             
-                            # Используем streaming для консультации генетика
+                            # Используем streaming для консультации генетика с гарантированным Opus
+                            print("🔄 Запуск Opus 4.5 для консультации генетика...", file=sys.stderr)
                             try:
                                 text_generator = assistant.get_response_streaming(
                                     genetic_question,
                                     context=genetic_context,
-                                    use_sonnet_4_5=False
+                                    force_opus=True
                                 )
                                 genetic_opinion = st.write_stream(text_generator)
+                                
+                                # Показываем информацию о модели после завершения streaming
+                                if hasattr(assistant, 'model') and assistant.model:
+                                    if hasattr(assistant, '_get_model_name'):
+                                        model_display_name = assistant._get_model_name(assistant.model)
+                                    else:
+                                        model_display_name = assistant.model.replace("anthropic/claude-", "").replace("-4.5", " 4.5")
+                                    st.caption(f"🤖 **Консультация выполнена моделью: {model_display_name}**")
                             except Exception as e:
                                 # Fallback на обычный режим если streaming не работает
                                 st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
+                                # Используем get_response_without_system для генетика (без системного промпта)
+                                # но с force_opus для гарантированного Opus
                                 genetic_opinion = assistant.get_response(
                                     genetic_question,
                                     context=genetic_context
@@ -5049,7 +4872,12 @@ def show_patient_context_page():
     selected_patient = st.selectbox("Выберите пациента", patients['name'])
     patient_id = patients[patients['name'] == selected_patient].iloc[0]['id']
     
-    context_store = ContextStore()
+    context_store = None
+    if CONTEXT_STORE_AVAILABLE and ContextStore:
+        try:
+            context_store = ContextStore()
+        except Exception as e:
+            print(f"⚠️ Ошибка инициализации ContextStore: {e}", file=sys.stderr)
     
     # Вкладки для разных действий
     tab1, tab2, tab3 = st.tabs(["📊 Просмотр контекста", "➕ Добавить данные", "🔍 Использовать для анализа"])
@@ -5058,8 +4886,13 @@ def show_patient_context_page():
         st.subheader("📊 Просмотр сохраненного контекста")
         
         if st.button("📊 Загрузить контекст"):
-            context_data = context_store.get_patient_context(patient_id)
-            comprehensive_context = context_store.build_comprehensive_context(patient_id)
+            if context_store:
+                context_data = context_store.get_patient_context(patient_id)
+                comprehensive_context = context_store.build_comprehensive_context(patient_id)
+            else:
+                st.error("❌ Модуль контекста недоступен. Проверьте настройки.")
+                context_data = {}
+                comprehensive_context = ""
             
             if not context_data:
                 st.info("Контекст для данного пациента отсутствует. Добавьте данные во вкладке '➕ Добавить данные'.")
@@ -5097,7 +4930,8 @@ def show_patient_context_page():
             
             if st.button("💾 Сохранить протокол"):
                 if protocol_text:
-                    context_store.add_context(
+                    if context_store:
+                        context_store.add_context(
                         patient_id=patient_id,
                         context_type='protocol',
                         context_data={'protocol': protocol_text, 'type': 'consultation'},
@@ -5113,7 +4947,8 @@ def show_patient_context_page():
             
             if st.button("💾 Сохранить жалобы"):
                 if complaints_text:
-                    context_store.add_context(
+                    if context_store:
+                        context_store.add_context(
                         patient_id=patient_id,
                         context_type='complaints',
                         context_data={'complaints': complaints_text},
@@ -5130,7 +4965,8 @@ def show_patient_context_page():
             
             if st.button("💾 Сохранить диагноз"):
                 if diagnosis_text:
-                    context_store.add_context(
+                    if context_store:
+                        context_store.add_context(
                         patient_id=patient_id,
                         context_type='diagnosis',
                         context_data={'diagnosis': diagnosis_text, 'icd10': icd10},
@@ -5153,12 +4989,13 @@ def show_patient_context_page():
                         # Если не JSON, сохраняем как текст
                         lab_data = {'results_text': lab_text}
                     
-                    context_store.add_context(
-                        patient_id=patient_id,
-                        context_type='lab_results',
-                        context_data=lab_data,
-                        source='manual_entry'
-                    )
+                    if context_store:
+                        context_store.add_context(
+                            patient_id=patient_id,
+                            context_type='lab_results',
+                            context_data=lab_data,
+                            source='manual_entry'
+                        )
                     st.success("✅ Результаты анализов сохранены в контекст пациента!")
                 else:
                     st.warning("⚠️ Введите результаты анализов")
@@ -5170,7 +5007,8 @@ def show_patient_context_page():
             
             if st.button("💾 Сохранить результаты"):
                 if imaging_text:
-                    context_store.add_context(
+                    if context_store:
+                        context_store.add_context(
                         patient_id=patient_id,
                         context_type='imaging',
                         context_data={'type': imaging_type, 'results': imaging_text},
@@ -5186,7 +5024,8 @@ def show_patient_context_page():
             
             if st.button("💾 Сохранить данные"):
                 if other_text:
-                    context_store.add_context(
+                    if context_store:
+                        context_store.add_context(
                         patient_id=patient_id,
                         context_type='other',
                         context_data={'data': other_text},
@@ -5210,7 +5049,7 @@ def show_patient_context_page():
                 st.info("💡 Теперь перейдите в раздел 'Анализ ЭКГ' или другой анализ - контекст будет автоматически учтен.")
                 
                 with st.expander("📋 Просмотр загруженного контекста"):
-                    st.text_area("", comprehensive_context, height=200, disabled=True)
+                    st.text_area("Контекст", comprehensive_context, height=200, disabled=True, label_visibility="collapsed")
             else:
                 st.warning("⚠️ Контекст для данного пациента отсутствует. Добавьте данные во вкладке '➕ Добавить данные'.")
         
@@ -5932,8 +5771,9 @@ def show_document_scanner_page():
             
             if st.button("💾 Сохранить в контекст пациента"):
                 try:
-                    context_store = ContextStore()
-                    context_store.add_context(
+                    if CONTEXT_STORE_AVAILABLE and ContextStore:
+                        context_store = ContextStore()
+                        context_store.add_context(
                         patient_id=patient_id,
                         context_type='document',
                         context_data={
@@ -6074,7 +5914,11 @@ def show_document_scanner_page():
                                     if 'extracted_doc_raw' in st.session_state:
                                         del st.session_state['extracted_doc_raw']
                                     st.rerun()  # Перезагружаем для показа структурированных данных
-                                except:
+                                except (json.JSONDecodeError, ValueError, KeyError) as json_error:
+                                    # Логируем ошибку парсинга JSON
+                                    if ERROR_HANDLER_AVAILABLE:
+                                        logger = logging.getLogger(__name__)
+                                        logger.warning(f"Ошибка парсинга JSON из ответа ИИ: {json_error}")
                                     st.warning("⚠️ Не удалось распарсить JSON из ответа ИИ")
                                     st.text_area("Ответ ИИ", analysis_result, height=200)
                             else:
@@ -6157,8 +6001,11 @@ def show_document_scanner_page():
                                     extracted_data = json.loads(json_match.group())
                                     st.json(extracted_data)
                                     st.session_state['extracted_doc_data'] = extracted_data
-                                except:
-                                    pass
+                                except (json.JSONDecodeError, ValueError) as json_error:
+                                    # Логируем ошибку парсинга JSON, но не прерываем выполнение
+                                    if ERROR_HANDLER_AVAILABLE:
+                                        logger = logging.getLogger(__name__)
+                                        logger.debug(f"Не удалось распарсить JSON из результата: {json_error}")
                         except Exception as e:
                             st.error(f"❌ Ошибка обработки: {e}")
 

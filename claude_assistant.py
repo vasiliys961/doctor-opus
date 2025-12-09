@@ -39,12 +39,49 @@ def check_deprecated(model_name):
             return True
     return False
 
+# Константы для API запросов
+API_TIMEOUT_SECONDS = 120  # Таймаут для обычных запросов
+API_TIMEOUT_LONG_SECONDS = 180  # Таймаут для длинных запросов (видео, консенсус)
+MAX_TOKENS_ECG = 2500  # Максимальное количество токенов для ЭКГ
+MAX_TOKENS_DEFAULT = 4000  # Максимальное количество токенов по умолчанию
+MAX_TOKENS_ECG_LIST = [2000, 1500, 1000]  # Список токенов для ЭКГ (fallback)
+MAX_TOKENS_DEFAULT_LIST = [3000, 2000, 1000]  # Список токенов по умолчанию (fallback)
+MAX_TOKENS_LLAMA = 1000  # Максимальное количество токенов для Llama
+EXTENDED_THINKING_BUDGET = 10000  # Бюджет токенов для Extended Thinking
+MIN_CONSENSUS_RESULTS = 2  # Минимальное количество результатов для консенсуса
+MAX_CONSENSUS_MODELS = 4  # Максимальное количество моделей для консенсуса
+
+# Константы для изображений
+IMAGE_MAX_SIZE = (1024, 1024)  # Максимальный размер изображения для AI анализа
+
 # Ленивая загрузка промптов для видео (загружаются только при необходимости)
+# Ограничение кеша: максимум 10 различных промптов для предотвращения утечки памяти
 _video_prompts_cache = None
+_video_prompts_loaded = {}  # Кеш загруженных промптов с ограничением размера
+_MAX_CACHED_PROMPTS = 10
 
 def _get_video_prompt(study_type: str):
-    """Ленивая загрузка промпта для видео-анализа"""
-    global _video_prompts_cache
+    """Ленивая загрузка промпта для видео-анализа с ограничением размера кеша
+    
+    Args:
+        study_type: Тип исследования
+        
+    Returns:
+        Промпт для видео-анализа или None
+    """
+    global _video_prompts_cache, _video_prompts_loaded
+    
+    # Проверяем кеш загруженных промптов
+    if study_type in _video_prompts_loaded:
+        return _video_prompts_loaded[study_type]
+    
+    # Если кеш переполнен, очищаем старые записи (FIFO)
+    if len(_video_prompts_loaded) >= _MAX_CACHED_PROMPTS:
+        # Удаляем самую старую запись
+        oldest_key = next(iter(_video_prompts_loaded))
+        del _video_prompts_loaded[oldest_key]
+    
+    # Загружаем функцию загрузки промптов (один раз)
     if _video_prompts_cache is None:
         try:
             from prompts.video_prompts import get_video_prompt as _load_prompt
@@ -53,11 +90,21 @@ def _get_video_prompt(study_type: str):
             # Если файл не найден, возвращаем None
             _video_prompts_cache = lambda x: None
     
+    # Загружаем промпт и кешируем его
     if _video_prompts_cache:
-        return _video_prompts_cache(study_type)
+        prompt = _video_prompts_cache(study_type)
+        if prompt:
+            _video_prompts_loaded[study_type] = prompt
+        return prompt
+    
     return None
 
 class OpenRouterAssistant:
+    """Класс для работы с OpenRouter API для медицинской диагностики
+    
+    Обеспечивает взаимодействие с различными AI моделями для анализа медицинских изображений,
+    текстовых запросов и видео. Поддерживает streaming ответы и fallback механизмы.
+    """
     # Флаг класса для однократного вывода предупреждения о роутере
     _router_warning_shown = False
     
@@ -137,6 +184,86 @@ class OpenRouterAssistant:
 - Галлюцинации: Если данных недостаточно или стандарты противоречивы — укажи это явно. Не выдумывай дозировки.
 ."""
     
+    def _log_api_error(self, model: str, latency: float, error_msg: str, context: str = ""):
+        """Логирование ошибки API вызова
+        
+        Args:
+            model: Название модели
+            latency: Время выполнения запроса в секундах
+            error_msg: Сообщение об ошибке
+            context: Дополнительный контекст для логирования (опционально)
+        """
+        log_api_call(model, False, latency, error_msg)
+        track_model_usage(model, False)
+        model_name = self._get_model_name(model)
+        model_type = "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "❓ UNKNOWN"
+        if context:
+            print(f"❌ [{model_type}] [{context}] Модель: {model_name}, Latency: {latency:.2f}с, Ошибка: {error_msg}")
+        else:
+            print(f"❌ [{model_type}] Модель: {model_name}, Latency: {latency:.2f}с, Ошибка: {error_msg}")
+    
+    def _log_api_success(self, model: str, latency: float, tokens_received: int = 0, context: str = ""):
+        """Логирование успешного API вызова
+        
+        Args:
+            model: Название модели
+            latency: Время выполнения запроса в секундах
+            tokens_received: Количество полученных токенов (опционально)
+            context: Дополнительный контекст для логирования (опционально)
+        """
+        log_api_call(model, True, latency, None)
+        model_name = self._get_model_name(model)
+        model_type = "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "❓ UNKNOWN"
+        
+        if tokens_received > 0:
+            track_model_usage(model, True, tokens_received)
+            if context:
+                print(f"✅ [{model_type}] [{context}] Модель: {model_name}, Токенов: {tokens_received}, Latency: {latency:.2f}с")
+            else:
+                print(f"✅ [{model_type}] Модель: {model_name}, Токенов: {tokens_received}, Latency: {latency:.2f}с")
+        else:
+            track_model_usage(model, True, 0)
+            if context:
+                print(f"✅ [{model_type}] [{context}] Модель: {model_name}, Latency: {latency:.2f}с")
+            else:
+                print(f"✅ [{model_type}] Модель: {model_name}, Latency: {latency:.2f}с")
+    
+    def _handle_timeout_error(self, model: str, start_time: float, timeout_seconds: int = API_TIMEOUT_LONG_SECONDS, context: str = ""):
+        """Обработка ошибки таймаута
+        
+        Args:
+            model: Название модели
+            start_time: Время начала запроса
+            timeout_seconds: Таймаут в секундах
+            context: Дополнительный контекст для логирования (опционально)
+        
+        Returns:
+            tuple: (latency, error_msg)
+        """
+        latency = time.time() - start_time if 'start_time' in locals() else timeout_seconds
+        error_msg = f"Таймаут запроса (>{timeout_seconds} секунд)"
+        self._log_api_error(model, latency, error_msg, context)
+        return latency, error_msg
+    
+    def _handle_exception_error(self, model: str, exception: Exception, start_time: float, 
+                                function_name: str, context: str = ""):
+        """Обработка исключения при API вызове
+        
+        Args:
+            model: Название модели
+            exception: Исключение
+            start_time: Время начала запроса
+            function_name: Имя функции, где произошла ошибка
+            context: Дополнительный контекст для логирования (опционально)
+        
+        Returns:
+            tuple: (latency, error_msg)
+        """
+        latency = time.time() - start_time if 'start_time' in locals() else 0
+        error_msg = handle_error(exception, function_name, show_to_user=False)
+        self._log_api_error(model, latency, error_msg, context)
+        return latency, error_msg
+    
     def send_vision_request(self, prompt: str, image_array=None, metadata=None, use_cache: bool = False, 
                            use_router: bool = True, force_model: Optional[str] = None):
         """Анализ изображения с Vision моделями - улучшенные промпты от имени специалистов
@@ -154,7 +281,8 @@ class OpenRouterAssistant:
         clear_old_cache()
         
         # Определяем тип медицинского изображения и используем специализированный промпт
-        prompt_lower = prompt.lower()
+        # Оптимизация: кешируем lower() результат для повторного использования
+        prompt_lower = prompt.lower() if prompt else ""
         
         # Для ЭКГ кэш всегда отключен
         is_ecg = "экг" in prompt_lower or "ecg" in prompt_lower
@@ -612,11 +740,12 @@ class OpenRouterAssistant:
 1. ТЕХНИЧЕСКИЕ ПАРАМЕТРЫ:
         
         # Для документов НЕ добавляем system_prompt - используем промпт как есть
-        elif any(keyword in prompt_lower for keyword in [
+        # Оптимизация: используем set для быстрой проверки
+        elif any(keyword in prompt_lower for keyword in {
             "документ", "справка", "рецепт", "направление", "выписка", 
             "больничный", "извлеките", "распознавание", "document", "extract",
             "медицинской справки", "медицинских документов", "распознаванию медицинских"
-        ]):
+        }):
             # Для документов используем промпт БЕЗ system_prompt - только извлечение текста
             medical_prompt = prompt  # Промпт уже содержит все необходимое
    - Датчик и частота
@@ -690,7 +819,10 @@ class OpenRouterAssistant:
             })
         
         # Проверяем устаревшие модели и фильтруем их
-        active_models = [m for m in self.models if not check_deprecated(m)]
+        # Оптимизация: кешируем результат проверки устаревших моделей (модели не меняются во время работы)
+        if not hasattr(self, '_cached_active_models') or self._cached_active_models is None:
+            self._cached_active_models = [m for m in self.models if not check_deprecated(m)]
+        active_models = self._cached_active_models
         
         # Базовые флаги задачи
         prompt_lower = prompt.lower() if prompt else ""
@@ -700,12 +832,14 @@ class OpenRouterAssistant:
         )
         
         # Если не определили через metadata, проверяем промпт на документный контент
+        # Оптимизация: используем set для быстрой проверки (O(1) вместо O(n))
         if not is_document:
-            is_document = any(keyword in prompt_lower for keyword in [
+            document_keywords = {
                 "документ", "справка", "рецепт", "направление", "выписка", 
                 "больничный", "извлеките", "распознавание", "document", "extract",
                 "медицинской справки", "медицинских документов"
-            ])
+            }
+            is_document = any(keyword in prompt_lower for keyword in document_keywords)
         
         # ----- Выбор моделей в зависимости от типа задачи -----
         # Приоритет force_model, затем явные типы задач, затем дефолт (Opus)
@@ -747,12 +881,14 @@ class OpenRouterAssistant:
             use_consensus = metadata.get('consensus_mode', False)
         
         # Для ЭКГ используем достаточно токенов для полного заключения
-        max_tokens_consensus = 2500 if is_ecg else 4000
+        max_tokens_consensus = MAX_TOKENS_ECG if is_ecg else MAX_TOKENS_DEFAULT
         
         if use_consensus and len(models_to_try) > 1:
             # Используем первые 3-4 модели для консенсуса
-            models_to_try = models_to_try[:min(4, len(models_to_try))]
+            models_to_try = models_to_try[:min(MAX_CONSENSUS_MODELS, len(models_to_try))]
             results = []
+            # Оптимизация: минимальное количество успешных ответов для консенсуса (2 из 3-4)
+            min_consensus_results = min(MIN_CONSENSUS_RESULTS, len(models_to_try))
             
             for model in models_to_try:
                 try:
@@ -768,36 +904,35 @@ class OpenRouterAssistant:
                         "temperature": 0.1
                     }
                     
-                    response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
+                    response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=API_TIMEOUT_SECONDS)
                     latency = time.time() - start_time
                     
                     if response.status_code == 200:
                         result_data = response.json()
                         result = result_data["choices"][0]["message"]["content"]
                         tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
-                        log_api_call(model, True, latency, None)
-                        track_model_usage(model, True, tokens_used)
+                        self._log_api_success(model, latency, tokens_used)
                         results.append({
                             "model": model,
                             "result": result,
                             "tokens": tokens_used
                         })
+                        # Оптимизация: ранний выход если получили достаточно результатов для консенсуса
+                        if len(results) >= min_consensus_results:
+                            break
                     elif response.status_code == 402:
                         # Ошибка недостатка кредитов - пробуем меньше токенов
                         print(f"⚠️ Недостаточно кредитов для {max_tokens_consensus} токенов в консенсусе. Пропускаю модель {model}.")
                         error_msg = f"HTTP 402: Недостаточно кредитов"
-                        log_api_call(model, False, latency, error_msg)
-                        track_model_usage(model, False)
+                        self._log_api_error(model, latency, error_msg)
                         continue
                     else:
                         error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                        log_api_call(model, False, latency, error_msg)
-                        track_model_usage(model, False)
+                        self._log_api_error(model, latency, error_msg)
                 except Exception as e:
                     latency = time.time() - start_time if 'start_time' in locals() else 0
                     error_msg = handle_error(e, f"send_vision_request ({model})", show_to_user=False)
-                    log_api_call(model, False, latency, error_msg)
-                    track_model_usage(model, False)
+                    self._log_api_error(model, latency, error_msg)
                     continue
             
             if results:
@@ -807,7 +942,7 @@ class OpenRouterAssistant:
         # Для ЭКГ используем достаточно токенов для полного заключения
         # Оптимизация: начинаем с меньших max_tokens для быстрого ответа
         # Если не хватает, система автоматически попробует больше
-        max_tokens_list = [2000, 1500, 1000] if is_ecg else [3000, 2000, 1000]
+        max_tokens_list = MAX_TOKENS_ECG_LIST if is_ecg else MAX_TOKENS_DEFAULT_LIST
         
         # Fallback модели для ЭКГ (если Claude недоступен из-за кредитов)
         claude_failed = False  # Флаг, что все Claude модели недоступны
@@ -859,11 +994,11 @@ class OpenRouterAssistant:
                             if metadata.get('model_params', {}).get('extended_thinking', False):
                                 payload['thinking'] = {
                                     "type": "enabled",
-                                    "budget_tokens": 10000
+                                    "budget_tokens": EXTENDED_THINKING_BUDGET
                                 }
                     
                     print(f"📡 [{model_name}] Отправляю запрос к API...")
-                    response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
+                    response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=API_TIMEOUT_SECONDS)
                     latency = time.time() - start_time
                     
                     if response.status_code == 200:
@@ -878,11 +1013,10 @@ class OpenRouterAssistant:
                         
                         # Логирование
                         tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
-                        log_api_call(model, True, latency, None)
-                        track_model_usage(model, True, tokens_used)
-                        
                         model_name = self._get_model_name(model)
-                        print(f"✅ [{model_name}] Анализ завершен за {latency:.2f}с, использовано токенов: {tokens_used}")
+                        model_type = "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "❓ UNKNOWN"
+                        print(f"✅ [{model_type}] [VISION] Модель: {model_name}, Токенов: {tokens_used}, Latency: {latency:.2f}с")
+                        self._log_api_success(model, latency, tokens_used, f"{model_name}")
                         
                         # Для документов не добавляем префикс "Медицинский анализ" - просто возвращаем текст
                         if is_document or (force_model and force_model.lower() == "llama"):
@@ -901,15 +1035,13 @@ class OpenRouterAssistant:
                             continue  # Пробуем следующий max_tokens
                     else:
                         error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                        log_api_call(model, False, latency, error_msg)
-                        track_model_usage(model, False)
+                        self._log_api_error(model, latency, error_msg, "VISION REQUEST")
                         break  # Переходим к следующей модели
                         
                 except Exception as e:
                     latency = time.time() - start_time if 'start_time' in locals() else 0
                 error_msg = handle_error(e, f"send_vision_request ({model})", show_to_user=False)
-                log_api_call(model, False, latency, error_msg)
-                track_model_usage(model, False)
+                self._log_api_error(model, latency, error_msg)
                 continue
             
             if claude_failed:
@@ -932,12 +1064,12 @@ class OpenRouterAssistant:
                     payload = {
                         "model": model,
                         "messages": messages,
-                        "max_tokens": 1000,  # Llama обычно дешевле
+                        "max_tokens": MAX_TOKENS_LLAMA,  # Llama обычно дешевле
                         "temperature": 0.1
                     }
                     
                     print(f"📡 [FALLBACK {model_name}] Отправляю запрос к API...")
-                    response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
+                    response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=API_TIMEOUT_SECONDS)
                     latency = time.time() - start_time
                     
                     if response.status_code == 200:
@@ -945,11 +1077,8 @@ class OpenRouterAssistant:
                         result = result_data["choices"][0]["message"]["content"]
                         
                         tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
-                        log_api_call(model, True, latency, None)
-                        track_model_usage(model, True, tokens_used)
-                        
                         model_name = self._get_model_name(model)
-                        print(f"✅ [FALLBACK {model_name}] Анализ завершен за {latency:.2f}с, использовано токенов: {tokens_used}")
+                        self._log_api_success(model, latency, tokens_used, f"FALLBACK {model_name}")
                         
                         # Для документов не добавляем префикс "Медицинский анализ"
                         if is_document or (force_model and force_model.lower() == "llama"):
@@ -957,15 +1086,13 @@ class OpenRouterAssistant:
                         return f"**🩺 Медицинский анализ ({model_name}) [Fallback]:**\n\n{result}"
                     else:
                         error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                        log_api_call(model, False, latency, error_msg)
-                        track_model_usage(model, False)
+                        self._log_api_error(model, latency, error_msg)
                         continue
                         
                 except Exception as e:
                     latency = time.time() - start_time if 'start_time' in locals() else 0
                     error_msg = handle_error(e, f"send_vision_request fallback ({model})", show_to_user=False)
-                    log_api_call(model, False, latency, error_msg)
-                    track_model_usage(model, False)
+                    self._log_api_error(model, latency, error_msg)
                     continue
         
         return "❌ Ошибка: Все модели недоступны"
@@ -984,7 +1111,7 @@ class OpenRouterAssistant:
         model = "google/gemini-2.5-flash"
         
         # Логирование в терминал
-        print(f"🤖 [GEMINI FLASH] Начинаю быстрый анализ изображения...")
+        print(f"🤖 [⚡ FLASH] [GEMINI FLASH] Начинаю быстрый анализ изображения...")
         
         # Используем тот же детальный промпт, что и для Opus, но без обращений к коллегам
         prompt_lower = prompt.lower() if prompt else ""
@@ -1229,7 +1356,7 @@ class OpenRouterAssistant:
         
         try:
             start_time = time.time()
-            print(f"📡 [GEMINI FLASH] Отправляю запрос к API...")
+            print(f"📡 [⚡ FLASH] [GEMINI FLASH] Отправляю запрос к API...")
             response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
             latency = time.time() - start_time
             
@@ -1241,32 +1368,31 @@ class OpenRouterAssistant:
                 log_api_call(model, True, latency, None)
                 track_model_usage(model, True, tokens_used)
                 
-                print(f"✅ [GEMINI FLASH] Анализ завершен за {latency:.2f}с, использовано токенов: {tokens_used}")
+                print(f"✅ [⚡ FLASH] [GEMINI FLASH] Модель: Gemini 2.5 Flash, Токенов: {tokens_used}, Latency: {latency:.2f}с")
+                self._log_api_success(model, latency, tokens_used, "GEMINI FLASH")
                 return f"**⚡ Быстрый анализ (Gemini 2.5 Flash):**\n\n{result}"
             elif response.status_code == 402:
                 error_msg = f"HTTP 402: Недостаточно кредитов на OpenRouter для модели {model}"
                 log_api_call(model, False, latency, error_msg)
                 track_model_usage(model, False)
-                print(f"❌ [GEMINI FLASH] {error_msg}")
+                print(f"❌ [⚡ FLASH] [GEMINI FLASH] {error_msg}")
                 return f"❌ Ошибка: {error_msg}"
             else:
                 error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                log_api_call(model, False, latency, error_msg)
-                track_model_usage(model, False)
-                print(f"❌ [GEMINI FLASH] {error_msg}")
+                self._log_api_error(model, latency, error_msg, "GEMINI FLASH")
                 return f"❌ Ошибка анализа: {error_msg}"
                 
         except requests.exceptions.Timeout:
-            error_msg = "Таймаут запроса (>120 секунд)"
-            log_api_call(model, False, 120, error_msg)
+            error_msg = f"Таймаут запроса (>{API_TIMEOUT_SECONDS} секунд)"
+            log_api_call(model, False, API_TIMEOUT_SECONDS, error_msg)
             track_model_usage(model, False)
-            print(f"❌ [GEMINI FLASH] {error_msg}")
+            print(f"❌ [⚡ FLASH] [GEMINI FLASH] {error_msg}")
             return f"❌ Ошибка: {error_msg}"
         except Exception as e:
             error_msg = handle_error(e, "send_vision_request_gemini_fast", show_to_user=False)
             log_api_call(model, False, 0, error_msg)
             track_model_usage(model, False)
-            print(f"❌ [GEMINI FLASH] Ошибка: {error_msg}")
+            print(f"❌ [⚡ FLASH] [GEMINI FLASH] Ошибка: {error_msg}")
             return f"❌ Ошибка при анализе: {error_msg}"
     
     def send_vision_request_streaming(self, prompt: str, image_array=None, metadata=None):
@@ -1283,7 +1409,7 @@ class OpenRouterAssistant:
         model = "anthropic/claude-opus-4.5"
         
         # Логирование в терминал
-        print(f"🤖 [OPUS 4.5 STREAMING] Начинаю streaming анализ изображения...")
+        print(f"🤖 [🧠 OPUS] [STREAMING] Начинаю streaming анализ изображения...")
         
         # Используем тот же промпт, что и для основного анализа
         prompt_lower = prompt.lower() if prompt else ""
@@ -1450,7 +1576,8 @@ class OpenRouterAssistant:
         
         try:
             start_time = time.time()
-            print(f"📡 [OPUS 4.5 STREAMING] Отправляю streaming запрос к API...")
+            model_name = self._get_model_name(model)
+            print(f"📡 [🧠 OPUS] [STREAMING] Отправляю streaming запрос к API для модели: {model_name}...")
             response = requests.post(
                 self.base_url,
                 headers=self.headers,
@@ -1461,7 +1588,7 @@ class OpenRouterAssistant:
             
             if response.status_code == 200:
                 self.model = model  # Запоминаем рабочую модель
-                print(f"✅ [OPUS 4.5 STREAMING] Streaming начат, получаю ответ...")
+                print(f"✅ [🧠 OPUS] [STREAMING] Streaming начат для модели: {model_name}, получаю ответ...")
                 tokens_received = 0
                 
                 # Читаем stream
@@ -1489,16 +1616,11 @@ class OpenRouterAssistant:
                             except json.JSONDecodeError:
                                 continue
                 
-                # Измеряем latency и логируем через log_api_call
+                # Измеряем latency и логируем через вспомогательную функцию
                 latency = time.time() - start_time
                 model_name = self._get_model_name(model)
-                log_api_call(model, True, latency, None)
-                if tokens_received > 0:
-                    track_model_usage(model, True, tokens_received)
-                    print(f"✅ [OPUS 4.5 STREAMING] Завершено. Модель: {model_name}, использовано токенов: {tokens_received}, latency: {latency:.2f}s")
-                else:
-                    track_model_usage(model, True, 0)
-                    print(f"✅ [OPUS 4.5 STREAMING] Завершено. Модель: {model_name}, latency: {latency:.2f}s")
+                print(f"✅ [🧠 OPUS] [STREAMING] Модель: {model_name}, Токенов: {tokens_received}, Latency: {latency:.2f}с")
+                self._log_api_success(model, latency, tokens_received, f"OPUS 4.5 STREAMING ({model_name})")
                 return  # Успешно завершили streaming
                 
             elif response.status_code == 402:
@@ -1506,7 +1628,7 @@ class OpenRouterAssistant:
                 error_msg = f"HTTP 402: Недостаточно кредитов на OpenRouter для модели {model}"
                 log_api_call(model, False, latency, error_msg)
                 track_model_usage(model, False)
-                print(f"❌ [OPUS 4.5 STREAMING] {error_msg}, latency: {latency:.2f}s")
+                print(f"❌ [🧠 OPUS] [STREAMING] {error_msg}, latency: {latency:.2f}s")
                 yield f"\n⚠️ **Opus 4.5 недоступен (недостаточно кредитов). Переключаюсь на другую модель...**\n\n"
                 # Fallback на Sonnet 4.5
                 yield from self._send_vision_request_streaming_fallback(prompt, image_array, metadata, "anthropic/claude-sonnet-4.5")
@@ -1514,26 +1636,17 @@ class OpenRouterAssistant:
             else:
                 latency = time.time() - start_time if 'start_time' in locals() else 0
                 error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                log_api_call(model, False, latency, error_msg)
-                track_model_usage(model, False)
-                print(f"❌ [OPUS 4.5 STREAMING] {error_msg}, latency: {latency:.2f}s")
+                self._log_api_error(model, latency, error_msg, "OPUS 4.5 STREAMING")
+                print(f"❌ [🧠 OPUS] [STREAMING] Ошибка: {error_msg}, latency: {latency:.2f}s")
                 yield f"❌ Ошибка streaming: {error_msg}"
                 return
                 
         except requests.exceptions.Timeout:
-            latency = time.time() - start_time if 'start_time' in locals() else 180
-            error_msg = "Таймаут запроса (>180 секунд)"
-            log_api_call(model, False, latency, error_msg)
-            track_model_usage(model, False)
-            print(f"❌ [OPUS 4.5 STREAMING] {error_msg}, latency: {latency:.2f}s")
+            latency, error_msg = self._handle_timeout_error(model, start_time, 180, "OPUS 4.5 STREAMING")
             yield f"❌ Ошибка: {error_msg}"
             return
         except Exception as e:
-            latency = time.time() - start_time if 'start_time' in locals() else 0
-            error_msg = handle_error(e, "send_vision_request_streaming", show_to_user=False)
-            log_api_call(model, False, latency, error_msg)
-            track_model_usage(model, False)
-            print(f"❌ [OPUS 4.5 STREAMING] Ошибка: {error_msg}, latency: {latency:.2f}s")
+            latency, error_msg = self._handle_exception_error(model, e, start_time, "send_vision_request_streaming", "OPUS 4.5 STREAMING")
             yield f"❌ Ошибка при streaming анализе: {error_msg}"
             return
     
@@ -1699,16 +1812,11 @@ class OpenRouterAssistant:
                     continue
                 else:
                     error_msg = f"HTTP {response.status_code}"
-                    log_api_call(model, False, latency, error_msg)
-                    track_model_usage(model, False)
+                    self._log_api_error(model, latency, error_msg)
                     continue
                     
             except requests.exceptions.Timeout:
-                latency = time.time() - start_time if 'start_time' in locals() else 0
-                error_msg = f"Таймаут запроса (>{180} секунд)"
-                log_api_call(model, False, latency, error_msg)
-                track_model_usage(model, False)
-                print(f"⚠️ Таймаут для модели {model}")
+                latency, error_msg = self._handle_timeout_error(model, start_time, 180)
                 continue
             except Exception as e:
                 latency = time.time() - start_time if 'start_time' in locals() else 0
@@ -1748,7 +1856,9 @@ class OpenRouterAssistant:
         for model in models_to_try:
             try:
                 model_name = self._get_model_name(model)
-                print(f"🤖 [{model_name} STREAMING] Начинаю streaming текстовый запрос...")
+                model_type = "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "❓ UNKNOWN"
+                force_msg = " [FORCE_OPUS]" if force_opus else ""
+                print(f"🤖 [{model_type}]{force_msg} [STREAMING] Начинаю streaming текстовый запрос для модели: {model_name}...")
                 
                 payload = {
                     "model": model,
@@ -1761,7 +1871,8 @@ class OpenRouterAssistant:
                     "stream": True  # Включаем streaming
                 }
                 
-                print(f"📡 [{model_name} STREAMING] Отправляю streaming запрос к API...")
+                force_msg = " [FORCE_OPUS]" if force_opus else ""
+                print(f"📡 [{model_type}]{force_msg} [STREAMING] Отправляю streaming запрос к API для модели: {model_name}...")
                 response = requests.post(
                     self.base_url,
                     headers=self.headers,
@@ -1772,7 +1883,8 @@ class OpenRouterAssistant:
                 
                 if response.status_code == 200:
                     self.model = model  # Запоминаем рабочую модель
-                    print(f"✅ [{model_name} STREAMING] Streaming начат, получаю ответ...")
+                    force_msg = " [FORCE_OPUS]" if force_opus else ""
+                    print(f"✅ [{model_type}]{force_msg} [STREAMING] Streaming начат для модели: {model_name}, получаю ответ...")
                     tokens_received = 0
                     # Читаем stream
                     for line in response.iter_lines():
@@ -1781,15 +1893,13 @@ class OpenRouterAssistant:
                             if line_text.startswith('data: '):
                                 data_str = line_text[6:]  # Убираем "data: "
                                 if data_str.strip() == '[DONE]':
-                                    # Измеряем latency и логируем через log_api_call
+                                    # Измеряем latency и логируем через вспомогательную функцию
                                     latency = time.time() - start_time
-                                    log_api_call(model, True, latency, None)
-                                    if tokens_received > 0:
-                                        track_model_usage(model, True, tokens_received)
-                                        print(f"✅ [{model_name} STREAMING] Streaming завершен, получено токенов: {tokens_received}, latency: {latency:.2f}s")
-                                    else:
-                                        track_model_usage(model, True, 0)
-                                        print(f"✅ [{model_name} STREAMING] Streaming завершен, latency: {latency:.2f}s")
+                                    model_type = "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "❓ UNKNOWN"
+                                    force_msg = " [FORCE_OPUS]" if force_opus else ""
+                                    context_msg = f"STREAMING ({model_name})" + (force_msg if force_opus else "")
+                                    print(f"✅ [{model_type}]{force_msg} [STREAMING] Модель: {model_name}, Токенов: {tokens_received}, Latency: {latency:.2f}с")
+                                    self._log_api_success(model, latency, tokens_received, context_msg)
                                     break
                                 try:
                                     data = json.loads(data_str)
@@ -1815,7 +1925,9 @@ class OpenRouterAssistant:
                     log_api_call(model, False, latency, error_msg)
                     track_model_usage(model, False)
                     model_name = self._get_model_name(model)
-                    print(f"❌ [{model_name} STREAMING] {error_msg}, latency: {latency:.2f}s")
+                    model_type = "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "❓ UNKNOWN"
+                    force_msg = " [FORCE_OPUS]" if force_opus else ""
+                    print(f"❌ [{model_type}]{force_msg} [STREAMING] Модель: {model_name}, {error_msg}, Latency: {latency:.2f}с")
                     # Если force_opus=True, не пробуем другие модели
                     if force_opus:
                         yield f"\n❌ **Opus 4.5 недоступен (недостаточно кредитов).**\n\n"
@@ -1827,8 +1939,11 @@ class OpenRouterAssistant:
                 else:
                     latency = time.time() - start_time if 'start_time' in locals() else 0
                     error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                    log_api_call(model, False, latency, error_msg)
-                    print(f"⚠️ HTTP {response.status_code} для {model}, latency: {latency:.2f}s")
+                    model_name = self._get_model_name(model)
+                    model_type = "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "❓ UNKNOWN"
+                    force_msg = " [FORCE_OPUS]" if force_opus else ""
+                    self._log_api_error(model, latency, error_msg, f"STREAMING{force_msg}")
+                    print(f"❌ [{model_type}]{force_msg} [STREAMING] Модель: {model_name}, Ошибка: {error_msg}, Latency: {latency:.2f}с")
                     # Если force_opus=True, не пробуем другие модели
                     if force_opus:
                         yield f"❌ Ошибка: {error_msg}"
@@ -1836,19 +1951,13 @@ class OpenRouterAssistant:
                     continue
                     
             except requests.exceptions.Timeout:
-                latency = time.time() - start_time if 'start_time' in locals() else 180
-                error_msg = "Таймаут запроса (>180 секунд)"
-                log_api_call(model, False, latency, error_msg)
-                print(f"⚠️ Таймаут для модели {model}, latency: {latency:.2f}s")
+                latency, error_msg = self._handle_timeout_error(model, start_time, 180)
                 if force_opus:
                     yield f"❌ Ошибка: {error_msg}"
                     return
                 continue
             except Exception as e:
-                latency = time.time() - start_time if 'start_time' in locals() else 0
-                error_msg = handle_error(e, "get_response_streaming", show_to_user=False)
-                log_api_call(model, False, latency, error_msg)
-                print(f"⚠️ Ошибка с моделью {model}: {error_msg}, latency: {latency:.2f}s")
+                latency, error_msg = self._handle_exception_error(model, e, start_time, "get_response_streaming", "")
                 if force_opus:
                     yield f"❌ Ошибка: {error_msg}"
                     return
@@ -1896,11 +2005,12 @@ class OpenRouterAssistant:
                     result = result_data["choices"][0]["message"]["content"]
 
                     tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                    model_type = "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "❓ UNKNOWN"
+                    print(f"✅ [{model_type}] [NO SYSTEM] Модель: {model_name}, Токенов: {tokens_used}, Latency: {latency:.2f}с")
                     log_api_call(model, True, latency, None)
                     track_model_usage(model, True, tokens_used)
 
                     self.model = model
-                    print(f"✅ [{model_name} NO SYSTEM] Запрос завершен за {latency:.2f}с, использовано токенов: {tokens_used}")
                     return result
                 elif response.status_code == 402:
                     # Ошибка недостатка кредитов
@@ -1911,8 +2021,7 @@ class OpenRouterAssistant:
                     continue
                 else:
                     error_msg = f"HTTP {response.status_code}"
-                    log_api_call(model, False, latency, error_msg)
-                    track_model_usage(model, False)
+                    self._log_api_error(model, latency, error_msg)
                     continue
 
             except requests.exceptions.Timeout:
@@ -2091,14 +2200,14 @@ class OpenRouterAssistant:
                 
                 # Логирование
                 tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                print(f"✅ [⚡ FLASH] [VIDEO] Модель: Gemini 2.5 Flash, Токенов: {tokens_used}, Latency: {latency:.2f}с")
                 log_api_call(model, True, latency, None)
                 track_model_usage(model, True, tokens_used)
                 
                 return f"**🎬 Анализ видео (Gemini 2.5 Flash):**\n\n{result}"
             else:
                 error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                log_api_call(model, False, latency, error_msg)
-                track_model_usage(model, False)
+                self._log_api_error(model, latency, error_msg)
                 return f"❌ Ошибка анализа видео: {error_msg}"
                 
         except requests.exceptions.Timeout:
@@ -2108,8 +2217,7 @@ class OpenRouterAssistant:
             return f"❌ Ошибка: {error_msg}\n\n💡 Попробуйте:\n- Уменьшить размер видео\n- Использовать более короткий фрагмент\n- Проверить подключение к интернету"
         except requests.exceptions.RequestException as e:
             error_msg = f"Ошибка сети: {str(e)}"
-            log_api_call(model, False, 0, error_msg)
-            track_model_usage(model, False)
+            self._log_api_error(model, 0, error_msg)
             return f"❌ Ошибка сети: {error_msg}"
         except Exception as e:
             error_msg = handle_error(e, "send_video_request", show_to_user=False)
@@ -2198,12 +2306,17 @@ class OpenRouterAssistant:
                         }
                     else:
                         error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                        log_api_call(model, False, latency, error_msg)
-                        track_model_usage(model, False)
+                        self._log_api_error(model, latency, error_msg)
                         return {
                             'specialized': specialized_result,
                             'final': f"❌ Ошибка получения итогового заключения: {error_msg}"
                         }
+                except Exception as e:
+                    error_msg = handle_error(e, "send_video_request_two_stage_final", show_to_user=False)
+                    return {
+                        'specialized': specialized_result,
+                        'final': f"❌ Ошибка при получении итогового заключения: {error_msg}"
+                    }
                 except Exception as e:
                     error_msg = handle_error(e, "send_video_request_two_stage_final", show_to_user=False)
                     return {

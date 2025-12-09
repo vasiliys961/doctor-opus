@@ -932,7 +932,7 @@ def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
             "temperature": 0.3
         }
         
-        print(f"🔍 [GEMINI 2.5 FLASH] Ищу протоколы: {query} ({specialty})")
+        print(f"🔍 [⚡ FLASH] [PROTOCOLS] Ищу протоколы через Gemini 2.5 Flash: {query} ({specialty})")
         start_time = time.time()
         response = requests.post(url, headers=headers, json=payload, timeout=60)
         latency = time.time() - start_time
@@ -942,7 +942,7 @@ def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             tokens_used = data.get("usage", {}).get("total_tokens", 0)
             
-            print(f"✅ [GEMINI 2.5 FLASH] Найдено протоколов. Токенов: {tokens_used}, Время: {latency:.2f}с")
+            print(f"✅ [⚡ FLASH] [PROTOCOLS] Модель: Gemini 2.5 Flash, Токенов: {tokens_used}, Latency: {latency:.2f}с")
             
             return {
                 "success": True,
