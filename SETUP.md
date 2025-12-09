@@ -43,11 +43,14 @@ max_retries = 3
 Приложение автоматически определит платформу и загрузит ключи из переменных окружения.
 
 **Важно:**
-- **OPENROUTER_API_KEY** - обязательный для работы ИИ-функций
+- **OPENROUTER_API_KEY** - обязательный для работы ИИ-функций и поиска протоколов
 - **ASSEMBLYAI_API_KEY** - опциональный (функции транскрипции будут недоступны без него)
 
 **Где получить ключи:**
 - OpenRouter: https://openrouter.ai/keys
+- AssemblyAI: https://www.assemblyai.com/app/account
+
+**Примечание:** Поиск протоколов использует Gemini 2.5 Flash через OpenRouter (бесплатно), дополнительный API ключ не требуется.
 - AssemblyAI: https://www.assemblyai.com/app/account
 
 ### 3. Запуск приложения
