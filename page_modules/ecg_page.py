@@ -559,7 +559,7 @@ def show_ecg_analysis():
 
         # Выбор пациента для сохранения в контекст
         st.subheader("👤 Связь с пациентом (опционально)")
-        from app import init_db
+        from utils.database import init_db
         init_db()
         conn = sqlite3.connect('medical_data.db')
         patients = pd.read_sql_query("SELECT id, name FROM patients", conn)

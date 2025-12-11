@@ -99,27 +99,8 @@ def get_model_metrics_display(category: str):
             'opus': {'accuracy': 96, 'speed_multiplier': 3.8, 'price_multiplier': 4.5}
         }
 
-def init_db():
-    """Инициализация базы данных"""
-    try:
-        import app
-        app.init_db()
-    except (ImportError, AttributeError):
-        # Fallback - создаем таблицы напрямую
-        import sqlite3
-        conn = sqlite3.connect('medical_data.db')
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS patients (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                age INTEGER,
-                sex TEXT,
-                phone TEXT
-            )
-        ''')
-        conn.commit()
-        conn.close()
+# Функция init_db() вынесена в utils/database.py для устранения циклических зависимостей
+from utils.database import init_db
 
 
 def show_mri_analysis():

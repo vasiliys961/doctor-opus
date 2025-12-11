@@ -7,21 +7,12 @@ import sqlite3
 import pandas as pd
 
 # Импорты функций из app.py (которые используются в show_patient_database)
-# Используем ленивый импорт чтобы избежать циклических зависимостей
-def get_init_db():
-    """Ленивый импорт init_db из app.py"""
-    try:
-        import app
-        return app.init_db
-    except (ImportError, AttributeError):
-        def fallback():
-            pass  # Fallback - ничего не делаем
-        return fallback
+# Функция init_db() вынесена в utils/database.py для устранения циклических зависимостей
+from utils.database import init_db
 
 
 def show_patient_database():
     st.header("👤 База данных пациентов")
-    init_db = get_init_db()
     init_db()
 
     tab1, tab2 = st.tabs(["➕ Добавить", "🔍 Поиск"])

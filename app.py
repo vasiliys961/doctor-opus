@@ -522,56 +522,8 @@ def get_model_metrics_display(category: str):
     })
 
 # --- Инициализация базы данных ---
-def init_db():
-    conn = sqlite3.connect('medical_data.db')
-    cursor = conn.cursor()
-
-    # Создаём таблицы
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS patients (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            age INTEGER,
-            sex TEXT,
-            phone TEXT
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS patient_notes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            patient_id INTEGER,
-            raw_text TEXT,
-            structured_note TEXT,
-            gdoc_url TEXT,
-            diagnosis TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (patient_id) REFERENCES patients (id)
-        )
-    ''')
-
-    # Таблица для истории чата с ИИ
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS ai_chat_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT,
-            user_message TEXT,
-            assistant_response TEXT,
-            files_context TEXT,
-            context_summary TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-
-    conn.commit()
-    conn.close()
-    
-    # Создаём таблицу для обратной связи
-    try:
-        from database import init_feedback_table
-        init_feedback_table()
-    except Exception as e:
-        print(f"⚠️ Предупреждение: не удалось создать таблицу обратной связи: {e}", file=sys.stderr)
+# Функция init_db() вынесена в utils/database.py для устранения циклических зависимостей
+from utils.database import init_db
 
 # --- Страницы ---
 # Функция show_home_page() вынесена в pages/home_page.py
@@ -792,86 +744,104 @@ def main():
         # Игнорируем ошибки автоанализа (чтобы не ломать приложение)
         pass
 
-    # ОБНОВЛЕННЫЙ список страниц
-    pages = [
-        "🏠 Главная",
-        "📈 Анализ ЭКГ",
-        "🩻 Анализ рентгена",
-        "🧠 Анализ МРТ",
-        "🩻 Анализ КТ",
-        "🔊 Анализ УЗИ",
-        "🔬 Анализ дерматоскопии",
-        "🔬 Анализ лабораторных данных",
-        "📝 Протокол приёма",
-        "📄 Сканирование документов",
-        "🎬 Анализ видео",
-        "👤 База данных пациентов",
-        "📋 Клинический контекст",
-        "🤖 ИИ-Консультант",
-        "🧬 Генетический анализ",
-        "📊 Статистика",
-        "🔬 Расширенный ИИ-анализ",
-        "📊 Сравнительный анализ",
-        "📚 Медицинские протоколы",
-    ]
+    # Импорт роутера страниц
+    try:
+        from utils.page_router import create_page_router, get_all_pages_list, get_enhanced_pages
+        page_router = create_page_router()
+        enhanced_pages = get_enhanced_pages()
+        pages = get_all_pages_list()
+    except ImportError:
+        # Fallback на старый способ, если роутер недоступен
+        pages = [
+            "🏠 Главная",
+            "📈 Анализ ЭКГ",
+            "🩻 Анализ рентгена",
+            "🧠 Анализ МРТ",
+            "🩻 Анализ КТ",
+            "🔊 Анализ УЗИ",
+            "🔬 Анализ дерматоскопии",
+            "🔬 Анализ лабораторных данных",
+            "📝 Протокол приёма",
+            "📄 Сканирование документов",
+            "🎬 Анализ видео",
+            "👤 База данных пациентов",
+            "📋 Клинический контекст",
+            "🤖 ИИ-Консультант",
+            "🧬 Генетический анализ",
+            "📊 Статистика",
+            "🔬 Расширенный ИИ-анализ",
+            "📊 Сравнительный анализ",
+            "📚 Медицинские протоколы",
+        ]
+        page_router = {}
+        enhanced_pages = {}
 
     st.sidebar.title("🧠 Меню")
     page = st.sidebar.selectbox("Выберите раздел:", pages)
 
-    # === ОБРАБОТКА СТРАНИЦ ===
-    if page == "🏠 Главная":
-        show_home_page()
-    elif page == "📈 Анализ ЭКГ":
-        show_ecg_analysis()
-    elif page == "🩻 Анализ рентгена":
-        show_xray_analysis()
-    elif page == "🧠 Анализ МРТ":
-        show_mri_analysis()
-    elif page == "🩻 Анализ КТ":  # ← НОВОЕ
-        show_ct_analysis()
-    elif page == "🔊 Анализ УЗИ":  # ← НОВОЕ
-        show_ultrasound_analysis()
-    elif page == "🔬 Анализ дерматоскопии":
-        show_dermatoscopy_analysis()
-    elif page == "🔬 Анализ лабораторных данных":
-        show_lab_analysis()  # ← ваша новая улучшенная функция
-    elif page == "📝 Протокол приёма":
-        show_consultation_protocol()
-    elif page == "📄 Сканирование документов":  # ← НОВОЕ
-        show_document_scanner_page()
-    elif page == "🎬 Анализ видео":
-        show_video_analysis()
-    elif page == "👤 База данных пациентов":
-        show_patient_database()
-    elif page == "📋 Клинический контекст":  # ← НОВОЕ
-        show_patient_context_page()
-    elif page == "🤖 ИИ-Консультант":
-        show_ai_chat()
-    elif page == "🧬 Генетический анализ":
-        show_genetic_analysis_page()  # ← ваша готовая функция
-    elif page == "📊 Статистика":  # ← НОВОЕ
-        show_statistics_page()
-    # === НОВЫЕ СТРАНИЦЫ ===
-    elif page == "🔬 Расширенный ИИ-анализ":
-        if ENHANCED_PAGES_AVAILABLE and show_enhanced_analysis_page:
-            show_enhanced_analysis_page()
+    # === ОБРАБОТКА СТРАНИЦ ЧЕРЕЗ РОУТЕР ===
+    # Основные страницы
+    if page in page_router:
+        page_router[page]()
+    # Расширенные страницы с проверкой доступности
+    elif page in enhanced_pages:
+        if ENHANCED_PAGES_AVAILABLE and enhanced_pages[page]:
+            enhanced_pages[page]()
         else:
-            st.error("❌ Модуль расширенного анализа недоступен. Проверьте файл `modules/streamlit_enhanced_pages.py`")
+            st.error(f"❌ Модуль '{page}' недоступен. Проверьте файл `modules/streamlit_enhanced_pages.py`")
             st.info("💡 Убедитесь, что все зависимости установлены: `pip install plotly pandas`")
-    elif page == "📊 Сравнительный анализ":
-        if ENHANCED_PAGES_AVAILABLE and show_comparative_analysis_page:
-            show_comparative_analysis_page()
-        else:
-            st.error("❌ Модуль сравнительного анализа недоступен. Проверьте файл `modules/streamlit_enhanced_pages.py`")
-            st.info("💡 Убедитесь, что все зависимости установлены: `pip install plotly pandas`")
-    elif page == "📚 Медицинские протоколы":
-        if ENHANCED_PAGES_AVAILABLE and show_medical_protocols_page:
-            show_medical_protocols_page()
-        else:
-            st.error("❌ Модуль медицинских протоколов недоступен. Проверьте файл `modules/streamlit_enhanced_pages.py`")
-            st.info("💡 Убедитесь, что все зависимости установлены: `pip install plotly pandas`")
-    #"elif page == "🎓 Обучение ИИ":
-#       show_ai_training_page()
+    # Fallback на старый способ (для обратной совместимости)
+    else:
+        if page == "🏠 Главная":
+            show_home_page()
+        elif page == "📈 Анализ ЭКГ":
+            show_ecg_analysis()
+        elif page == "🩻 Анализ рентгена":
+            show_xray_analysis()
+        elif page == "🧠 Анализ МРТ":
+            show_mri_analysis()
+        elif page == "🩻 Анализ КТ":
+            show_ct_analysis()
+        elif page == "🔊 Анализ УЗИ":
+            show_ultrasound_analysis()
+        elif page == "🔬 Анализ дерматоскопии":
+            show_dermatoscopy_analysis()
+        elif page == "🔬 Анализ лабораторных данных":
+            show_lab_analysis()
+        elif page == "📝 Протокол приёма":
+            show_consultation_protocol()
+        elif page == "📄 Сканирование документов":
+            show_document_scanner_page()
+        elif page == "🎬 Анализ видео":
+            show_video_analysis()
+        elif page == "👤 База данных пациентов":
+            show_patient_database()
+        elif page == "📋 Клинический контекст":
+            show_patient_context_page()
+        elif page == "🤖 ИИ-Консультант":
+            show_ai_chat()
+        elif page == "🧬 Генетический анализ":
+            show_genetic_analysis_page()
+        elif page == "📊 Статистика":
+            show_statistics_page()
+        elif page == "🔬 Расширенный ИИ-анализ":
+            if ENHANCED_PAGES_AVAILABLE and show_enhanced_analysis_page:
+                show_enhanced_analysis_page()
+            else:
+                st.error("❌ Модуль расширенного анализа недоступен. Проверьте файл `modules/streamlit_enhanced_pages.py`")
+                st.info("💡 Убедитесь, что все зависимости установлены: `pip install plotly pandas`")
+        elif page == "📊 Сравнительный анализ":
+            if ENHANCED_PAGES_AVAILABLE and show_comparative_analysis_page:
+                show_comparative_analysis_page()
+            else:
+                st.error("❌ Модуль сравнительного анализа недоступен. Проверьте файл `modules/streamlit_enhanced_pages.py`")
+                st.info("💡 Убедитесь, что все зависимости установлены: `pip install plotly pandas`")
+        elif page == "📚 Медицинские протоколы":
+            if ENHANCED_PAGES_AVAILABLE and show_medical_protocols_page:
+                show_medical_protocols_page()
+            else:
+                st.error("❌ Модуль медицинских протоколов недоступен. Проверьте файл `modules/streamlit_enhanced_pages.py`")
+                st.info("💡 Убедитесь, что все зависимости установлены: `pip install plotly pandas`")
     
     # === ОБНОВЛЕННЫЙ САЙДБАР ===
     st.sidebar.markdown("---")
