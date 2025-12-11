@@ -98,24 +98,8 @@ def get_model_metrics_display(category: str):
             'opus': {'accuracy': 95, 'speed_multiplier': 3.5, 'price_multiplier': 4.2}
         }
 
-def get_safe_init_components():
-    """Ленивый импорт safe_init_components из app.py"""
-    try:
-        import app
-        return app.safe_init_components
-    except (ImportError, AttributeError):
-        def fallback(assistant):
-            return {
-                'consensus_engine': None,
-                'validator': None,
-                'scorecard': None,
-                'context_store': None,
-                'gap_detector': None,
-                'notifier': None,
-                'model_router': None,
-                'evidence_ranker': None
-            }
-        return fallback
+# Функция safe_init_components() вынесена в utils/component_initializer.py для устранения циклических зависимостей
+from utils.component_initializer import safe_init_components
 
 # Импорт ImageType
 try:
@@ -202,7 +186,6 @@ def show_ct_analysis():
 
         # Инициализация компонентов (безопасная)
         assistant = OpenRouterAssistant()
-        safe_init_components = get_safe_init_components()
         components = safe_init_components(assistant)
         consensus_engine = components['consensus_engine']
         validator = components['validator']

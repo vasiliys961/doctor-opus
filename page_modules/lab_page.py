@@ -68,25 +68,8 @@ except ImportError:
         ECG = "ECG"
 
 # Импорты функций из app.py (которые используются в show_lab_analysis)
-# Используем ленивый импорт чтобы избежать циклических зависимостей
-def get_safe_init_components():
-    """Ленивый импорт safe_init_components из app.py"""
-    try:
-        import app
-        return app.safe_init_components
-    except (ImportError, AttributeError):
-        def fallback(assistant):
-            return {
-                'consensus_engine': None,
-                'validator': None,
-                'scorecard': None,
-                'context_store': None,
-                'gap_detector': None,
-                'notifier': None,
-                'model_router': None,
-                'evidence_ranker': None
-            }
-        return fallback
+# Функция safe_init_components() вынесена в utils/component_initializer.py для устранения циклических зависимостей
+from utils.component_initializer import safe_init_components
 
 
 def show_lab_analysis():
@@ -271,7 +254,6 @@ def show_lab_analysis():
                             
                             try:
                                 assistant = OpenRouterAssistant()
-                                safe_init_components = get_safe_init_components()
                                 components = safe_init_components(assistant)
                                 consensus_engine = components['consensus_engine']
                                 validator = components['validator']

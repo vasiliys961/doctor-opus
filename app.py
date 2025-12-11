@@ -334,69 +334,8 @@ def transcribe_audio(audio_file):
     return "❌ Используйте AssemblyAI для расшифровки"
 
 # --- Безопасная инициализация компонентов ---
-def safe_init_components(assistant):
-    """Безопасная инициализация компонентов с обработкой ошибок"""
-    components = {
-        'consensus_engine': None,
-        'validator': None,
-        'scorecard': None,
-        'context_store': None,
-        'gap_detector': None,
-        'notifier': None,
-        'model_router': None,
-        'evidence_ranker': None
-    }
-    
-    # Прямые вызовы с обработкой ошибок - если модуль доступен, используем его
-    if CONSENSUS_ENGINE_AVAILABLE and ConsensusEngine:
-        try:
-            components['consensus_engine'] = ConsensusEngine(assistant)
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации ConsensusEngine: {e}", file=sys.stderr)
-    
-    if VALIDATION_PIPELINE_AVAILABLE and ValidationPipeline:
-        try:
-            components['validator'] = ValidationPipeline(assistant)
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации ValidationPipeline: {e}", file=sys.stderr)
-    
-    if SCORECARDS_AVAILABLE and MedicalScorecard:
-        try:
-            components['scorecard'] = MedicalScorecard()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации MedicalScorecard: {e}", file=sys.stderr)
-    
-    if CONTEXT_STORE_AVAILABLE and ContextStore:
-        try:
-            components['context_store'] = ContextStore()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации ContextStore: {e}", file=sys.stderr)
-    
-    if GAP_DETECTOR_AVAILABLE and DiagnosticGapDetector:
-        try:
-            components['gap_detector'] = DiagnosticGapDetector()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации DiagnosticGapDetector: {e}", file=sys.stderr)
-    
-    if NOTIFICATION_SYSTEM_AVAILABLE and NotificationSystem:
-        try:
-            components['notifier'] = NotificationSystem()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации NotificationSystem: {e}", file=sys.stderr)
-    
-    if MODEL_ROUTER_AVAILABLE and ModelRouter:
-        try:
-            components['model_router'] = ModelRouter()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации ModelRouter: {e}", file=sys.stderr)
-    
-    if EVIDENCE_RANKER_AVAILABLE and EvidenceRanker:
-        try:
-            components['evidence_ranker'] = EvidenceRanker()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации EvidenceRanker: {e}", file=sys.stderr)
-    
-    return components
+# Функция safe_init_components() вынесена в utils/component_initializer.py для устранения циклических зависимостей
+from utils.component_initializer import safe_init_components
 
 # --- Вспомогательная функция для анализа с streaming ---
 def perform_analysis_with_streaming(assistant, prompt, image_array, metadata, use_streaming, 

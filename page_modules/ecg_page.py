@@ -545,8 +545,8 @@ def show_ecg_analysis():
         assistant = OpenRouterAssistant()
         
         # Инициализация компонентов (безопасная)
-        # Импортируем функцию из app.py (ленивый импорт для избежания циклических зависимостей)
-        from app import safe_init_components
+        # Функция вынесена в utils/component_initializer.py для устранения циклических зависимостей
+        from utils.component_initializer import safe_init_components
         components = safe_init_components(assistant)
         consensus_engine = components['consensus_engine']
         validator = components['validator']
