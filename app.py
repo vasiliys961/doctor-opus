@@ -578,31 +578,31 @@ def init_db():
 # Удалена из app.py для улучшения архитектуры
 
 # Функция show_ecg_analysis() вынесена в pages/ecg_page.py
-from pages.ecg_page import show_ecg_analysis
+from page_modules.ecg_page import show_ecg_analysis
 # Функция show_xray_analysis() вынесена в pages/xray_page.py
-from pages.xray_page import show_xray_analysis
+from page_modules.xray_page import show_xray_analysis
 # Функция show_mri_analysis() вынесена в pages/mri_page.py
-from pages.mri_page import show_mri_analysis
+from page_modules.mri_page import show_mri_analysis
 # Функция show_ct_analysis() вынесена в pages/ct_page.py
-from pages.ct_page import show_ct_analysis
+from page_modules.ct_page import show_ct_analysis
 # Функция show_ultrasound_analysis() вынесена в pages/ultrasound_page.py
-from pages.ultrasound_page import show_ultrasound_analysis
+from page_modules.ultrasound_page import show_ultrasound_analysis
 # Функция show_dermatoscopy_analysis() вынесена в pages/dermatoscopy_page.py
-from pages.dermatoscopy_page import show_dermatoscopy_analysis
+from page_modules.dermatoscopy_page import show_dermatoscopy_analysis
 # Функция show_lab_analysis() вынесена в pages/lab_page.py
-from pages.lab_page import show_lab_analysis
+from page_modules.lab_page import show_lab_analysis
 # Функция show_video_analysis() вынесена в pages/video_page.py
-from pages.video_page import show_video_analysis
+from page_modules.video_page import show_video_analysis
 # Функция show_document_scanner_page() вынесена в pages/document_page.py
-from pages.document_page import show_document_scanner_page
+from page_modules.document_page import show_document_scanner_page
 # Функция show_statistics_page() вынесена в pages/statistics_page.py
-from pages.statistics_page import show_statistics_page
+from page_modules.statistics_page import show_statistics_page
 # Функция show_patient_context_page() вынесена в pages/patient_context_page.py
-from pages.patient_context_page import show_patient_context_page
+from page_modules.patient_context_page import show_patient_context_page
 # Функция show_home_page() вынесена в pages/home_page.py
-from pages.home_page import show_home_page
+from page_modules.home_page import show_home_page
 # Функция show_patient_database() вынесена в pages/patient_database_page.py
-from pages.patient_database_page import show_patient_database
+from page_modules.patient_database_page import show_patient_database
 
 # --- Страница: Протокол приёма ---
 # Функция show_consultation_protocol() вынесена в pages/consultation_protocol_page.py
@@ -611,9 +611,10 @@ from pages.patient_database_page import show_patient_database
 # Функция show_patient_database() вынесена в pages/patient_database_page.py
 # Удалена из app.py для улучшения архитектуры
 # Функция show_ai_chat() вынесена в pages/ai_chat_page.py
-from pages.ai_chat_page import show_ai_chat
-# Функция show_consultation_protocol() вынесена в pages/consultation_protocol_page.py
-from pages.consultation_protocol_page import show_consultation_protocol
+from page_modules.ai_chat_page import show_ai_chat
+# Функция show_consultation_protocol() вынесена в page_modules/consultation_protocol_page.py
+from page_modules.consultation_protocol_page import show_consultation_protocol
+from page_modules.genetic_page import show_genetic_analysis_page
 
 # --- Вспомогательная функция для клинических рекомендаций ---
 def show_clinical_recommendations(diagnosis):
@@ -656,260 +657,10 @@ def show_clinical_recommendations(diagnosis):
     else:
         st.info("Рекомендации для данного диагноза не найдены")
 
-# Функция show_genetic_analysis_page() вынесена в pages/genetic_page.py
-# Удалена из app.py для улучшения архитектуры
-# ВАЖНО: Эта функция очень большая (~1200 строк), поэтому её вынос требует особой осторожности
-# Пока оставляем её в app.py, но планируем вынести в следующем этапе
-
-def show_genetic_analysis_page():
-    """Страница анализа генетических данных с поддержкой VCF"""
-    # ВРЕМЕННО: функция остается в app.py из-за большого размера (~1200 строк)
-    # Планируется вынос в pages/genetic_page.py в следующем этапе
-    st.header("🧬 Генетический анализ")
-    
-    # Импорт генетического анализатора
-    try:
-        from modules.genetic_analyzer import GeneticAnalyzer, VCFParser
-        GENETIC_ANALYZER_AVAILABLE = True
-    except ImportError as e:
-        st.error(f"❌ Модуль генетического анализа недоступен: {e}")
-        GENETIC_ANALYZER_AVAILABLE = False
-        return
-    
-    # Информация о пациенте
-    st.subheader("👤 Информация о пациенте")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        age = st.number_input("Возраст", 1, 120, 30)
-    with col2:
-        gender = st.selectbox("Пол", ["М", "Ж"])
-    with col3:
-        lifestyle = st.selectbox("Образ жизни", ["Низкая активность", "Средняя активность", "Высокая активность"])
-    
-    # Клинический контекст
-    clinical_context = st.text_area(
-        "Клинический контекст (опционально)",
-        placeholder="Укажите жалобы, семейный анамнез, сопутствующие заболевания...",
-        height=100
-    )
-    
-    # Загрузка файла
-    uploaded_file = st.file_uploader(
-        "Загрузите генетический файл или снимок отчета", 
-        type=["vcf", "vcf.gz", "txt", "csv", "pdf", "jpg", "jpeg", "png"],
-        help="Поддерживаются: VCF, VCF.GZ (сжатый), TXT, CSV, PDF, а также скриншоты (JPG, JPEG, PNG) генетических отчетов"
-    )
-    
-    if uploaded_file:
-        file_ext = uploaded_file.name.split('.')[-1].lower()
-        file_name = uploaded_file.name
-        
-        # Сохранение во временный файл
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            tmp_path = tmp_file.name
-        
-        # Сохраняем путь к файлу в session_state для повторного использования
-        file_key = f"genetic_file_{uploaded_file.name}"
-        
-        if st.button("🧬 Запустить генетический анализ", use_container_width=True):
-            if not GENETIC_ANALYZER_AVAILABLE:
-                st.error("❌ Модуль генетического анализа недоступен. Проверьте файл modules/genetic_analyzer.py")
-                return
-            try:
-                with st.spinner("🔬 Анализ генетических данных..."):
-                    # Инициализация анализатора
-                    analyzer = GeneticAnalyzer()
-                    
-                    # Информация о пациенте
-                    patient_info = {
-                        "age": age,
-                        "gender": gender,
-                        "lifestyle": lifestyle
-                    }
-                    
-                    # Анализ VCF файла
-                    if file_ext in ['vcf', 'gz']:
-                        st.info("📄 Парсинг VCF файла...")
-                        analysis_result = analyzer.analyze_vcf_file(
-                            tmp_path,
-                            patient_info=patient_info,
-                            clinical_context=clinical_context
-                        )
-                        
-                        # Сохраняем результат в session_state для использования после rerun
-                        if 'genetic_analysis_results' not in st.session_state:
-                            st.session_state.genetic_analysis_results = {}
-                        
-                        st.session_state.genetic_analysis_results[file_key] = {
-                            'result': analysis_result,
-                            'patient_info': patient_info,
-                            'clinical_context': clinical_context,
-                            'file_name': file_name
-                        }
-                        
-                        # Отображение результатов
-                        st.success("✅ Анализ завершен! Результаты сохранены.")
-                        st.rerun()  # Перезагружаем страницу, чтобы показать сохраненные результаты
-                    
-                    # Анализ скриншота (изображения) генетического отчета
-                    elif file_ext in ['jpg', 'jpeg', 'png']:
-                        if not AI_AVAILABLE or OpenRouterAssistant is None:
-                            st.error("❌ ИИ-модуль недоступен. Скриншот не может быть проанализирован.")
-                        else:
-                            st.info("🖼️ Обработка скриншота генетического отчета и извлечение текста (OCR)...")
-                            st.info("💡 Система попытается распознать таблицы с генами, rsID и генотипами и затем выполнит анализ, как для текстового отчета.")
-                            try:
-                                from PIL import Image
-                                import numpy as np
-                                image = Image.open(tmp_path)
-                                image_array = np.array(image)
-
-                                from claude_assistant import OpenRouterAssistant as _OraForImage  # локальный псевдоним
-                                img_assistant = _OraForImage()
-
-                                ocr_prompt = """
-Вы — эксперт по OCR генетических отчетов.
-Аккуратно извлеките ВЕСЬ текст с этого изображения (особенно таблицы с генами, SNP/rsID и генотипами).
-Верните ТОЛЬКО распознанный текст без интерпретации и без клинических выводов.
-"""
-                                ocr_result = img_assistant.send_vision_request(
-                                    ocr_prompt,
-                                    image_array,
-                                    metadata={"task": "doc_ocr", "source": "genetic_screenshot"}
-                                )
-                                if isinstance(ocr_result, list):
-                                    ocr_text = "\n\n".join(str(x.get("result", x)) for x in ocr_result)
-                                else:
-                                    ocr_text = str(ocr_result)
-
-                                analysis_result = analyzer.analyze_text_report(
-                                    report_text=ocr_text,
-                                    patient_info=patient_info,
-                                    clinical_context=clinical_context,
-                                    source="image_report_ocr"
-                                )
-
-                                # Сохраняем результат в session_state для использования после rerun
-                                if 'genetic_analysis_results' not in st.session_state:
-                                    st.session_state.genetic_analysis_results = {}
-                                
-                                st.session_state.genetic_analysis_results[file_key] = {
-                                    'result': analysis_result,
-                                    'patient_info': patient_info,
-                                    'clinical_context': clinical_context,
-                                    'file_name': file_name
-                                }
-                                
-                                st.success("✅ Анализ завершен! Результаты сохранены.")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Ошибка обработки скриншота: {e}")
-                                import traceback
-                                with st.expander("🔍 Детали ошибки"):
-                                    st.code(traceback.format_exc())
-                    
-                    # Анализ PDF отчета
-                    elif file_ext == 'pdf':
-                        st.info("📄 Обработка PDF отчета...")
-                        try:
-                            from modules.advanced_lab_processor import AdvancedLabProcessor
-                            processor = AdvancedLabProcessor()
-                            extracted_text = processor._extract_from_pdf(tmp_path)
-                            
-                            analysis_result = analyzer.analyze_text_report(
-                                report_text=str(extracted_text),
-                                patient_info=patient_info,
-                                clinical_context=clinical_context,
-                                source="pdf_report"
-                            )
-                            
-                            # Сохраняем результат в session_state
-                            if 'genetic_analysis_results' not in st.session_state:
-                                st.session_state.genetic_analysis_results = {}
-                            
-                            st.session_state.genetic_analysis_results[file_key] = {
-                                'result': analysis_result,
-                                'patient_info': patient_info,
-                                'clinical_context': clinical_context,
-                                'file_name': file_name
-                            }
-                            
-                            st.success("✅ Анализ завершен! Результаты сохранены.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Ошибка обработки PDF: {e}")
-                            import traceback
-                            with st.expander("🔍 Детали ошибки"):
-                                st.code(traceback.format_exc())
-                    
-                    # Анализ текстового отчета
-                    elif file_ext in ['txt', 'csv']:
-                        st.info("📄 Обработка текстового отчета...")
-                        try:
-                            content = uploaded_file.read().decode('utf-8')
-                            
-                            analysis_result = analyzer.analyze_text_report(
-                                report_text=content,
-                                patient_info=patient_info,
-                                clinical_context=clinical_context,
-                                source="text_report"
-                            )
-                            
-                            # Сохраняем результат в session_state
-                            if 'genetic_analysis_results' not in st.session_state:
-                                st.session_state.genetic_analysis_results = {}
-                            
-                            st.session_state.genetic_analysis_results[file_key] = {
-                                'result': analysis_result,
-                                'patient_info': patient_info,
-                                'clinical_context': clinical_context,
-                                'file_name': file_name
-                            }
-                            
-                            st.success("✅ Анализ завершен! Результаты сохранены.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Ошибка обработки текстового файла: {e}")
-                            import traceback
-                            with st.expander("🔍 Детали ошибки"):
-                                st.code(traceback.format_exc())
-                    
-                    # Очищаем временный файл
-                    try:
-                        os.unlink(tmp_path)
-                    except:
-                        pass
-            
-            except Exception as e:
-                st.error(f"❌ Ошибка анализа: {e}")
-                import traceback
-                with st.expander("🔍 Детали ошибки"):
-                    st.code(traceback.format_exc())
-    
-    # Отображение сохраненных результатов
-    if 'genetic_analysis_results' in st.session_state and st.session_state.genetic_analysis_results:
-        st.markdown("---")
-        st.subheader("📊 Сохраненные результаты анализов")
-        
-        for key, data in st.session_state.genetic_analysis_results.items():
-            with st.expander(f"📋 {data.get('file_name', 'Результат анализа')}", expanded=False):
-                result = data.get('result')
-                if result:
-                    if isinstance(result, dict):
-                        st.json(result)
-                    else:
-                        st.write(result)
-                
-                # Кнопка удаления результата
-                if st.button(f"🗑️ Удалить результат", key=f"delete_{key}"):
-                    del st.session_state.genetic_analysis_results[key]
-                    st.rerun()
-
 # Функция show_clinical_recommendations() остается в app.py как вспомогательная функция
 # (дубликат удален, оставлена только первая версия на строке 619)
 # Функция show_genetic_analysis_page() вынесена в pages/genetic_page.py
-# (дубликат удален, оставлена только первая версия на строке 664 для выноса)
+# Удалена из app.py для улучшения архитектуры
 
 # Функция show_statistics_page() вынесена в pages/statistics_page.py
 # Удалена из app.py для улучшения архитектуры
