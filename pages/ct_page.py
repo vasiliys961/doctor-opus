@@ -1,0 +1,484 @@
+"""
+Страница анализа КТ (компьютерная томография)
+Вынесена из app.py для улучшения архитектуры проекта
+"""
+import streamlit as st
+import sqlite3
+import pandas as pd
+import numpy as np
+from PIL import Image
+# Увеличиваем лимит PIL для больших изображений из CSV (защита от decompression bomb)
+Image.MAX_IMAGE_PIXELS = 500000000  # ~500M пикселей (было ~179M по умолчанию)
+import tempfile
+import os
+from io import BytesIO
+import datetime
+import sys
+
+# Импорты из claude_assistant
+try:
+    from claude_assistant import OpenRouterAssistant
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    OpenRouterAssistant = None
+
+# Импорты из utils
+try:
+    from utils.validators import validate_image, validate_file_size
+    VALIDATORS_AVAILABLE = True
+except ImportError:
+    VALIDATORS_AVAILABLE = False
+    validate_image = lambda *args, **kwargs: (True, "")
+    validate_file_size = lambda *args, **kwargs: (True, "")
+
+try:
+    from utils.image_processor import ImageFormatProcessor, optimize_image_for_ai
+    IMAGE_PROCESSOR_AVAILABLE = True
+except ImportError:
+    IMAGE_PROCESSOR_AVAILABLE = False
+    ImageFormatProcessor = None
+    optimize_image_for_ai = None
+
+try:
+    from utils.error_handler import handle_error
+    ERROR_HANDLER_AVAILABLE = True
+except ImportError:
+    ERROR_HANDLER_AVAILABLE = False
+    def handle_error(error, context="", show_to_user=True):
+        return str(error)
+
+try:
+    from utils.specialist_detector import get_specialist_prompt, get_specialist_info
+    SPECIALIST_DETECTOR_AVAILABLE = True
+except ImportError:
+    SPECIALIST_DETECTOR_AVAILABLE = False
+    get_specialist_prompt = None
+    get_specialist_info = None
+
+try:
+    from utils.feedback_widget import show_feedback_form
+    FEEDBACK_WIDGET_AVAILABLE = True
+except ImportError:
+    FEEDBACK_WIDGET_AVAILABLE = False
+    def show_feedback_form(*args, **kwargs):
+        st.warning("⚠️ Модуль обратной связи недоступен")
+
+# Импорты из config
+try:
+    from config import IS_REPLIT, MOBILE_MAX_IMAGE_SIZE
+    CONFIG_AVAILABLE = True
+except ImportError:
+    CONFIG_AVAILABLE = False
+    IS_REPLIT = False
+    MOBILE_MAX_IMAGE_SIZE = (1024, 1024)
+
+# Импорты функций из app.py (которые используются в show_ct_analysis)
+# Используем ленивый импорт чтобы избежать циклических зависимостей
+def get_perform_analysis_with_streaming():
+    """Ленивый импорт perform_analysis_with_streaming из app.py"""
+    try:
+        import app
+        return app.perform_analysis_with_streaming
+    except (ImportError, AttributeError):
+        def fallback(*args, **kwargs):
+            st.error("⚠️ Функция perform_analysis_with_streaming недоступна")
+            return None
+        return fallback
+
+def get_model_metrics_display(category: str):
+    """Получить метрики моделей для отображения"""
+    try:
+        import app
+        return app.get_model_metrics_display(category)
+    except (ImportError, AttributeError):
+        # Fallback метрики
+        return {
+            'gemini': {'accuracy': 87},
+            'opus': {'accuracy': 95, 'speed_multiplier': 3.5, 'price_multiplier': 4.2}
+        }
+
+def get_safe_init_components():
+    """Ленивый импорт safe_init_components из app.py"""
+    try:
+        import app
+        return app.safe_init_components
+    except (ImportError, AttributeError):
+        def fallback(assistant):
+            return {
+                'consensus_engine': None,
+                'validator': None,
+                'scorecard': None,
+                'context_store': None,
+                'gap_detector': None,
+                'notifier': None,
+                'model_router': None,
+                'evidence_ranker': None
+            }
+        return fallback
+
+# Импорт ImageType
+try:
+    from modules.medical_ai_analyzer import ImageType
+    IMAGE_TYPE_AVAILABLE = True
+except ImportError:
+    IMAGE_TYPE_AVAILABLE = False
+    # Fallback - создаем простой класс для ImageType
+    class ImageType:
+        CT = "CT"
+
+
+def show_ct_analysis():
+    """Анализ КТ (компьютерная томография) с полной интеграцией компонентов"""
+    if not AI_AVAILABLE:
+        st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
+        return
+
+    st.header("🩻 Анализ КТ (компьютерная томография)")
+    
+    source_type = st.radio(
+        "Выберите источник изображения:",
+        ["📁 Загрузить файл", "📷 Сделать фото"],
+        horizontal=True
+    )
+    
+    image_array = None
+    metadata = {}
+    
+    if source_type == "📷 Сделать фото":
+        camera_image = st.camera_input("Сфотографируйте КТ-снимок", key="ct_camera")
+        if camera_image:
+            try:
+                image = Image.open(camera_image)
+                image_array = np.array(image)
+                metadata = {'source': 'camera', 'format': 'mobile_photo'}
+            except Exception as e:
+                st.error(f"Ошибка обработки фото: {e}")
+                return
+    else:
+        uploaded_file = st.file_uploader(
+            "Загрузите КТ", 
+            type=["jpg", "jpeg", "png", "pdf", "dcm", "dicom", "tiff", "tif", "heic", "heif", "webp", "zip"],
+            help="Поддерживаются: JPG, PNG, TIFF, HEIC, WEBP, DICOM, ZIP"
+        )
+        
+        if uploaded_file:
+            try:
+                is_valid, error_msg = validate_file_size(uploaded_file.size)
+                if not is_valid:
+                    st.error(f"❌ {error_msg}")
+                    return
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    tmp_path = tmp.name
+                
+                processor = ImageFormatProcessor()
+                image_array, file_metadata = processor.load_image(tmp_path, MOBILE_MAX_IMAGE_SIZE)
+                metadata = {**metadata, **file_metadata, 'source': 'upload'}
+                
+                os.unlink(tmp_path)
+                processor.cleanup_temp_files()
+                
+            except Exception as e:
+                st.error(f"Ошибка обработки файла: {e}")
+                return
+
+    if image_array is None:
+        st.info("Загрузите файл или сделайте фото для анализа.")
+        return
+
+    # Валидация изображения
+    is_valid, error_msg = validate_image(image_array)
+    if not is_valid:
+        st.error(f"❌ Ошибка валидации изображения: {error_msg}")
+        return
+
+    try:
+        if (IS_REPLIT or st.session_state.get('mobile_mode', False)) and IMAGE_PROCESSOR_AVAILABLE and optimize_image_for_ai:
+            image_array = optimize_image_for_ai(image_array)
+        
+        st.image(image_array, caption="КТ-срез", use_container_width=True, clamp=True)
+
+        # Инициализация компонентов (безопасная)
+        assistant = OpenRouterAssistant()
+        safe_init_components = get_safe_init_components()
+        components = safe_init_components(assistant)
+        consensus_engine = components['consensus_engine']
+        validator = components['validator']
+        scorecard = components['scorecard']
+        context_store = components['context_store']
+        gap_detector = components['gap_detector']
+        notifier = components['notifier']
+        model_router = components['model_router']
+        evidence_ranker = components['evidence_ranker']
+        
+        st.markdown("---")
+        
+        # Блок метрик моделей
+        st.markdown("### 📊 Точность моделей для КТ")
+        metrics = get_model_metrics_display('CT')
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Точность Gemini Flash", f"{metrics['gemini']['accuracy']}%")
+            st.metric("Точность Opus 4.5", f"{metrics['opus']['accuracy']}%")
+        with col2:
+            speed_diff = metrics['opus']['speed_multiplier']
+            st.info(f"⚡ Opus в {speed_diff} раз медленнее")
+        with col3:
+            price_diff = metrics['opus']['price_multiplier']
+            st.info(f"💰 Opus в {price_diff} раз дороже")
+        
+        # Форма обратной связи - ДО анализа, всегда видна и активна!
+        st.markdown("---")
+        st.markdown("### 💬 Обратная связь")
+        
+        last_result = st.session_state.get('ct_analysis_result', '')
+        analysis_id_base = "CT_feedback_form"
+        ct_input = "КТ: Компьютерная томография"
+        
+        try:
+            show_feedback_form(
+                analysis_type="CT",
+                analysis_result=str(last_result) if last_result else "",
+                analysis_id=analysis_id_base,
+                input_case=ct_input
+            )
+        except Exception as e:
+            st.error(f"Ошибка формы обратной связи: {e}")
+        
+        if not last_result:
+            st.info("💡 После проведения анализа форма автоматически обновится с новым результатом.")
+        
+        st.markdown("---")
+        
+        specialist_info = get_specialist_info(ImageType.CT)
+        base_prompt = f"Проанализируйте КТ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените структуры, патологические изменения, денситометрию."
+        prompt = get_specialist_prompt(ImageType.CT, base_prompt)
+        
+        # Отображение сохраненных результатов анализа (если есть)
+        gemini_result = st.session_state.get('ct_gemini_result', '')
+        opus_result = st.session_state.get('ct_analysis_result', '')
+        
+        if gemini_result or opus_result:
+            st.markdown("---")
+            st.markdown("### 📋 Результаты анализа")
+            
+            if gemini_result:
+                gemini_timestamp = st.session_state.get('ct_gemini_timestamp', '')
+                st.markdown(f"#### ⚡ Быстрый анализ (Gemini Flash){f' - {gemini_timestamp}' if gemini_timestamp else ''}")
+                st.write(gemini_result)
+                st.markdown("---")
+            
+            if opus_result:
+                opus_timestamp = st.session_state.get('ct_analysis_timestamp', '')
+                st.markdown(f"#### 🎯 Точный анализ (Opus 4.5){f' - {opus_timestamp}' if opus_timestamp else ''}")
+                st.write(opus_result)
+                st.markdown("---")
+        
+        # Кнопки быстрого и точного анализа
+        col_fast, col_precise = st.columns(2)
+        with col_fast:
+            if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, type="primary", key="ct_fast"):
+                with st.spinner("Gemini Flash анализирует КТ..."):
+                    try:
+                        result = assistant.send_vision_request_gemini_fast(prompt, image_array, str(metadata))
+                        # Сохраняем результат Gemini
+                        st.session_state.ct_gemini_result = result
+                        st.session_state.ct_gemini_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Ошибка анализа: {str(e)}")
+        
+        with col_precise:
+            opus_accuracy = metrics['opus']['accuracy']
+            gemini_accuracy = metrics['gemini']['accuracy']
+            accuracy_diff = opus_accuracy - gemini_accuracy
+            if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary", key="ct_precise"):
+                perform_analysis_with_streaming = get_perform_analysis_with_streaming()
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
+                    analysis_type="точный", model_type="opus",
+                    title="🎯 Точный анализ (Opus 4.5):"
+                )
+                if result:
+                    st.session_state.ct_analysis_result = result
+                    st.session_state.ct_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    st.rerun()
+        
+        st.markdown("---")
+        st.markdown("### ⚙️ Расширенные режимы анализа")
+        
+        # Выбор режима анализа
+        analysis_mode = st.radio(
+            "Режим анализа:",
+            ["⚡ Быстрый (одна модель)", "🎯 Консенсус (несколько моделей)", "✅ С валидацией"],
+            horizontal=True,
+            key="ct_analysis_mode"
+        )
+        
+        if st.button("🩻 ИИ-анализ КТ", use_container_width=True):
+            perform_analysis_with_streaming = get_perform_analysis_with_streaming()
+            if analysis_mode == "⚡ Быстрый (одна модель)":
+                # Opus 4.5 используется по умолчанию для клинического анализа КТ
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
+                    analysis_type="точный", model_type="opus",
+                    title=f"### 🧠 Заключение ({specialist_info['role']}):"
+                )
+                if result:
+                    st.session_state.ct_analysis_result = result
+                    st.session_state.ct_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    st.rerun()
+                    
+            elif analysis_mode == "🎯 Консенсус (несколько моделей)":
+                    if consensus_engine:
+                        consensus_result = consensus_engine.analyze_with_consensus(prompt, image_array, str(metadata))
+                    else:
+                        st.warning("⚠️ Модуль консенсуса недоступен. Используется стандартный анализ.")
+                        consensus_result = None
+                    
+                    if consensus_result:
+                        st.markdown("### 🎯 Консенсус-анализ:")
+                        
+                        # Правильная структура: consensus_result['consensus']['consensus_response']
+                        if consensus_result.get('consensus', {}).get('consensus_available'):
+                            st.write(consensus_result['consensus']['consensus_response'])
+                            st.metric("Уровень согласия", f"{consensus_result['consensus']['agreement_level']:.1%}")
+                            
+                            if consensus_result['consensus'].get('discrepancies'):
+                                st.warning("⚠️ Обнаружены расхождения между моделями:")
+                                for disc in consensus_result['consensus']['discrepancies']:
+                                    st.warning(f"• {disc}")
+                        else:
+                            st.write(consensus_result.get('consensus', {}).get('single_opinion', 'Ошибка получения консенсуса'))
+                        
+                        if consensus_result.get('individual_opinions'):
+                            with st.expander("📊 Детали мнений моделей"):
+                                for i, opinion in enumerate(consensus_result['individual_opinions'], 1):
+                                    if opinion['success']:
+                                        st.markdown(f"**Модель {i} ({opinion['model']}):**")
+                                        response_text = opinion['response'] if isinstance(opinion['response'], str) else str(opinion['response'])
+                                        st.write(response_text[:500] + "..." if len(response_text) > 500 else response_text)
+                                    else:
+                                        st.error(f"**Модель {i} ({opinion['model']}):** Ошибка: {opinion.get('error', 'Неизвестная ошибка')}")
+                    
+            elif analysis_mode == "✅ С валидацией":
+                # Сначала Flash, потом Opus - оба результата остаются
+                print("🔄 Запуск Gemini Flash для первичного анализа...", file=sys.stderr)
+                flash_result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
+                    analysis_type="быстрый", model_type="gemini",
+                    title=f"### ⚡ Gemini Flash ({specialist_info['role']}):"
+                )
+                
+                if flash_result:
+                    st.session_state.ct_flash_result = flash_result
+                    st.session_state.ct_flash_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                
+                print("🔄 Запуск Opus 4.5 для детального анализа...", file=sys.stderr)
+                result = perform_analysis_with_streaming(
+                    assistant, prompt, image_array, str(metadata), use_streaming=True,
+                    analysis_type="точный", model_type="opus",
+                    title=f"### 🧠 Opus 4.5 ({specialist_info['role']}):"
+                )
+                
+                if not result:
+                    st.error("❌ Не удалось получить результат анализа от Opus")
+                    if flash_result:
+                        st.info("ℹ️ Результат Flash сохранен выше")
+                    return
+                
+                # Валидация
+                validation = None
+                if validator:
+                    try:
+                        validation = validator.validate_response(result)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка валидации: {e}", file=sys.stderr)
+                
+                # Оценка качества
+                evaluation = None
+                if scorecard:
+                    try:
+                        evaluation = scorecard.evaluate_response(result, ImageType.CT)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка оценки: {e}", file=sys.stderr)
+                
+                # Детекция пробелов
+                gaps = None
+                if gap_detector:
+                    try:
+                        gaps = gap_detector.detect_gaps(result, ImageType.CT)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка выявления пробелов: {e}", file=sys.stderr)
+                
+                # Критические находки
+                critical_findings = None
+                if notifier:
+                    try:
+                        critical_findings = notifier.check_critical_findings(result)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка проверки критических находок: {e}", file=sys.stderr)
+                
+                # Оценка доказательности
+                evidence = None
+                if evidence_ranker:
+                    try:
+                        evidence = evidence_ranker.rank_evidence(result)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка оценки доказательности: {e}", file=sys.stderr)
+                
+                # Сохраняем результат (без rerun, чтобы оба результата остались)
+                if result:
+                    st.session_state.ct_analysis_result = result
+                    st.session_state.ct_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                if flash_result:
+                    st.session_state.ct_flash_result = flash_result
+                    st.session_state.ct_flash_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                
+                # Уведомления о критических находках
+                if notifier and critical_findings:
+                    notifier.display_notifications(critical_findings)
+                
+                # Валидация
+                if validator and validation:
+                    with st.expander("✅ Результаты валидации"):
+                        if validation.get('is_valid'):
+                            st.success("✅ Валидация пройдена")
+                        else:
+                            st.error("❌ Обнаружены проблемы")
+                        st.write(f"Полнота: {validation.get('completeness_score', 0):.1%}")
+                        if validation.get('warnings'):
+                            for warning in validation['warnings']:
+                                st.warning(warning)
+                        if validation.get('errors'):
+                            for error in validation['errors']:
+                                st.error(error)
+                
+                # Оценка качества
+                if scorecard and evaluation:
+                    with st.expander("📊 Оценка качества"):
+                        st.write(f"**Оценка:** {evaluation.get('grade', 'N/A')}")
+                        st.write(f"**Балл:** {evaluation.get('score', 0):.1%}")
+                        if evaluation.get('recommendations'):
+                            st.write("**Рекомендации:**")
+                            for rec in evaluation['recommendations']:
+                                st.write(f"• {rec}")
+                
+                # Пробелы
+                if gap_detector and gaps and gaps.get('completeness_percentage', 100) < 100:
+                    with st.expander("⚠️ Обнаруженные пробелы"):
+                        st.write(gap_detector.generate_gap_report(gaps))
+                
+                # Доказательность
+                if evidence_ranker and evidence:
+                    with st.expander("📚 Оценка доказательности"):
+                        st.write(evidence_ranker.generate_evidence_report(evidence))
+
+    except Exception as e:
+        error_msg = handle_error(e, "show_ct_analysis", show_to_user=True)
+        st.error(f"Ошибка обработки КТ: {error_msg}")
+
+
+
