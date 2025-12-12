@@ -7,8 +7,16 @@ import sqlite3
 import pandas as pd
 import numpy as np
 from PIL import Image
+# Импорт констант для изображений
+try:
+    import sys
+    import os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'config'))
+    from constants import PIL_MAX_IMAGE_PIXELS
+except ImportError:
+    PIL_MAX_IMAGE_PIXELS = 500000000  # Fallback
 # Увеличиваем лимит PIL для больших изображений из CSV (защита от decompression bomb)
-Image.MAX_IMAGE_PIXELS = 500000000  # ~500M пикселей (было ~179M по умолчанию)
+Image.MAX_IMAGE_PIXELS = PIL_MAX_IMAGE_PIXELS
 import tempfile
 import os
 from io import BytesIO

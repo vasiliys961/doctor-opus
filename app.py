@@ -6,9 +6,19 @@ import sqlite3
 import pandas as pd
 import numpy as np
 from PIL import Image
+# Импорт констант для изображений (безопасный импорт)
+try:
+    import sys
+    import os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'config'))
+    from constants import PIL_MAX_IMAGE_PIXELS, IMAGE_MOBILE_MAX_SIZE
+except ImportError:
+    # Fallback на значения по умолчанию
+    PIL_MAX_IMAGE_PIXELS = 500000000
+    IMAGE_MOBILE_MAX_SIZE = (1024, 1024)
 # Увеличиваем лимит PIL для больших изображений из CSV (защита от decompression bomb)
 # Для медицинских данных мы доверяем источнику, поэтому увеличиваем лимит
-Image.MAX_IMAGE_PIXELS = 500000000  # ~500M пикселей (было ~179M по умолчанию)
+Image.MAX_IMAGE_PIXELS = PIL_MAX_IMAGE_PIXELS
 import requests
 import tempfile
 import os
@@ -85,12 +95,14 @@ get_specialist_prompt = specialist_detector_values['get_specialist_prompt']
 get_specialist_info = specialist_detector_values['get_specialist_info']
 
 # Импорт config
+# Используем константу IMAGE_MOBILE_MAX_SIZE если она уже импортирована, иначе fallback
+_mobile_max_size_fallback = IMAGE_MOBILE_MAX_SIZE if 'IMAGE_MOBILE_MAX_SIZE' in globals() else (1024, 1024)
 CONFIG_AVAILABLE, config_values = safe_import_module(
     'config',
     ['IS_REPLIT', 'MOBILE_MAX_IMAGE_SIZE', 'ALLOWED_IMAGE_EXTENSIONS'],
     {
         'IS_REPLIT': False,
-        'MOBILE_MAX_IMAGE_SIZE': (1024, 1024),
+        'MOBILE_MAX_IMAGE_SIZE': _mobile_max_size_fallback,
         'ALLOWED_IMAGE_EXTENSIONS': ['.jpg', '.jpeg', '.png']
     },
     'config'

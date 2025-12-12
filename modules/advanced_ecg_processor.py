@@ -5,11 +5,53 @@ from scipy.stats import kurtosis, skew
 import matplotlib.pyplot as plt
 from datetime import datetime
 import json
+import sys
+import os
+
+# Импорт констант для ЭКГ
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'config'))
+    from constants import (
+        ECG_DEFAULT_SAMPLING_RATE,
+        BANDPASS_FILTER_LOW_FREQ,
+        BANDPASS_FILTER_HIGH_FREQ,
+        POWERLINE_INTERFERENCE_FREQ,
+        R_PEAK_MIN_DISTANCE_RATIO,
+        R_PEAK_WINDOW_SIZE_RATIO,
+        R_PEAK_CORRECTION_WINDOW_RATIO,
+        TRIANGULAR_INDEX_BIN_WIDTH_MS,
+        TRIANGULAR_INDEX_BIN_WIDTH_SEC,
+        HR_BRADYCARDIA_THRESHOLD,
+        HR_TACHYCARDIA_THRESHOLD,
+        HR_SEVERE_BRADYCARDIA,
+        HR_SEVERE_TACHYCARDIA,
+        RR_VARIATION_COEFFICIENT_THRESHOLD,
+        RR_VARIATION_COEFFICIENT_SEVERE,
+        HRV_NN50_THRESHOLD_SEC,
+    )
+except ImportError:
+    # Fallback значения
+    ECG_DEFAULT_SAMPLING_RATE = 500
+    BANDPASS_FILTER_LOW_FREQ = 0.5
+    BANDPASS_FILTER_HIGH_FREQ = 40
+    POWERLINE_INTERFERENCE_FREQ = 50
+    R_PEAK_MIN_DISTANCE_RATIO = 0.2
+    R_PEAK_WINDOW_SIZE_RATIO = 0.15
+    R_PEAK_CORRECTION_WINDOW_RATIO = 0.05
+    TRIANGULAR_INDEX_BIN_WIDTH_MS = 7.8125
+    TRIANGULAR_INDEX_BIN_WIDTH_SEC = 0.0078125
+    HR_BRADYCARDIA_THRESHOLD = 60
+    HR_TACHYCARDIA_THRESHOLD = 100
+    HR_SEVERE_BRADYCARDIA = 45
+    HR_SEVERE_TACHYCARDIA = 150
+    RR_VARIATION_COEFFICIENT_THRESHOLD = 0.15
+    RR_VARIATION_COEFFICIENT_SEVERE = 0.25
+    HRV_NN50_THRESHOLD_SEC = 0.05
 
 class AdvancedECGProcessor:
     """Расширенный класс для обработки и анализа ЭКГ данных"""
     
-    def __init__(self, sampling_rate=500):
+    def __init__(self, sampling_rate=ECG_DEFAULT_SAMPLING_RATE):
         self.sampling_rate = sampling_rate
         self.lead_names = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
         
@@ -69,13 +111,13 @@ class AdvancedECGProcessor:
         filtered_signal = signal.sosfilt(sos, signal_data)
         return filtered_signal
     
-    def apply_bandpass_filter(self, signal_data, low_freq=0.5, high_freq=40):
+    def apply_bandpass_filter(self, signal_data, low_freq=BANDPASS_FILTER_LOW_FREQ, high_freq=BANDPASS_FILTER_HIGH_FREQ):
         """Применение полосового фильтра"""
         sos = signal.butter(4, [low_freq, high_freq], btype='band', fs=self.sampling_rate, output='sos')
         filtered_signal = signal.sosfilt(sos, signal_data)
         return filtered_signal
     
-    def remove_powerline_interference(self, signal_data, notch_freq=50):
+    def remove_powerline_interference(self, signal_data, notch_freq=POWERLINE_INTERFERENCE_FREQ):
         """Удаление сетевой наводки"""
         # Режекторный фильтр для удаления 50/60 Гц
         quality_factor = 30
@@ -86,7 +128,7 @@ class AdvancedECGProcessor:
     def detect_r_peaks(self, signal_data, min_distance=None):
         """Обнаружение R-пиков"""
         if min_distance is None:
-            min_distance = int(0.2 * self.sampling_rate)  # Минимальное расстояние 200 мс
+            min_distance = int(R_PEAK_MIN_DISTANCE_RATIO * self.sampling_rate)  # Минимальное расстояние
         
         # Использование алгоритма Pan-Tompkins (упрощенная версия)
         # 1. Дифференцирование
@@ -96,7 +138,7 @@ class AdvancedECGProcessor:
         squared_signal = diff_signal ** 2
         
         # 3. Скользящее окно интегрирования
-        window_size = int(0.15 * self.sampling_rate)  # 150 мс окно
+        window_size = int(R_PEAK_WINDOW_SIZE_RATIO * self.sampling_rate)  # Окно интегрирования
         integrated_signal = np.convolve(squared_signal, np.ones(window_size), mode='same') / window_size
         
         # 4. Поиск пиков
@@ -109,8 +151,8 @@ class AdvancedECGProcessor:
         # 5. Коррекция позиций пиков (поиск максимума в исходном сигнале)
         corrected_peaks = []
         for peak in peaks:
-            # Поиск в окне ±50 мс вокруг найденного пика
-            window_half = int(0.05 * self.sampling_rate)
+            # Поиск в окне коррекции вокруг найденного пика
+            window_half = int(R_PEAK_CORRECTION_WINDOW_RATIO * self.sampling_rate)
             start_idx = max(0, peak - window_half)
             end_idx = min(len(signal_data), peak + window_half)
             
@@ -143,7 +185,7 @@ class AdvancedECGProcessor:
         hrv_metrics['RMSSD'] = np.sqrt(np.mean(successive_diffs ** 2)) * 1000  # в мс
         
         # pNN50 - процент NN интервалов, различающихся более чем на 50 мс
-        nn50_count = np.sum(np.abs(successive_diffs) > 0.05)  # 50 мс = 0.05 с
+        nn50_count = np.sum(np.abs(successive_diffs) > HRV_NN50_THRESHOLD_SEC)
         hrv_metrics['pNN50'] = (nn50_count / len(successive_diffs)) * 100
         
         # Среднее RR и частота сердечных сокращений
@@ -160,8 +202,8 @@ class AdvancedECGProcessor:
         if len(rr_intervals) < 20:
             return 0
         
-        # Создание гистограммы с шагом 7.8125 мс
-        bin_width = 7.8125 / 1000  # в секундах
+        # Создание гистограммы с шагом из константы
+        bin_width = TRIANGULAR_INDEX_BIN_WIDTH_SEC
         hist, bins = np.histogram(rr_intervals, bins=int((np.max(rr_intervals) - np.min(rr_intervals)) / bin_width))
         
         # Треугольный индекс = общее количество интервалов / максимальная высота гистограммы
@@ -183,28 +225,28 @@ class AdvancedECGProcessor:
         mean_hr = 60 / mean_rr
         
         # 1. Брадикардия
-        if mean_hr < 60:
+        if mean_hr < HR_BRADYCARDIA_THRESHOLD:
             arrhythmias.append({
                 'type': 'Брадикардия',
                 'description': f'Средняя ЧСС: {mean_hr:.1f} уд/мин',
-                'severity': 'Умеренная' if mean_hr > 45 else 'Выраженная'
+                'severity': 'Умеренная' if mean_hr > HR_SEVERE_BRADYCARDIA else 'Выраженная'
             })
         
         # 2. Тахикардия
-        elif mean_hr > 100:
+        elif mean_hr > HR_TACHYCARDIA_THRESHOLD:
             arrhythmias.append({
                 'type': 'Тахикардия',
                 'description': f'Средняя ЧСС: {mean_hr:.1f} уд/мин',
-                'severity': 'Умеренная' if mean_hr < 150 else 'Выраженная'
+                'severity': 'Умеренная' if mean_hr < HR_SEVERE_TACHYCARDIA else 'Выраженная'
             })
         
         # 3. Аритмия (нерегулярность)
         cv_rr = std_rr / mean_rr  # Коэффициент вариации
-        if cv_rr > 0.15:  # Если коэффициент вариации > 15%
+        if cv_rr > RR_VARIATION_COEFFICIENT_THRESHOLD:
             arrhythmias.append({
                 'type': 'Нерегулярный ритм',
                 'description': f'Коэффициент вариации RR: {cv_rr:.3f}',
-                'severity': 'Умеренная' if cv_rr < 0.25 else 'Выраженная'
+                'severity': 'Умеренная' if cv_rr < RR_VARIATION_COEFFICIENT_SEVERE else 'Выраженная'
             })
         
         # 4. Экстрасистолы (упрощенное обнаружение)
