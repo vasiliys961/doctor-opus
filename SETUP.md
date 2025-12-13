@@ -50,7 +50,7 @@ max_retries = 3
 - OpenRouter: https://openrouter.ai/keys
 - AssemblyAI: https://www.assemblyai.com/app/account
 
-**Примечание:** Поиск протоколов использует Gemini 2.5 Flash через OpenRouter (бесплатно), дополнительный API ключ не требуется.
+**Примечание:** Поиск протоколов использует Claude Sonnet через OpenRouter, дополнительный API ключ не требуется.
 - AssemblyAI: https://www.assemblyai.com/app/account
 
 ### 3. Запуск приложения

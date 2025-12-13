@@ -1036,7 +1036,7 @@ def show_ai_training_page():
 
 def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
     """
-    Поиск актуальных медицинских протоколов через Gemini 2.5 Flash (бесплатно через OpenRouter)
+    Поиск актуальных медицинских протоколов через Claude Sonnet (через OpenRouter)
     
     Args:
         query: Поисковый запрос
@@ -1097,7 +1097,7 @@ def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
 - Используй актуальные источники (2020-2024 годы)
 - Если найдешь российские клинические рекомендации, укажи их в первую очередь."""
         
-        # Используем Gemini 2.5 Flash через OpenRouter
+        # Используем Claude Sonnet через OpenRouter
         url = "https://openrouter.ai/api/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -1107,7 +1107,7 @@ def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
         }
         
         payload = {
-            "model": "google/gemini-2.5-flash",
+            "model": "anthropic/claude-sonnet-4.5",
             "messages": [
                 {
                     "role": "system",
@@ -1122,7 +1122,7 @@ def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
             "temperature": 0.3
         }
         
-        print(f"🔍 [GEMINI 2.5 FLASH] Ищу протоколы: {query} ({specialty})")
+        print(f"🔍 [CLAUDE SONNET] Ищу протоколы: {query} ({specialty})")
         start_time = time.time()
         response = requests.post(url, headers=headers, json=payload, timeout=60)
         latency = time.time() - start_time
@@ -1132,13 +1132,13 @@ def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             tokens_used = data.get("usage", {}).get("total_tokens", 0)
             
-            print(f"✅ [GEMINI 2.5 FLASH] Найдено протоколов. Токенов: {tokens_used}, Время: {latency:.2f}с")
+            print(f"✅ [CLAUDE SONNET] Найдено протоколов. Токенов: {tokens_used}, Время: {latency:.2f}с")
             
             return {
                 "success": True,
                 "content": content,
                 "tokens_used": tokens_used,
-                "model": "Gemini 2.5 Flash"
+                "model": "Claude Sonnet 4.5"
             }
         elif response.status_code == 402:
             return {
@@ -1621,10 +1621,10 @@ def show_medical_protocols_page():
         }
     }
     
-    # Поиск актуальных протоколов через Gemini 2.5 Flash (бесплатно)
+    # Поиск актуальных протоколов через Claude Sonnet
     st.markdown("---")
     st.subheader("🔍 Поиск актуальных протоколов")
-    st.info("💡 Поиск выполняется через Gemini 2.5 Flash (бесплатно через OpenRouter)")
+    st.info("💡 Поиск выполняется через Claude Sonnet (через OpenRouter)")
     
     search_query = st.text_input(
         "Введите запрос для поиска протоколов",
@@ -1634,18 +1634,18 @@ def show_medical_protocols_page():
     
     if st.button("🔍 Найти актуальные протоколы", use_container_width=True, type="primary", key="search_protocols"):
         if search_query:
-            with st.spinner("🔍 Ищу актуальные протоколы через Gemini 2.5 Flash (бесплатно)..."):
+            with st.spinner("🔍 Ищу актуальные протоколы через Claude Sonnet..."):
                 result = search_protocols_gemini(search_query, protocol_category)
                 
                 if result.get("success"):
-                    # Gemini возвращает структурированный текст
+                    # Claude Sonnet возвращает структурированный текст
                     st.markdown("### 📋 Найденные протоколы")
                     st.markdown(result.get("content", ""))
                     
                     if result.get("tokens_used"):
                         st.caption(f"📊 Использовано токенов: {result.get('tokens_used')}")
                     
-                    st.caption(f"🤖 Поиск выполнен через {result.get('model', 'Gemini 2.5 Flash')} (бесплатно)")
+                    st.caption(f"🤖 Поиск выполнен через {result.get('model', 'Claude Sonnet 4.5')}")
                 else:
                     error_msg = result.get("error", "Неизвестная ошибка")
                     st.error(f"❌ {error_msg}")
@@ -1683,7 +1683,7 @@ def show_medical_protocols_page():
                 
                 # Кнопка для поиска актуальных протоколов по конкретному протоколу
                 if st.button(f"🔍 Найти актуальные протоколы: {protocol_name}", key=f"search_{protocol_name}"):
-                    with st.spinner("Ищу актуальные протоколы через Gemini 2.5 Flash..."):
+                    with st.spinner("Ищу актуальные протоколы через Claude Sonnet..."):
                         search_result = search_protocols_gemini(
                             f"{protocol_name} {protocol_data['описание']}", 
                             protocol_category

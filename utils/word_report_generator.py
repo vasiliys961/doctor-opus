@@ -60,7 +60,8 @@ def generate_word_report(
         'ULTRASOUND': 'Ультразвуковое исследование (УЗИ)',
         'DERMATOSCOPY': 'Дерматоскопия',
         'LAB': 'Лабораторные исследования',
-        'GENETIC': 'Генетический анализ'
+        'GENETIC': 'Генетический анализ',
+        'VIDEO': 'Анализ медицинского видео'
     }
     
     analysis_name = analysis_type_names.get(analysis_type.upper(), analysis_type)
@@ -149,7 +150,8 @@ def get_word_report_filename(analysis_type: str, timestamp: Optional[str] = None
         'ULTRASOUND': 'Ultrasound',
         'DERMATOSCOPY': 'Dermatoscopy',
         'LAB': 'Lab',
-        'GENETIC': 'Genetic'
+        'GENETIC': 'Genetic',
+        'VIDEO': 'Video'
     }
     
     type_name = type_names.get(analysis_type.upper(), analysis_type)

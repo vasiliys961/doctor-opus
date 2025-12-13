@@ -17,10 +17,19 @@ except ImportError:
     AI_AVAILABLE = False
     OpenRouterAssistant = None
 
+# Импорты общих функций из page_helpers
+try:
+    from utils.page_helpers import check_ai_availability
+    PAGE_HELPERS_AVAILABLE = True
+except ImportError:
+    PAGE_HELPERS_AVAILABLE = False
+    def check_ai_availability():
+        return AI_AVAILABLE
+
 
 def show_video_analysis():
     """Страница анализа медицинских видео"""
-    if not AI_AVAILABLE:
+    if not check_ai_availability():
         st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
         return
     
@@ -209,10 +218,29 @@ def show_video_analysis():
                     progress_bar.empty()
                     st.info("💡 Итоговое заключение не было сформировано. Доступен только специализированный анализ.")
                 
-                # Экспорт в DOC формат
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                # Экспорт в Word формат
+                timestamp = datetime.datetime.now().strftime("%d.%m.%Y %H:%M")
                 
-                # Формируем содержимое для DOC
+                # Формируем содержимое для Word - объединяем specialized и final
+                full_conclusion_text = ""
+                
+                if results.get('specialized'):
+                    full_conclusion_text += "**СПЕЦИАЛИЗИРОВАННЫЙ АНАЛИЗ**\n\n"
+                    full_conclusion_text += results['specialized'] + "\n\n"
+                
+                if results.get('final'):
+                    full_conclusion_text += "**ИТОГОВОЕ ЗАКЛЮЧЕНИЕ**\n\n"
+                    full_conclusion_text += results['final']
+                
+                # Формируем метаданные пациента
+                patient_info_parts = []
+                if patient_age:
+                    patient_info_parts.append(f"Возраст: {patient_age} лет")
+                if specialty:
+                    patient_info_parts.append(f"Специализация: {specialty}")
+                if urgency:
+                    patient_info_parts.append(f"Срочность: {urgency}")
+                
                 study_type_names = {
                     "fgds": "ФГДС",
                     "colonoscopy": "Колоноскопия",
@@ -225,79 +253,41 @@ def show_video_analysis():
                 }
                 study_name = study_type_names.get(study_type_for_request, "Видео-анализ") if study_type_for_request else "Видео-анализ"
                 
-                # Создаем DOC документ
+                # Дополнительные метаданные
+                metadata_dict = {}
+                if study_type_for_request:
+                    metadata_dict['Тип исследования'] = study_name
+                if additional_context:
+                    metadata_dict['Дополнительный контекст'] = additional_context
+                
+                patient_info_str = ", ".join(patient_info_parts) if patient_info_parts else None
+                
+                # Используем стандартизированный генератор Word
                 try:
-                    from docx import Document
-                    from docx.shared import Pt, Inches
-                    from docx.enum.text import WD_ALIGN_PARAGRAPH
+                    from utils.word_report_generator import generate_word_report, get_word_report_filename
                     
-                    doc = Document()
-                    
-                    # Заголовок
-                    title = doc.add_heading(f"Анализ видео: {study_name}", level=0)
-                    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    
-                    # Метаданные
-                    doc.add_paragraph(f"Дата анализа: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}")
-                    if patient_age:
-                        doc.add_paragraph(f"Возраст пациента: {patient_age} лет")
-                    if specialty:
-                        doc.add_paragraph(f"Специализация: {specialty}")
-                    if urgency:
-                        doc.add_paragraph(f"Срочность: {urgency}")
-                    doc.add_paragraph()
-                    
-                    # Раздел 1: Специализированный анализ
-                    if results.get('specialized'):
-                        doc.add_heading("СПЕЦИАЛИЗИРОВАННЫЙ АНАЛИЗ (Gemini 2.5 Flash)", level=1)
-                        # Убираем markdown форматирование для чистого текста
-                        specialized_text = results['specialized'].replace('**', '').replace('🎬', '').strip()
-                        doc.add_paragraph(specialized_text)
-                        doc.add_paragraph()
-                    
-                    # Раздел 2: Итоговое заключение
-                    if results.get('final'):
-                        doc.add_heading("ИТОГОВОЕ ЗАКЛЮЧЕНИЕ (Профессор, Claude Opus 4.5)", level=1)
-                        final_text = results['final'].replace('**', '').replace('🎓', '').strip()
-                        doc.add_paragraph(final_text)
-                    
-                    # Сохраняем в BytesIO для скачивания
-                    doc_buffer = io.BytesIO()
-                    doc.save(doc_buffer)
-                    doc_buffer.seek(0)
-                    
-                    # Кнопка скачивания DOC
-                    doc_filename = f"video_analysis_{study_name.replace(' ', '_')}_{timestamp}.docx"
-                    st.download_button(
-                        label="📥 Скачать полный отчет (.docx)",
-                        data=doc_buffer.getvalue(),
-                        file_name=doc_filename,
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    word_bytes = generate_word_report(
+                        'VIDEO',
+                        full_conclusion_text,
+                        patient_info=patient_info_str,
+                        metadata=metadata_dict if metadata_dict else None,
+                        timestamp=timestamp
                     )
+                    
+                    if word_bytes:
+                        st.download_button(
+                            label="📥 Скачать заключение (.docx)",
+                            data=word_bytes,
+                            file_name=get_word_report_filename('VIDEO', timestamp),
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key="download_video_word"
+                        )
+                    else:
+                        st.warning("⚠️ Не удалось сгенерировать Word документ")
                 except ImportError:
-                    # Если python-docx не установлен, предлагаем TXT
-                    st.warning("⚠️ Для экспорта в DOC формат требуется python-docx. Установите: pip install python-docx")
-                    # Альтернатива: TXT файл
-                    full_text = f"АНАЛИЗ ВИДЕО: {study_name}\n"
-                    full_text += f"Дата: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
-                    if results.get('specialized'):
-                        full_text += "=" * 50 + "\n"
-                        full_text += "СПЕЦИАЛИЗИРОВАННЫЙ АНАЛИЗ (Gemini 2.5 Flash)\n"
-                        full_text += "=" * 50 + "\n"
-                        full_text += results['specialized'] + "\n\n"
-                    if results.get('final'):
-                        full_text += "=" * 50 + "\n"
-                        full_text += "ИТОГОВОЕ ЗАКЛЮЧЕНИЕ (Профессор, Claude Opus 4.5)\n"
-                        full_text += "=" * 50 + "\n"
-                        full_text += results['final'] + "\n"
-                    
-                    txt_filename = f"video_analysis_{timestamp}.txt"
-                    st.download_button(
-                        label="📥 Скачать отчет (.txt)",
-                        data=full_text,
-                        file_name=txt_filename,
-                        mime="text/plain"
-                    )
+                    st.info("💡 Установите python-docx для экспорта в Word")
+                except Exception as e:
+                    st.error(f"Ошибка генерации Word: {e}")
                 
             except Exception as e:
                 progress_bar.empty()

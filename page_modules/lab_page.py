@@ -85,6 +85,12 @@ def show_lab_analysis():
         st.error("❌ Модуль обработки лабораторных данных недоступен. Проверьте файл `modules/advanced_lab_processor.py`")
         return
     
+    # Инициализируем session_state ключи, если их нет
+    if 'lab_analysis_result' not in st.session_state:
+        st.session_state.lab_analysis_result = ''
+    if 'lab_analysis_timestamp' not in st.session_state:
+        st.session_state.lab_analysis_timestamp = ''
+    
     # Инициализация нового процессора
     if 'lab_processor' not in st.session_state:
         st.session_state.lab_processor = AdvancedLabProcessor()
@@ -203,11 +209,52 @@ def show_lab_analysis():
                                 
                                 st.markdown(f"{status_emoji} **{param['name']}:** {param['value']} {param['unit']} ({param['status']})")
                     
+                    # Отображение сохраненного результата анализа (если есть) - ДО ИИ-анализа
+                    last_result = st.session_state.get('lab_analysis_result', '')
+                    last_timestamp = st.session_state.get('lab_analysis_timestamp', '')
+                    
+                    if last_result:
+                        st.markdown("---")
+                        st.subheader("💾 Результат анализа")
+                        st.info(f"📅 Дата анализа: {last_timestamp}" if last_timestamp else "📅 Дата анализа: не указана")
+                        
+                        # Показываем результат
+                        st.markdown(last_result)
+                        
+                        # Экспорт результата в Word и TXT - КНОПКИ ВСЕГДА ВИДНЫ
+                        st.markdown("### 📥 Экспорт заключения")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            try:
+                                from utils.word_report_generator import generate_word_report, get_word_report_filename
+                                word_bytes = generate_word_report('LAB', last_result, timestamp=last_timestamp)
+                                if word_bytes:
+                                    st.download_button(
+                                        label="📥 Скачать заключение (.docx)",
+                                        data=word_bytes,
+                                        file_name=get_word_report_filename('LAB', last_timestamp),
+                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                        key="download_lab_word_saved"
+                                    )
+                                else:
+                                    st.info("💡 Не удалось сгенерировать Word документ")
+                            except Exception as e:
+                                st.info(f"💡 Установите python-docx для экспорта в Word: {e}")
+                        with col2:
+                            header = f"Заключение по лабораторным исследованиям\nВремя анализа: {last_timestamp}" if last_timestamp else "Заключение по лабораторным исследованиям"
+                            report_text = f"{header}\n\n{last_result}"
+                            st.download_button(
+                                label="📥 Скачать заключение (.txt)",
+                                data=report_text,
+                                file_name=f"Lab_report_{last_timestamp.replace(' ', '_').replace(':', '-') if last_timestamp else 'latest'}.txt",
+                                mime="text/plain",
+                                key="download_lab_txt_saved"
+                            )
+                    
                     # Форма обратной связи - ДО анализа, всегда видна и активна!
                     st.markdown("---")
                     st.markdown("### 💬 Обратная связь")
                     
-                    last_result = st.session_state.get('lab_analysis_result', '')
                     analysis_id_base = "LAB_feedback_form"
                     lab_input = f"Лабораторные данные: {len(lab_report.parameters)} параметров, Критические: {len(lab_report.critical_values) if lab_report.critical_values else 0}"
                     
@@ -276,6 +323,39 @@ def show_lab_analysis():
                                     st.session_state.lab_analysis_result = interpretation
                                     st.session_state.lab_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                                     
+                                    # Экспорт в Word (для быстрого режима)
+                                    st.markdown("---")
+                                    st.markdown("### 💾 Экспорт заключения")
+                                    timestamp = st.session_state.get('lab_analysis_timestamp', '')
+                                    
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        try:
+                                            from utils.word_report_generator import generate_word_report, get_word_report_filename
+                                            word_bytes = generate_word_report('LAB', interpretation, timestamp=timestamp)
+                                            if word_bytes:
+                                                st.download_button(
+                                                    label="📥 Скачать заключение (.docx)",
+                                                    data=word_bytes,
+                                                    file_name=get_word_report_filename('LAB', timestamp),
+                                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                                    key="download_lab_word_fast"
+                                                )
+                                            else:
+                                                st.info("💡 Не удалось сгенерировать Word документ")
+                                        except Exception as e:
+                                            st.info(f"💡 Установите python-docx для экспорта в Word: {e}")
+                                    with col2:
+                                        header = f"Заключение по лабораторным исследованиям\nВремя анализа: {timestamp}" if timestamp else "Заключение по лабораторным исследованиям"
+                                        report_text = f"{header}\n\n{interpretation}"
+                                        st.download_button(
+                                            label="📥 Скачать заключение (.txt)",
+                                            data=report_text,
+                                            file_name=f"Lab_report_{timestamp.replace(' ', '_').replace(':', '-') if timestamp else 'latest'}.txt",
+                                            mime="text/plain",
+                                            key="download_lab_txt_fast"
+                                        )
+                                    
                                 elif lab_analysis_mode == "🎯 Консенсус (несколько моделей)":
                                     if consensus_engine:
                                         # Для текстового анализа используем get_multiple_opinions
@@ -303,6 +383,39 @@ def show_lab_analysis():
                                         # Сохраняем результат (форма обновится при следующем рендере)
                                         st.session_state.lab_analysis_result = consensus_report
                                         st.session_state.lab_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                        
+                                        # Экспорт в Word (для консенсуса)
+                                        st.markdown("---")
+                                        st.markdown("### 💾 Экспорт заключения")
+                                        timestamp = st.session_state.get('lab_analysis_timestamp', '')
+                                        
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            try:
+                                                from utils.word_report_generator import generate_word_report, get_word_report_filename
+                                                word_bytes = generate_word_report('LAB', consensus_report, timestamp=timestamp)
+                                                if word_bytes:
+                                                    st.download_button(
+                                                        label="📥 Скачать заключение (.docx)",
+                                                        data=word_bytes,
+                                                        file_name=get_word_report_filename('LAB', timestamp),
+                                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                                        key="download_lab_word_consensus"
+                                                    )
+                                                else:
+                                                    st.info("💡 Не удалось сгенерировать Word документ")
+                                            except Exception as e:
+                                                st.info(f"💡 Установите python-docx для экспорта в Word: {e}")
+                                        with col2:
+                                            header = f"Заключение по лабораторным исследованиям\nВремя анализа: {timestamp}" if timestamp else "Заключение по лабораторным исследованиям"
+                                            report_text = f"{header}\n\n{consensus_report}"
+                                            st.download_button(
+                                                label="📥 Скачать заключение (.txt)",
+                                                data=report_text,
+                                                file_name=f"Lab_report_{timestamp.replace(' ', '_').replace(':', '-') if timestamp else 'latest'}.txt",
+                                                mime="text/plain",
+                                                key="download_lab_txt_consensus"
+                                            )
                                     else:
                                         st.warning("⚠️ Модуль консенсуса недоступен. Используется стандартный анализ.")
                                 
@@ -383,7 +496,7 @@ def show_lab_analysis():
                                         with st.expander("📚 Оценка доказательности"):
                                             st.write(evidence_ranker.generate_evidence_report(evidence))
                                     
-                                    # Экспорт заключения
+                                    # Экспорт заключения (для всех режимов анализа)
                                     if 'lab_analysis_result' in st.session_state and st.session_state.lab_analysis_result:
                                         st.markdown("---")
                                         st.markdown("### 💾 Экспорт заключения")
@@ -403,8 +516,10 @@ def show_lab_analysis():
                                                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                                         key="download_lab_word"
                                                     )
-                                            except Exception:
-                                                st.info("💡 Установите python-docx для экспорта в Word")
+                                                else:
+                                                    st.info("💡 Не удалось сгенерировать Word документ")
+                                            except Exception as e:
+                                                st.info(f"💡 Установите python-docx для экспорта в Word: {e}")
                                         with col2:
                                             header = f"Заключение по лабораторным исследованиям\nВремя анализа: {timestamp}" if timestamp else "Заключение по лабораторным исследованиям"
                                             report_text = f"{header}\n\n{result_text}"
@@ -459,41 +574,312 @@ def show_lab_analysis():
                                 )
                 
                 else:
-                    st.error("❌ Не удалось извлечь лабораторные данные из файла")
-                    
-                    # Показываем детальную информацию об ошибке
-                    if lab_report.warnings:
-                        st.warning("⚠️ **Предупреждения:**")
-                        for warning in lab_report.warnings:
-                            st.warning(f"• {warning}")
-                    
-                    # Показываем извлеченный текст для диагностики
+                    # Если параметры не извлечены, но есть текст - предлагаем ИИ-анализ
                     if lab_report.raw_text:
-                        st.info("📄 **Извлеченный текст из файла:**")
-                        st.text_area("Извлеченный текст", lab_report.raw_text, height=300, key="raw_text_display", label_visibility="collapsed")
+                        st.warning("⚠️ Не удалось автоматически извлечь структурированные параметры, но текст извлечен.")
                         
-                        # Попытка ручного парсинга
-                        if st.button("🔍 Попробовать извлечь параметры вручную"):
-                            with st.spinner("Анализ текста..."):
+                        # Проверяем, есть ли уже сохраненный результат
+                        saved_result = st.session_state.get('lab_analysis_result', '')
+                        saved_timestamp = st.session_state.get('lab_analysis_timestamp', '')
+                        
+                        # Если в raw_text есть полный анализ с "КЛИНИЧЕСКИЙ ОБЗОР", показываем его как результат
+                        if "КЛИНИЧЕСКИЙ ОБЗОР" in lab_report.raw_text or "Клинический обзор" in lab_report.raw_text:
+                            # Это полный анализ, показываем его и добавляем кнопки экспорта
+                            st.markdown("---")
+                            st.subheader("💾 Результат анализа")
+                            
+                            # Показываем анализ
+                            st.markdown(lab_report.raw_text)
+                            
+                            # Сохраняем в session_state для будущего использования
+                            if not saved_result:
+                                st.session_state.lab_analysis_result = lab_report.raw_text
+                                st.session_state.lab_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                saved_result = lab_report.raw_text
+                                saved_timestamp = st.session_state.lab_analysis_timestamp
+                            
+                            # Экспорт результата в Word и TXT - КНОПКИ ВИДНЫ СРАЗУ
+                            st.markdown("### 📥 Экспорт заключения")
+                            col1, col2 = st.columns(2)
+                            with col1:
                                 try:
-                                    if AI_AVAILABLE:
-                                        # Пробуем использовать ИИ для извлечения
-                                        assistant = OpenRouterAssistant()
-                                        ai_prompt = f"""Извлеки все лабораторные параметры из следующего текста в формате JSON:
-                                        
-{lab_report.raw_text[:2000]}
-
-Верни JSON массив с объектами вида:
-{{"name": "название параметра", "value": число, "unit": "единица измерения", "reference": "норма"}}
-"""
-                                        ai_result = assistant.get_response(ai_prompt)
-                                        st.success("✅ ИИ извлек данные:")
-                                        st.json(ai_result)
+                                    from utils.word_report_generator import generate_word_report, get_word_report_filename
+                                    word_bytes = generate_word_report('LAB', saved_result, timestamp=saved_timestamp)
+                                    if word_bytes:
+                                        st.download_button(
+                                            label="📥 Скачать заключение (.docx)",
+                                            data=word_bytes,
+                                            file_name=get_word_report_filename('LAB', saved_timestamp),
+                                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                            key="download_lab_word_from_raw"
+                                        )
                                     else:
-                                        st.error("❌ ИИ-модуль недоступен для извлечения параметров")
+                                        st.info("💡 Не удалось сгенерировать Word документ")
                                 except Exception as e:
-                                    st.error(f"Ошибка ИИ-извлечения: {e}")
+                                    st.info(f"💡 Установите python-docx для экспорта в Word: {e}")
+                            with col2:
+                                header = f"Заключение по лабораторным исследованиям\nВремя анализа: {saved_timestamp}" if saved_timestamp else "Заключение по лабораторным исследованиям"
+                                report_text = f"{header}\n\n{saved_result}"
+                                st.download_button(
+                                    label="📥 Скачать заключение (.txt)",
+                                    data=report_text,
+                                    file_name=f"Lab_report_{saved_timestamp.replace(' ', '_').replace(':', '-') if saved_timestamp else 'latest'}.txt",
+                                    mime="text/plain",
+                                    key="download_lab_txt_from_raw"
+                                )
+                        else:
+                            # Обычный текст, показываем в text_area
+                            st.info("📄 **Извлеченный текст из файла:**")
+                            st.text_area("Извлеченный текст", lab_report.raw_text, height=300, key="raw_text_display", label_visibility="collapsed")
+                        
+                        # Показываем предупреждения
+                        if lab_report.warnings:
+                            st.warning("⚠️ **Предупреждения:**")
+                            for warning in lab_report.warnings:
+                                st.warning(f"• {warning}")
+                        
+                        # Показываем сохраненный результат и кнопки экспорта ДО раздела ИИ-анализа
+                        if saved_result:
+                            st.markdown("---")
+                            st.subheader("💾 Результат анализа")
+                            if saved_timestamp:
+                                st.info(f"📅 Дата анализа: {saved_timestamp}")
+                            
+                            # Показываем результат напрямую (без expander)
+                            st.markdown(saved_result)
+                            
+                            # Экспорт сохраненного результата в Word и TXT - РАСПОЛОЖЕН ДО КНОПКИ ИИ-АНАЛИЗА
+                            st.markdown("### 📥 Экспорт заключения")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                try:
+                                    from utils.word_report_generator import generate_word_report, get_word_report_filename
+                                    word_bytes = generate_word_report('LAB', saved_result, timestamp=saved_timestamp)
+                                    if word_bytes:
+                                        st.download_button(
+                                            label="📥 Скачать заключение (.docx)",
+                                            data=word_bytes,
+                                            file_name=get_word_report_filename('LAB', saved_timestamp),
+                                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                            key="download_lab_word_no_params_saved"
+                                        )
+                                    else:
+                                        st.info("💡 Не удалось сгенерировать Word документ")
+                                except Exception as e:
+                                    st.info(f"💡 Установите python-docx для экспорта в Word: {e}")
+                            with col2:
+                                header = f"Заключение по лабораторным исследованиям\nВремя анализа: {saved_timestamp}" if saved_timestamp else "Заключение по лабораторным исследованиям"
+                                report_text = f"{header}\n\n{saved_result}"
+                                st.download_button(
+                                    label="📥 Скачать заключение (.txt)",
+                                    data=report_text,
+                                    file_name=f"Lab_report_{saved_timestamp.replace(' ', '_').replace(':', '-') if saved_timestamp else 'latest'}.txt",
+                                    mime="text/plain",
+                                    key="download_lab_txt_no_params_saved"
+                                )
+                        
+                        # Предлагаем ИИ-анализ текста напрямую (ПОСЛЕ блока экспорта)
+                        st.markdown("---")
+                        st.subheader("🤖 ИИ-анализ текста лабораторных данных")
+                        if saved_result:
+                            st.info("💡 Вы можете провести дополнительный анализ через Opus или скачать сохраненный результат выше.")
+                        else:
+                            st.info("💡 Текст успешно извлечен. Вы можете провести ИИ-анализ этого текста для получения заключения.")
+                        
+                        # Выбор режима анализа
+                        lab_analysis_mode = st.radio(
+                            "Режим анализа:",
+                            ["⚡ Быстрый (одна модель)", "🎯 Консенсус (несколько моделей)", "✅ С валидацией"],
+                            horizontal=True,
+                            key="lab_analysis_mode_no_params"
+                        )
+                        
+                        if st.button("🧪 Запустить ИИ-анализ текста", use_container_width=True):
+                            with st.spinner("ИИ анализирует текст..."):
+                                try:
+                                    # Формируем промпт с текстом
+                                    base_prompt = f"""Проанализируйте лабораторные данные из следующего текста как врач-лаборант-консультант с 15-летним опытом работы в клинической лаборатории. 
+Дайте клиническую оценку, выявите критические значения, предложите дифференциальную диагностику и рекомендации в формате "Клиническая директива".
+
+Текст лабораторных данных:
+{lab_report.raw_text[:5000]}
+"""
+                                    
+                                    assistant = OpenRouterAssistant()
+                                    components = safe_init_components(assistant)
+                                    consensus_engine = components['consensus_engine']
+                                    validator = components['validator']
+                                    scorecard = components['scorecard']
+                                    gap_detector = components['gap_detector']
+                                    notifier = components['notifier']
+                                    evidence_ranker = components['evidence_ranker']
+                                    
+                                    if lab_analysis_mode == "⚡ Быстрый (одна модель)":
+                                        interpretation = assistant.get_response(base_prompt)
+                                        
+                                        # Сохраняем результат В session_state СРАЗУ
+                                        st.session_state.lab_analysis_result = interpretation
+                                        st.session_state.lab_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                        
+                                        st.markdown("### 🧠 ИИ-интерпретация (Врач-лаборант-консультант)")
+                                        st.markdown(interpretation)
+                                        
+                                        # Сразу показываем кнопки экспорта
+                                        st.markdown("### 📥 Экспорт заключения")
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            try:
+                                                from utils.word_report_generator import generate_word_report, get_word_report_filename
+                                                word_bytes = generate_word_report('LAB', interpretation, timestamp=st.session_state.lab_analysis_timestamp)
+                                                if word_bytes:
+                                                    st.download_button(
+                                                        label="📥 Скачать заключение (.docx)",
+                                                        data=word_bytes,
+                                                        file_name=get_word_report_filename('LAB', st.session_state.lab_analysis_timestamp),
+                                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                                        key="download_lab_word_fast_no_params"
+                                                    )
+                                            except Exception as e:
+                                                st.info(f"💡 Установите python-docx для экспорта в Word: {e}")
+                                        with col2:
+                                            header = f"Заключение по лабораторным исследованиям\nВремя анализа: {st.session_state.lab_analysis_timestamp}"
+                                            report_text = f"{header}\n\n{interpretation}"
+                                            st.download_button(
+                                                label="📥 Скачать заключение (.txt)",
+                                                data=report_text,
+                                                file_name=f"Lab_report_{st.session_state.lab_analysis_timestamp.replace(' ', '_').replace(':', '-')}.txt",
+                                                mime="text/plain",
+                                                key="download_lab_txt_fast_no_params"
+                                            )
+                                        
+                                    elif lab_analysis_mode == "🎯 Консенсус (несколько моделей)":
+                                        if consensus_engine:
+                                            opinions = consensus_engine.get_multiple_opinions(base_prompt)
+                                            findings_list = [consensus_engine.extract_key_findings(op['response']) for op in opinions]
+                                            comparison = consensus_engine.compare_opinions(opinions)
+                                            
+                                            consensus_report = consensus_engine._generate_consensus_report(
+                                                findings_list,
+                                                comparison.get('common_diagnoses', []),
+                                                comparison.get('urgency', 'не определена'),
+                                                comparison.get('discrepancies', [])
+                                            )
+                                            
+                                            st.markdown("### 🎯 Консенсус-анализ:")
+                                            st.write(consensus_report)
+                                            
+                                            with st.expander("📊 Детали мнений моделей"):
+                                                for i, opinion in enumerate(opinions, 1):
+                                                    st.markdown(f"**Модель {i}:**")
+                                                    st.write(opinion['response'][:500] + "...")
+                                            
+                                            st.session_state.lab_analysis_result = consensus_report
+                                            st.session_state.lab_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                    
+                                    elif lab_analysis_mode == "✅ С валидацией":
+                                        interpretation = assistant.get_response(base_prompt)
+                                        
+                                        validation = None
+                                        if validator:
+                                            try:
+                                                validation = validator.validate_response(interpretation)
+                                            except Exception as e:
+                                                print(f"⚠️ Ошибка валидации: {e}", file=sys.stderr)
+                                        
+                                        evaluation = None
+                                        if scorecard:
+                                            try:
+                                                evaluation = scorecard.evaluate_response(interpretation, ImageType.ECG)
+                                            except Exception as e:
+                                                print(f"⚠️ Ошибка оценки: {e}", file=sys.stderr)
+                                        
+                                        critical_findings = None
+                                        if notifier:
+                                            try:
+                                                critical_findings = notifier.check_critical_findings(interpretation)
+                                            except Exception as e:
+                                                print(f"⚠️ Ошибка проверки критических находок: {e}", file=sys.stderr)
+                                        
+                                        evidence = None
+                                        if evidence_ranker:
+                                            try:
+                                                evidence = evidence_ranker.rank_evidence(interpretation)
+                                            except Exception as e:
+                                                print(f"⚠️ Ошибка оценки доказательности: {e}", file=sys.stderr)
+                                        
+                                        st.markdown("### 🧠 ИИ-интерпретация (Врач-лаборант-консультант)")
+                                        st.write(interpretation)
+                                        
+                                        st.session_state.lab_analysis_result = interpretation
+                                        st.session_state.lab_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                        
+                                        if notifier and critical_findings:
+                                            notifier.display_notifications(critical_findings)
+                                        
+                                        if validator and validation:
+                                            with st.expander("✅ Результаты валидации"):
+                                                if validation.get('is_valid'):
+                                                    st.success("✅ Валидация пройдена")
+                                                else:
+                                                    st.error("❌ Обнаружены проблемы")
+                                                st.write(f"Полнота: {validation.get('completeness_score', 0):.1%}")
+                                                if validation.get('warnings'):
+                                                    for warning in validation['warnings']:
+                                                        st.warning(warning)
+                                        
+                                        if scorecard and evaluation:
+                                            with st.expander("📊 Оценка качества"):
+                                                st.write(f"**Оценка:** {evaluation.get('grade', 'N/A')}")
+                                                st.write(f"**Балл:** {evaluation.get('score', 0):.1%}")
+                                        
+                                        if evidence_ranker and evidence:
+                                            with st.expander("📚 Оценка доказательности"):
+                                                st.write(evidence_ranker.generate_evidence_report(evidence))
+                                    
+                                    # Экспорт в Word (для всех режимов)
+                                    if 'lab_analysis_result' in st.session_state and st.session_state.lab_analysis_result:
+                                        st.markdown("---")
+                                        st.markdown("### 💾 Экспорт заключения")
+                                        result_text = st.session_state.lab_analysis_result
+                                        timestamp = st.session_state.get('lab_analysis_timestamp', '')
+                                        
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            try:
+                                                from utils.word_report_generator import generate_word_report, get_word_report_filename
+                                                word_bytes = generate_word_report('LAB', result_text, timestamp=timestamp)
+                                                if word_bytes:
+                                                    st.download_button(
+                                                        label="📥 Скачать заключение (.docx)",
+                                                        data=word_bytes,
+                                                        file_name=get_word_report_filename('LAB', timestamp),
+                                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                                        key="download_lab_word_no_params"
+                                                    )
+                                            except Exception:
+                                                st.info("💡 Установите python-docx для экспорта в Word")
+                                        with col2:
+                                            header = f"Заключение по лабораторным исследованиям\nВремя анализа: {timestamp}" if timestamp else "Заключение по лабораторным исследованиям"
+                                            report_text = f"{header}\n\n{result_text}"
+                                            st.download_button(
+                                                label="📥 Скачать заключение (.txt)",
+                                                data=report_text,
+                                                file_name=f"Lab_report_{timestamp.replace(' ', '_').replace(':', '-') if timestamp else 'latest'}.txt",
+                                                mime="text/plain",
+                                                key="download_lab_txt_no_params"
+                                            )
+                                
+                                except Exception as e:
+                                    error_msg = handle_error(e, "show_lab_analysis", show_to_user=True)
+                                    st.error(f"Ошибка ИИ-анализа: {error_msg}")
                     else:
+                        st.error("❌ Не удалось извлечь лабораторные данные из файла")
+                        
+                        if lab_report.warnings:
+                            st.warning("⚠️ **Предупреждения:**")
+                            for warning in lab_report.warnings:
+                                st.warning(f"• {warning}")
+                        
                         st.warning("⚠️ Не удалось извлечь текст из файла. Проверьте формат файла.")
             
             except Exception as e:
