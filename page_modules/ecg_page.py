@@ -28,70 +28,47 @@ import traceback
 # Импортируем все зависимости из их исходных модулей
 import sys
 
-# Импорты из claude_assistant
+# Импорты из utils.page_imports (общие импорты)
 try:
-    from claude_assistant import OpenRouterAssistant
-    AI_AVAILABLE = True
+    from utils.page_imports import (
+        OpenRouterAssistant, AI_AVAILABLE,
+        download_from_url, URL_DOWNLOADER_AVAILABLE,
+        validate_image, validate_file_size, VALIDATORS_AVAILABLE,
+        ImageFormatProcessor, optimize_image_for_ai, IMAGE_PROCESSOR_AVAILABLE,
+        handle_error, ERROR_HANDLER_AVAILABLE,
+        get_specialist_prompt, get_specialist_info, SPECIALIST_DETECTOR_AVAILABLE,
+        show_feedback_form, FEEDBACK_WIDGET_AVAILABLE,
+        IS_REPLIT, MOBILE_MAX_IMAGE_SIZE, CONFIG_AVAILABLE
+    )
+    PAGE_IMPORTS_AVAILABLE = True
 except ImportError:
-    AI_AVAILABLE = False
-    OpenRouterAssistant = None
+    PAGE_IMPORTS_AVAILABLE = False
+    # Fallback к старым импортам
+    try:
+        from claude_assistant import OpenRouterAssistant
+        AI_AVAILABLE = True
+    except ImportError:
+        AI_AVAILABLE = False
+        OpenRouterAssistant = None
+    # ... остальные fallback импорты (для совместимости)
+    from utils.page_imports import (
+        download_from_url, URL_DOWNLOADER_AVAILABLE,
+        validate_image, validate_file_size, VALIDATORS_AVAILABLE,
+        ImageFormatProcessor, optimize_image_for_ai, IMAGE_PROCESSOR_AVAILABLE,
+        handle_error, ERROR_HANDLER_AVAILABLE,
+        get_specialist_prompt, get_specialist_info, SPECIALIST_DETECTOR_AVAILABLE,
+        show_feedback_form, FEEDBACK_WIDGET_AVAILABLE,
+        IS_REPLIT, MOBILE_MAX_IMAGE_SIZE, CONFIG_AVAILABLE
+    )
 
-# Импорты из utils
+# Импорты общих функций из page_helpers
 try:
-    from utils.url_downloader import download_from_url
-    URL_DOWNLOADER_AVAILABLE = True
+    from utils.page_helpers import check_ai_availability
+    PAGE_HELPERS_AVAILABLE = True
 except ImportError:
-    URL_DOWNLOADER_AVAILABLE = False
-    download_from_url = None
-
-try:
-    from utils.validators import validate_image, validate_file_size
-    VALIDATORS_AVAILABLE = True
-except ImportError:
-    VALIDATORS_AVAILABLE = False
-    validate_image = lambda *args, **kwargs: (True, "")
-    validate_file_size = lambda *args, **kwargs: (True, "")
-
-try:
-    from utils.image_processor import ImageFormatProcessor, optimize_image_for_ai
-    IMAGE_PROCESSOR_AVAILABLE = True
-except ImportError:
-    IMAGE_PROCESSOR_AVAILABLE = False
-    ImageFormatProcessor = None
-    optimize_image_for_ai = None
-
-try:
-    from utils.error_handler import handle_error
-    ERROR_HANDLER_AVAILABLE = True
-except ImportError:
-    ERROR_HANDLER_AVAILABLE = False
-    def handle_error(error, context="", show_to_user=True):
-        return str(error)
-
-try:
-    from utils.specialist_detector import get_specialist_prompt, get_specialist_info
-    SPECIALIST_DETECTOR_AVAILABLE = True
-except ImportError:
-    SPECIALIST_DETECTOR_AVAILABLE = False
-    get_specialist_prompt = None
-    get_specialist_info = None
-
-try:
-    from utils.feedback_widget import show_feedback_form
-    FEEDBACK_WIDGET_AVAILABLE = True
-except ImportError:
-    FEEDBACK_WIDGET_AVAILABLE = False
-    def show_feedback_form(*args, **kwargs):
-        st.warning("⚠️ Модуль обратной связи недоступен")
-
-# Импорты из config
-try:
-    from config import IS_REPLIT, MOBILE_MAX_IMAGE_SIZE
-    CONFIG_AVAILABLE = True
-except ImportError:
-    CONFIG_AVAILABLE = False
-    IS_REPLIT = False
-    MOBILE_MAX_IMAGE_SIZE = (1024, 1024)
+    PAGE_HELPERS_AVAILABLE = False
+    def check_ai_availability():
+        return AI_AVAILABLE
 
 # Импорты из services и других модулей для safe_init_components
 try:
@@ -162,7 +139,7 @@ except ImportError:
 
 
 def show_ecg_analysis():
-    if not AI_AVAILABLE:
+    if not check_ai_availability():
         st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
         return
 
@@ -242,98 +219,58 @@ def show_ecg_analysis():
                         tmp.write(file_content)
                         tmp_path = tmp.name
                     
-                    # Обработка CSV файлов для ЭКГ (используем существующую логику)
+                    # Обработка CSV файлов для ЭКГ (используем новые модули)
                     if file_ext == 'csv':
                         try:
                             progress_status = st.empty()
                             progress_status.text("📊 Загрузка CSV файла...")
                             
-                            import matplotlib
-                            matplotlib.use('Agg')  # Использовать non-interactive backend
-                            import matplotlib.pyplot as plt
-                            from io import BytesIO
-                            
-                            # Загрузка CSV с оптимизацией для больших файлов
-                            progress_status.text("📊 Чтение CSV данных...")
-                            df = pd.read_csv(tmp_path, low_memory=False)
-                            
-                            progress_status.text("🔍 Анализ структуры данных...")
-                            # Инициализация процессора ЭКГ
+                            # Импорт модулей обработки ЭКГ
                             try:
-                                from modules.advanced_ecg_processor import AdvancedECGProcessor
-                                ecg_processor = AdvancedECGProcessor()
-                                df_ecg, time_col, lead_cols = ecg_processor.load_multi_lead_ecg(df, format_type='csv')
+                                from page_modules.ecg import process_csv_from_path, create_ecg_visualization
                             except ImportError:
-                                # Fallback: используем первую колонку как время, остальные как отведения
-                                time_col = df.columns[0]
-                                lead_cols = [col for col in df.columns if col != time_col]
-                                df_ecg = df
+                                # Fallback к старой логике если модули недоступны
+                                import matplotlib
+                                matplotlib.use('Agg')
+                                import matplotlib.pyplot as plt
+                                from io import BytesIO
+                                df = pd.read_csv(tmp_path, low_memory=False)
+                                try:
+                                    from modules.advanced_ecg_processor import AdvancedECGProcessor
+                                    ecg_processor = AdvancedECGProcessor()
+                                    df_ecg, time_col, lead_cols = ecg_processor.load_multi_lead_ecg(df, format_type='csv')
+                                except ImportError:
+                                    time_col = df.columns[0]
+                                    lead_cols = [col for col in df.columns if col != time_col]
+                                    df_ecg = df
+                                # ... (старая логика визуализации)
+                                st.error("Модули обработки ЭКГ недоступны. Используйте обновленную версию.")
+                                if os.path.exists(tmp_path):
+                                    os.unlink(tmp_path)
+                                return
                             
-                            progress_status.text("📈 Подготовка визуализации...")
-                            # Оптимизация: уменьшаем размер фигуры и DPI для больших CSV
-                            num_leads = min(len(lead_cols), 12)
-                            fig_height = min(2 * num_leads, 20)  # Максимум 20 дюймов высоты
-                            fig, axes = plt.subplots(num_leads, 1, figsize=(12, fig_height))
-                            if num_leads == 1:
-                                axes = [axes]
+                            # Обработка CSV через новый модуль
+                            df_ecg, time_col, lead_cols, csv_metadata = process_csv_from_path(tmp_path, progress_status)
                             
-                            # Получаем данные времени
-                            if time_col in df_ecg.columns:
-                                time_data = df_ecg[time_col].values
-                            else:
-                                time_data = np.arange(len(df_ecg))
+                            # Создание визуализации через новый модуль
+                            image_array, viz_metadata = create_ecg_visualization(
+                                df_ecg, time_col, lead_cols, progress_status
+                            )
                             
-                            # Агрессивная децимация для очень больших CSV (уменьшаем количество точек)
-                            # Если данных больше 50k точек, берем каждую N-ю точку
-                            max_points = 50000  # Уменьшено с 100k до 50k для ускорения
-                            data_len = len(time_data)
-                            
-                            if data_len > max_points:
-                                step = max(1, data_len // max_points)
-                                indices = np.arange(0, data_len, step)
-                                time_data_decimated = time_data[indices] if isinstance(time_data, np.ndarray) else time_data[::step]
-                            else:
-                                time_data_decimated = time_data
-                                indices = np.arange(data_len)
-                                step = 1
-                            
-                            progress_status.text("📉 Построение графиков...")
-                            # Построение графиков с прогрессом
-                            for idx, lead in enumerate(lead_cols[:num_leads]):
-                                if lead in df_ecg.columns:
-                                    lead_data = df_ecg[lead].values if hasattr(df_ecg[lead], 'values') else df_ecg[lead]
-                                    
-                                    if data_len > max_points:
-                                        lead_data_decimated = lead_data[indices] if isinstance(lead_data, np.ndarray) else lead_data[::step]
-                                    else:
-                                        lead_data_decimated = lead_data
-                                    
-                                    axes[idx].plot(time_data_decimated, lead_data_decimated, linewidth=0.5)  # Уменьшена толщина линии
-                                    axes[idx].set_title(f'Отведение {lead}', fontsize=9)
-                                    axes[idx].grid(True, alpha=0.2)
-                                    if idx == num_leads - 1:
-                                        axes[idx].set_xlabel('Время (с)', fontsize=8)
-                            
-                            progress_status.text("💾 Сохранение изображения...")
-                            plt.tight_layout()
-                            
-                            # Конвертация в изображение с оптимизированным DPI
-                            # Уменьшаем DPI до 75 для больших изображений
-                            buf = BytesIO()
-                            plt.savefig(buf, format='png', dpi=75, bbox_inches='tight', facecolor='white')
-                            buf.seek(0)
-                            
-                            progress_status.text("🖼️ Обработка изображения...")
-                            image = Image.open(buf)
-                            image_array = np.array(image)
-                            metadata = {**metadata, 'source': 'url_csv', 'leads': lead_cols[:12], 'format': 'csv', 'url': url_input}
-                            plt.close('all')  # Закрываем все фигуры
-                            buf.close()
+                            # Объединяем метаданные
+                            metadata = {
+                                **metadata,
+                                **csv_metadata,
+                                **viz_metadata,
+                                'source': 'url_csv',
+                                'url': url_input
+                            }
                             
                             progress_status.empty()
                             st.success(f"✅ CSV файл загружен по ссылке. Обнаружено отведений: {len(lead_cols[:12])}")
                         except Exception as e:
-                            progress_status.empty()
+                            if 'progress_status' in locals():
+                                progress_status.empty()
                             st.error(f"Ошибка обработки CSV файла: {e}")
                             import traceback
                             st.code(traceback.format_exc())
@@ -378,98 +315,41 @@ def show_ecg_analysis():
                         st.error(f"❌ {error_msg}")
                         return
                 
-                # Обработка CSV файлов для ЭКГ
+                # Обработка CSV файлов для ЭКГ (используем новые модули)
                 if file_ext == 'csv':
                     try:
                         progress_status = st.empty()
                         progress_status.text("📊 Загрузка CSV файла...")
                         
-                        import matplotlib
-                        matplotlib.use('Agg')  # Использовать non-interactive backend
-                        import matplotlib.pyplot as plt
-                        from io import BytesIO
-                        
-                        # Загрузка CSV с оптимизацией для больших файлов
-                        progress_status.text("📊 Чтение CSV данных...")
-                        df = pd.read_csv(uploaded_file, low_memory=False)
-                        
-                        progress_status.text("🔍 Анализ структуры данных...")
-                        # Инициализация процессора ЭКГ
+                        # Импорт модулей обработки ЭКГ
                         try:
-                            from modules.advanced_ecg_processor import AdvancedECGProcessor
-                            ecg_processor = AdvancedECGProcessor()
-                            df_ecg, time_col, lead_cols = ecg_processor.load_multi_lead_ecg(df, format_type='csv')
+                            from page_modules.ecg import process_csv_file, create_ecg_visualization
                         except ImportError:
-                            # Fallback: используем первую колонку как время, остальные как отведения
-                            time_col = df.columns[0]
-                            lead_cols = [col for col in df.columns if col != time_col]
-                            df_ecg = df
+                            # Fallback к старой логике если модули недоступны
+                            st.error("Модули обработки ЭКГ недоступны. Используйте обновленную версию.")
+                            return
                         
-                        progress_status.text("📈 Подготовка визуализации...")
-                        # Оптимизация: уменьшаем размер фигуры и DPI для больших CSV
-                        num_leads = min(len(lead_cols), 12)
-                        fig_height = min(2 * num_leads, 20)  # Максимум 20 дюймов высоты
-                        fig, axes = plt.subplots(num_leads, 1, figsize=(12, fig_height))
-                        if num_leads == 1:
-                            axes = [axes]
+                        # Обработка CSV через новый модуль
+                        df_ecg, time_col, lead_cols, csv_metadata = process_csv_file(uploaded_file, progress_status)
                         
-                        # Получаем данные времени
-                        if time_col in df_ecg.columns:
-                            time_data = df_ecg[time_col].values
-                        else:
-                            time_data = np.arange(len(df_ecg))
+                        # Создание визуализации через новый модуль
+                        image_array, viz_metadata = create_ecg_visualization(
+                            df_ecg, time_col, lead_cols, progress_status
+                        )
                         
-                        # Агрессивная децимация для очень больших CSV (уменьшаем количество точек)
-                        # Если данных больше 50k точек, берем каждую N-ю точку
-                        max_points = 50000  # Уменьшено с 100k до 50k для ускорения
-                        data_len = len(time_data)
-                        
-                        if data_len > max_points:
-                            step = max(1, data_len // max_points)
-                            indices = np.arange(0, data_len, step)
-                            time_data_decimated = time_data[indices] if isinstance(time_data, np.ndarray) else time_data[::step]
-                        else:
-                            time_data_decimated = time_data
-                            indices = np.arange(data_len)
-                            step = 1
-                        
-                        progress_status.text("📉 Построение графиков...")
-                        # Построение графиков с прогрессом
-                        for idx, lead in enumerate(lead_cols[:num_leads]):
-                            if lead in df_ecg.columns:
-                                lead_data = df_ecg[lead].values if hasattr(df_ecg[lead], 'values') else df_ecg[lead]
-                                
-                                if data_len > max_points:
-                                    lead_data_decimated = lead_data[indices] if isinstance(lead_data, np.ndarray) else lead_data[::step]
-                                else:
-                                    lead_data_decimated = lead_data
-                                
-                                axes[idx].plot(time_data_decimated, lead_data_decimated, linewidth=0.5)  # Уменьшена толщина линии
-                                axes[idx].set_title(f'Отведение {lead}', fontsize=9)
-                                axes[idx].grid(True, alpha=0.2)
-                                if idx == num_leads - 1:
-                                    axes[idx].set_xlabel('Время (с)', fontsize=8)
-                        
-                        progress_status.text("💾 Сохранение изображения...")
-                        plt.tight_layout()
-                        
-                        # Конвертация в изображение с оптимизированным DPI
-                        # Уменьшаем DPI до 75 для больших изображений
-                        buf = BytesIO()
-                        plt.savefig(buf, format='png', dpi=75, bbox_inches='tight', facecolor='white')
-                        buf.seek(0)
-                        
-                        progress_status.text("🖼️ Обработка изображения...")
-                        image = Image.open(buf)
-                        image_array = np.array(image)
-                        metadata = {**metadata, 'source': 'csv', 'leads': lead_cols[:12], 'format': 'csv'}
-                        plt.close('all')  # Закрываем все фигуры
-                        buf.close()
+                        # Объединяем метаданные
+                        metadata = {
+                            **metadata,
+                            **csv_metadata,
+                            **viz_metadata
+                        }
                         
                         progress_status.empty()
                         st.success(f"✅ CSV файл загружен. Обнаружено отведений: {len(lead_cols[:12])}")
                         
                     except Exception as e:
+                        if 'progress_status' in locals():
+                            progress_status.empty()
                         st.error(f"Ошибка обработки CSV файла: {e}")
                         import traceback
                         st.code(traceback.format_exc())
@@ -648,12 +528,39 @@ def show_ecg_analysis():
         if patient_context:
             prompt += f"\n\nКЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n{patient_context}\n\nУчтите этот контекст при анализе."
         
+        # Отображение сохраненных результатов анализа (если есть)
+        opus_result = st.session_state.get('ecg_opus_result', '')
+        ai_result = st.session_state.get('ecg_ai_result', '')
+        gemini_result = st.session_state.get('ecg_gemini_result', '')
+        
+        if opus_result or ai_result or gemini_result:
+            st.markdown("---")
+            st.markdown("### 📋 Результаты анализа")
+            
+            if opus_result:
+                opus_timestamp = st.session_state.get('ecg_opus_timestamp', '')
+                st.markdown(f"#### 🎯 Клиническая директива (Opus 4.5){f' - {opus_timestamp}' if opus_timestamp else ''}")
+                st.write(opus_result)
+                st.markdown("---")
+            
+            if ai_result:
+                ai_timestamp = st.session_state.get('ecg_ai_timestamp', '')
+                st.markdown(f"#### 🧠 Заключение ИИ{f' - {ai_timestamp}' if ai_timestamp else ''}")
+                st.write(ai_result)
+                st.markdown("---")
+            
+            if gemini_result:
+                gemini_timestamp = st.session_state.get('ecg_gemini_timestamp', '')
+                st.markdown(f"#### ⚡ Быстрый анализ (Gemini Flash){f' - {gemini_timestamp}' if gemini_timestamp else ''}")
+                st.write(gemini_result)
+                st.markdown("---")
+        
         # Выбор режима анализа (показывается всегда, до нажатия кнопки)
         st.markdown("---")
         
         # Блок метрик моделей
         st.markdown("### 📊 Точность моделей для ЭКГ")
-        from app import get_model_metrics_display
+        from utils.analysis_helpers import get_model_metrics_display
         metrics = get_model_metrics_display('ECG')
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -711,13 +618,17 @@ def show_ecg_analysis():
         col_fast, col_precise = st.columns(2)
         with col_fast:
             if st.button("⚡ Быстрый анализ (Gemini Flash)", use_container_width=True, type="primary"):
-                from app import perform_analysis_with_streaming
+                from utils.analysis_helpers import perform_analysis_with_streaming
                 result = perform_analysis_with_streaming(
                     assistant, prompt, image_array, str(analysis), use_streaming,
                     analysis_type="быстрый", model_type="gemini", 
                     title="⚡ Быстрый анализ (Gemini Flash):"
                 )
                 if result:
+                    # Сохраняем для быстрого анализа Gemini
+                    st.session_state.ecg_gemini_result = result
+                    st.session_state.ecg_gemini_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # Также сохраняем для обратной совместимости с формой
                     st.session_state.ecg_analysis_result = result
                     st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                     # Форма под метриками обновится автоматически при следующем рендере
@@ -728,13 +639,17 @@ def show_ecg_analysis():
             gemini_accuracy = metrics['gemini']['accuracy']
             accuracy_diff = opus_accuracy - gemini_accuracy
             if st.button(f"🎯 Точный анализ (Opus 4.5) - на {accuracy_diff}% точнее", use_container_width=True, type="primary"):
-                from app import perform_analysis_with_streaming
+                from utils.analysis_helpers import perform_analysis_with_streaming
                 result = perform_analysis_with_streaming(
                     assistant, prompt, image_array, str(analysis), use_streaming=True,
                     analysis_type="точный", model_type="opus",
-                    title=f"🎯 Точный анализ (Opus 4.5):"
+                    title="## 🎯 Клиническая директива (Opus 4.5)"
                 )
                 if result:
+                    # Сохраняем в отдельный ключ для точного анализа Opus
+                    st.session_state.ecg_opus_result = result
+                    st.session_state.ecg_opus_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # Также сохраняем для обратной совместимости с формой
                     st.session_state.ecg_analysis_result = result
                     st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                     # Форма под метриками обновится автоматически при следующем рендере
@@ -776,18 +691,18 @@ def show_ecg_analysis():
                 
                 # Отображаем результат ВНЕ спиннера
                 if result:
-                    # Сохраняем результат СРАЗУ для формы обратной связи
+                    # Сохраняем в отдельный ключ для ИИ-анализа с контекстом
+                    st.session_state.ecg_ai_result = result
+                    st.session_state.ecg_ai_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # Также сохраняем для обратной совместимости с формой
                     st.session_state.ecg_analysis_result = result
                     st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                     
-                    st.markdown(f"### 🧠 Ответ ИИ ({specialist_info['role']}):")
+                    st.markdown(f"## 🧠 Заключение ИИ ({specialist_info['role']})")
                     st.write(result)
                     
-                    # Сохраняем результат в session_state чтобы форма под метриками обновилась
-                    st.session_state.ecg_analysis_result = result
-                    st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    # Обновляем страницу чтобы форма обновилась
-                    st.rerun()
+                    # НЕ вызываем st.rerun(), чтобы результаты не терялись
+                    # Форма обновится автоматически при следующем рендере
             
             elif analysis_mode == "🎯 Консенсус (несколько моделей)":
                 consensus_result = None
@@ -822,16 +737,18 @@ def show_ecg_analysis():
                         result = consensus_result.get('consensus', {}).get('single_opinion', 'Ошибка получения консенсуса')
                         st.write(result)
                     
-                    # Сохраняем результат СРАЗУ для формы обратной связи
+                    # Сохраняем в отдельный ключ для консенсуса
+                    st.session_state.ecg_ai_result = result
+                    st.session_state.ecg_ai_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # Также сохраняем для обратной совместимости с формой
                     st.session_state.ecg_analysis_result = result
                     st.session_state.ecg_analysis_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    # Форма под метриками обновится автоматически при следующем рендере
-                    # Обновляем страницу только после вывода результата
-                    st.rerun()
+                    # НЕ вызываем st.rerun(), чтобы результаты не терялись
+                    # Форма обновится автоматически при следующем рендере
                 
             elif analysis_mode == "✅ С валидацией":
                 # Сначала Flash, потом Opus - оба результата остаются
-                from app import perform_analysis_with_streaming
+                from utils.analysis_helpers import perform_analysis_with_streaming
                 print("🔄 Запуск Gemini Flash для первичного анализа ЭКГ...", file=sys.stderr)
                 flash_result = perform_analysis_with_streaming(
                     assistant, prompt, image_array, str(analysis), use_streaming=True,
@@ -847,14 +764,17 @@ def show_ecg_analysis():
                 result = perform_analysis_with_streaming(
                     assistant, prompt, image_array, str(analysis), use_streaming=True,
                     analysis_type="точный", model_type="opus",
-                    title=f"### 🧠 Opus 4.5 ({specialist_info['role']}):"
+                    title=f"## 🎯 Клиническая директива (Opus 4.5) - {specialist_info['role']}"
                 )
                 
                 # Обработка результата ВНЕ спиннера
                 if result:
-                    # Сохраняем результат для пересылки консультанту (без rerun, чтобы оба результата остались)
-                    st.session_state.ecg_analysis_result = result
+                    # Сохраняем в отдельный ключ для точного анализа Opus (режим с валидацией)
+                    st.session_state.ecg_opus_result = result
                     timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    st.session_state.ecg_opus_timestamp = timestamp_str
+                    # Также сохраняем для обратной совместимости с формой
+                    st.session_state.ecg_analysis_result = result
                     st.session_state.ecg_analysis_timestamp = timestamp_str
                 elif flash_result:
                     st.info("ℹ️ Результат Flash сохранен выше")
@@ -966,20 +886,74 @@ def show_ecg_analysis():
                             st.text(evidence_report)
 
         # Возможность скачать стандартный протокол описания ЭКГ
-        if 'ecg_analysis_result' in st.session_state and st.session_state.ecg_analysis_result:
+        has_opus = 'ecg_opus_result' in st.session_state and st.session_state.ecg_opus_result
+        has_ai = 'ecg_ai_result' in st.session_state and st.session_state.ecg_ai_result
+        has_gemini = 'ecg_gemini_result' in st.session_state and st.session_state.ecg_gemini_result
+        
+        if has_opus or has_ai or has_gemini or ('ecg_analysis_result' in st.session_state and st.session_state.ecg_analysis_result):
             st.markdown("---")
-            st.markdown("### 💾 Экспорт протокола ЭКГ")
-            timestamp = st.session_state.get('ecg_analysis_timestamp', '')
-            header = "Стандартный протокол описания ЭКГ"
-            if timestamp:
-                header += f"\nВремя анализа: {timestamp}"
-            report_text = f"{header}\n\n{st.session_state.ecg_analysis_result}"
-            st.download_button(
-                label="📥 Скачать протокол ЭКГ (.txt)",
-                data=report_text,
-                file_name=f"ECG_report_{timestamp.replace(' ', '_').replace(':', '-') if timestamp else 'latest'}.txt",
-                mime="text/plain"
-            )
+            st.markdown("### 💾 Экспорт заключения")
+            
+            # Определяем какой результат использовать (приоритет: Opus > AI > Gemini > общий)
+            if has_opus:
+                result_text = st.session_state.ecg_opus_result
+                timestamp = st.session_state.get('ecg_opus_timestamp', '')
+                result_type = "Opus 4.5"
+            elif has_ai:
+                result_text = st.session_state.ecg_ai_result
+                timestamp = st.session_state.get('ecg_ai_timestamp', '')
+                result_type = "ИИ-анализ"
+            elif has_gemini:
+                result_text = st.session_state.ecg_gemini_result
+                timestamp = st.session_state.get('ecg_gemini_timestamp', '')
+                result_type = "Gemini Flash"
+            else:
+                result_text = st.session_state.ecg_analysis_result
+                timestamp = st.session_state.get('ecg_analysis_timestamp', '')
+                result_type = "Анализ"
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Word формат
+                try:
+                    from utils.word_report_generator import generate_word_report, get_word_report_filename
+                    word_bytes = generate_word_report(
+                        analysis_type='ECG',
+                        conclusion_text=result_text,
+                        timestamp=timestamp,
+                        metadata={'Тип анализа': result_type}
+                    )
+                    if word_bytes:
+                        st.download_button(
+                            label="📥 Скачать заключение (.docx)",
+                            data=word_bytes,
+                            file_name=get_word_report_filename('ECG', timestamp),
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key="download_ecg_word"
+                        )
+                    else:
+                        st.info("💡 Установите python-docx для экспорта в Word")
+                except ImportError:
+                    st.info("💡 Установите python-docx для экспорта в Word")
+                except Exception as e:
+                    st.error(f"Ошибка генерации Word: {e}")
+            
+            with col2:
+                # TXT формат
+                header = "Стандартный протокол описания ЭКГ"
+                if timestamp:
+                    header += f"\nВремя анализа: {timestamp}"
+                if result_type:
+                    header += f"\nТип анализа: {result_type}"
+                report_text = f"{header}\n\n{result_text}"
+                st.download_button(
+                    label="📥 Скачать заключение (.txt)",
+                    data=report_text,
+                    file_name=f"ECG_report_{timestamp.replace(' ', '_').replace(':', '-') if timestamp else 'latest'}.txt",
+                    mime="text/plain",
+                    key="download_ecg_txt"
+                )
 
     except Exception as e:
         handle_error(e, "show_ecg_analysis", show_to_user=True)

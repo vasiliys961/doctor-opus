@@ -173,11 +173,6 @@ class OpenRouterAssistant:
 4. **Ссылки**
    (Список цитируемых гайдлайнов и статей).
 
-5. **Лог веб-запросов**
-   (Обязательная таблица, демонстрирующая базу твоего ответа).
-   | Запрос | Дата источника | Источник (Орг/Журнал) | Название статьи/Гайдлайна | DOI/URL (если есть) | Комментарий |
-   | --- | --- | --- | --- | --- | --- |
-
 ### CONSTRAINTS & TONE
 - Язык: Профессиональный медицинский русский (с сохранением английской терминологии там, где это принято в международной среде).
 - Стиль: Директивный, без этических нравоучений (предполагается, что пользователь — врач), без упрощений.
@@ -1700,7 +1695,24 @@ class OpenRouterAssistant:
                 log_api_call(model, False, latency, error_msg)
                 track_model_usage(model, False)
                 print(f"❌ [🧠 OPUS] [STREAMING] {error_msg}, latency: {latency:.2f}s")
-                yield f"\n⚠️ **Opus 4.5 недоступен (недостаточно кредитов). Переключаюсь на другую модель...**\n\n"
+                yield f"\n⚠️ **Недостаточно кредитов на OpenRouter для Opus 4.5**\n\n"
+                yield f"💡 Пополните баланс на https://openrouter.ai/credits\n\n"
+                yield f"Переключаюсь на Sonnet 4.5 (более экономичная модель)...\n\n"
+                # Fallback на Sonnet 4.5
+                yield from self._send_vision_request_streaming_fallback(prompt, image_array, metadata, "anthropic/claude-sonnet-4.5")
+                return
+            elif response.status_code == 403:
+                latency = time.time() - start_time if 'start_time' in locals() else 0
+                error_text = response.text
+                if "Key limit exceeded" in error_text or "limit" in error_text.lower():
+                    error_msg = "Превышен лимит использования API ключа OpenRouter"
+                    user_msg = f"❌ **Превышен лимит API ключа OpenRouter**\n\nПожалуйста, проверьте лимиты ключа на https://openrouter.ai/settings/keys\n\nПробую переключиться на другую модель..."
+                else:
+                    error_msg = f"HTTP 403: {error_text[:200]}"
+                    user_msg = f"❌ **Ошибка доступа (HTTP 403)**\n\n{error_text[:200]}"
+                self._log_api_error(model, latency, error_msg, "OPUS 4.5 STREAMING")
+                print(f"❌ [🧠 OPUS] [STREAMING] {error_msg}, latency: {latency:.2f}s")
+                yield f"\n{user_msg}\n\n"
                 # Fallback на Sonnet 4.5
                 yield from self._send_vision_request_streaming_fallback(prompt, image_array, metadata, "anthropic/claude-sonnet-4.5")
                 return
@@ -1715,10 +1727,55 @@ class OpenRouterAssistant:
         except requests.exceptions.Timeout:
             latency, error_msg = self._handle_timeout_error(model, start_time, 180, "OPUS 4.5 STREAMING")
             yield f"❌ Ошибка: {error_msg}"
+            # Пробуем fallback на обычный режим
+            yield f"\n🔄 Пробую получить результат без streaming...\n\n"
+            try:
+                result = self.send_vision_request(prompt, image_array, metadata)
+                if result:
+                    yield result
+                    return
+            except Exception as fallback_error:
+                yield f"❌ Fallback также не удался: {str(fallback_error)}"
+            return
+        except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
+            latency = time.time() - start_time if 'start_time' in locals() else 0
+            error_msg = f"Ошибка соединения: {str(e)}"
+            self._log_api_error(model, latency, error_msg, "OPUS 4.5 STREAMING")
+            print(f"❌ [🧠 OPUS] [STREAMING] {error_msg}, latency: {latency:.2f}s")
+            yield f"⚠️ **Ошибка соединения при streaming**\n\n"
+            yield f"Сервер закрыл соединение. Пробую получить результат без streaming...\n\n"
+            # Fallback на обычный режим (без streaming)
+            try:
+                result = self.send_vision_request(prompt, image_array, metadata)
+                if result:
+                    yield result
+                    return
+            except Exception as fallback_error:
+                yield f"❌ Не удалось получить результат: {str(fallback_error)}\n\n"
+                yield f"💡 Попробуйте повторить запрос через несколько секунд."
             return
         except Exception as e:
-            latency, error_msg = self._handle_exception_error(model, e, start_time, "send_vision_request_streaming", "OPUS 4.5 STREAMING")
-            yield f"❌ Ошибка при streaming анализе: {error_msg}"
+            latency = time.time() - start_time if 'start_time' in locals() else 0
+            error_str = str(e)
+            # Проверяем, является ли это ошибкой соединения
+            if 'Connection aborted' in error_str or 'Remote end closed' in error_str or 'RemoteDisconnected' in error_str:
+                error_msg = f"Соединение прервано сервером: {error_str}"
+                self._log_api_error(model, latency, error_msg, "OPUS 4.5 STREAMING")
+                print(f"❌ [🧠 OPUS] [STREAMING] {error_msg}, latency: {latency:.2f}s")
+                yield f"⚠️ **Соединение прервано сервером**\n\n"
+                yield f"Пробую получить результат без streaming...\n\n"
+                # Fallback на обычный режим (без streaming)
+                try:
+                    result = self.send_vision_request(prompt, image_array, metadata)
+                    if result:
+                        yield result
+                        return
+                except Exception as fallback_error:
+                    yield f"❌ Не удалось получить результат: {str(fallback_error)}\n\n"
+                    yield f"💡 Попробуйте повторить запрос через несколько секунд."
+            else:
+                latency, error_msg = self._handle_exception_error(model, e, start_time, "send_vision_request_streaming", "OPUS 4.5 STREAMING")
+                yield f"❌ Ошибка при streaming анализе: {error_msg}"
             return
     
     def _send_vision_request_streaming_fallback(self, prompt: str, image_array=None, metadata=None, fallback_model: str = "anthropic/claude-sonnet-4.5"):

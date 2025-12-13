@@ -23,88 +23,79 @@ from io import BytesIO
 import datetime
 import sys
 
-# Импорты из claude_assistant
+# Импорты из utils.page_imports (общие импорты)
 try:
-    from claude_assistant import OpenRouterAssistant
-    AI_AVAILABLE = True
+    from utils.page_imports import (
+        OpenRouterAssistant, AI_AVAILABLE,
+        validate_image, validate_file_size, VALIDATORS_AVAILABLE,
+        ImageFormatProcessor, optimize_image_for_ai, IMAGE_PROCESSOR_AVAILABLE,
+        handle_error, ERROR_HANDLER_AVAILABLE,
+        get_specialist_prompt, get_specialist_info, SPECIALIST_DETECTOR_AVAILABLE,
+        show_feedback_form, FEEDBACK_WIDGET_AVAILABLE,
+        IS_REPLIT, MOBILE_MAX_IMAGE_SIZE, CONFIG_AVAILABLE
+    )
+    PAGE_IMPORTS_AVAILABLE = True
 except ImportError:
-    AI_AVAILABLE = False
-    OpenRouterAssistant = None
-
-# Импорты из utils
-try:
-    from utils.validators import validate_image, validate_file_size
-    VALIDATORS_AVAILABLE = True
-except ImportError:
-    VALIDATORS_AVAILABLE = False
-    validate_image = lambda *args, **kwargs: (True, "")
-    validate_file_size = lambda *args, **kwargs: (True, "")
-
-try:
-    from utils.image_processor import ImageFormatProcessor, optimize_image_for_ai
-    IMAGE_PROCESSOR_AVAILABLE = True
-except ImportError:
-    IMAGE_PROCESSOR_AVAILABLE = False
-    ImageFormatProcessor = None
-    optimize_image_for_ai = None
-
-try:
-    from utils.error_handler import handle_error
-    ERROR_HANDLER_AVAILABLE = True
-except ImportError:
-    ERROR_HANDLER_AVAILABLE = False
-    def handle_error(error, context="", show_to_user=True):
-        return str(error)
-
-try:
-    from utils.specialist_detector import get_specialist_prompt, get_specialist_info
-    SPECIALIST_DETECTOR_AVAILABLE = True
-except ImportError:
-    SPECIALIST_DETECTOR_AVAILABLE = False
-    get_specialist_prompt = None
-    get_specialist_info = None
-
-try:
-    from utils.feedback_widget import show_feedback_form
-    FEEDBACK_WIDGET_AVAILABLE = True
-except ImportError:
-    FEEDBACK_WIDGET_AVAILABLE = False
-    def show_feedback_form(*args, **kwargs):
-        st.warning("⚠️ Модуль обратной связи недоступен")
-
-# Импорты из config
-try:
-    from config import IS_REPLIT, MOBILE_MAX_IMAGE_SIZE
-    CONFIG_AVAILABLE = True
-except ImportError:
-    CONFIG_AVAILABLE = False
-    IS_REPLIT = False
-    MOBILE_MAX_IMAGE_SIZE = (1024, 1024)
-
-# Импорты функций из app.py (которые используются в show_dermatoscopy_analysis)
-# Используем ленивый импорт чтобы избежать циклических зависимостей
-def get_perform_analysis_with_streaming():
-    """Ленивый импорт perform_analysis_with_streaming из app.py"""
+    PAGE_IMPORTS_AVAILABLE = False
+    # Fallback к старым импортам (для совместимости)
     try:
-        import app
-        return app.perform_analysis_with_streaming
-    except (ImportError, AttributeError):
-        def fallback(*args, **kwargs):
-            st.error("⚠️ Функция perform_analysis_with_streaming недоступна")
-            return None
-        return fallback
+        from claude_assistant import OpenRouterAssistant
+        AI_AVAILABLE = True
+    except ImportError:
+        AI_AVAILABLE = False
+        OpenRouterAssistant = None
+    from utils.page_imports import (
+        validate_image, validate_file_size, VALIDATORS_AVAILABLE,
+        ImageFormatProcessor, optimize_image_for_ai, IMAGE_PROCESSOR_AVAILABLE,
+        handle_error, ERROR_HANDLER_AVAILABLE,
+        get_specialist_prompt, get_specialist_info, SPECIALIST_DETECTOR_AVAILABLE,
+        show_feedback_form, FEEDBACK_WIDGET_AVAILABLE,
+        IS_REPLIT, MOBILE_MAX_IMAGE_SIZE, CONFIG_AVAILABLE
+    )
 
-def get_model_metrics_display(category: str):
-    """Получить метрики моделей для отображения"""
-    try:
-        import app
-        return app.get_model_metrics_display(category)
-    except (ImportError, AttributeError):
-        # Fallback метрики
-        return {
-            'gemini': {'accuracy': 82},
-            'opus': {'accuracy': 96, 'speed_multiplier': 3.6, 'price_multiplier': 4.3}
-        }
+# Импорты общих функций из page_helpers
+try:
+    from utils.page_helpers import (
+        check_ai_availability,
+        display_image_upload_section,
+        optimize_image_if_needed,
+        get_perform_analysis_with_streaming,
+        get_model_metrics_display
+    )
+    PAGE_HELPERS_AVAILABLE = True
+except ImportError:
+    PAGE_HELPERS_AVAILABLE = False
+    # Fallback - используем старую логику
+    def check_ai_availability():
+        return AI_AVAILABLE
+    
+    def display_image_upload_section(*args, **kwargs):
+        return None, None, None
+    
+    def optimize_image_if_needed(img):
+        return img
+    
+    def get_perform_analysis_with_streaming():
+        """Ленивый импорт perform_analysis_with_streaming из app.py"""
+        try:
+            import app
+            return app.perform_analysis_with_streaming
+        except (ImportError, AttributeError):
+            def fallback(*args, **kwargs):
+                st.error("⚠️ Функция perform_analysis_with_streaming недоступна")
+                return None
+            return fallback
+    
+    def get_model_metrics_display(category: str):
+        """Получить метрики моделей для отображения"""
+        try:
+            import app
+            return app.get_model_metrics_display(category)
+        except (ImportError, AttributeError):
+            return {
+                'gemini': {'accuracy': 82},
+                'opus': {'accuracy': 96, 'speed_multiplier': 3.6, 'price_multiplier': 4.3}
+            }
 
 # Импорт ImageType
 try:
@@ -119,66 +110,32 @@ except ImportError:
 
 def show_dermatoscopy_analysis():
     """Анализ дерматоскопии (фото кожи)"""
-    if not AI_AVAILABLE:
+    # Проверка доступности AI (используем общую функцию)
+    if not check_ai_availability():
         st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
         return
 
     st.header("🔬 Анализ дерматоскопии (фото кожи)")
     
-    # Мобильная поддержка: выбор источника
-    source_type = st.radio(
-        "Выберите источник изображения:",
-        ["📁 Загрузить файл", "📷 Сделать фото"],
-        horizontal=True
+    # Загрузка и валидация изображения (используем общую функцию)
+    image_array, metadata, error_msg = display_image_upload_section(
+        page_title="дерматоскопию",
+        allowed_types=["jpg", "jpeg", "png", "tiff", "tif", "heic", "heif", "webp"],
+        help_text="Поддерживаются: JPG, PNG, TIFF, HEIC, WEBP",
+        camera_key="derm_camera"
     )
     
-    image_array = None
-    metadata = {}
+    if error_msg:
+        st.error(error_msg)
+        return
     
-    if source_type == "📷 Сделать фото":
-        # Использование камеры смартфона
-        camera_image = st.camera_input("Сфотографируйте кожное образование", key="derm_camera")
-        if camera_image:
-            try:
-                image = Image.open(camera_image)
-                image_array = np.array(image)
-                metadata = {'source': 'camera', 'format': 'mobile_photo'}
-            except Exception as e:
-                st.error(f"Ошибка обработки фото: {e}")
-                return
-    else:
-        # Загрузка файла с расширенной поддержкой форматов
-        uploaded_file = st.file_uploader(
-            "Загрузите фото кожи/дерматоскопию", 
-            type=["jpg", "jpeg", "png", "tiff", "tif", "heic", "heif", "webp"],
-            help="Поддерживаются: JPG, PNG, TIFF, HEIC, WEBP"
-        )
-        
-        if uploaded_file:
-            try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
-                    tmp.write(uploaded_file.getvalue())
-                    tmp_path = tmp.name
-                
-                processor = ImageFormatProcessor()
-                image_array, file_metadata = processor.load_image(tmp_path, MOBILE_MAX_IMAGE_SIZE)
-                metadata = {**metadata, **file_metadata, 'source': 'upload'}
-                
-                os.unlink(tmp_path)
-                processor.cleanup_temp_files()
-                
-            except Exception as e:
-                st.error(f"Ошибка обработки файла: {e}")
-                return
-
     if image_array is None:
         st.info("Загрузите файл или сделайте фото для анализа.")
         return
 
     try:
-        # Оптимизация для мобильных устройств
-        if (IS_REPLIT or st.session_state.get('mobile_mode', False)) and IMAGE_PROCESSOR_AVAILABLE and optimize_image_for_ai:
-            image_array = optimize_image_for_ai(image_array)
+        # Оптимизация для мобильных устройств (используем общую функцию)
+        image_array = optimize_image_if_needed(image_array)
         
         st.image(image_array, caption="Дерматоскопия", use_container_width=True, clamp=True)
 
@@ -281,7 +238,7 @@ def show_dermatoscopy_analysis():
                 result = perform_analysis_with_streaming(
                     assistant, prompt, image_array, str(metadata), use_streaming=True,
                     analysis_type="точный", model_type="opus",
-                    title="🎯 Точный анализ (Opus 4.5):"
+                    title="## 🎯 Клиническая директива (Opus 4.5)"
                 )
                 # Сохраняем результат ВСЕГДА
                 result_str = str(result) if result else ""
@@ -313,7 +270,7 @@ def show_dermatoscopy_analysis():
             result = perform_analysis_with_streaming(
                 assistant, prompt, image_array, str(metadata), use_streaming=True,
                 analysis_type="точный", model_type="opus",
-                title=f"### 🧠 Заключение ({specialist_info['role']}):"
+                title=f"## 🧠 Заключение ИИ ({specialist_info['role']})"
             )
             # Сохраняем результат ВСЕГДА
             result_str = str(result) if result else ""
@@ -323,6 +280,39 @@ def show_dermatoscopy_analysis():
             print(f"💾 [DERMA] Сохранен результат длиной {len(result_str)} символов", file=sys.stderr)
             # Обновляем страницу чтобы результат отобразился в блоке "Результаты анализа"
             st.rerun()
+        
+        # Экспорт заключения
+        if 'derma_analysis_result' in st.session_state and st.session_state.derma_analysis_result:
+            st.markdown("---")
+            st.markdown("### 💾 Экспорт заключения")
+            result_text = st.session_state.derma_analysis_result
+            timestamp = st.session_state.get('derma_analysis_timestamp', '')
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                try:
+                    from utils.word_report_generator import generate_word_report, get_word_report_filename
+                    word_bytes = generate_word_report('DERMATOSCOPY', result_text, timestamp=timestamp)
+                    if word_bytes:
+                        st.download_button(
+                            label="📥 Скачать заключение (.docx)",
+                            data=word_bytes,
+                            file_name=get_word_report_filename('DERMATOSCOPY', timestamp),
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key="download_derma_word"
+                        )
+                except Exception:
+                    st.info("💡 Установите python-docx для экспорта в Word")
+            with col2:
+                header = f"Заключение по дерматоскопии\nВремя анализа: {timestamp}" if timestamp else "Заключение по дерматоскопии"
+                report_text = f"{header}\n\n{result_text}"
+                st.download_button(
+                    label="📥 Скачать заключение (.txt)",
+                    data=report_text,
+                    file_name=f"Dermatoscopy_report_{timestamp.replace(' ', '_').replace(':', '-') if timestamp else 'latest'}.txt",
+                    mime="text/plain",
+                    key="download_derma_txt"
+                )
 
     except Exception as e:
         st.error(f"Ошибка обработки дерматоскопии: {e}")

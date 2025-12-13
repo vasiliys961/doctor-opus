@@ -15,39 +15,58 @@ import sys
 import logging
 import traceback
 
-# Импорты из claude_assistant
+# Импорты из utils.page_imports (общие импорты)
 try:
-    from claude_assistant import OpenRouterAssistant
-    AI_AVAILABLE = True
+    from utils.page_imports import (
+        OpenRouterAssistant, AI_AVAILABLE,
+        handle_error, ERROR_HANDLER_AVAILABLE,
+        show_feedback_form, FEEDBACK_WIDGET_AVAILABLE,
+        AdvancedLabProcessor, ADVANCED_LAB_PROCESSOR_AVAILABLE,
+        ImageType, IMAGE_TYPE_AVAILABLE,
+        safe_init_components, COMPONENT_INITIALIZER_AVAILABLE
+    )
+    PAGE_IMPORTS_AVAILABLE = True
+    # Для обратной совместимости
+    LAB_PROCESSOR_AVAILABLE = ADVANCED_LAB_PROCESSOR_AVAILABLE
 except ImportError:
-    AI_AVAILABLE = False
-    OpenRouterAssistant = None
+    PAGE_IMPORTS_AVAILABLE = False
+    # Fallback к старым импортам
+    try:
+        from claude_assistant import OpenRouterAssistant
+        AI_AVAILABLE = True
+    except ImportError:
+        AI_AVAILABLE = False
+        OpenRouterAssistant = None
+    try:
+        from utils.error_handler import handle_error
+        ERROR_HANDLER_AVAILABLE = True
+    except ImportError:
+        ERROR_HANDLER_AVAILABLE = False
+        def handle_error(error, context="", show_to_user=True):
+            return str(error)
+    try:
+        from utils.feedback_widget import show_feedback_form
+        FEEDBACK_WIDGET_AVAILABLE = True
+    except ImportError:
+        FEEDBACK_WIDGET_AVAILABLE = False
+        def show_feedback_form(*args, **kwargs):
+            st.warning("⚠️ Модуль обратной связи недоступен")
+    try:
+        from modules.advanced_lab_processor import AdvancedLabProcessor
+        LAB_PROCESSOR_AVAILABLE = True
+    except ImportError:
+        LAB_PROCESSOR_AVAILABLE = False
+        AdvancedLabProcessor = None
+    try:
+        from modules.medical_ai_analyzer import ImageType
+        IMAGE_TYPE_AVAILABLE = True
+    except ImportError:
+        IMAGE_TYPE_AVAILABLE = False
+        class ImageType:
+            ECG = "ECG"
+    from utils.component_initializer import safe_init_components
 
-# Импорты из utils
-try:
-    from utils.error_handler import handle_error
-    ERROR_HANDLER_AVAILABLE = True
-except ImportError:
-    ERROR_HANDLER_AVAILABLE = False
-    def handle_error(error, context="", show_to_user=True):
-        return str(error)
-
-try:
-    from utils.feedback_widget import show_feedback_form
-    FEEDBACK_WIDGET_AVAILABLE = True
-except ImportError:
-    FEEDBACK_WIDGET_AVAILABLE = False
-    def show_feedback_form(*args, **kwargs):
-        st.warning("⚠️ Модуль обратной связи недоступен")
-
-# Импорты из modules
-try:
-    from modules.advanced_lab_processor import AdvancedLabProcessor
-    LAB_PROCESSOR_AVAILABLE = True
-except ImportError:
-    LAB_PROCESSOR_AVAILABLE = False
-    AdvancedLabProcessor = None
-
+# Импорт export_manager (специфичный для lab_page)
 try:
     from utils.export_manager import export_lab_results_to_excel
     EXPORT_MANAGER_AVAILABLE = True
@@ -56,20 +75,6 @@ except ImportError:
     def export_lab_results_to_excel(*args, **kwargs):
         st.warning("⚠️ Модуль экспорта недоступен")
         return None
-
-# Импорт ImageType
-try:
-    from modules.medical_ai_analyzer import ImageType
-    IMAGE_TYPE_AVAILABLE = True
-except ImportError:
-    IMAGE_TYPE_AVAILABLE = False
-    # Fallback - создаем простой класс для ImageType
-    class ImageType:
-        ECG = "ECG"
-
-# Импорты функций из app.py (которые используются в show_lab_analysis)
-# Функция safe_init_components() вынесена в utils/component_initializer.py для устранения циклических зависимостей
-from utils.component_initializer import safe_init_components
 
 
 def show_lab_analysis():
@@ -377,6 +382,39 @@ def show_lab_analysis():
                                     if evidence_ranker and evidence:
                                         with st.expander("📚 Оценка доказательности"):
                                             st.write(evidence_ranker.generate_evidence_report(evidence))
+                                    
+                                    # Экспорт заключения
+                                    if 'lab_analysis_result' in st.session_state and st.session_state.lab_analysis_result:
+                                        st.markdown("---")
+                                        st.markdown("### 💾 Экспорт заключения")
+                                        result_text = st.session_state.lab_analysis_result
+                                        timestamp = st.session_state.get('lab_analysis_timestamp', '')
+                                        
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            try:
+                                                from utils.word_report_generator import generate_word_report, get_word_report_filename
+                                                word_bytes = generate_word_report('LAB', result_text, timestamp=timestamp)
+                                                if word_bytes:
+                                                    st.download_button(
+                                                        label="📥 Скачать заключение (.docx)",
+                                                        data=word_bytes,
+                                                        file_name=get_word_report_filename('LAB', timestamp),
+                                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                                        key="download_lab_word"
+                                                    )
+                                            except Exception:
+                                                st.info("💡 Установите python-docx для экспорта в Word")
+                                        with col2:
+                                            header = f"Заключение по лабораторным исследованиям\nВремя анализа: {timestamp}" if timestamp else "Заключение по лабораторным исследованиям"
+                                            report_text = f"{header}\n\n{result_text}"
+                                            st.download_button(
+                                                label="📥 Скачать заключение (.txt)",
+                                                data=report_text,
+                                                file_name=f"Lab_report_{timestamp.replace(' ', '_').replace(':', '-') if timestamp else 'latest'}.txt",
+                                                mime="text/plain",
+                                                key="download_lab_txt"
+                                            )
                                 
                             except Exception as e:
                                 error_msg = handle_error(e, "show_lab_analysis", show_to_user=True)
