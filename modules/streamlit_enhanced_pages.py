@@ -11,11 +11,12 @@ import pandas as pd
 import json
 import plotly.graph_objects as go
 import plotly.express as px
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import io
 import base64
 import requests
 import time
+import datetime
 try:
     from .medical_ai_analyzer import EnhancedMedicalAIAnalyzer, ImageType, AnalysisResult
 except ImportError:
@@ -26,6 +27,29 @@ except ImportError:
         EnhancedMedicalAIAnalyzer = None
         ImageType = None
         AnalysisResult = None
+
+
+def ensure_string_for_download(data: Any) -> str:
+    """Безопасное преобразование данных в строку для download_button
+    
+    Args:
+        data: Данные любого типа для преобразования в строку
+        
+    Returns:
+        str: Строковое представление данных
+    """
+    if isinstance(data, tuple):
+        # Если это кортеж, берем первый элемент или преобразуем весь кортеж
+        if len(data) > 0:
+            return str(data[0])
+        return str(data)
+    elif isinstance(data, (list, dict)):
+        # Если это список или словарь, преобразуем в JSON строку
+        return json.dumps(data, ensure_ascii=False, indent=2)
+    elif not isinstance(data, str):
+        # Любой другой тип преобразуем в строку
+        return str(data)
+    return data
 
 
 def show_enhanced_analysis_page():
@@ -142,6 +166,10 @@ def show_enhanced_analysis_page():
             progress_bar.empty()
             status_text.empty()
             
+            # Сохраняем результаты в session_state
+            st.session_state['enhanced_analysis_results'] = results
+            st.session_state['enhanced_analysis_timestamp'] = datetime.datetime.now().isoformat()
+            
             # Отображение результатов
             if results:
                 st.success(f"✅ Анализ завершен! Обработано изображений: {len(results)}")
@@ -152,21 +180,163 @@ def show_enhanced_analysis_page():
                 # Детальные результаты
                 for result in results:
                     show_detailed_analysis_result(result, show_metadata)
+    
+    # Показываем сохраненные результаты и кнопку генерации протокола
+    if 'enhanced_analysis_results' in st.session_state and st.session_state['enhanced_analysis_results']:
+        results = st.session_state['enhanced_analysis_results']
+        
+        st.markdown("---")
+        st.subheader("📄 Генерация медицинского протокола")
+        
+        # Показываем сохраненный протокол если есть
+        protocol_key = f'generated_report_{len(results)}'
+        docx_key = f'{protocol_key}_docx'
+        
+        if protocol_key in st.session_state:
+            saved_report = st.session_state[protocol_key]
+            if saved_report:
+                st.info("💡 Отображается ранее сгенерированный протокол. Нажмите кнопку ниже, чтобы сгенерировать новый.")
+                st.text_area("📋 Медицинский протокол (текстовый просмотр)", saved_report, height=400, key=f"saved_protocol_text_{len(results)}")
                 
-                # Генерация отчета
-                if st.button("📄 Сгенерировать медицинский отчет"):
-                    report = analyzer.generate_report(results)
-                    
-                    st.subheader("📋 Медицинский отчет")
-                    st.text_area("Отчет", report, height=400)
-                    
-                    # Скачать отчет
+                # Кнопки скачивания
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Скачать Word документ (если есть)
+                    if docx_key in st.session_state:
+                        st.download_button(
+                            label="📄 Скачать протокол Word (.docx)",
+                            data=st.session_state[docx_key],
+                            file_name=f"medical_protocol_{len(results)}_images.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True,
+                            key=f"download_docx_report_{len(results)}"
+                        )
+                    else:
+                        st.info("💡 Сгенерируйте протокол, чтобы получить Word документ")
+                
+                with col2:
+                    # Скачать текстовый файл
                     st.download_button(
-                        label="💾 Скачать отчет (.txt)",
-                        data=report,
-                        file_name=f"medical_report_{len(results)}_images.txt",
-                        mime="text/plain"
+                        label="📝 Скачать протокол (.txt)",
+                        data=saved_report,
+                        file_name=f"medical_protocol_{len(results)}_images.txt",
+                        mime="text/plain",
+                        use_container_width=True,
+                        key=f"download_txt_report_{len(results)}"
                     )
+                
+                st.markdown("---")
+        
+        if st.button("📄 Сгенерировать медицинский протокол", use_container_width=True, type="primary", key="generate_protocol_button"):
+            try:
+                with st.spinner("🔄 Генерирую протокол..."):
+                    if 'enhanced_analyzer' not in st.session_state:
+                        st.error("❌ Анализатор не найден. Выполните анализ заново.")
+                    else:
+                        analyzer = st.session_state.enhanced_analyzer
+                        report_raw = analyzer.generate_report(results)
+                        report = ensure_string_for_download(report_raw)
+                        
+                        if report and len(report.strip()) > 0:
+                            # Сохраняем текстовый отчет в session_state
+                            st.session_state[protocol_key] = report
+                            
+                            # Генерируем Word документ
+                            try:
+                                from docx import Document
+                                from docx.shared import Pt, Inches
+                                from docx.enum.text import WD_ALIGN_PARAGRAPH
+                                import io
+                                
+                                doc = Document()
+                                
+                                # Настройка стилей
+                                style = doc.styles['Normal']
+                                font = style.font
+                                font.name = 'Times New Roman'
+                                font.size = Pt(12)
+                                
+                                # Заголовок
+                                title = doc.add_heading('МЕДИЦИНСКОЕ ЗАКЛЮЧЕНИЕ', 0)
+                                title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                
+                                # Дата
+                                date_para = doc.add_paragraph(f"Дата: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}")
+                                date_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                doc.add_paragraph()
+                                
+                                # Разделитель
+                                doc.add_paragraph('─' * 80)
+                                
+                                # Разбиваем текст протокола на строки и форматируем
+                                lines = report.split('\n')
+                                for line in lines:
+                                    line = line.strip()
+                                    if not line:
+                                        doc.add_paragraph()
+                                        continue
+                                    
+                                    # Заголовки (начинаются с заглавных букв и содержат только заглавные или цифры)
+                                    if line.isupper() or (len(line) < 60 and line.isupper()):
+                                        doc.add_heading(line, level=1)
+                                    elif line.startswith('='):
+                                        doc.add_paragraph('─' * 80)
+                                    elif line.startswith('-'):
+                                        doc.add_paragraph(line, style='List Bullet')
+                                    else:
+                                        para = doc.add_paragraph(line)
+                                
+                                # Сохраняем Word документ в байты
+                                doc_bytes = io.BytesIO()
+                                doc.save(doc_bytes)
+                                doc_bytes.seek(0)
+                                
+                                # Сохраняем Word документ в session_state
+                                docx_bytes = doc_bytes.getvalue()
+                                st.session_state[f'{protocol_key}_docx'] = docx_bytes
+                                st.success("✅ Протокол успешно сгенерирован!")
+                                
+                                # Сразу показываем кнопки скачивания
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.download_button(
+                                        label="📄 Скачать протокол Word (.docx)",
+                                        data=docx_bytes,
+                                        file_name=f"medical_protocol_{len(results)}_images.docx",
+                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                        use_container_width=True,
+                                        key=f"download_docx_immediate_{len(results)}"
+                                    )
+                                
+                                with col2:
+                                    st.download_button(
+                                        label="📝 Скачать протокол TXT (.txt)",
+                                        data=report,
+                                        file_name=f"medical_protocol_{len(results)}_images.txt",
+                                        mime="text/plain",
+                                        use_container_width=True,
+                                        key=f"download_txt_immediate_{len(results)}"
+                                    )
+                                
+                                st.rerun()  # Обновляем страницу чтобы показать протокол
+                                
+                            except ImportError:
+                                st.warning("⚠️ python-docx не установлен. Протокол доступен только в текстовом формате.")
+                                st.info("💡 Установите: pip install python-docx")
+                                st.success("✅ Текстовый протокол успешно сгенерирован!")
+                                st.rerun()
+                        else:
+                            st.error("❌ Ошибка: Протокол пуст. Проверьте результаты анализа.")
+            except AttributeError as e:
+                st.error(f"❌ Ошибка: Метод generate_report не найден: {e}")
+                st.info("💡 Убедитесь, что используется правильная версия EnhancedMedicalAIAnalyzer")
+            except Exception as e:
+                st.error(f"❌ Ошибка генерации протокола: {e}")
+                import traceback
+                with st.expander("🔍 Детали ошибки"):
+                    st.code(traceback.format_exc())
 
 
 def show_analysis_summary(results: List[AnalysisResult], confidence_threshold: float):
@@ -367,6 +537,13 @@ def show_detailed_analysis_result(result: AnalysisResult, show_metadata: bool = 
                 prognosis = risk.get("prognosis", "")
                 if prognosis:
                     st.info(f"**Прогноз:** {prognosis}")
+        
+        # Клиническая интерпретация (читаемый форматированный текст)
+        # УБРАНО: Не показываем clinical_interpretation, так как вся информация уже показана выше
+        # в структурированном виде (находки, диагноз, рекомендации)
+        
+        # НЕ показываем structured_findings как JSON - они уже показаны выше в структурированном виде
+        # Убираем дублирование JSON внизу
         
         # Метаданные
         if show_metadata and hasattr(result, 'metadata') and result.metadata:
@@ -622,9 +799,12 @@ def show_comparative_analysis_page():
                 
                 # Проверяем, есть ли сохраненное заключение
                 saved_conclusion_key = f"{comparison_type}_{len(results)}"
-                saved_conclusion = st.session_state.get('comparative_analysis_result', {}).get(saved_conclusion_key, '')
+                saved_conclusion_raw = st.session_state.get('comparative_analysis_result', {}).get(saved_conclusion_key, '')
                 
-                if saved_conclusion:
+                # Преобразуем в строку если это не строка (может быть tuple или другой тип)
+                if saved_conclusion_raw:
+                    saved_conclusion = ensure_string_for_download(saved_conclusion_raw)
+                    
                     st.info("💡 Отображается сохраненное заключение. Нажмите кнопку ниже, чтобы сгенерировать новое.")
                     st.markdown("### 📋 Сравнительное заключение")
                     st.markdown(saved_conclusion)
@@ -634,7 +814,8 @@ def show_comparative_analysis_page():
                         data=saved_conclusion,
                         file_name=f"comparative_analysis_{comparison_type}_{len(results)}_images.txt",
                         mime="text/plain",
-                        use_container_width=True
+                        use_container_width=True,
+                        key=f"download_saved_conclusion_{saved_conclusion_key}"
                     )
                     st.markdown("---")
                 
@@ -744,7 +925,10 @@ def show_comparative_analysis_page():
                             )
                             
                             # Отображаем streaming результат
-                            comparative_analysis = st.write_stream(text_generator)
+                            comparative_analysis_raw = st.write_stream(text_generator)
+                            
+                            # Преобразуем в строку если нужно (st.write_stream может вернуть разные типы)
+                            comparative_analysis = ensure_string_for_download(comparative_analysis_raw)
                             
                             # Проверяем, что результат не пустой
                             if not comparative_analysis or len(comparative_analysis.strip()) == 0:
@@ -764,7 +948,8 @@ def show_comparative_analysis_page():
                                 data=comparative_analysis,
                                 file_name=f"comparative_analysis_{comparison_type}_{len(results)}_images.txt",
                                 mime="text/plain",
-                                use_container_width=True
+                                use_container_width=True,
+                                key=f"download_streaming_conclusion_{comparison_type}_{len(results)}"
                             )
                         else:
                             st.error("❌ Не удалось получить заключение. Попробуйте еще раз.")
@@ -774,11 +959,15 @@ def show_comparative_analysis_page():
                         # Fallback на обычный режим
                         try:
                             st.warning("⚠️ Streaming недоступен, используем обычный режим...")
-                            comparative_analysis = analyzer._send_ai_request(
+                            # _send_ai_request возвращает tuple: (content, model_name, tokens_used)
+                            comparative_analysis_raw, model_name, tokens_used = analyzer._send_ai_request(
                                 comparison_prompt, 
                                 images[0],
                                 {"comparison_type": comparison_type, "images_count": len(results)}
                             )
+                            
+                            # Преобразуем в строку
+                            comparative_analysis = ensure_string_for_download(comparative_analysis_raw)
                             st.markdown(comparative_analysis)
                             
                             # Сохраняем результат
@@ -791,7 +980,8 @@ def show_comparative_analysis_page():
                                 data=comparative_analysis,
                                 file_name=f"comparative_analysis_{comparison_type}_{len(results)}_images.txt",
                                 mime="text/plain",
-                                use_container_width=True
+                                use_container_width=True,
+                                key=f"download_fallback_conclusion_{comparison_type}_{len(results)}"
                             )
                         except Exception as e2:
                             st.error(f"❌ Критическая ошибка: {e2}")
@@ -932,7 +1122,7 @@ def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
             "temperature": 0.3
         }
         
-        print(f"🔍 [⚡ FLASH] [PROTOCOLS] Ищу протоколы через Gemini 2.5 Flash: {query} ({specialty})")
+        print(f"🔍 [GEMINI 2.5 FLASH] Ищу протоколы: {query} ({specialty})")
         start_time = time.time()
         response = requests.post(url, headers=headers, json=payload, timeout=60)
         latency = time.time() - start_time
@@ -942,7 +1132,7 @@ def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             tokens_used = data.get("usage", {}).get("total_tokens", 0)
             
-            print(f"✅ [⚡ FLASH] [PROTOCOLS] Модель: Gemini 2.5 Flash, Токенов: {tokens_used}, Latency: {latency:.2f}с")
+            print(f"✅ [GEMINI 2.5 FLASH] Найдено протоколов. Токенов: {tokens_used}, Время: {latency:.2f}с")
             
             return {
                 "success": True,

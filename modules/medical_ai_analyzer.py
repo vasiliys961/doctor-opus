@@ -3,70 +3,101 @@
 """
 Улучшенный ИИ-анализатор медицинских изображений
 Поддерживает: ЭКГ, Рентген, МРТ, КТ, УЗИ, Дерматоскопия, Гистология, Офтальмология, Маммография
+
+РЕФАКТОРИНГ v3.18:
+- Типы данных вынесены в modules/medical_types.py
+- Промпты вынесены в modules/medical_prompts.py
+- Детектор типа изображения вынесен в modules/image_type_detector.py
+- API клиент вынесен в modules/medical_api_client.py
+- Сохранена 100% обратная совместимость
 """
 
 import json
-import base64
+import datetime
 import io
+import base64
+import requests
 import time
 import sys
 from PIL import Image
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
-from dataclasses import dataclass
-from enum import Enum
-import datetime
-import requests
 
-class ImageType(Enum):
-    """Типы медицинских изображений"""
-    ECG = "ecg"
-    XRAY = "xray"
-    MRI = "mri"
-    CT = "ct"
-    ULTRASOUND = "ultrasound"
-    DERMATOSCOPY = "dermatoscopy"
-    HISTOLOGY = "histology"
-    RETINAL = "retinal"
-    MAMMOGRAPHY = "mammography"
+# Импорт из новых модулей (обратная совместимость)
+from .medical_types import ImageType, AnalysisResult
+from .medical_prompts import get_specialized_prompts
+from .image_type_detector import ImageTypeDetector
 
-@dataclass
-class AnalysisResult:
-    """Результат анализа изображения"""
-    image_type: ImageType
-    confidence: float
-    structured_findings: Dict[str, Any]
-    clinical_interpretation: str
-    recommendations: List[str]
-    urgent_flags: List[str]
-    icd10_codes: List[str]
-    timestamp: str
-    metadata: Dict[str, Any]
-    model_name: str = ""  # Название модели, которая выполнила анализ
-    tokens_used: int = 0  # Количество использованных токенов
+# Опциональный импорт MedicalAPIClient (может отсутствовать)
+try:
+    from .medical_api_client import MedicalAPIClient
+    MEDICAL_API_CLIENT_AVAILABLE = True
+except ImportError:
+    MedicalAPIClient = None
+    MEDICAL_API_CLIENT_AVAILABLE = False
+
+# Экспорт для обратной совместимости
+__all__ = ['EnhancedMedicalAIAnalyzer', 'ImageType', 'AnalysisResult']
 
 class EnhancedMedicalAIAnalyzer:
-    """Улучшенный анализатор медицинских изображений"""
+    """Улучшенный анализатор медицинских изображений
+    
+    РЕФАКТОРИНГ v3.18: Использует модульную архитектуру
+    - medical_types: типы данных
+    - medical_prompts: специализированные промпты
+    - image_type_detector: определение типа изображения
+    - medical_api_client: работа с API
+    """
     
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
-        self.models = [
-            "anthropic/claude-opus-4.5",  # Opus для расширенного анализа
-            "anthropic/claude-sonnet-4.5",
-            "anthropic/claude-3-5-sonnet-20241022",
-            "anthropic/claude-3-5-sonnet",
-        ]
         
-        self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/vasiliys961/medical-assistant1",
-            "X-Title": "Enhanced Medical AI Assistant"
-        }
+        # Инициализация модулей (с обработкой отсутствия MedicalAPIClient)
+        if MEDICAL_API_CLIENT_AVAILABLE and MedicalAPIClient:
+            self.api_client = MedicalAPIClient(api_key, self.base_url)
+            self.models = self.api_client.models  # Для обратной совместимости
+            self.headers = self.api_client.headers  # Для обратной совместимости
+        else:
+            # Fallback: создаем базовые атрибуты если MedicalAPIClient недоступен
+            self.api_client = None
+            # Устанавливаем список моделей по умолчанию (не пустой словарь!)
+            # Claude Opus - приоритетная модель для максимального качества
+            self.models = [
+                "anthropic/claude-opus-4.5",
+                "anthropic/claude-sonnet-4.5",
+                "anthropic/claude-haiku-4.5",
+                "google/gemini-2.5-flash",
+                "meta-llama/llama-3.2-90b-vision-instruct"
+            ]
+            self.headers = {"Authorization": f"Bearer {api_key}"}  # Базовые заголовки
         
-        # Специализированные промпты для каждого типа изображения
-        self.specialized_prompts = self._init_specialized_prompts()
+        # Убеждаемся что models это список, а не словарь или другой тип
+        if not isinstance(self.models, list) or len(self.models) == 0:
+            if isinstance(self.models, dict):
+                # Если это словарь, преобразуем в список ключей или значений
+                self.models = list(self.models.keys()) if self.models else []
+            if not self.models:  # Если все еще пустой
+                # Устанавливаем модели по умолчанию
+                # Claude Opus - приоритетная модель для максимального качества
+                self.models = [
+                    "anthropic/claude-opus-4.5",
+                    "anthropic/claude-sonnet-4.5",
+                    "anthropic/claude-haiku-4.5",
+                    "google/gemini-2.5-flash",
+                    "meta-llama/llama-3.2-90b-vision-instruct"
+                ]
+        
+        # ВАЖНО: Убеждаемся что Claude Opus всегда первый в списке (если есть)
+        if isinstance(self.models, list) and len(self.models) > 0:
+            opus_models = [m for m in self.models if "claude-opus-4.5" in m or "claude-opus-4" in m]
+            if opus_models:
+                # Перемещаем Opus модели в начало
+                other_models = [m for m in self.models if m not in opus_models]
+                self.models = opus_models + other_models
+        
+        self.type_detector = ImageTypeDetector()
+        self.specialized_prompts = get_specialized_prompts()
 
     def _init_specialized_prompts(self) -> Dict[ImageType, str]:
         """Инициализация специализированных промптов"""
@@ -949,13 +980,49 @@ JSON обязательно!
                     }
                 }
             
+            # Формируем читаемую клиническую интерпретацию из структурированных данных
+            clinical_text_parts = []
+            
+            # Диагноз
+            if "diagnosis" in response_data and response_data["diagnosis"].get("primary_diagnosis"):
+                diag = response_data["diagnosis"]
+                clinical_text_parts.append(f"**Основной диагноз:** {diag.get('primary_diagnosis', 'Не определен')}")
+                if diag.get("confidence_level"):
+                    clinical_text_parts.append(f"Уверенность: {diag['confidence_level']}")
+            
+            # Клинические находки
+            if "clinical_findings" in response_data:
+                clinical = response_data["clinical_findings"]
+                if clinical.get("pathological_findings"):
+                    clinical_text_parts.append("\n**Патологические находки:**")
+                    for finding in clinical["pathological_findings"]:
+                        finding_text = f"• {finding.get('finding', 'Находка')}"
+                        if finding.get('location'):
+                            finding_text += f" (локализация: {finding['location']})"
+                        clinical_text_parts.append(finding_text)
+            
+            # Рекомендации
+            if "recommendations" in response_data:
+                rec = response_data["recommendations"]
+                if rec.get("urgent_actions") or rec.get("follow_up"):
+                    clinical_text_parts.append("\n**Рекомендации:**")
+                    if rec.get("urgent_actions"):
+                        for action in rec["urgent_actions"]:
+                            clinical_text_parts.append(f"⚠️ {action}")
+                    if rec.get("follow_up"):
+                        for follow in rec["follow_up"]:
+                            clinical_text_parts.append(f"• {follow}")
+            
+            # Формируем финальный текст
+            clinical_interpretation_text = "\n".join(clinical_text_parts) if clinical_text_parts else "Детальный анализ выполнен. См. структурированные данные ниже."
+            
             # Создание результата
             # Используем универсальный тип для результата, но не отображаем его
             result = AnalysisResult(
                 image_type=ImageType.XRAY,  # Базовый тип для структуры, но не используется для отображения
                 confidence=confidence * response_data.get("confidence_score", 0.5),
                 structured_findings=response_data,
-                clinical_interpretation=ai_response,
+                clinical_interpretation=clinical_interpretation_text,  # Используем форматированный текст вместо JSON
                 recommendations=response_data.get("recommendations", {}).get("follow_up", []),
                 urgent_flags=response_data.get("recommendations", {}).get("urgent_actions", []),
                 icd10_codes=response_data.get("diagnosis", {}).get("icd10_codes", []),
@@ -1110,6 +1177,8 @@ JSON обязательно!
             return "Claude Opus 4.5"
         elif "claude-sonnet-4.5" in model or "claude-sonnet-4" in model:
             return "Claude Sonnet 4.5"
+        elif "claude-haiku-4.5" in model or "claude-haiku-4" in model:
+            return "Claude Haiku 4.5"
         elif "claude-3-5-sonnet-20241022" in model:
             return "Claude 3.5 Sonnet (Latest)"
         elif "claude-3-5-sonnet" in model:
@@ -1118,10 +1187,14 @@ JSON обязательно!
             return "Claude 3 Sonnet"
         elif "claude-3-haiku" in model:
             return "Claude 3 Haiku"
-        elif "gemini" in model.lower():
-            return "Gemini"
+        elif "llama-3.2-90b-vision" in model or "llama-3.2-90b" in model:
+            return "Llama 3.2 90B Vision"
         elif "llama" in model.lower():
             return "Llama"
+        elif "gemini-2.5-flash" in model:
+            return "Gemini 2.5 Flash"
+        elif "gemini" in model.lower():
+            return "Gemini"
         else:
             return model.split("/")[-1] if "/" in model else model
 
