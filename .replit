@@ -1,12 +1,5 @@
-{
-  "run": [
-    "pip install -r requirements.txt",
-    "streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true"
-  ],
-  "language": "python3",
-  "env": {
-    "PYTHONUNBUFFERED": "1"
-  }
-}
+run = "pip install -r requirements.txt && streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true"
+language = "python"
 
-
+[env]
+PYTHONUNBUFFERED = "1"
