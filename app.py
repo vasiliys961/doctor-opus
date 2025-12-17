@@ -583,6 +583,17 @@ def main():
         layout="wide"
     )
 
+    # Простая идентификация по email (для ролей OWNER/VIP)
+    with st.sidebar:
+        default_email = st.session_state.get("user_email", "")
+        email_input = st.text_input(
+            "Ваш email (для доступа и баланса)",
+            value=default_email,
+            key="user_email_input",
+        )
+        if email_input:
+            st.session_state["user_email"] = email_input
+
     # Глобальные стили интерфейса в зелёно-голубой гамме
     st.markdown(
         """
@@ -592,15 +603,15 @@ def main():
             background: radial-gradient(circle at top left, #e0f7fa 0%, #e8f5e9 40%, #ffffff 100%);
         }
 
-        /* Базовая типографика */
+        /* Базовая типографика (чуть мельче, ближе к дефолтному Streamlit) */
         html, body, [class*="css"]  {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-            font-size: 16px;
+            font-size: 15px;
         }
 
-        /* Крупнее шрифт основного текста */
+        /* Основной текст в контенте */
         p, li, span {
-            font-size: 15px;
+            font-size: 14px;
         }
 
         /* Карточки и контейнеры */
@@ -611,10 +622,101 @@ def main():
         /* Боковое меню */
         section[data-testid="stSidebar"] {
             background: linear-gradient(180deg, #004d40 0%, #00695c 40%, #004d40 100%);
+            padding-top: 0.25rem !important;
         }
         section[data-testid="stSidebar"] * {
             color: #e0f2f1 !important;
         }
+        /* Делает поле ввода email читаемым: тёмный текст на светлом фоне */
+        section[data-testid="stSidebar"] .stTextInput input {
+            background-color: #ffffff !important;
+            color: #111827 !important;          /* почти чёрный */
+        }
+        section[data-testid="stSidebar"] .stTextInput label {
+            color: #e0f2f1 !important;          /* подпись остаётся светлой */
+            font-weight: 600 !important;
+        }
+        /* Исключение для кнопок навигации - темный текст на белом фоне */
+        section[data-testid="stSidebar"] div.stButton > button {
+            color: #1f2937 !important;
+        }
+        
+        /* Поднимаем заголовок меню выше */
+        section[data-testid="stSidebar"] h1 {
+            margin-top: 0 !important;
+            padding-top: 0.25rem !important;
+            margin-bottom: 0.25rem !important;
+            padding-bottom: 0 !important;
+        }
+        
+        /* Уменьшаем отступы для заголовка "Выберите раздел:" */
+        section[data-testid="stSidebar"] h3 {
+            margin-top: 0.25rem !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* Уменьшаем отступы в начале сайдбара */
+        section[data-testid="stSidebar"] > div:first-child {
+            padding-top: 0.25rem !important;
+        }
+
+        /* ========== УЛУЧШЕННЫЕ КНОПКИ НАВИГАЦИИ В САЙДБАРЕ ========== */
+        /* Базовые стили для всех кнопок навигации */
+        section[data-testid="stSidebar"] div.stButton > button {
+            border-radius: 8px !important;
+            padding: 0.4rem 0.6rem !important;
+            font-size: 0.95rem !important;
+            font-weight: 600 !important;
+            min-height: 36px !important;
+            height: auto !important;
+            width: 100% !important;
+            text-align: center !important;
+            transition: all 0.2s ease !important;
+            cursor: pointer !important;
+            margin-bottom: 0.15rem !important;
+            line-height: 1.2 !important;
+        }
+        
+        /* Кнопки по умолчанию - белые */
+        section[data-testid="stSidebar"] div.stButton > button[kind="secondary"] {
+            background-color: rgba(255, 255, 255, 0.95) !important;
+            color: #1f2937 !important;
+            border: 2px solid rgba(255, 255, 255, 0.3) !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+        }
+        
+        
+        /* Hover эффект для всех кнопок */
+        section[data-testid="stSidebar"] div.stButton > button:hover {
+            transform: translateY(-1px) scale(1.01) !important;
+            font-size: 1rem !important;
+            box-shadow: 0 3px 10px rgba(255, 255, 255, 0.4) !important;
+        }
+        
+        /* Активная кнопка (выбранная страница) - всегда с зеленой рамкой */
+        section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
+            background-color: rgba(255, 255, 255, 1) !important;
+            border-color: #4db6ac !important;
+            border-width: 3px !important;
+            box-shadow: 0 0 14px rgba(77, 182, 172, 0.6) !important;
+            color: #004d40 !important;
+            font-weight: 700 !important;
+        }
+        
+        /* Минимальные отступы между кнопками - очень густо */
+        section[data-testid="stSidebar"] div.stButton {
+            margin-bottom: 0.15rem !important;
+            width: 100% !important;
+        }
+        
+        /* Заголовок "Выберите раздел:" */
+        section[data-testid="stSidebar"] h3 {
+            color: #e0f2f1 !important;
+            font-size: 1.1rem !important;
+            font-weight: 600 !important;
+            margin-bottom: 1rem !important;
+        }
+        
 
         /* Кнопки */
         div.stButton > button {
@@ -705,30 +807,86 @@ def main():
         # Fallback на старый способ, если роутер недоступен
         pages = [
             "🏠 Главная",
+            "🤖 ИИ-Консультант",
+            "📝 Протокол приёма",
             "📈 Анализ ЭКГ",
+            "🔍 Анализ медицинских изображений",
             "🩻 Анализ рентгена",
             "🧠 Анализ МРТ",
             "🩻 Анализ КТ",
             "🔊 Анализ УЗИ",
             "🔬 Анализ дерматоскопии",
             "🔬 Анализ лабораторных данных",
-            "📝 Протокол приёма",
             "📄 Сканирование документов",
-            "🎬 Анализ видео",
-            "👤 База данных пациентов",
-            "📋 Клинический контекст",
-            "🤖 ИИ-Консультант",
-            "🧬 Генетический анализ",
-            "📊 Статистика",
             "🔬 Расширенный ИИ-анализ",
             "📊 Сравнительный анализ",
+            "🧬 Генетический анализ",
             "📚 Медицинские протоколы",
+            "👤 База данных пациентов",
+            "📋 Клинический контекст",
+            "📊 Статистика",
         ]
         page_router = {}
         enhanced_pages = {}
 
+    # Инициализация системы подписки (если доступна)
+    try:
+        from utils.subscription_manager import init_subscription
+        from utils.balance_display import show_balance_display
+
+        init_subscription()
+        show_balance_display()
+    except Exception:
+        pass
+
     st.sidebar.title("🧠 Меню")
-    page = st.sidebar.selectbox("Выберите раздел:", pages)
+
+    # Инициализация текущей страницы, если её нет
+    if "page" not in st.session_state:
+        st.session_state["page"] = "🏠 Главная"
+    
+    # Определяем текущую страницу
+    current_page = st.session_state.get("page", "🏠 Главная")
+    
+    # Кликабельные надписи вместо radio кнопок
+    st.sidebar.markdown("### Выберите раздел:")
+    
+    # Создаем кликабельные элементы для каждой страницы с цветовой группировкой
+    page = current_page  # По умолчанию текущая страница
+    
+    # Определяем группы страниц для цветового выделения
+    ai_consultant_pages = ["🤖 ИИ-Консультант"]
+    protocol_pages = ["📝 Протокол приёма"]
+    scanning_pages = ["📄 Сканирование документов"]
+    
+    analysis_pages = [
+        "📈 Анализ ЭКГ",
+        "🔍 Анализ медицинских изображений",
+        "🩻 Анализ рентгена",
+        "🧠 Анализ МРТ",
+        "🩻 Анализ КТ",
+        "🔊 Анализ УЗИ",
+        "🔬 Анализ дерматоскопии",
+        "🔬 Анализ лабораторных данных",
+    ]
+    
+    for page_name in pages:
+        is_active = (page_name == current_page)
+        
+        # Создаем кликабельный элемент через button
+        if st.sidebar.button(
+            page_name,
+            key=f"nav_{page_name}",
+            use_container_width=True,
+            type="primary" if is_active else "secondary"
+        ):
+            page = page_name
+            st.session_state["page"] = page_name
+            st.rerun()
+    
+    # Обновляем текущую страницу
+    if page != current_page:
+        st.session_state["page"] = page
 
     # === ОБРАБОТКА СТРАНИЦ ЧЕРЕЗ РОУТЕР ===
     # Основные страницы
@@ -797,7 +955,7 @@ def main():
     # === ОБНОВЛЕННЫЙ САЙДБАР ===
     st.sidebar.markdown("---")
     st.sidebar.info("""
-    **Медицинский Ассистент v6.0.2-stable** [STABLE]
+    **Медицинский Ассистент v3.27**
     - AssemblyAI для голоса
     - 10 типов изображений
     - Улучшенный анализ лабораторных данных

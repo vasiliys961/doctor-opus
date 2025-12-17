@@ -74,6 +74,21 @@ def get_cached_result(cache_key: str, max_age_hours: int = 24) -> Optional[Any]:
             
             # Проверка формата данных (старый формат без timestamp или новый)
             if isinstance(cache_data, dict) and 'result' in cache_data:
+                # Проверка, что это не ошибка (ошибки не должны кешироваться)
+                result = cache_data.get('result')
+                # Если результат - это строка, начинающаяся с "Ошибка" или содержит типичные ошибки, не возвращаем его
+                if isinstance(result, str):
+                    error_indicators = ["Ошибка", "Error", "Exception", "Traceback", "Ошибка:", "Error:"]
+                    if any(indicator in result for indicator in error_indicators):
+                        # Удаляем поврежденный кеш
+                        try:
+                            cache_file.unlink()
+                            _log_debug("cache_manager.py:get_cached_result", "Удален поврежденный кеш с ошибкой", {
+                                "cache_key": cache_key
+                            })
+                        except Exception:
+                            pass
+                        return None
                 # Новый формат с timestamp
                 timestamp = cache_data.get('timestamp')
                 if timestamp:
@@ -134,8 +149,18 @@ def get_cached_result(cache_key: str, max_age_hours: int = 24) -> Optional[Any]:
     return None
 
 def save_to_cache(cache_key: str, result: Any, max_age_hours: int = 24):
-    """Сохранение результата в кэш"""
+    """Сохранение результата в кэш (не сохраняет ошибки)"""
     cache_file = CACHE_DIR / f"{cache_key}.pkl"
+    
+    # Проверка, что результат не является ошибкой
+    if isinstance(result, str):
+        error_indicators = ["Ошибка", "Error", "Exception", "Traceback", "Ошибка:", "Error:"]
+        if any(indicator in result for indicator in error_indicators):
+            # Не сохраняем ошибки в кеш
+            _log_debug("cache_manager.py:save_to_cache", "Результат содержит ошибку, не сохраняем в кеш", {
+                "cache_key": cache_key
+            })
+            return
     
     # #region agent log
     _log_debug("cache_manager.py:save_to_cache", "Сохранение в кеш", {
@@ -183,3 +208,14 @@ def clear_old_cache(max_age_hours: int = 24):
                 cache_file.unlink()
         except Exception:
             pass
+
+def clear_all_cache():
+    """Полная очистка всего кэша (удаляет все файлы)"""
+    deleted_count = 0
+    for cache_file in CACHE_DIR.glob("*.pkl"):
+        try:
+            cache_file.unlink()
+            deleted_count += 1
+        except Exception as e:
+            print(f"⚠️ Ошибка удаления {cache_file}: {e}")
+    return deleted_count

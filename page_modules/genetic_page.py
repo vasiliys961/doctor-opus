@@ -47,6 +47,17 @@ def show_genetic_analysis_page():
     """Страница анализа генетических данных с поддержкой VCF"""
     st.header("🧬 Генетический анализ")
     
+    # Полезные подсказки
+    with st.expander("💡 Полезные подсказки", expanded=True):
+        st.info("""
+        **💡 Советы по использованию:**
+        - Поддерживаются форматы: VCF, VCF.GZ (сжатый), TXT, CSV, PDF, скриншоты (JPG, PNG)
+        - Важно указать правильный пол пациента для корректной интерпретации
+        - Клинический контекст помогает улучшить точность анализа
+        - Результаты включают патогенные варианты, фармакогеномику и рекомендации
+        - Анализ может занять некоторое время для больших VCF файлов
+        """)
+    
     if not GENETIC_ANALYZER_AVAILABLE:
         st.error("❌ Модуль генетического анализа недоступен. Проверьте файл modules/genetic_analyzer.py")
         return
@@ -86,6 +97,8 @@ def show_genetic_analysis_page():
         
         # Сохраняем путь к файлу в session_state для повторного использования
         file_key = f"genetic_file_{uploaded_file.name}"
+        
+        st.caption("💰 Примерная стоимость: ≈2.5 ед.")
         
         if st.button("🧬 Запустить генетический анализ", use_container_width=True):
             if not GENETIC_ANALYZER_AVAILABLE:
@@ -334,6 +347,9 @@ def show_genetic_analysis_page():
                             if st.button("🔄 Получить новую интерпретацию", use_container_width=True, key=f"new_{analysis_id}"):
                                 if analysis_id in st.session_state.genetic_ai_interpretation:
                                     del st.session_state.genetic_ai_interpretation[analysis_id]
+                                # Сбрасываем флаг генерации при запросе новой интерпретации
+                                if f'genetic_generating_{analysis_id}' in st.session_state:
+                                    del st.session_state[f'genetic_generating_{analysis_id}']
                                 st.rerun()
                         
                         # Чат для дополнительных вопросов
@@ -424,9 +440,14 @@ def show_genetic_analysis_page():
                             st.rerun()
                     
                     # Кнопка для получения интерпретации
-                    if not saved_interpretation:
+                    # Проверяем, не идет ли уже генерация (защита от повторных запросов)
+                    is_generating = st.session_state.get(f'genetic_generating_{analysis_id}', False)
+                    
+                    if not saved_interpretation and not is_generating:
                         button_key = f"get_genetic_interpretation_{analysis_id}"
                         if st.button("🧠 Получить интерпретацию специалиста", use_container_width=True, type="primary", key=button_key):
+                            # Устанавливаем флаг генерации для предотвращения повторных запросов
+                            st.session_state[f'genetic_generating_{analysis_id}'] = True
                             try:
                                 # Проверка перед началом
                                 st.info("🔄 Инициализация ИИ-ассистента...")
@@ -741,6 +762,10 @@ def show_genetic_analysis_page():
                                         
                                         st.session_state.genetic_ai_interpretation[analysis_id] = ai_interpretation
                                         
+                                        # Сбрасываем флаг генерации после успешной генерации
+                                        if f'genetic_generating_{analysis_id}' in st.session_state:
+                                            del st.session_state[f'genetic_generating_{analysis_id}']
+                                        
                                         # Кнопка для скачивания интерпретации
                                         st.download_button(
                                             "📥 Скачать интерпретацию (TXT)",
@@ -754,6 +779,10 @@ def show_genetic_analysis_page():
                                         st.rerun()
                                         
                                     except Exception as api_error:
+                                        # Сбрасываем флаг генерации при ошибке
+                                        if f'genetic_generating_{analysis_id}' in st.session_state:
+                                            del st.session_state[f'genetic_generating_{analysis_id}']
+                                        
                                         # Fallback на обычный режим если streaming не работает
                                         st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
                                         try:
@@ -768,6 +797,10 @@ def show_genetic_analysis_page():
                                                 st.session_state.genetic_ai_interpretation = {}
                                             
                                             st.session_state.genetic_ai_interpretation[analysis_id] = ai_interpretation
+                                            
+                                            # Сбрасываем флаг генерации после успешной генерации
+                                            if f'genetic_generating_{analysis_id}' in st.session_state:
+                                                del st.session_state[f'genetic_generating_{analysis_id}']
                                             
                                             # Отображаем результат
                                             st.markdown("### 🧬 Интерпретация врача-генетика-консультанта")
@@ -791,6 +824,10 @@ def show_genetic_analysis_page():
                                             raise api_error
                             
                             except Exception as e:
+                                # Сбрасываем флаг генерации при ошибке
+                                if f'genetic_generating_{analysis_id}' in st.session_state:
+                                    del st.session_state[f'genetic_generating_{analysis_id}']
+                                
                                 st.error(f"❌ Ошибка при получении интерпретации: {e}")
                                 with st.expander("🔍 Детали ошибки"):
                                     st.code(traceback.format_exc())

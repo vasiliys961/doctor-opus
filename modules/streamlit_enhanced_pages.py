@@ -83,12 +83,17 @@ def show_enhanced_analysis_page():
     
     analyzer = st.session_state.enhanced_analyzer
     
+    # Информация о стоимости (на основе реальных данных: ~3500 токенов на изображение)
+    st.info("💰 **Примерная стоимость:** ≈2 условные единицы за одно изображение (Claude Opus 4.5, среднее ~3500 токенов)")
+    
     # Настройки анализа
     col1, col2, col3 = st.columns(3)
     
     with col1:
         preprocessing = st.checkbox("Предобработка изображения", value=True)
         batch_mode = st.checkbox("Пакетный режим", value=False)
+        # Подсказка по использованию пакетного режима
+        st.caption("В пакетном режиме можно выбрать несколько файлов в диалоге (Ctrl/⌘ или Shift).")
     
     with col2:
         confidence_threshold = st.slider("Порог достоверности", 0.0, 1.0, 0.7, 0.1)
@@ -104,6 +109,8 @@ def show_enhanced_analysis_page():
             type=["jpg", "jpeg", "png", "dcm", "tiff"],
             accept_multiple_files=True
         )
+        if uploaded_files:
+            st.caption(f"Загружено файлов: {len(uploaded_files)}")
     else:
         uploaded_file = st.file_uploader(
             "Загрузите медицинское изображение",
@@ -162,6 +169,9 @@ def show_enhanced_analysis_page():
                     
                 except Exception as e:
                     st.error(f"Ошибка анализа {filename}: {e}")
+                    import traceback
+                    with st.expander("🔍 Детали ошибки"):
+                        st.code(traceback.format_exc())
             
             progress_bar.empty()
             status_text.empty()
@@ -590,6 +600,17 @@ def show_comparative_analysis_page():
         help="Оптимально 2-4 изображения одного типа"
     )
     
+    # Информация о стоимости (на основе реальных данных: ~3500 токенов на изображение, ~7000 токенов на синтез)
+    cost_per_image = 2  # ~2 ед. за каждое изображение (Claude Opus 4.5, среднее ~3500 токенов)
+    cost_synthesis = 3  # ~3 ед. за финальный синтез (Claude Opus 4.5, среднее ~7000 токенов)
+    
+    if uploaded_files and len(uploaded_files) >= 2:
+        num_images = len(uploaded_files)
+        total_cost = cost_per_image * num_images + cost_synthesis
+        st.info(f"💰 **Примерная стоимость:** ≈{total_cost} условных единиц ({num_images} изображений × {cost_per_image} ед. + синтез {cost_synthesis} ед.)")
+    else:
+        st.info(f"💰 **Примерная стоимость:** ≈{cost_per_image} условные единицы за каждое изображение + ≈{cost_synthesis} ед. за финальный синтез")
+    
     if uploaded_files and len(uploaded_files) >= 2:
         
         st.success(f"✅ Загружено {len(uploaded_files)} изображений")
@@ -686,7 +707,8 @@ def show_comparative_analysis_page():
                     except Exception as e:
                         st.error(f"Ошибка обработки {uploaded_file.name}: {e}")
                         import traceback
-                        st.error(f"Детали ошибки: {traceback.format_exc()}")
+                        with st.expander("🔍 Детали ошибки"):
+                            st.code(traceback.format_exc())
                         continue
                 
                 progress_bar.empty()
@@ -1178,7 +1200,8 @@ def show_medical_protocols_page():
             "Эндокринология",
             "Неврология",
             "Нефрология",
-            "Гематология"
+            "Гематология",
+            "Прочие"
         ]
     )
     

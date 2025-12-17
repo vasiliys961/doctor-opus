@@ -35,6 +35,9 @@ ENV/
 
 # Streamlit
 .streamlit/secrets.toml
+**/.streamlit/secrets.toml
+modules/.streamlit/secrets.toml
+modules/**/secrets.toml
 
 # Database
 *.db
@@ -65,7 +68,8 @@ exports/
 Thumbs.db
 
 # Config и секреты (НЕ КОММИТИТЬ API ключи!)
-config.py
+# config.py - НЕ должен быть здесь! Это код приложения, должен быть в git
+# config.py безопасен - не содержит ключей, только загружает из secrets/env
 config.local.py
 .env
 .env.local
@@ -125,8 +129,14 @@ generated_documents/*
 # === ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА СЕКРЕТОВ ===
 .streamlit/secrets.toml
 **/secrets.toml
+**/.streamlit/secrets.toml
+modules/.streamlit/secrets.toml
+modules/.streamlit/
+modules/**/secrets.toml
 .env
 .env.local
+.env.*
+*.env
 *КЛЮЧ*.md
 *СЕКРЕТ*.md
 *API*.txt
@@ -149,3 +159,10 @@ data/models/
 *.pt
 *.pth
 # Анонимизированные данные МОГУТ быть в git (решение принимается пользователем)
+
+# === DEVELOPMENT MODE ===
+# Файл для режима разработки (обход системы подписки)
+.dev_mode
+
+# Внутренние документы и отчеты (не пушить на GitHub)
+internal_docs/

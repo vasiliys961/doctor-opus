@@ -514,92 +514,103 @@ class AdvancedLabProcessor:
 
     def _extract_from_pdf(self, file_path: str) -> str:
         """Извлечение текста из PDF - улучшенная версия с обработкой ошибок"""
+        # Подавляем предупреждения pdfminer (используется внутри pdfplumber)
+        import logging
+        pdfminer_logger = logging.getLogger('pdfminer')
+        original_level = pdfminer_logger.level
+        pdfminer_logger.setLevel(logging.ERROR)  # Показываем только ошибки, скрываем WARNING
+        
         text = ""
         errors = []
         
-        # Проверяем доступность библиотек
-        pdfplumber_available = False
-        pypdf2_available = False
-        
         try:
-            import pdfplumber
-            pdfplumber_available = True
-        except ImportError:
-            pass
-        
-        try:
-            import PyPDF2
-            pypdf2_available = True
-        except ImportError:
-            pass
-        
-        if not pdfplumber_available and not pypdf2_available:
-            raise ImportError("Для работы с PDF установите: pip install PyPDF2 pdfplumber")
-        
-        # Попробуем с pdfplumber (лучше для таблиц)
-        if pdfplumber_available:
+            # Проверяем доступность библиотек
+            pdfplumber_available = False
+            pypdf2_available = False
+            
             try:
-                with pdfplumber.open(file_path) as pdf:
-                    total_pages = len(pdf.pages)
-                    for page_num, page in enumerate(pdf.pages, 1):
-                        try:
-                            # Извлечение текста
-                            page_text = page.extract_text()
-                            if page_text and page_text.strip():
-                                text += f"\n--- Страница {page_num}/{total_pages} ---\n"
-                                text += page_text + "\n"
-                            
-                            # Извлечение таблиц
-                            try:
-                                tables = page.extract_tables()
-                                if tables:
-                                    text += f"\n--- Таблицы со страницы {page_num} ---\n"
-                                    for table_num, table in enumerate(tables, 1):
-                                        text += f"\nТаблица {table_num}:\n"
-                                        for row in table:
-                                            if row and any(cell for cell in row if cell):
-                                                # Фильтруем пустые строки
-                                                row_text = "\t".join([str(cell).strip() if cell else "" for cell in row])
-                                                if row_text.strip():
-                                                    text += row_text + "\n"
-                            except Exception as e:
-                                errors.append(f"Ошибка извлечения таблиц со страницы {page_num}: {str(e)}")
-                                
-                        except Exception as e:
-                            errors.append(f"Ошибка обработки страницы {page_num}: {str(e)}")
-                            continue
-                            
-            except Exception as e:
-                errors.append(f"Ошибка pdfplumber: {str(e)}")
-        
-        # Если pdfplumber не сработал или не установлен, пробуем PyPDF2
-        if (not text.strip() or not pdfplumber_available) and pypdf2_available:
+                import pdfplumber
+                pdfplumber_available = True
+            except ImportError:
+                pass
+            
             try:
                 import PyPDF2
-                with open(file_path, 'rb') as file:
-                    pdf_reader = PyPDF2.PdfReader(file)
-                    total_pages = len(pdf_reader.pages)
-                    for page_num, page in enumerate(pdf_reader.pages, 1):
-                        try:
-                            page_text = page.extract_text()
-                            if page_text and page_text.strip():
-                                text += f"\n--- Страница {page_num}/{total_pages} (PyPDF2) ---\n"
-                                text += page_text + "\n"
-                        except Exception as e2:
-                            errors.append(f"Ошибка PyPDF2 на странице {page_num}: {str(e2)}")
-            except Exception as e2:
-                errors.append(f"Ошибка PyPDF2: {str(e2)}")
+                pypdf2_available = True
+            except ImportError:
+                pass
+            
+            if not pdfplumber_available and not pypdf2_available:
+                raise ImportError("Для работы с PDF установите: pip install PyPDF2 pdfplumber")
+
+            # Попробуем с pdfplumber (лучше для таблиц)
+            if pdfplumber_available:
+                try:
+                    with pdfplumber.open(file_path) as pdf:
+                        total_pages = len(pdf.pages)
+                        for page_num, page in enumerate(pdf.pages, 1):
+                            try:
+                                # Извлечение текста
+                                page_text = page.extract_text()
+                                if page_text and page_text.strip():
+                                    text += f"\n--- Страница {page_num}/{total_pages} ---\n"
+                                    text += page_text + "\n"
+
+                                # Извлечение таблиц
+                                try:
+                                    tables = page.extract_tables()
+                                    if tables:
+                                        text += f"\n--- Таблицы со страницы {page_num} ---\n"
+                                        for table_num, table in enumerate(tables, 1):
+                                            text += f"\nТаблица {table_num}:\n"
+                                            for row in table:
+                                                if row and any(cell for cell in row if cell):
+                                                    # Фильтруем пустые строки
+                                                    row_text = "\t".join([str(cell).strip() if cell else "" for cell in row])
+                                                    if row_text.strip():
+                                                        text += row_text + "\n"
+                                except Exception as e:
+                                    errors.append(f"Ошибка извлечения таблиц со страницы {page_num}: {str(e)}")
+
+                            except Exception as e:
+                                errors.append(f"Ошибка обработки страницы {page_num}: {str(e)}")
+                                continue
+
+                except Exception as e:
+                    errors.append(f"Ошибка pdfplumber: {str(e)}")
+            
+            # Если pdfplumber не сработал или не установлен, пробуем PyPDF2
+            if (not text.strip() or not pdfplumber_available) and pypdf2_available:
+                try:
+                    import PyPDF2
+                    with open(file_path, 'rb') as file:
+                        pdf_reader = PyPDF2.PdfReader(file)
+                        total_pages = len(pdf_reader.pages)
+                        for page_num, page in enumerate(pdf_reader.pages, 1):
+                            try:
+                                page_text = page.extract_text()
+                                if page_text and page_text.strip():
+                                    text += f"\n--- Страница {page_num}/{total_pages} (PyPDF2) ---\n"
+                                    text += page_text + "\n"
+                            except Exception as e2:
+                                errors.append(f"Ошибка PyPDF2 на странице {page_num}: {str(e2)}")
+                except Exception as e2:
+                    errors.append(f"Ошибка PyPDF2: {str(e2)}")
+            
+            # Если ничего не извлечено
+            if not text.strip():
+                error_msg = "Не удалось извлечь текст из PDF."
+                if errors:
+                    error_msg += f" Ошибки: {'; '.join(errors[:3])}"  # Показываем первые 3 ошибки
+                else:
+                    error_msg += " Возможно, PDF содержит только изображения (сканированный документ)."
+                raise Exception(error_msg)
+            
+            return text
         
-        # Если ничего не извлечено
-        if not text.strip():
-            error_msg = "Не удалось извлечь текст из PDF."
-            if errors:
-                error_msg += f" Ошибки: {'; '.join(errors[:3])}"  # Показываем первые 3 ошибки
-            else:
-                error_msg += " Возможно, PDF содержит только изображения (сканированный документ)."
-            raise Exception(error_msg)
-        
-        return text
+        finally:
+            # Восстанавливаем уровень логирования pdfminer
+            pdfminer_logger.setLevel(original_level)
 
     def _extract_from_excel(self, file_path: str) -> str:
         """Извлечение данных из Excel - улучшенная версия"""

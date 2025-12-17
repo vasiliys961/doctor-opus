@@ -15,41 +15,56 @@ import re
 import sys
 import logging
 
-# Импорты из claude_assistant
+# Импорты из utils.page_imports (общие импорты)
 try:
-    from claude_assistant import OpenRouterAssistant
-    AI_AVAILABLE = True
+    from utils.page_imports import (
+        OpenRouterAssistant, AI_AVAILABLE,
+        handle_error, ERROR_HANDLER_AVAILABLE,
+        AdvancedLabProcessor, ADVANCED_LAB_PROCESSOR_AVAILABLE,
+        ContextStore, CONTEXT_STORE_AVAILABLE,
+        init_db, DATABASE_AVAILABLE
+    )
+    PAGE_IMPORTS_AVAILABLE = True
+    # Для обратной совместимости
+    LAB_PROCESSOR_AVAILABLE = ADVANCED_LAB_PROCESSOR_AVAILABLE
 except ImportError:
-    AI_AVAILABLE = False
-    OpenRouterAssistant = None
+    PAGE_IMPORTS_AVAILABLE = False
+    # Fallback к старым импортам
+    try:
+        from claude_assistant import OpenRouterAssistant
+        AI_AVAILABLE = True
+    except ImportError:
+        AI_AVAILABLE = False
+        OpenRouterAssistant = None
+    try:
+        from utils.error_handler import handle_error
+        ERROR_HANDLER_AVAILABLE = True
+    except ImportError:
+        ERROR_HANDLER_AVAILABLE = False
+        def handle_error(error, context="", show_to_user=True):
+            return str(error)
+    try:
+        from modules.advanced_lab_processor import AdvancedLabProcessor
+        LAB_PROCESSOR_AVAILABLE = True
+    except ImportError:
+        LAB_PROCESSOR_AVAILABLE = False
+        AdvancedLabProcessor = None
+    try:
+        from storages.context_store import ContextStore
+        CONTEXT_STORE_AVAILABLE = True
+    except ImportError:
+        CONTEXT_STORE_AVAILABLE = False
+        ContextStore = None
+    from utils.database import init_db
 
-# Импорты из utils
+# Импорты общих функций из page_helpers
 try:
-    from utils.error_handler import handle_error
-    ERROR_HANDLER_AVAILABLE = True
+    from utils.page_helpers import check_ai_availability
+    PAGE_HELPERS_AVAILABLE = True
 except ImportError:
-    ERROR_HANDLER_AVAILABLE = False
-    def handle_error(error, context="", show_to_user=True):
-        return str(error)
-
-# Импорты из modules
-try:
-    from modules.advanced_lab_processor import AdvancedLabProcessor
-    LAB_PROCESSOR_AVAILABLE = True
-except ImportError:
-    LAB_PROCESSOR_AVAILABLE = False
-    AdvancedLabProcessor = None
-
-try:
-    from storages.context_store import ContextStore
-    CONTEXT_STORE_AVAILABLE = True
-except ImportError:
-    CONTEXT_STORE_AVAILABLE = False
-    ContextStore = None
-
-# Импорты функций из app.py (которые используются в show_document_scanner_page)
-# Функция init_db() вынесена в utils/database.py для устранения циклических зависимостей
-from utils.database import init_db
+    PAGE_HELPERS_AVAILABLE = False
+    def check_ai_availability():
+        return AI_AVAILABLE
 
 
 def show_document_scanner_page():
@@ -129,8 +144,9 @@ def show_document_scanner_page():
         
         # Режим 1: ЧИСТОЕ СКАНИРОВАНИЕ (получить текст без анализа)
         with col_scan:
+            st.caption("💰 ≈1 ед.")
             if st.button("📄 Сканировать (получить текст)", use_container_width=True, type="secondary"):
-                if not AI_AVAILABLE:
+                if not check_ai_availability():
                     st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
                     return
                 with st.spinner("🤖 ИИ распознает текст документа..."):
@@ -165,8 +181,9 @@ def show_document_scanner_page():
         
         # Режим 2: Структурированное извлечение (как было)
         with col_struct:
+            st.caption("💰 ≈2.5 ед.")
             if st.button("🔍 Извлечь данные из документа", use_container_width=True, type="primary"):
-                if not AI_AVAILABLE:
+                if not check_ai_availability():
                     st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
                     return
                 
@@ -565,7 +582,7 @@ def show_document_scanner_page():
             with col2:
                 if st.button("🤖 Проанализировать ИИ", use_container_width=True, type="secondary"):
                     # Переходим к ИИ-анализу извлеченного текста
-                    if not AI_AVAILABLE:
+                    if not check_ai_availability():
                         st.error("❌ ИИ-модуль недоступен.")
                         return
                     
@@ -669,7 +686,7 @@ def show_document_scanner_page():
             
             with col2:
                 if st.button("🤖 Проанализировать PDF текст ИИ", use_container_width=True, type="secondary", key="analyze_pdf_text_btn"):
-                    if not AI_AVAILABLE:
+                    if not check_ai_availability():
                         st.error("❌ ИИ-модуль недоступен.")
                         return
                     

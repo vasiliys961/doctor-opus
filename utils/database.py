@@ -17,6 +17,9 @@ def init_db():
     try:
         conn = sqlite3.connect('medical_data.db')
         cursor = conn.cursor()
+        
+        # Явно включаем проверку внешних ключей для безопасности
+        cursor.execute("PRAGMA foreign_keys = ON")
 
         # Создаём таблицы
         cursor.execute('''
@@ -59,9 +62,13 @@ def init_db():
         conn.close()
         
         # Создаём таблицу для обратной связи
+        # Импортируем из корневого database.py модуля (для обратной совместимости)
         try:
             from database import init_feedback_table
             init_feedback_table()
+        except ImportError as e:
+            # Модуль database.py может отсутствовать в некоторых конфигурациях
+            print(f"⚠️ Предупреждение: модуль database не найден, таблица обратной связи не создана: {e}", file=sys.stderr)
         except Exception as e:
             print(f"⚠️ Предупреждение: не удалось создать таблицу обратной связи: {e}", file=sys.stderr)
         

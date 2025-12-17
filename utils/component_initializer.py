@@ -3,7 +3,34 @@
 Вынесен из app.py для устранения циклических зависимостей
 """
 import sys
+from typing import Any, Optional
 from utils.safe_imports import safe_import_module
+
+
+def _safe_init_component(
+    component_class: Optional[Any],
+    component_name: str,
+    *init_args
+) -> Optional[Any]:
+    """
+    Безопасная инициализация компонента с обработкой ошибок.
+    
+    Args:
+        component_class: Класс компонента для инициализации
+        component_name: Имя компонента для сообщений об ошибках
+        *init_args: Аргументы для инициализации (передаются в конструктор)
+    
+    Returns:
+        Optional[Any]: Инициализированный компонент или None в случае ошибки
+    """
+    if component_class is None:
+        return None
+    
+    try:
+        return component_class(*init_args)
+    except Exception as e:
+        print(f"⚠️ Ошибка инициализации {component_name}: {e}", file=sys.stderr)
+        return None
 
 
 def safe_init_components(assistant):
@@ -104,51 +131,43 @@ def safe_init_components(assistant):
     
     # Прямые вызовы с обработкой ошибок - если модуль доступен, используем его
     if CONSENSUS_ENGINE_AVAILABLE and ConsensusEngine:
-        try:
-            components['consensus_engine'] = ConsensusEngine(assistant)
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации ConsensusEngine: {e}", file=sys.stderr)
+        components['consensus_engine'] = _safe_init_component(
+            ConsensusEngine, 'ConsensusEngine', assistant
+        )
     
     if VALIDATION_PIPELINE_AVAILABLE and ValidationPipeline:
-        try:
-            components['validator'] = ValidationPipeline(assistant)
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации ValidationPipeline: {e}", file=sys.stderr)
+        components['validator'] = _safe_init_component(
+            ValidationPipeline, 'ValidationPipeline', assistant
+        )
     
     if SCORECARDS_AVAILABLE and MedicalScorecard:
-        try:
-            components['scorecard'] = MedicalScorecard()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации MedicalScorecard: {e}", file=sys.stderr)
+        components['scorecard'] = _safe_init_component(
+            MedicalScorecard, 'MedicalScorecard'
+        )
     
     if CONTEXT_STORE_AVAILABLE and ContextStore:
-        try:
-            components['context_store'] = ContextStore()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации ContextStore: {e}", file=sys.stderr)
+        components['context_store'] = _safe_init_component(
+            ContextStore, 'ContextStore'
+        )
     
     if GAP_DETECTOR_AVAILABLE and DiagnosticGapDetector:
-        try:
-            components['gap_detector'] = DiagnosticGapDetector()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации DiagnosticGapDetector: {e}", file=sys.stderr)
+        components['gap_detector'] = _safe_init_component(
+            DiagnosticGapDetector, 'DiagnosticGapDetector'
+        )
     
     if NOTIFICATION_SYSTEM_AVAILABLE and NotificationSystem:
-        try:
-            components['notifier'] = NotificationSystem()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации NotificationSystem: {e}", file=sys.stderr)
+        components['notifier'] = _safe_init_component(
+            NotificationSystem, 'NotificationSystem'
+        )
     
     if MODEL_ROUTER_AVAILABLE and ModelRouter:
-        try:
-            components['model_router'] = ModelRouter()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации ModelRouter: {e}", file=sys.stderr)
+        components['model_router'] = _safe_init_component(
+            ModelRouter, 'ModelRouter'
+        )
     
     if EVIDENCE_RANKER_AVAILABLE and EvidenceRanker:
-        try:
-            components['evidence_ranker'] = EvidenceRanker()
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации EvidenceRanker: {e}", file=sys.stderr)
+        components['evidence_ranker'] = _safe_init_component(
+            EvidenceRanker, 'EvidenceRanker'
+        )
     
     return components

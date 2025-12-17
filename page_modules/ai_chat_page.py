@@ -18,13 +18,27 @@ except ImportError:
     AI_AVAILABLE = False
     OpenRouterAssistant = None
 
+# Импорты общих функций из page_helpers
+try:
+    from utils.page_helpers import check_ai_availability
+    PAGE_HELPERS_AVAILABLE = True
+except ImportError:
+    PAGE_HELPERS_AVAILABLE = False
+    def check_ai_availability():
+        return AI_AVAILABLE
+
 # Импорты из assemblyai_transcriber
 try:
     from assemblyai_transcriber import transcribe_audio_assemblyai
     ASSEMBLYAI_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     ASSEMBLYAI_AVAILABLE = False
     transcribe_audio_assemblyai = None
+    print(f"⚠️ Не удалось импортировать assemblyai_transcriber: {e}")
+except Exception as e:
+    ASSEMBLYAI_AVAILABLE = False
+    transcribe_audio_assemblyai = None
+    print(f"⚠️ Ошибка при импорте assemblyai_transcriber: {e}")
 
 # Импорты из utils.validators
 try:
@@ -36,11 +50,23 @@ except ImportError:
 
 
 def show_ai_chat():
-    if not AI_AVAILABLE:
+    st.header("🤖 ИИ-Консультант")
+    
+    # Полезные подсказки (expander - можно свернуть)
+    with st.expander("💡 Полезные подсказки", expanded=True):
+        st.info("""
+        **💡 Советы по использованию:**
+        - ИИ-консультант использует Claude Opus 4.5 для ответов
+        - Можно загружать файлы для контекста (ЭКГ, анализы, документы)
+        - История диалога сохраняется в базе данных
+        - Можно очистить историю и начать новый диалог
+        - Контекст файлов используется для более точных ответов
+        """)
+    
+    if not check_ai_availability():
         st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
         return
-
-    st.header("🤖 ИИ-Консультант")
+    
     st.info("💡 Рекомендации даются от врача врачу. Вы можете загружать файлы для анализа.")
 
     try:
@@ -361,32 +387,67 @@ def show_ai_chat():
         if input_mode == "🎤 Голосовой" and not user_input:
             if not ASSEMBLYAI_AVAILABLE:
                 st.warning("⚠️ Голосовой ввод недоступен. AssemblyAI не настроен. Используйте текстовый ввод.")
+                st.info("💡 Для включения голосового ввода:\n1. Установите `assemblyai`: `pip install assemblyai`\n2. Настройте API ключ в `.streamlit/secrets.toml` или переменную окружения `ASSEMBLYAI_API_KEY`")
             else:
                 audio_data = st.audio_input("🎤 Запишите ваш вопрос", key="ai_chat_audio")
+                
+                # Диагностика: показываем информацию об аудио
                 if audio_data:
-                    st.info("💡 Аудио записано. Нажмите кнопку ниже для расшифровки.")
+                    # Показываем размер данных
+                    if hasattr(audio_data, 'getvalue'):
+                        audio_size = len(audio_data.getvalue())
+                    elif hasattr(audio_data, 'read'):
+                        current_pos = audio_data.tell()
+                        audio_data.seek(0, 2)  # Переходим в конец
+                        audio_size = audio_data.tell()
+                        audio_data.seek(current_pos)  # Возвращаемся обратно
+                    else:
+                        audio_size = len(audio_data) if isinstance(audio_data, bytes) else "неизвестно"
+                    
+                    st.info(f"💡 Аудио записано ({audio_size} байт). Нажмите кнопку ниже для расшифровки.")
+                    st.audio(audio_data, format="audio/wav")  # Показываем проигрыватель для проверки
+                    
                     if st.button("🎤 Расшифровать аудио", use_container_width=True, type="primary"):
                         try:
                             with st.spinner("🎤 Расшифровка аудио..."):
                                 # Получаем API ключ из конфига
                                 from config import ASSEMBLYAI_API_KEY
-                                api_key = ASSEMBLYAI_API_KEY or st.secrets.get("ASSEMBLYAI_API_KEY", "")
+                                
+                                # Пробуем получить ключ из разных источников
+                                api_key = None
+                                try:
+                                    api_key = ASSEMBLYAI_API_KEY
+                                except:
+                                    pass
+                                
+                                if not api_key:
+                                    try:
+                                        api_key = st.secrets.get("api_keys", {}).get("ASSEMBLYAI_API_KEY") or st.secrets.get("ASSEMBLYAI_API_KEY", "")
+                                    except:
+                                        pass
+                                
                                 if not api_key:
                                     st.error("❌ API ключ AssemblyAI не настроен. Проверьте config.py или secrets.")
+                                    st.info("💡 Установите ключ в `.streamlit/secrets.toml` или переменную окружения `ASSEMBLYAI_API_KEY`")
                                 else:
                                     # Убеждаемся, что передаем правильный формат данных
                                     # st.audio_input возвращает BytesIO, который нужно правильно обработать
-                                    transcribed_text = transcribe_audio_assemblyai(audio_data, api_key)
-                                    
-                                    if transcribed_text and not transcribed_text.startswith("❌"):
-                                        # Сохраняем транскрибированный текст в session_state
-                                        st.session_state['transcribed_question'] = transcribed_text
-                                        st.success(f"✅ Расшифровано: {transcribed_text[:100]}...")
-                                        st.rerun()  # Перезагружаем для отправки вопроса
+                                    if not transcribe_audio_assemblyai:
+                                        st.error("❌ Функция транскрипции недоступна. Проверьте импорт assemblyai_transcriber")
                                     else:
-                                        st.error(f"❌ Ошибка расшифровки: {transcribed_text}")
+                                        transcribed_text = transcribe_audio_assemblyai(audio_data, api_key)
+                                        
+                                        if transcribed_text and not transcribed_text.startswith("❌"):
+                                            # Сохраняем транскрибированный текст в session_state
+                                            st.session_state['transcribed_question'] = transcribed_text
+                                            st.success(f"✅ Расшифровано: {transcribed_text[:100]}...")
+                                            st.rerun()  # Перезагружаем для отправки вопроса
+                                        else:
+                                            st.error(f"❌ Ошибка расшифровки: {transcribed_text}")
                         except Exception as e:
                             st.error(f"❌ Ошибка обработки аудио: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
                             with st.expander("🔍 Детали ошибки"):
                                 st.code(traceback.format_exc())
         
@@ -394,6 +455,7 @@ def show_ai_chat():
         # Показываем текстовый ввод только если нет транскрибированного вопроса
         if not user_input:
             if input_mode != "🎤 Голосовой" or not st.session_state.get('transcribed_question'):
+                st.caption("💰 Примерная стоимость: ≈1–2 ед. за сообщение (зависит от длины)")
                 user_input = st.chat_input("Задайте вопрос врачу-консультанту...")
         
         if user_input:

@@ -13,6 +13,7 @@ Text клиент для текстовых консультаций
 import time
 import requests
 import json
+import sys
 from typing import Optional, Generator
 
 from .base_client import BaseAPIClient
@@ -113,8 +114,24 @@ class TextClient(BaseAPIClient):
 
                     # Логирование
                     tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                    input_tokens = result_data.get("usage", {}).get("prompt_tokens", tokens_used // 2)
+                    output_tokens = result_data.get("usage", {}).get("completion_tokens", tokens_used // 2)
+                    
                     log_api_call(model, True, latency, None)
                     track_model_usage(model, True, tokens_used)
+                    
+                    # Сохраняем информацию о последнем запросе для статистики
+                    try:
+                        import streamlit as st
+                        st.session_state.last_request_info = {
+                            'model': model,
+                            'tokens': tokens_used,
+                            'input_tokens': input_tokens,
+                            'output_tokens': output_tokens,
+                            'latency': latency
+                        }
+                    except:
+                        pass
 
                     self.model = model
                     print(f"✅ [{model_name}] Запрос завершен за {latency:.2f}с, использовано токенов: {tokens_used}")
@@ -211,37 +228,62 @@ class TextClient(BaseAPIClient):
                 if response.status_code == 200:
                     self.model = model
                     force_msg = " [FORCE_OPUS]" if force_opus else ""
-                    print(f"✅ [{model_type}]{force_msg} [STREAMING] Streaming начат для модели: {model_name}, получаю ответ...")
+                    print(f"✅ [{model_type}]{force_msg} [STREAMING] Streaming начат для модели: {model_name}, получаю ответ...", file=sys.stderr)
                     tokens_received = 0
-                    # Читаем stream
-                    for line in response.iter_lines():
-                        if line:
-                            line_text = line.decode('utf-8')
-                            if line_text.startswith('data: '):
-                                data_str = line_text[6:]
-                                if data_str.strip() == '[DONE]':
-                                    latency = time.time() - start_time
-                                    model_type = "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "❓ UNKNOWN"
-                                    force_msg = " [FORCE_OPUS]" if force_opus else ""
-                                    context_msg = f"STREAMING ({model_name})" + (force_msg if force_opus else "")
-                                    print(f"✅ [{model_type}]{force_msg} [STREAMING] Модель: {model_name}, Токенов: {tokens_received}, Latency: {latency:.2f}с")
-                                    log_api_success(model, latency, tokens_received, context_msg)
-                                    break
-                                try:
-                                    data = json.loads(data_str)
-                                    if 'choices' in data and len(data['choices']) > 0:
-                                        delta = data['choices'][0].get('delta', {})
-                                        content = delta.get('content', '')
-                                        if content:
-                                            tokens_received += len(content.split())
-                                            yield content
+                    
+                    # Используем iter_content с буфером, как в оригинале (там работало)
+                    buffer = b''
+                    try:
+                        for chunk in response.iter_content(chunk_size=8192, decode_unicode=False):
+                            if chunk:
+                                buffer += chunk
+                                
+                                # Обрабатываем полные строки
+                                while b'\n' in buffer:
+                                    line, buffer = buffer.split(b'\n', 1)
+                                    if line:
+                                        try:
+                                            line_text = line.decode('utf-8')
+                                        except UnicodeDecodeError:
+                                            continue
                                         
-                                        if 'usage' in data:
-                                            tokens_used = data['usage'].get('total_tokens', 0)
-                                            if tokens_used > 0:
-                                                tokens_received = tokens_used
-                                except json.JSONDecodeError:
-                                    continue
+                                        if line_text.startswith('data: '):
+                                            data_str = line_text[6:]
+                                            if data_str.strip() == '[DONE]':
+                                                latency = time.time() - start_time
+                                                model_type = "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "❓ UNKNOWN"
+                                                force_msg = " [FORCE_OPUS]" if force_opus else ""
+                                                context_msg = f"STREAMING ({model_name})" + (force_msg if force_opus else "")
+                                                print(f"✅ [{model_type}]{force_msg} [STREAMING] Модель: {model_name}, Токенов: {tokens_received}, Latency: {latency:.2f}с", file=sys.stderr)
+                                                log_api_success(model, latency, tokens_received, context_msg)
+                                                return
+                                            try:
+                                                data = json.loads(data_str)
+                                                if 'choices' in data and len(data['choices']) > 0:
+                                                    delta = data['choices'][0].get('delta', {})
+                                                    content = delta.get('content', '')
+                                                    if content:
+                                                        tokens_received += len(content.split())
+                                                        yield content
+                                                    
+                                                    # Проверяем finish_reason для раннего завершения
+                                                    choice = data['choices'][0]
+                                                    if choice.get('finish_reason'):
+                                                        model_type = "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "❓ UNKNOWN"
+                                                        print(f"✅ [{model_type}] [STREAMING] Streaming завершен (finish_reason: {choice['finish_reason']})", file=sys.stderr)
+                                                        return
+                                                    
+                                                    if 'usage' in data:
+                                                        tokens_used = data['usage'].get('total_tokens', 0)
+                                                        if tokens_used > 0:
+                                                            tokens_received = tokens_used
+                                            except json.JSONDecodeError:
+                                                continue
+                    except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError) as e:
+                        model_type = "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "❓ UNKNOWN"
+                        print(f"⚠️ [{model_type}] [STREAMING] Ошибка чтения потока: {e}", file=sys.stderr)
+                        yield f"\n\n⚠️ **Ошибка чтения streaming потока**: {str(e)}\n\n"
+                    
                     return
                 elif response.status_code == 402:
                     latency = time.time() - start_time if 'start_time' in locals() else 0
@@ -433,6 +475,77 @@ class TextClient(BaseAPIClient):
                 continue
 
         return "❌ Ошибка: Все модели недоступны для запроса без системного промпта."
+    
+    def get_response_gemini_flash(
+        self,
+        user_message: str,
+        context: str = ""
+    ) -> str:
+        """
+        Текстовый запрос через Gemini 2.5 Flash (быстро и дешево)
+        
+        Args:
+            user_message: Вопрос пользователя
+            context: Дополнительный контекст
+        
+        Returns:
+            str: Ответ от Gemini Flash
+        """
+        model = "google/gemini-2.5-flash"
+        full_message = f"{context}\n\nВопрос: {user_message}" if context else user_message
+        
+        print(f"🤖 [⚡ FLASH] [GEMINI FLASH TEXT] Начинаю текстовый запрос через Gemini Flash...")
+        
+        # Gemini не использует system_prompt через OpenRouter
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "user", "content": full_message}
+            ],
+            "max_tokens": 8000,
+            "temperature": 0.2
+        }
+        
+        try:
+            start_time = time.time()
+            print(f"📡 [⚡ FLASH] [GEMINI FLASH TEXT] Отправляю запрос к API...")
+            response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
+            latency = time.time() - start_time
+            
+            if response.status_code == 200:
+                result_data = response.json()
+                result = result_data["choices"][0]["message"]["content"]
+                
+                tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                log_api_call(model, True, latency, None)
+                track_model_usage(model, True, tokens_used)
+                
+                print(f"✅ [⚡ FLASH] [GEMINI FLASH TEXT] Модель: Gemini 2.5 Flash, Токенов: {tokens_used}, Latency: {latency:.2f}с")
+                log_api_success(model, latency, tokens_used, "GEMINI FLASH TEXT")
+                return result
+            elif response.status_code == 402:
+                error_msg = f"HTTP 402: Недостаточно кредитов на OpenRouter для модели {model}"
+                log_api_call(model, False, latency, error_msg)
+                track_model_usage(model, False)
+                print(f"❌ [⚡ FLASH] [GEMINI FLASH TEXT] {error_msg}")
+                return f"❌ Ошибка: {error_msg}"
+            else:
+                error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                log_api_error(model, latency, error_msg, "GEMINI FLASH TEXT")
+                return f"❌ Ошибка анализа: {error_msg}"
+                
+        except requests.exceptions.Timeout:
+            error_msg = f"Таймаут запроса (>120 секунд)"
+            log_api_call(model, False, 120, error_msg)
+            track_model_usage(model, False)
+            print(f"❌ [⚡ FLASH] [GEMINI FLASH TEXT] {error_msg}")
+            return f"❌ Ошибка: {error_msg}"
+        except Exception as e:
+            error_msg = handle_error(e, "get_response_gemini_flash", show_to_user=False)
+            log_api_call(model, False, 0, error_msg)
+            track_model_usage(model, False)
+            print(f"❌ [⚡ FLASH] [GEMINI FLASH TEXT] Ошибка: {error_msg}")
+            return f"❌ Ошибка при анализе: {error_msg}"
     
     def analyze_ecg_data(self, ecg_analysis: dict, user_question: str = None) -> str:
         """

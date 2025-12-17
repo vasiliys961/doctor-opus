@@ -2,6 +2,7 @@
 Улучшенная обработка ошибок для медицинского ассистента
 """
 import logging
+import logging.handlers
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -11,11 +12,21 @@ import streamlit as st
 LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True)
 
+# Ротация логов: хранить 14 дней, затем автоматически удалять
+file_handler = logging.handlers.TimedRotatingFileHandler(
+    LOG_DIR / "medical_assistant.log",
+    when='midnight',
+    interval=1,
+    backupCount=14,
+    encoding='utf-8'
+)
+file_handler.suffix = "%Y%m%d"
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(LOG_DIR / f"medical_assistant_{datetime.now().strftime('%Y%m%d')}.log"),
+        file_handler,
         logging.StreamHandler()
     ]
 )

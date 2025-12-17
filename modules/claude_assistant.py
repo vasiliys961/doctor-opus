@@ -1,3 +1,27 @@
+"""
+FALLBACK ВЕРСИЯ OpenRouterAssistant
+====================================
+
+⚠️ ВНИМАНИЕ: Это упрощенная fallback версия для случаев, когда основной 
+claude_assistant/ недоступен или требуется минимальная зависимость.
+
+Основной рабочий модуль находится в: claude_assistant/assistant_wrapper.py
+Используйте его для production!
+
+Эта версия:
+- Обновлена до актуальных моделей Claude 4.5 серии (Opus, Sonnet, Haiku)
+- Сохраняет обратную совместимость API
+- Не требует дополнительных зависимостей из claude_assistant/
+- Может использоваться как резервный вариант при проблемах с основным модулем
+
+Использование:
+    # В коде можно использовать как fallback:
+    try:
+        from claude_assistant import OpenRouterAssistant
+    except ImportError:
+        from modules.claude_assistant import OpenRouterAssistant
+"""
+
 import requests
 import base64
 import io
@@ -17,6 +41,14 @@ except ImportError:
         OPENROUTER_API_KEY = None
 
 class OpenRouterAssistant:
+    """
+    FALLBACK версия OpenRouterAssistant
+    
+    Упрощенная версия для случаев, когда основной claude_assistant/ недоступен.
+    Обновлена до актуальных моделей Claude 4.5 серии.
+    
+    ⚠️ Для production используйте claude_assistant/assistant_wrapper.py
+    """
     def __init__(self, api_key=None):
         # Используем переданный ключ или ключ из config/secrets
         self.api_key = api_key or OPENROUTER_API_KEY
@@ -24,18 +56,16 @@ class OpenRouterAssistant:
             raise ValueError("API ключ не найден. Установите OPENROUTER_API_KEY в config.py или .streamlit/secrets.toml")
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         
-        # Модели с приоритетом Claude Sonnet 4.5 + Gemini 3 Pro
+        # Актуальные модели: Claude 4.5 серия + Llama (обновлено 2024)
+        # Приоритет: Opus 4.5 → Sonnet 4.5 → Haiku 4.5 → Llama
         self.models = [
-            "anthropic/claude-sonnet-4.5",            # Claude Sonnet 4.5 (latest)
-            "anthropic/claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (fallback)
-            "anthropic/claude-3-5-sonnet",           # Claude 3.5 Sonnet
-            "google/gemini-3-pro-preview",           # Gemini 3 Pro Preview (новейшая модель Google)
-            "anthropic/claude-3-sonnet-20240229",    # Claude 3 Sonnet
-            "anthropic/claude-3-haiku",              # Claude 3 Haiku (fallback)
-            "google/gemini-pro-vision"               # Gemini Pro Vision (дополнительно)
+            "anthropic/claude-opus-4.5",                # Opus 4.5 — основной клинический ассистент
+            "anthropic/claude-sonnet-4.5",              # Sonnet 4.5 — быстрый fallback
+            "anthropic/claude-haiku-4.5",               # Haiku 4.5 — быстрый анализ документов
+            "meta-llama/llama-3.2-90b-vision-instruct"  # Llama 3.2 90B Vision — резерв
         ]
         
-        self.model = self.models[0]  # Claude Sonnet 4.5 по умолчанию
+        self.model = self.models[0]  # Opus 4.5 по умолчанию
         
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -130,12 +160,12 @@ class OpenRouterAssistant:
                 "image_url": {"url": f"data:image/png;base64,{base64_str}"}
             })
         
-        # Для ЭКГ используем Claude Sonnet 4.5
+        # Для ЭКГ используем актуальные модели
         if "экг" in prompt_lower or "ecg" in prompt_lower:
             ecg_models = [
-                "anthropic/claude-sonnet-4.5",
-                "anthropic/claude-3-5-sonnet-20241022",
-                "anthropic/claude-3-5-sonnet"
+                "anthropic/claude-opus-4.5",      # Основной для ЭКГ
+                "anthropic/claude-sonnet-4.5",   # Fallback
+                "anthropic/claude-haiku-4.5"     # Быстрый fallback
             ]
             models_to_use = ecg_models
         else:
@@ -173,6 +203,10 @@ class OpenRouterAssistant:
             return "Claude Opus 4.5"
         elif "claude-sonnet-4.5" in model or "claude-sonnet-4" in model:
             return "Claude Sonnet 4.5"
+        elif "claude-haiku-4.5" in model or "claude-haiku-4" in model:
+            return "Claude Haiku 4.5"
+        elif "llama-3.2-90b" in model or "llama-3.2" in model:
+            return "Llama 3.2 90B Vision"
         elif "claude-3-5-sonnet-20241022" in model:
             return "Claude 3.5 Sonnet (Latest)"
         elif "claude-3-5-sonnet" in model:

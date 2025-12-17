@@ -12,64 +12,91 @@ import re
 import traceback
 from datetime import datetime
 
-# Импорты из local_docs
+# Импорты из utils.page_imports (общие импорты)
 try:
-    from local_docs import create_local_doc
-    LOCAL_DOCS_AVAILABLE = True
+    from utils.page_imports import (
+        OpenRouterAssistant, AI_AVAILABLE,
+        create_local_doc, LOCAL_DOCS_AVAILABLE,
+        transcribe_audio_assemblyai, ASSEMBLYAI_AVAILABLE,
+        ContextStore, CONTEXT_STORE_AVAILABLE,
+        init_specialist_prompts_table, save_specialist_prompt,
+        get_specialist_prompts, delete_specialist_prompt,
+        DATABASE_LEGACY_AVAILABLE,
+        init_db, DATABASE_AVAILABLE
+    )
+    PAGE_IMPORTS_AVAILABLE = True
+    # Для обратной совместимости
+    DATABASE_AVAILABLE = DATABASE_LEGACY_AVAILABLE
 except ImportError:
-    LOCAL_DOCS_AVAILABLE = False
-    create_local_doc = None
+    PAGE_IMPORTS_AVAILABLE = False
+    # Fallback к старым импортам
+    try:
+        from local_docs import create_local_doc
+        LOCAL_DOCS_AVAILABLE = True
+    except ImportError:
+        LOCAL_DOCS_AVAILABLE = False
+        create_local_doc = None
+    try:
+        from claude_assistant import OpenRouterAssistant
+        AI_AVAILABLE = True
+    except ImportError:
+        AI_AVAILABLE = False
+        OpenRouterAssistant = None
+    try:
+        from assemblyai_transcriber import transcribe_audio_assemblyai
+        ASSEMBLYAI_AVAILABLE = True
+    except ImportError:
+        ASSEMBLYAI_AVAILABLE = False
+        transcribe_audio_assemblyai = None
+    try:
+        from storages.context_store import ContextStore
+        CONTEXT_STORE_AVAILABLE = True
+    except ImportError:
+        CONTEXT_STORE_AVAILABLE = False
+        ContextStore = None
+    try:
+        from database import init_specialist_prompts_table, save_specialist_prompt, get_specialist_prompts, delete_specialist_prompt
+        DATABASE_AVAILABLE = True
+    except ImportError:
+        DATABASE_AVAILABLE = False
+        init_specialist_prompts_table = None
+        save_specialist_prompt = None
+        get_specialist_prompts = None
+        delete_specialist_prompt = None
+    from utils.database import init_db
 
-# Импорты из claude_assistant
+# Импорты общих функций из page_helpers
 try:
-    from claude_assistant import OpenRouterAssistant
-    AI_AVAILABLE = True
+    from utils.page_helpers import check_ai_availability
+    PAGE_HELPERS_AVAILABLE = True
 except ImportError:
-    AI_AVAILABLE = False
-    OpenRouterAssistant = None
-
-# Импорты из assemblyai_transcriber
-try:
-    from assemblyai_transcriber import transcribe_audio_assemblyai
-    ASSEMBLYAI_AVAILABLE = True
-except ImportError:
-    ASSEMBLYAI_AVAILABLE = False
-    transcribe_audio_assemblyai = None
-
-# Импорты из storages
-try:
-    from storages.context_store import ContextStore
-    CONTEXT_STORE_AVAILABLE = True
-except ImportError:
-    CONTEXT_STORE_AVAILABLE = False
-    ContextStore = None
-
-# Импорты из database
-try:
-    from database import init_specialist_prompts_table, save_specialist_prompt, get_specialist_prompts, delete_specialist_prompt
-    DATABASE_AVAILABLE = True
-except ImportError:
-    DATABASE_AVAILABLE = False
-    init_specialist_prompts_table = None
-    save_specialist_prompt = None
-    get_specialist_prompts = None
-    delete_specialist_prompt = None
-
-# Импорты функций из app.py (которые используются в show_consultation_protocol)
-# Функция init_db() вынесена в utils/database.py для устранения циклических зависимостей
-from utils.database import init_db
+    PAGE_HELPERS_AVAILABLE = False
+    def check_ai_availability():
+        return AI_AVAILABLE
 
 
 def show_consultation_protocol():
+    st.header("📝 Автоматический протокол приёма")
+    
+    # Полезные подсказки (expander - можно свернуть)
+    with st.expander("💡 Полезные подсказки", expanded=True):
+        st.info("""
+        **💡 Советы по использованию:**
+        - Вы можете использовать голосовую запись через AssemblyAI для транскрипции
+        - Или вставить готовый текст транскрипции
+        - Протокол генерируется с использованием промпта американского профессора
+        - Результат включает диагноз и рекомендации по лечению
+        - Протокол можно редактировать перед сохранением
+        - Экспорт в Word доступен для сохранения готового документа
+        """)
+    
     if not LOCAL_DOCS_AVAILABLE or create_local_doc is None:
         st.error("❌ Модуль local_docs недоступен. Проверьте файл `local_docs.py`.")
         return
     
-    if not AI_AVAILABLE:
+    if not check_ai_availability():
         st.error("❌ ИИ-модуль недоступен. Проверьте файл `claude_assistant.py` и API-ключ.")
         return
-
-    st.header("📝 Автоматический протокол приёма")
 
     init_db()
     
@@ -140,6 +167,7 @@ def show_consultation_protocol():
         with col2:
             # Кнопка всегда видна, но активна только если есть текст
             button_disabled = not raw_text or len(raw_text.strip()) == 0
+            st.caption("💰 Примерная стоимость: ≈2–3 ед.")
             if st.button(
                 "📝 **СОЗДАТЬ ПРОТОКОЛ**", 
                 use_container_width=True, 
@@ -207,6 +235,7 @@ def show_consultation_protocol():
             with col2:
                 # Кнопка всегда видна, но активна только если есть текст
                 button_disabled = not raw_text or len(raw_text.strip()) == 0
+                st.caption("💰 Примерная стоимость: ≈2–3 ед.")
                 if st.button(
                     "📝 **СОЗДАТЬ ПРОТОКОЛ**", 
                     use_container_width=True, 
@@ -315,12 +344,18 @@ def show_consultation_protocol():
                 st.subheader("📝 Расшифрованный текст:")
                 st.text_area("Расшифрованный текст", value=raw_text, height=150, disabled=True, key="transcribed_text_display")
     
-    # Генерация протокола (если есть raw_text)
+    # Генерация протокола (если есть raw_text И протокол еще не сгенерирован)
+    # Проверяем, что протокол еще не был сгенерирован для этого raw_text
     if raw_text or st.session_state.get('raw_text'):
         if not raw_text:
             raw_text = st.session_state.get('raw_text', '')
         
-        if raw_text:
+        # Проверяем, что протокол еще не сгенерирован
+        # Если structured_note уже есть, значит протокол уже был сгенерирован
+        already_generated = st.session_state.get('structured_note', '') and \
+                           st.session_state.get('raw_text', '') == raw_text
+        
+        if raw_text and not already_generated:
             # Блок выбора/загрузки шаблона протокола врача
             st.subheader("🧩 Шаблон протокола врача")
             
@@ -347,6 +382,7 @@ def show_consultation_protocol():
                     "Педиатр",
                     "Акушер‑гинеколог",
                     "Врач УЗИ",
+                    "Прочие",
                     "Эндоскопист",
                     "Рентгенолог",
                     "Радиолог",
@@ -417,6 +453,7 @@ def show_consultation_protocol():
                     "Педиатр": "Учитывай возрастные нормы, перинатальный анамнез, вакцинацию, физическое и психомоторное развитие ребёнка.",
                     "Акушер‑гинеколог": "Фокус на акушерско‑гинекологическом анамнезе, менструальной функции, беременности и родах, рисках акушерских осложнений.",
                     "Врач УЗИ": "Подробно опиши результаты ультразвукового исследования: размеры органов, структуру, эхогенность, наличие патологических образований, кровоток (при допплерографии). Укажи локализацию и характеристики выявленных изменений.",
+                    "Прочие": "",
                     "Эндоскопист": "Детально опиши результаты эндоскопического исследования: состояние слизистой оболочки, наличие патологических изменений (эрозии, язвы, полипы, новообразования), их локализацию, размеры, характер. Укажи результаты биопсии (если проводилась).",
                     "Рентгенолог": "Систематически проанализируй рентгенограмму: оценка качества снимка, описание всех визуализированных структур, выявление патологических изменений (инфильтраты, затемнения, просветления, деформации), их локализацию и характеристики. Сравни с предыдущими исследованиями при наличии.",
                     "Радиолог": "Проведи комплексный анализ результатов лучевой диагностики (КТ, МРТ, ПЭТ-КТ): описание всех визуализированных структур, выявление патологических образований, их локализацию, размеры, плотность/интенсивность сигнала, контрастное усиление, признаки злокачественности. Оцени динамику при наличии предыдущих исследований.",
@@ -484,6 +521,14 @@ def show_consultation_protocol():
                     f"(шаблон врача: {template_preset}):\n{protocol_template.strip()}\n"
                 )
 
+            # Опция выбора режима генерации (streaming или обычный)
+            use_streaming = st.checkbox(
+                "📺 Постепенное появление текста (streaming)",
+                value=True,
+                help="Текст будет появляться постепенно. Если возникают проблемы, отключите эту опцию.",
+                key="protocol_use_streaming"
+            )
+
             # Генерация протокола происходит автоматически после обработки аудио/текста
             # (как в main ветке - сразу после обработки, без отдельной кнопки)
             if raw_text:
@@ -549,39 +594,65 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
 
 Медицинские рекомендации - опираться только на проверенные международные источники; для каждого ключевого лечебного шага указывать ссылку и год публикации (предпочтительно ≤5 лет).
 """
-                # Используем Sonnet 4.5 для протокола с streaming (текст появляется постепенно)
+                # Используем Sonnet 4.5 для протокола
                 st.markdown("### 📄 Генерация протокола...")
+                
+                # Выбираем режим генерации (streaming или обычный)
                 try:
-                    # Пробуем streaming
-                    text_generator = assistant.get_response_streaming(prompt, use_sonnet_4_5=True)
-                    structured_note = st.write_stream(text_generator)
-                    st.session_state.structured_note = structured_note
+                    if use_streaming:
+                        # Streaming режим - текст появляется постепенно
+                        try:
+                            # Получаем генератор для streaming
+                            text_generator = assistant.get_response_streaming(prompt, use_sonnet_4_5=True)
+                            
+                            # Отображаем текст постепенно через st.write_stream
+                            structured_note = st.write_stream(text_generator)
+                        except Exception as stream_error:
+                            # Fallback на обычный режим если streaming не работает
+                            st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
+                            with st.spinner("🤖 Генерация протокола (обычный режим)..."):
+                                structured_note = assistant.get_response(prompt, use_sonnet_4_5=True)
+                                if structured_note:
+                                    st.markdown(structured_note)
+                    else:
+                        # Обычный режим - ждем полный ответ
+                        with st.spinner("🤖 Генерация протокола..."):
+                            structured_note = assistant.get_response(prompt, use_sonnet_4_5=True)
+                            if structured_note:
+                                st.markdown(structured_note)
                     
-                    # Показываем информацию о модели, которая использовалась
-                    if assistant.model:
-                        model_name = assistant.model.replace("anthropic/claude-", "").replace("-4.5", " 4.5")
-                        if "sonnet" in assistant.model.lower():
+                    if not structured_note or len(str(structured_note).strip()) == 0:
+                        st.error("❌ ИИ вернул пустой ответ. Попробуйте еще раз.")
+                        return
+                    
+                    structured_note = str(structured_note).strip()
+                    
+                    # Сохраняем в session_state
+                    st.session_state.structured_note = structured_note
+                    # Сбрасываем флаг генерации после успешной генерации
+                    if 'protocol_generating' in st.session_state:
+                        del st.session_state['protocol_generating']
+                    
+                    # Показываем информацию о модели
+                    model = None
+                    if hasattr(assistant, '_text_client') and hasattr(assistant._text_client, 'model'):
+                        model = assistant._text_client.model
+                    elif hasattr(assistant, 'model'):
+                        model = assistant.model
+                    
+                    if model:
+                        if "sonnet" in model.lower():
                             st.success(f"✅ Протокол сгенерирован моделью Claude Sonnet 4.5")
-                        elif "haiku" in assistant.model.lower():
+                        elif "haiku" in model.lower():
                             st.info(f"ℹ️ Протокол сгенерирован моделью Claude Haiku 4.5 (Sonnet был недоступен)")
-                        elif "opus" in assistant.model.lower():
+                        elif "opus" in model.lower():
                             st.info(f"ℹ️ Протокол сгенерирован моделью Claude Opus 4.5")
                 except Exception as e:
-                    # Fallback на обычный режим если streaming не работает
-                    st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
-                    with st.spinner("🤖 Генерация протокола..."):
-                        structured_note = assistant.get_response(prompt, use_sonnet_4_5=True)
-                        st.session_state.structured_note = structured_note
-                        
-                        # Показываем информацию о модели
-                        if assistant.model:
-                            model_name = assistant.model.replace("anthropic/claude-", "").replace("-4.5", " 4.5")
-                            if "sonnet" in assistant.model.lower():
-                                st.success(f"✅ Протокол сгенерирован моделью Claude Sonnet 4.5")
-                            elif "haiku" in assistant.model.lower():
-                                st.info(f"ℹ️ Протокол сгенерирован моделью Claude Haiku 4.5 (Sonnet был недоступен)")
-                            elif "opus" in assistant.model.lower():
-                                st.info(f"ℹ️ Протокол сгенерирован моделью Claude Opus 4.5")
+                    st.error(f"❌ Ошибка генерации протокола: {e}")
+                    import traceback
+                    with st.expander("🔍 Детали ошибки"):
+                        st.code(traceback.format_exc())
+                    return
                 
                 # Автоматическое создание/получение пациента, если не выбран
                 if not patient_id:
@@ -629,9 +700,12 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
                 except Exception as e:
                     st.warning(f"⚠️ Не удалось сохранить протокол в контекст: {e}")
 
-            # Показываем сгенерированный протокол
+            # Показываем сгенерированный протокол (если он уже был сгенерирован)
             structured_note = st.session_state.get('structured_note', '')
             if structured_note:
+                # Сбрасываем флаг генерации, если протокол уже показан
+                if 'protocol_generating' in st.session_state:
+                    del st.session_state['protocol_generating']
                 # Используем имя пациента из session_state или временное
                 patient_name_for_doc = st.session_state.get('protocol_patient_name', selected_patient if 'selected_patient' in locals() and selected_patient else "Пациент")
                 with st.spinner("📄 Создание документа..."):

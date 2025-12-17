@@ -2,23 +2,44 @@
 Вспомогательные функции для анализа медицинских данных
 Вынесены из app.py для улучшения архитектуры
 """
+from typing import Any, Optional
 import streamlit as st
 import sys
 
 
-def perform_analysis_with_streaming(assistant, prompt, image_array, metadata, use_streaming, 
-                                   analysis_type="точный", model_type="opus", title=""):
-    """Универсальная функция для выполнения анализа с поддержкой streaming
+def perform_analysis_with_streaming(
+    assistant: Any,
+    prompt: str,
+    image_array: Any,
+    metadata: Any,
+    use_streaming: bool,
+    analysis_type: str = "точный",
+    model_type: str = "opus",
+    title: str = ""
+) -> Optional[str]:
+    """
+    Универсальная функция для выполнения анализа с поддержкой streaming.
+    
+    Поддерживает два режима работы:
+    - Streaming: постепенное отображение результата (для Opus)
+    - Обычный: полный результат после завершения (для Gemini)
     
     Args:
-        assistant: Экземпляр OpenRouterAssistant
-        prompt: Промпт для анализа
-        image_array: Массив изображения
-        metadata: Метаданные
-        use_streaming: Использовать ли streaming
-        analysis_type: Тип анализа ("быстрый" или "точный")
-        model_type: Тип модели ("gemini" или "opus")
-        title: Заголовок для отображения
+        assistant: Экземпляр OpenRouterAssistant для выполнения запросов
+        prompt: Промпт для анализа медицинских данных
+        image_array: Массив изображения (numpy array или PIL Image)
+        metadata: Метаданные изображения (строка или dict)
+        use_streaming: Использовать ли streaming режим (bool)
+        analysis_type: Тип анализа - "быстрый" или "точный" (str, default="точный")
+        model_type: Тип модели - "gemini" или "opus" (str, default="opus")
+        title: Заголовок для отображения результата (str, default="")
+    
+    Returns:
+        Optional[str]: Результат анализа или None в случае ошибки
+    
+    Note:
+        При ошибке streaming автоматически переключается на обычный режим.
+        Для Gemini Flash streaming пока не поддерживается.
     """
     if use_streaming:
         # Streaming режим
@@ -34,13 +55,28 @@ def perform_analysis_with_streaming(assistant, prompt, image_array, metadata, us
                 return result
             else:
                 # Opus с streaming
-                text_generator = assistant.send_vision_request_streaming(prompt, image_array, metadata)
-                # st.write_stream отображает текст и возвращает весь накопленный текст
-                result = st.write_stream(text_generator)
-                
-                # Логируем для отладки
-                result_str = str(result) if result else ""
-                print(f"📝 [STREAMING] Получен результат длиной {len(result_str)} символов", file=sys.stderr)
+                try:
+                    text_generator = assistant.send_vision_request_streaming(prompt, image_array, metadata)
+                    # st.write_stream отображает текст и возвращает весь накопленный текст
+                    # Используем таймаут для предотвращения зависания
+                    with st.spinner("🔄 Анализ выполняется..."):
+                        result = st.write_stream(text_generator)
+                    
+                    # Логируем для отладки
+                    result_str = str(result) if result else ""
+                    print(f"📝 [STREAMING] Получен результат длиной {len(result_str)} символов", file=sys.stderr)
+                except Exception as stream_error:
+                    print(f"❌ [STREAMING ERROR] Ошибка streaming: {stream_error}", file=sys.stderr)
+                    st.warning(f"⚠️ Ошибка streaming режима: {str(stream_error)}. Переключаюсь на обычный режим...")
+                    # Fallback на обычный режим
+                    with st.spinner(f"Opus 4.5 анализирует (без streaming)..."):
+                        result = assistant.send_vision_request(prompt, image_array, metadata)
+                        if result:
+                            st.write(result)
+                            result_str = str(result)
+                        else:
+                            result_str = ""
+                    print(f"✅ [STREAMING FALLBACK] Использован обычный режим, результат длиной {len(result_str)} символов", file=sys.stderr)
                 
                 # Показываем информацию о модели после завершения streaming
                 if hasattr(assistant, 'model') and assistant.model:
@@ -95,8 +131,29 @@ def perform_analysis_with_streaming(assistant, prompt, image_array, metadata, us
                 return None
 
 
-def get_model_metrics_display(category: str):
-    """Получить метрики моделей для отображения (иллюстрация)"""
+def get_model_metrics_display(category: str) -> dict:
+    """
+    Получить метрики моделей для отображения.
+    
+    Возвращает словарь с метриками точности, скорости и стоимости
+    для указанной категории медицинских данных.
+    
+    Args:
+        category: Категория данных (str) - 'ECG', 'XRAY', 'MRI', 'CT', 
+                 'ULTRASOUND', 'DERMATOSCOPY' или другая
+    
+    Returns:
+        dict: Словарь с метриками для каждой модели:
+            {
+                'gemini': {'accuracy': int, ...},
+                'opus': {'accuracy': int, 'speed_multiplier': float, ...}
+            }
+            Если категория не найдена, возвращает пустой словарь.
+    
+    Note:
+        Метрики являются иллюстративными и могут не отражать
+        реальные показатели моделей в продакшене.
+    """
     metrics = {
         'ECG': {
             'gemini': {'accuracy': 87},
@@ -104,24 +161,26 @@ def get_model_metrics_display(category: str):
         },
         'XRAY': {
             'gemini': {'accuracy': 85},
-            'opus': {'accuracy': 94, 'speed_multiplier': 3.2, 'price_multiplier': 4.0}
+            'opus': {'accuracy': 95, 'speed_multiplier': 3.2, 'price_multiplier': 4.0}
         },
         'MRI': {
-            'gemini': {'accuracy': 83},
-            'opus': {'accuracy': 93, 'speed_multiplier': 3.8, 'price_multiplier': 4.5}
+            'gemini': {'accuracy': 88},
+            'opus': {'accuracy': 96, 'speed_multiplier': 3.8, 'price_multiplier': 4.5}
         },
         'CT': {
-            'gemini': {'accuracy': 84},
-            'opus': {'accuracy': 92, 'speed_multiplier': 3.6, 'price_multiplier': 4.3}
+            'gemini': {'accuracy': 86},
+            'opus': {'accuracy': 95, 'speed_multiplier': 3.5, 'price_multiplier': 4.3}
         },
         'ULTRASOUND': {
-            'gemini': {'accuracy': 82},
-            'opus': {'accuracy': 91, 'speed_multiplier': 3.4, 'price_multiplier': 4.1}
+            'gemini': {'accuracy': 84},
+            'opus': {'accuracy': 94, 'speed_multiplier': 3.0, 'price_multiplier': 3.8}
         },
         'DERMATOSCOPY': {
-            'gemini': {'accuracy': 86},
-            'opus': {'accuracy': 95, 'speed_multiplier': 3.7, 'price_multiplier': 4.4}
+            'gemini': {'accuracy': 82},
+            'opus': {'accuracy': 98, 'speed_multiplier': 3.8, 'price_multiplier': 4.5}
         }
     }
-    
-    return metrics.get(category.upper(), {})
+    return metrics.get(category, {
+        'gemini': {'accuracy': 85},
+        'opus': {'accuracy': 95, 'speed_multiplier': 3.5, 'price_multiplier': 4.0}
+    })

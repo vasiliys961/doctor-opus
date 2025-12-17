@@ -8,17 +8,23 @@ import pandas as pd
 import json
 import sys
 
-# Импорты из storages
+# Импорты из utils.page_imports (общие импорты)
 try:
-    from storages.context_store import ContextStore
-    CONTEXT_STORE_AVAILABLE = True
+    from utils.page_imports import (
+        ContextStore, CONTEXT_STORE_AVAILABLE,
+        init_db, DATABASE_AVAILABLE
+    )
+    PAGE_IMPORTS_AVAILABLE = True
 except ImportError:
-    CONTEXT_STORE_AVAILABLE = False
-    ContextStore = None
-
-# Импорты функций из app.py (которые используются в show_patient_context_page)
-# Функция init_db() вынесена в utils/database.py для устранения циклических зависимостей
-from utils.database import init_db
+    PAGE_IMPORTS_AVAILABLE = False
+    # Fallback к старым импортам
+    try:
+        from storages.context_store import ContextStore
+        CONTEXT_STORE_AVAILABLE = True
+    except ImportError:
+        CONTEXT_STORE_AVAILABLE = False
+        ContextStore = None
+    from utils.database import init_db
 
 
 def show_patient_context_page():
