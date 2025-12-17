@@ -23,11 +23,15 @@ def show_balance_display() -> None:
         st.markdown(f"**Режим приложения:** `{state.mode}`")
 
         if not is_subscription_active():
-            st.info("Система подписки сейчас **выключена**.\n\n"
-                    "Приложение работает в свободном режиме.")
+            st.info(
+                "Система подписки сейчас **выключена**.\n\n"
+                "Приложение работает в свободном режиме.\n\n"
+                f"За текущую сессию использовано: `{state.total_used:.1f}` усл. ед."
+            )
             return
 
         st.markdown(f"**Баланс:** `{state.balance:.1f}` ед.")
+        st.markdown(f"**Всего использовано за сессию:** `{state.total_used:.1f}` ед.")
 
         if state.is_owner:
             st.success("Режим владельца: ограничения по балансу не действуют.")
