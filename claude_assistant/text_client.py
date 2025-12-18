@@ -479,73 +479,108 @@ class TextClient(BaseAPIClient):
     def get_response_gemini_flash(
         self,
         user_message: str,
-        context: str = ""
+        context: str = "",
+        use_flash_3: bool = True
     ) -> str:
         """
-        Текстовый запрос через Gemini 2.5 Flash (быстро и дешево)
+        Текстовый запрос через Gemini Flash (2.5 или 3.0)
         
         Args:
             user_message: Вопрос пользователя
             context: Дополнительный контекст
+            use_flash_3: Использовать Flash 3.0 (True) или Flash 2.5 (False). 
+                        При ошибке Flash 3.0 автоматически fallback на Flash 2.5
         
         Returns:
             str: Ответ от Gemini Flash
         """
-        model = "google/gemini-2.5-flash"
+        # Пробуем сначала Flash 3.0, если включено, иначе Flash 2.5
+        models_to_try = []
+        if use_flash_3:
+            models_to_try = [
+                "google/gemini-3-flash-preview",      # Flash 3.0 Preview (актуальное название на OpenRouter)
+                "google/gemini-3-flash",               # Flash 3.0 (если появится без preview)
+                "google/gemini-2.5-flash"              # Fallback на Flash 2.5
+            ]
+        else:
+            models_to_try = ["google/gemini-2.5-flash"]
+        
         full_message = f"{context}\n\nВопрос: {user_message}" if context else user_message
         
         print(f"🤖 [⚡ FLASH] [GEMINI FLASH TEXT] Начинаю текстовый запрос через Gemini Flash...")
         
-        # Gemini не использует system_prompt через OpenRouter
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "user", "content": full_message}
-            ],
-            "max_tokens": 8000,
-            "temperature": 0.2
-        }
-        
-        try:
-            start_time = time.time()
-            print(f"📡 [⚡ FLASH] [GEMINI FLASH TEXT] Отправляю запрос к API...")
-            response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
-            latency = time.time() - start_time
+        # Пробуем каждую модель по очереди
+        last_error = None
+        for model in models_to_try:
+            print(f"📡 [⚡ FLASH] [GEMINI FLASH TEXT] Пробую модель: {model}")
             
-            if response.status_code == 200:
-                result_data = response.json()
-                result = result_data["choices"][0]["message"]["content"]
+            # Gemini не использует system_prompt через OpenRouter
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "user", "content": full_message}
+                ],
+                "max_tokens": 8000,
+                "temperature": 0.2
+            }
+            
+            try:
+                start_time = time.time()
+                response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
+                latency = time.time() - start_time
                 
-                tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
-                log_api_call(model, True, latency, None)
-                track_model_usage(model, True, tokens_used)
-                
-                print(f"✅ [⚡ FLASH] [GEMINI FLASH TEXT] Модель: Gemini 2.5 Flash, Токенов: {tokens_used}, Latency: {latency:.2f}с")
-                log_api_success(model, latency, tokens_used, "GEMINI FLASH TEXT")
-                return result
-            elif response.status_code == 402:
-                error_msg = f"HTTP 402: Недостаточно кредитов на OpenRouter для модели {model}"
-                log_api_call(model, False, latency, error_msg)
-                track_model_usage(model, False)
-                print(f"❌ [⚡ FLASH] [GEMINI FLASH TEXT] {error_msg}")
-                return f"❌ Ошибка: {error_msg}"
-            else:
-                error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                log_api_error(model, latency, error_msg, "GEMINI FLASH TEXT")
-                return f"❌ Ошибка анализа: {error_msg}"
-                
-        except requests.exceptions.Timeout:
-            error_msg = f"Таймаут запроса (>120 секунд)"
-            log_api_call(model, False, 120, error_msg)
-            track_model_usage(model, False)
-            print(f"❌ [⚡ FLASH] [GEMINI FLASH TEXT] {error_msg}")
-            return f"❌ Ошибка: {error_msg}"
-        except Exception as e:
-            error_msg = handle_error(e, "get_response_gemini_flash", show_to_user=False)
-            log_api_call(model, False, 0, error_msg)
-            track_model_usage(model, False)
-            print(f"❌ [⚡ FLASH] [GEMINI FLASH TEXT] Ошибка: {error_msg}")
-            return f"❌ Ошибка при анализе: {error_msg}"
+                if response.status_code == 200:
+                    result_data = response.json()
+                    result = result_data["choices"][0]["message"]["content"]
+                    
+                    tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                    log_api_call(model, True, latency, None)
+                    track_model_usage(model, True, tokens_used)
+                    
+                    # Определяем читаемое название модели
+                    if "gemini-3-flash" in model:
+                        model_name = "Gemini 3.0 Flash Preview" if "preview" in model else "Gemini 3.0 Flash"
+                    else:
+                        model_name = "Gemini 2.5 Flash"
+                    print(f"✅ [⚡ FLASH] [GEMINI FLASH TEXT] Модель: {model_name}, Токенов: {tokens_used}, Latency: {latency:.2f}с")
+                    log_api_success(model, latency, tokens_used, "GEMINI FLASH TEXT")
+                    return result
+                elif response.status_code == 404:
+                    # Модель не найдена - пробуем следующую
+                    error_msg = f"Модель {model} недоступна на OpenRouter"
+                    print(f"⚠️ [⚡ FLASH] [GEMINI FLASH TEXT] {error_msg}, пробую следующую модель...")
+                    last_error = error_msg
+                    continue
+                elif response.status_code == 402:
+                    error_msg = f"HTTP 402: Недостаточно кредитов на OpenRouter для модели {model}"
+                    log_api_call(model, False, latency, error_msg)
+                    track_model_usage(model, False)
+                    print(f"❌ [⚡ FLASH] [GEMINI FLASH TEXT] {error_msg}")
+                    return f"❌ Ошибка: {error_msg}"
+                else:
+                    # Другие ошибки - пробуем следующую модель
+                    error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                    print(f"⚠️ [⚡ FLASH] [GEMINI FLASH TEXT] {error_msg}, пробую следующую модель...")
+                    last_error = error_msg
+                    continue
+                    
+            except requests.exceptions.Timeout:
+                error_msg = f"Таймаут запроса для модели {model} (>120 секунд)"
+                print(f"⚠️ [⚡ FLASH] [GEMINI FLASH TEXT] {error_msg}, пробую следующую модель...")
+                last_error = error_msg
+                continue
+            except Exception as e:
+                error_msg = handle_error(e, f"get_response_gemini_flash ({model})", show_to_user=False)
+                print(f"⚠️ [⚡ FLASH] [GEMINI FLASH TEXT] Ошибка с {model}: {error_msg}, пробую следующую модель...")
+                last_error = error_msg
+                continue
+        
+        # Если все модели не сработали
+        final_error = last_error or "Все модели Gemini Flash недоступны"
+        log_api_call(models_to_try[0] if models_to_try else "unknown", False, 0, final_error)
+        track_model_usage(models_to_try[0] if models_to_try else "unknown", False)
+        print(f"❌ [⚡ FLASH] [GEMINI FLASH TEXT] {final_error}")
+        return f"❌ Ошибка: {final_error}"
     
     def analyze_ecg_data(self, ecg_analysis: dict, user_question: str = None) -> str:
         """

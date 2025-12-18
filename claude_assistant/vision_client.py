@@ -590,9 +590,9 @@ class VisionClient(BaseAPIClient):
         
         return "❌ Ошибка: Все модели недоступны"
     
-    def send_vision_request_gemini_fast(self, prompt: str, image_array=None, metadata=None):
+    def send_vision_request_gemini_fast(self, prompt: str, image_array=None, metadata=None, use_flash_3: bool = False):
         """
-        Быстрый анализ изображения через Gemini 2.5 Flash
+        Быстрый анализ изображения через Gemini Flash (2.5 или 3.0)
         
         ТОЧНАЯ КОПИЯ из claude_assistant.py (строки 1160-1456)
         
@@ -600,17 +600,28 @@ class VisionClient(BaseAPIClient):
             prompt: Промпт для анализа
             image_array: Массив изображения
             metadata: Метаданные (опционально)
+            use_flash_3: Использовать Gemini 3.0 Flash (True) или Gemini 2.5 Flash (False)
         
         Returns:
             Результат анализа от Gemini Flash
         """
-        model = "google/gemini-2.5-flash"
+        # Пробуем сначала Flash 3.0, если включено, иначе Flash 2.5
+        models_to_try = []
+        if use_flash_3:
+            models_to_try = [
+                "google/gemini-3-flash-preview",      # Flash 3.0 Preview (актуальное название на OpenRouter)
+                "google/gemini-3-flash",               # Flash 3.0 (если появится без preview)
+                "google/gemini-2.5-flash"              # Fallback на Flash 2.5
+            ]
+        else:
+            models_to_try = ["google/gemini-2.5-flash"]
         
+        last_error = None
         print(f"🤖 [⚡ FLASH] [GEMINI FLASH] Начинаю быстрый анализ изображения...")
         
         prompt_lower = prompt.lower() if prompt else ""
         
-        # Формируем промпт (используем полный детальный промпт как у Opus, но без system_prompt)
+        # Формируем промпт один раз (используем полный детальный промпт как у Opus, но без system_prompt)
         if "экг" in prompt_lower or "ecg" in prompt_lower:
             medical_prompt = f"""Ты — ведущий кардиолог-электрофизиолог (board certified). 
 Твоя задача — выполнить полноценный экспертный анализ 12‑канальной ЭКГ (включая сложные аритмии и блокады)
@@ -752,53 +763,74 @@ class VisionClient(BaseAPIClient):
             {"role": "user", "content": content}
         ]
         
-        payload = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": 4000,
-            "temperature": 0.1
-        }
-        
-        try:
-            start_time = time.time()
-            print(f"📡 [⚡ FLASH] [GEMINI FLASH] Отправляю запрос к API...")
-            response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
-            latency = time.time() - start_time
+        # Пробуем каждую модель по очереди
+        for model in models_to_try:
+            payload = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": 4000,
+                "temperature": 0.1
+            }
             
-            if response.status_code == 200:
-                result_data = response.json()
-                result = result_data["choices"][0]["message"]["content"]
+            try:
+                start_time = time.time()
+                print(f"📡 [⚡ FLASH] [GEMINI FLASH] Пробую модель: {model}")
+                response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
+                latency = time.time() - start_time
                 
-                tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
-                log_api_call(model, True, latency, None)
-                track_model_usage(model, True, tokens_used)
-                
-                print(f"✅ [⚡ FLASH] [GEMINI FLASH] Модель: Gemini 2.5 Flash, Токенов: {tokens_used}, Latency: {latency:.2f}с")
-                log_api_success(model, latency, tokens_used, "GEMINI FLASH")
-                return f"**⚡ Быстрый анализ (Gemini 2.5 Flash):**\n\n{result}"
-            elif response.status_code == 402:
-                error_msg = f"HTTP 402: Недостаточно кредитов на OpenRouter для модели {model}"
-                log_api_call(model, False, latency, error_msg)
-                track_model_usage(model, False)
-                print(f"❌ [⚡ FLASH] [GEMINI FLASH] {error_msg}")
-                return f"❌ Ошибка: {error_msg}"
-            else:
-                error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                log_api_error(model, latency, error_msg, "GEMINI FLASH")
-                return f"❌ Ошибка анализа: {error_msg}"
-                
-        except requests.exceptions.Timeout:
-            error_msg = f"Таймаут запроса (>{API_TIMEOUT_SECONDS} секунд)"
-            log_api_call(model, False, API_TIMEOUT_SECONDS, error_msg)
-            track_model_usage(model, False)
-            print(f"❌ [⚡ FLASH] [GEMINI FLASH] {error_msg}")
-            return f"❌ Ошибка: {error_msg}"
-        except Exception as e:
-            error_msg = handle_error(e, "send_vision_request_gemini_fast", show_to_user=False)
-            log_api_call(model, False, 0, error_msg)
-            track_model_usage(model, False)
-            print(f"❌ [⚡ FLASH] [GEMINI FLASH] Ошибка: {error_msg}")
-            return f"❌ Ошибка при анализе: {error_msg}"
+                if response.status_code == 200:
+                    result_data = response.json()
+                    result = result_data["choices"][0]["message"]["content"]
+                    
+                    tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                    log_api_call(model, True, latency, None)
+                    track_model_usage(model, True, tokens_used)
+                    
+                    # Определяем читаемое название модели
+                    if "gemini-3-flash" in model:
+                        model_name = "Gemini 3.0 Flash Preview" if "preview" in model else "Gemini 3.0 Flash"
+                    else:
+                        model_name = "Gemini 2.5 Flash"
+                    
+                    print(f"✅ [⚡ FLASH] [GEMINI FLASH] Модель: {model_name}, Токенов: {tokens_used}, Latency: {latency:.2f}с")
+                    log_api_success(model, latency, tokens_used, "GEMINI FLASH")
+                    return f"**⚡ Быстрый анализ ({model_name}):**\n\n{result}"
+                elif response.status_code == 404:
+                    # Модель не найдена - пробуем следующую
+                    error_msg = f"Модель {model} недоступна на OpenRouter"
+                    print(f"⚠️ [⚡ FLASH] [GEMINI FLASH] {error_msg}, пробую следующую модель...")
+                    last_error = error_msg
+                    continue
+                elif response.status_code == 402:
+                    error_msg = f"HTTP 402: Недостаточно кредитов на OpenRouter для модели {model}"
+                    log_api_call(model, False, latency, error_msg)
+                    track_model_usage(model, False)
+                    print(f"❌ [⚡ FLASH] [GEMINI FLASH] {error_msg}")
+                    return f"❌ Ошибка: {error_msg}"
+                else:
+                    # Другие ошибки - пробуем следующую модель
+                    error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                    print(f"⚠️ [⚡ FLASH] [GEMINI FLASH] {error_msg}, пробую следующую модель...")
+                    last_error = error_msg
+                    continue
+                    
+            except requests.exceptions.Timeout:
+                error_msg = f"Таймаут запроса для модели {model} (>{API_TIMEOUT_SECONDS} секунд)"
+                print(f"⚠️ [⚡ FLASH] [GEMINI FLASH] {error_msg}, пробую следующую модель...")
+                last_error = error_msg
+                continue
+            except Exception as e:
+                error_msg = handle_error(e, f"send_vision_request_gemini_fast ({model})", show_to_user=False)
+                print(f"⚠️ [⚡ FLASH] [GEMINI FLASH] Ошибка с {model}: {error_msg}, пробую следующую модель...")
+                last_error = error_msg
+                continue
+        
+        # Если все модели не сработали
+        final_error = last_error or "Все модели Gemini Flash недоступны"
+        log_api_call(models_to_try[0] if models_to_try else "unknown", False, 0, final_error)
+        track_model_usage(models_to_try[0] if models_to_try else "unknown", False)
+        print(f"❌ [⚡ FLASH] [GEMINI FLASH] {final_error}")
+        return f"❌ Ошибка: {final_error}"
     
     def send_vision_request_streaming(self, prompt: str, image_array=None, metadata=None):
         """

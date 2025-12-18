@@ -13,6 +13,8 @@ MODEL_PRICING = {
     'anthropic/claude-3-5-opus-20241022': {'input': 15.0, 'output': 75.0},
     'google/gemini-2.5-flash': {'input': 0.30, 'output': 2.50},
     'google/gemini-2.5-flash-001': {'input': 0.30, 'output': 2.50},
+    'google/gemini-3-flash-preview': {'input': 0.50, 'output': 3.00},
+    'google/gemini-3-flash': {'input': 0.50, 'output': 3.00},
     'claude-3-5-sonnet-20241022': {'input': 3.0, 'output': 15.0},
     'anthropic/claude-3-5-sonnet-20241022': {'input': 3.0, 'output': 15.0},
 }
@@ -35,6 +37,9 @@ def calculate_cost(tokens: int, model: str, is_input: bool = True) -> float:
         # Дефолтные цены для неизвестных моделей
         if 'opus' in model_key:
             pricing = {'input': 15.0, 'output': 75.0}
+        elif 'gemini-3-flash' in model_key:
+            # Flash 3.0 (preview или обычная версия)
+            pricing = {'input': 0.50, 'output': 3.00}
         elif 'gemini' in model_key or 'flash' in model_key:
             pricing = {'input': 0.30, 'output': 2.50}
         elif 'sonnet' in model_key:
