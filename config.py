@@ -104,12 +104,6 @@ if not ASSEMBLYAI_API_KEY:
     print("⚠️ ВНИМАНИЕ: ASSEMBLYAI_API_KEY не найден!")
     print("   Установите ключ в .streamlit/secrets.toml или переменную окружения ASSEMBLYAI_API_KEY")
 
-if not ASSEMBLYAI_API_KEY:
-    raise RuntimeError(
-        "ASSEMBLYAI_API_KEY environment variable is required. "
-        "Set it using: export ASSEMBLYAI_API_KEY='your-key-here'"
-    )
-
 # Optional configuration from environment
 MODEL_PREFERENCE = os.getenv("MODEL_PREFERENCE", "anthropic/claude-3-5-sonnet-20241022")
 TIMEOUT = int(os.getenv("TIMEOUT", "90"))
