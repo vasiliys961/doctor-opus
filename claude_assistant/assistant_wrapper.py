@@ -202,13 +202,14 @@ class OpenRouterAssistant:
         log_api_success(model, latency, tokens_received, context)
     
     # Методы для совместимости, которые могут быть в оригинале
-    def send_vision_request_gemini_fast(self, prompt: str, image_array=None, metadata=None):
+    def send_vision_request_gemini_fast(self, prompt: str, image_array=None, metadata=None, use_flash_3: bool = False):
         """
-        Быстрый анализ изображения через Gemini 2.5 Flash
+        Быстрый анализ изображения через Gemini Flash (2.5 или 3.0)
         
         Делегирует вызов VisionClient.send_vision_request_gemini_fast()
+        По умолчанию использует Gemini 2.5 Flash
         """
-        return self._vision_client.send_vision_request_gemini_fast(prompt, image_array, metadata)
+        return self._vision_client.send_vision_request_gemini_fast(prompt, image_array, metadata, use_flash_3)
     
     def get_response_gemini_flash(self, user_message: str, context: str = "") -> str:
         """
