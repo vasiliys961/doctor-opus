@@ -230,3 +230,4 @@ if completed_analyses:
     print(f"  Всего: {avg_total:.0f} токенов → {avg_total_cost:.2f} усл. ед.")
     print()
 
+

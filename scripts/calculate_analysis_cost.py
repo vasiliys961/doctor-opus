@@ -111,3 +111,4 @@ print(f"Новая схема (Gemini → Opus):     ${total_cost_usd:.6f}")
 print(f"Экономия: ${savings_usd:.6f} ({savings_percent:.1f}%)")
 print()
 
+
