@@ -50,18 +50,40 @@ const SYSTEM_PROMPT = `Роль: ### ROLE
 - Галлюцинации: Если данных недостаточно или стандарты противоречивы — укажи это явно. Не выдумывай дозировки.`;
 
 // Актуальные модели (ТОЧНАЯ КОПИЯ из vision_client.py)
-const MODELS = [
-  'anthropic/claude-opus-4.5',                // Opus 4.5 — основной клинический ассистент
-  'anthropic/claude-sonnet-4.5',              // Sonnet 4.5 — быстрый fallback
-  'anthropic/claude-haiku-4.5',               // Haiku 4.5 — быстрый анализ документов
-  'meta-llama/llama-3.2-90b-vision-instruct'  // Llama 3.2 90B Vision — резерв
+const MODELS = {
+  OPUS: 'anthropic/claude-opus-4.5',                // Opus 4.5 — основной клинический ассистент
+  SONNET: 'anthropic/claude-sonnet-4.5',            // Sonnet 4.5 — быстрый fallback
+  HAIKU: 'anthropic/claude-haiku-4.5',             // Haiku 4.5 — быстрый анализ документов
+  LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct', // Llama 3.2 90B Vision — резерв
+  GEMINI_FLASH_25: 'google/gemini-2.5-flash',      // Gemini Flash 2.5 — быстрый анализ
+  GEMINI_FLASH_30: 'google/gemini-3-flash-preview'  // Gemini Flash 3.0 — новая версия
+};
+
+const MODELS_LIST = [
+  MODELS.OPUS,
+  MODELS.SONNET,
+  MODELS.HAIKU,
+  MODELS.LLAMA
 ];
+
+export type AnalysisMode = 'fast' | 'precise' | 'validated';
+export type ModelType = 'opus' | 'gemini' | 'sonnet' | 'haiku';
 
 interface VisionRequestOptions {
   prompt: string;
   imageBase64: string;
   model?: string;
   maxTokens?: number;
+  mode?: AnalysisMode;
+  useStreaming?: boolean;
+}
+
+interface StreamingOptions {
+  prompt: string;
+  imageBase64?: string;
+  model?: string;
+  mode?: AnalysisMode;
+  history?: Array<{role: string, content: string}>;
 }
 
 /**
@@ -77,7 +99,15 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
   }
 
-  const model = options.model || MODELS[0]; // Opus 4.5 по умолчанию
+  // Выбираем модель в зависимости от режима
+  let model = options.model;
+  if (!model) {
+    if (options.mode === 'fast') {
+      model = MODELS.GEMINI_FLASH_30; // Gemini Flash 3.0 для быстрого анализа
+    } else {
+      model = MODELS.OPUS; // Opus 4.5 для точного анализа
+    }
+  }
   const prompt = options.prompt || 'Проанализируйте медицинское изображение.';
   
   // Формируем messages для OpenRouter API
@@ -197,7 +227,7 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
   ];
 
   const payload = {
-    model,
+    model: selectedModel,
     messages,
     max_tokens: 4000,
     temperature: 0.2
