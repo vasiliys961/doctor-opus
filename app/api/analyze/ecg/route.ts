@@ -18,22 +18,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('📈 [ECG ANALYSIS] Начало анализа ЭКГ');
+    console.log('  - Файл:', file.name, file.size, 'байт');
+    console.log('  - Промпт:', prompt.substring(0, 150) + '...');
+
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const base64Image = buffer.toString('base64');
 
-    // Вызов OpenRouter API напрямую
+    console.log('  - Изображение конвертировано в base64, размер:', base64Image.length);
+    console.log('🎯 [ECG ANALYSIS] Используется модель: Opus 4.5 (точный анализ)');
+
+    // ЭКГ всегда анализируется через Opus для максимальной точности
+    const modelUsed = 'anthropic/claude-opus-4.5';
     const result = await analyzeImage({
       prompt,
       imageBase64: base64Image,
+      mode: 'precise',
     });
+
+    console.log('✅ [ECG ANALYSIS] Анализ завершён:');
+    console.log('  - Модель:', modelUsed);
+    console.log('  - Длина ответа:', result.length, 'символов');
 
     return NextResponse.json({
       success: true,
       result: result,
+      model: modelUsed,
     });
   } catch (error: any) {
-    console.error('Error analyzing ECG:', error);
+    console.error('❌ [ECG ANALYSIS] Ошибка:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
       { status: 500 }

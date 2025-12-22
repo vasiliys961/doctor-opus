@@ -43,29 +43,43 @@ export async function POST(request: NextRequest) {
 
     console.log('Image converted to base64, size:', base64Image.length);
     console.log('Analysis mode:', mode);
+    console.log('Prompt:', prompt.substring(0, 200) + '...');
 
     // Выбор функции анализа в зависимости от режима
     let result: string;
+    let modelUsed: string;
+    
     if (mode === 'fast') {
       // Быстрый анализ через Gemini Flash
+      console.log('🚀 [ANALYSIS] Запуск БЫСТРОГО анализа через Gemini Flash');
+      modelUsed = 'google/gemini-3-flash-preview';
       result = await analyzeImageFast({
         prompt,
         imageBase64: base64Image,
       });
+      console.log('✅ [ANALYSIS] Gemini Flash анализ завершён');
     } else {
       // Точный анализ через Opus
+      console.log('🎯 [ANALYSIS] Запуск ТОЧНОГО анализа через Opus 4.5');
+      modelUsed = 'anthropic/claude-opus-4.5';
       result = await analyzeImage({
         prompt,
         imageBase64: base64Image,
         mode: 'precise',
       });
+      console.log('✅ [ANALYSIS] Opus анализ завершён');
     }
 
-    console.log('Analysis completed, result length:', result.length);
+    console.log('📊 [ANALYSIS] Результат получен:');
+    console.log('  - Модель:', modelUsed);
+    console.log('  - Длина ответа:', result.length, 'символов');
+    console.log('  - Первые 200 символов:', result.substring(0, 200));
 
     return NextResponse.json({
       success: true,
       result: result,
+      model: modelUsed,
+      mode: mode,
     });
   } catch (error: any) {
     console.error('Error analyzing image:', error);

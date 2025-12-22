@@ -60,6 +60,10 @@ export default function ImageAnalysisPage() {
 
       if (data.success) {
         setResult(data.result)
+        setModelInfo({ model: data.model, mode: data.mode })
+        console.log('✅ [CLIENT] Анализ завершён успешно')
+        console.log('📊 [CLIENT] Использованная модель:', data.model || 'не указана')
+        console.log('📊 [CLIENT] Режим анализа:', data.mode || 'не указан')
       } else {
         setError(data.error || 'Ошибка при анализе')
       }
@@ -100,11 +104,11 @@ export default function ImageAnalysisPage() {
       {mode === 'validated' && flashResult && (
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-2">⚡ Быстрый анализ (Gemini Flash)</h3>
-          <AnalysisResult result={flashResult} loading={false} />
+          <AnalysisResult result={flashResult} loading={false} model="google/gemini-3-flash-preview" mode="fast" />
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} />
+      <AnalysisResult result={result} loading={loading} model={modelInfo.model} mode={modelInfo.mode || mode} />
     </div>
   )
 }

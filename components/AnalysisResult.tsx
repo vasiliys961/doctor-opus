@@ -5,9 +5,11 @@ import { useState } from 'react'
 interface AnalysisResultProps {
   result: string
   loading?: boolean
+  model?: string
+  mode?: string
 }
 
-export default function AnalysisResult({ result, loading = false }: AnalysisResultProps) {
+export default function AnalysisResult({ result, loading = false, model, mode }: AnalysisResultProps) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
@@ -31,10 +33,26 @@ export default function AnalysisResult({ result, loading = false }: AnalysisResu
     return null
   }
 
+  const getModelDisplayName = (modelName?: string) => {
+    if (!modelName) return null
+    if (modelName.includes('opus')) return '🧠 Opus 4.5'
+    if (modelName.includes('sonnet')) return '🤖 Sonnet 4.5'
+    if (modelName.includes('gemini') || modelName.includes('flash')) return '⚡ Gemini Flash'
+    return modelName
+  }
+
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 mt-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold text-primary-900">Результат анализа</h3>
+        <div>
+          <h3 className="text-xl font-bold text-primary-900">Результат анализа</h3>
+          {model && (
+            <p className="text-sm text-gray-600 mt-1">
+              Использована модель: <span className="font-semibold">{getModelDisplayName(model)}</span>
+              {mode && <span className="ml-2">({mode === 'fast' ? 'быстрый' : mode === 'precise' ? 'точный' : 'с валидацией'})</span>}
+            </p>
+          )}
+        </div>
         <button
           onClick={handleCopy}
           className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors text-sm"

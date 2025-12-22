@@ -9,6 +9,7 @@ export default function ECGPage() {
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [modelInfo, setModelInfo] = useState<string>('')
 
   const handleUpload = async (uploadedFile: File) => {
     setFile(uploadedFile)
@@ -30,6 +31,9 @@ export default function ECGPage() {
 
       if (data.success) {
         setResult(data.result)
+        setModelInfo(data.model || 'anthropic/claude-opus-4.5')
+        console.log('✅ [ECG CLIENT] Анализ ЭКГ завершён')
+        console.log('📊 [ECG CLIENT] Использованная модель:', data.model || 'Opus 4.5 (по умолчанию)')
       } else {
         setError(data.error || 'Ошибка при анализе')
       }
@@ -55,7 +59,7 @@ export default function ECGPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} />
+      <AnalysisResult result={result} loading={loading} model={modelInfo} />
     </div>
   )
 }

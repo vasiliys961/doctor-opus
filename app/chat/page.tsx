@@ -56,17 +56,28 @@ export default function ChatPage() {
         let accumulatedText = ''
 
         if (reader) {
+          console.log('📡 [STREAMING] Начало чтения потока')
+          let buffer = ''
+          
           while (true) {
             const { done, value } = await reader.read()
-            if (done) break
+            if (done) {
+              console.log('📡 [STREAMING] Поток завершён')
+              break
+            }
 
             const chunk = decoder.decode(value, { stream: true })
-            const lines = chunk.split('\n')
+            buffer += chunk
+            
+            // Обрабатываем полные строки
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || '' // Оставляем неполную строку в буфере
 
             for (const line of lines) {
               if (line.startsWith('data: ')) {
                 const data = line.slice(6).trim()
                 if (data === '[DONE]') {
+                  console.log('📡 [STREAMING] Получен сигнал завершения')
                   break
                 }
 
@@ -76,6 +87,8 @@ export default function ChatPage() {
                   const content = json.choices?.[0]?.delta?.content || ''
                   if (content) {
                     accumulatedText += content
+                    console.log('📡 [STREAMING] Получен фрагмент:', content.length, 'символов, всего:', accumulatedText.length)
+                    
                     // Обновляем последнее сообщение ассистента
                     setMessages(prev => {
                       const newMessages = [...prev]
@@ -95,12 +108,17 @@ export default function ChatPage() {
                     })
                   }
                 } catch (e) {
-                  // Игнорируем ошибки парсинга отдельных строк
-                  console.debug('SSE parse error:', e, 'line:', line)
+                  // Логируем ошибки парсинга для отладки
+                  console.warn('⚠️ [STREAMING] Ошибка парсинга SSE:', e, 'data:', data.substring(0, 100))
                 }
+              } else if (line.trim() && !line.startsWith(':')) {
+                // Логируем другие строки для отладки
+                console.debug('📡 [STREAMING] Другая строка:', line.substring(0, 100))
               }
             }
           }
+          
+          console.log('✅ [STREAMING] Итого получено:', accumulatedText.length, 'символов')
         }
       } else {
         // Обычный режим
