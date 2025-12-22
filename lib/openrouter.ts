@@ -209,7 +209,7 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
     throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
   }
 
-  const model = MODELS[0]; // Opus 4.5
+  const selectedModel = model || MODELS.OPUS; // Opus 4.5 по умолчанию
   
   const messages = [
     {
@@ -236,7 +236,7 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
   try {
     console.log('Calling OpenRouter API for text:', {
       url: OPENROUTER_API_URL,
-      model: model,
+      model: selectedModel,
       hasApiKey: !!apiKey,
       promptLength: prompt.length
     });
