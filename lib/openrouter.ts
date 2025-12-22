@@ -6,9 +6,17 @@
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Используем node-fetch для более надёжной работы в Vercel
-// node-fetch имеет совместимый API с встроенным fetch
-import fetch from 'node-fetch';
+// В Next.js 14 и Vercel используется встроенный fetch из Node.js 18+
+// Если возникают проблемы, можно использовать node-fetch как fallback
+let fetchImpl: typeof fetch;
+if (typeof fetch !== 'undefined') {
+  // Используем встроенный fetch (доступен в Node.js 18+ и Vercel)
+  fetchImpl = fetch;
+} else {
+  // Fallback на node-fetch только если встроенный fetch недоступен
+  const nodeFetch = require('node-fetch');
+  fetchImpl = nodeFetch.default || nodeFetch;
+}
 
 // Системный промпт профессора (ТОЧНАЯ КОПИЯ из claude_assistant/diagnostic_prompts.py)
 const SYSTEM_PROMPT = `Роль: ### ROLE
@@ -122,7 +130,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
       imageSize: options.imageBase64.length
     });
 
-    const response = await fetch(OPENROUTER_API_URL, {
+    const response = await fetchImpl(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -212,7 +220,7 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
       promptLength: prompt.length
     });
 
-    const response = await fetch(OPENROUTER_API_URL, {
+    const response = await fetchImpl(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
