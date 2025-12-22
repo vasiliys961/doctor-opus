@@ -199,6 +199,407 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
 }
 
 /**
+ * Быстрый анализ изображения через Gemini Flash
+ * Двухэтапный анализ: сначала Gemini Flash описывает изображение, затем Gemini 3.0 анализирует текст
+ * Использует специфичные промпты для каждого типа изображения
+ */
+export async function analyzeImageFast(options: { 
+  prompt: string; 
+  imageBase64: string;
+  imageType?: 'xray' | 'ct' | 'mri' | 'ultrasound' | 'dermatoscopy' | 'ecg' | 'universal';
+}): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  
+  if (!apiKey) {
+    console.error('OPENROUTER_API_KEY не найден в переменных окружения');
+    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
+  }
+
+  // Импортируем промпты для специфичных типов изображений
+  let descriptionPrompt = options.prompt || 'Проанализируйте медицинское изображение.';
+  let analysisPrompt = 'На основе приведённого выше описания медицинского изображения выполни экспертный анализ и сформируй КРАТКУЮ, но информативную клиническую директиву для врача.';
+  
+  // Используем специфичные промпты если указан тип изображения
+  if (options.imageType && options.imageType !== 'universal') {
+    try {
+      const { getPrompt, getFastAnalysisPrompt } = await import('./prompts');
+      descriptionPrompt = getPrompt(options.imageType, 'fast');
+      analysisPrompt = getFastAnalysisPrompt(options.imageType);
+    } catch (e) {
+      console.warn('Не удалось загрузить специфичные промпты, используем общий:', e);
+    }
+  }
+  
+  // Шаг 1: Gemini 2.5 Flash описывает изображение
+  const visionModel = MODELS.GEMINI_FLASH_25;
+  
+  const visionMessages = [
+    {
+      role: 'user' as const,
+      content: [
+        {
+          type: 'text',
+          text: descriptionPrompt
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:image/png;base64,${options.imageBase64}`
+          }
+        }
+      ]
+    }
+  ];
+
+  const visionPayload = {
+    model: visionModel,
+    messages: visionMessages,
+    max_tokens: 4000,
+    temperature: 0.1
+  };
+
+  try {
+    console.log('🚀 [FAST] Шаг 1: Gemini Flash описывает изображение...');
+    
+    const visionResponse = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
+        'X-Title': 'Medical AI Assistant'
+      },
+      body: JSON.stringify(visionPayload)
+    });
+
+    if (!visionResponse.ok) {
+      const errorText = await visionResponse.text();
+      throw new Error(`OpenRouter API error: ${visionResponse.status} - ${errorText.substring(0, 500)}`);
+    }
+
+    const visionData = await visionResponse.json();
+    const description = visionData.choices[0].message.content || '';
+    
+    console.log('✅ [FAST] Шаг 1 завершен, длина описания:', description.length);
+    
+    // Шаг 2: Gemini 3.0 анализирует описание
+    const textModel = MODELS.GEMINI_FLASH_30;
+    
+    const textMessages = [
+      {
+        role: 'user' as const,
+        content: `Ниже приведено текстовое описание медицинского изображения, автоматически полученное из изображения Vision‑моделью Gemini. На его основе выполни полный анализ и сформируй клиническую директиву для врача.\n\n=== ОПИСАНИЕ ОТ GEMINI VISION ===\n${description}\n\n${analysisPrompt}`
+      }
+    ];
+
+    const textPayload = {
+      model: textModel,
+      messages: textMessages,
+      max_tokens: 4000,
+      temperature: 0.2
+    };
+
+    console.log('🚀 [FAST] Шаг 2: Gemini 3.0 анализирует описание...');
+    
+    const textResponse = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
+        'X-Title': 'Medical AI Assistant'
+      },
+      body: JSON.stringify(textPayload)
+    });
+
+    if (!textResponse.ok) {
+      const errorText = await textResponse.text();
+      throw new Error(`OpenRouter API error: ${textResponse.status} - ${errorText.substring(0, 500)}`);
+    }
+
+    const textData = await textResponse.json();
+    const result = textData.choices[0].message.content || '';
+    
+    console.log('✅ [FAST] Шаг 2 завершен, длина результата:', result.length);
+    
+    return result;
+  } catch (error: any) {
+    console.error('Error in analyzeImageFast:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack?.substring(0, 500)
+    });
+    
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      throw new Error('Превышено время ожидания ответа от OpenRouter API. Попробуйте позже.');
+    }
+    
+    if (error.message.includes('fetch failed') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки Vercel.');
+    }
+    
+    throw new Error(`Ошибка быстрого анализа изображения: ${error.message}`);
+  }
+}
+
+/**
+ * Оптимизированный двухшаговый Opus анализ (Vision → Text)
+ * Этап 1: Opus Vision описывает изображение коротким промптом (без system prompt) - экономия токенов
+ * Этап 2: Opus Text формирует детальную клиническую директиву на основе описания
+ * 
+ * Экономия: ~50% по сравнению с прямым Opus Vision анализом
+ */
+export async function analyzeImageOpusTwoStage(options: { prompt: string; imageBase64: string }): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY не настроен');
+  }
+
+  const prompt = options.prompt || 'Проанализируйте медицинское изображение.';
+  
+  // Шаг 1: Opus Vision описывает изображение коротким промптом (БЕЗ system prompt для экономии)
+  const visionModel = MODELS.OPUS;
+  
+  // Короткий промпт для описания (без system prompt - экономия ~800 токенов)
+  const shortDescriptionPrompt = `Ты — эксперт-радиолог/кардиолог. По изображению выполни ПОДРОБНОЕ, но КОМПАКТНОЕ ОПИСАНИЕ без финального диагноза.
+
+${prompt}
+
+ВАЖНО:
+- НЕ формулируй окончательный диагноз и НЕ давай клинический план.
+- Пиши связным текстом и короткими списками, без таблиц.
+- Опиши все видимые находки, локализацию, размеры, плотность, контуры.`;
+
+  const visionMessages = [
+    // БЕЗ system prompt - экономия токенов!
+    {
+      role: 'user' as const,
+      content: [
+        {
+          type: 'text',
+          text: shortDescriptionPrompt
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:image/png;base64,${options.imageBase64}`,
+            detail: 'low' // LOW resolution для дополнительной экономии
+          }
+        }
+      ]
+    }
+  ];
+
+  const visionPayload = {
+    model: visionModel,
+    messages: visionMessages,
+    max_tokens: 2000, // Ограничиваем токены для экономии
+    temperature: 0.1
+  };
+
+  try {
+    console.log('🚀 [OPUS TWO-STAGE] Шаг 1: Opus Vision описывает изображение (короткий промпт, без system prompt)...');
+    
+    const visionResponse = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
+        'X-Title': 'Medical AI Assistant'
+      },
+      body: JSON.stringify(visionPayload)
+    });
+
+    if (!visionResponse.ok) {
+      const errorText = await visionResponse.text();
+      throw new Error(`OpenRouter API error: ${visionResponse.status} - ${errorText.substring(0, 500)}`);
+    }
+
+    const visionData = await visionResponse.json();
+    const description = visionData.choices[0].message.content || '';
+    
+    console.log('✅ [OPUS TWO-STAGE] Шаг 1 завершен, длина описания:', description.length);
+    
+    // Шаг 2: Текстовый Opus анализирует описание и формирует директиву
+    const textModel = MODELS.OPUS;
+    
+    const textMessages = [
+      {
+        role: 'system' as const,
+        content: SYSTEM_PROMPT // Используем system prompt только на втором этапе
+      },
+      {
+        role: 'user' as const,
+        content: `Ниже приведено текстовое описание медицинского изображения, автоматически полученное из изображения Vision‑моделью Opus. На его основе выполни полный анализ и сформируй детальную клиническую директиву для врача.
+
+=== ОПИСАНИЕ ОТ OPUS VISION ===
+${description}
+
+${prompt}
+
+Сформируй полную клиническую директиву на основе этого описания.`
+      }
+    ];
+
+    const textPayload = {
+      model: textModel,
+      messages: textMessages,
+      max_tokens: 4000,
+      temperature: 0.2
+    };
+
+    console.log('🚀 [OPUS TWO-STAGE] Шаг 2: Opus Text формирует клиническую директиву...');
+    
+    const textResponse = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
+        'X-Title': 'Medical AI Assistant'
+      },
+      body: JSON.stringify(textPayload)
+    });
+
+    if (!textResponse.ok) {
+      const errorText = await textResponse.text();
+      throw new Error(`OpenRouter API error: ${textResponse.status} - ${errorText.substring(0, 500)}`);
+    }
+
+    const textData = await textResponse.json();
+    const result = textData.choices[0].message.content || '';
+    
+    console.log('✅ [OPUS TWO-STAGE] Шаг 2 завершен, длина результата:', result.length);
+    
+    return result;
+  } catch (error: any) {
+    console.error('Error in analyzeImageOpusTwoStage:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack?.substring(0, 500)
+    });
+    
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      throw new Error('Превышено время ожидания ответа от OpenRouter API. Попробуйте позже.');
+    }
+    
+    if (error.message.includes('fetch failed') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки Vercel.');
+    }
+    
+    throw new Error(`Ошибка оптимизированного двухшагового Opus анализа: ${error.message}`);
+  }
+}
+
+/**
+ * Извлечение структурированных данных через Gemini 3.0 Flash в формате JSON
+ */
+export async function extractImageJSON(options: { imageBase64: string; modality?: string }): Promise<any> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY не настроен');
+  }
+
+  const modality = options.modality || 'unknown';
+  
+  // Используем Gemini 3.0 Flash для извлечения JSON
+  const modelsToTry = [
+    'google/gemini-3-flash-preview',
+    'google/gemini-3-flash',
+    'google/gemini-2.5-flash'
+  ];
+
+  const jsonPrompt = `Ты — эксперт-радиолог/кардиолог. Проанализируй изображение и верни результат СТРОГО в формате JSON.
+
+Структура JSON:
+{
+    "modality": "${modality}",
+    "image_quality": "excellent|good|fair|poor",
+    "confidence": 0.0-1.0,
+    "findings_observed": [
+        {"finding": "описание находки", "location": "локализация", "severity": "mild|moderate|severe"}
+    ],
+    "red_flags": ["критические находки"],
+    "cannot_assess": ["что невозможно оценить"],
+    "recommendations": ["рекомендации"]
+}
+
+ВАЖНО: Верни ТОЛЬКО валидный JSON, без дополнительного текста до или после.`;
+
+  const content = [
+    {
+      type: 'text',
+      text: jsonPrompt
+    },
+    {
+      type: 'image_url',
+      image_url: {
+        url: `data:image/png;base64,${options.imageBase64}`
+      }
+    }
+  ];
+
+  for (const model of modelsToTry) {
+    try {
+      console.log(`📡 [GEMINI JSON] Пробую модель: ${model}`);
+      
+      const payload = {
+        model,
+        messages: [
+          { role: 'user', content: content }
+        ],
+        max_tokens: 4000,
+        temperature: 0.1
+      };
+
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
+          'X-Title': 'Medical AI Assistant'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const resultData = await response.json();
+        const resultText = resultData.choices[0].message.content;
+        
+        // Извлекаем JSON из ответа (может быть обернут в markdown код блоки)
+        const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+        const jsonStr = jsonMatch ? jsonMatch[0] : resultText;
+        
+        try {
+          const jsonExtraction = JSON.parse(jsonStr);
+          console.log(`✅ [GEMINI JSON] JSON извлечен успешно через ${model}`);
+          return jsonExtraction;
+        } catch (e) {
+          console.warn(`⚠️ [GEMINI JSON] Ошибка парсинга JSON от ${model}, пробую следующую модель...`);
+          continue;
+        }
+      } else if (response.status === 404) {
+        console.warn(`⚠️ [GEMINI JSON] Модель ${model} недоступна, пробую следующую...`);
+        continue;
+      } else {
+        const errorText = await response.text();
+        console.warn(`⚠️ [GEMINI JSON] Ошибка ${response.status} от ${model}: ${errorText.substring(0, 200)}`);
+        continue;
+      }
+    } catch (error: any) {
+      console.warn(`⚠️ [GEMINI JSON] Ошибка с ${model}: ${error.message}, пробую следующую модель...`);
+      continue;
+    }
+  }
+
+  throw new Error('Не удалось извлечь JSON ни через одну модель Gemini Flash');
+}
+
+/**
  * Текстовый запрос к OpenRouter API (для чата)
  */
 export async function sendTextRequest(prompt: string, history: Array<{role: string, content: string}> = []): Promise<string> {
@@ -209,7 +610,7 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
     throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
   }
 
-  const selectedModel = model || MODELS.OPUS; // Opus 4.5 по умолчанию
+  const selectedModel = MODELS.OPUS; // Opus 4.5 по умолчанию
   
   const messages = [
     {

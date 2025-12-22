@@ -1,20 +1,29 @@
 'use client'
 
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
 
 export default function ImageAnalysisPage() {
   const [file, setFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [result, setResult] = useState<string>('')
   const [flashResult, setFlashResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<AnalysisMode>('precise')
+  const [useStreaming, setUseStreaming] = useState(true) // Включаем стриминг по умолчанию для точного анализа
+  const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
+  const [lastAnalysisData, setLastAnalysisData] = useState<any>(null)
 
-  const handleUpload = async (uploadedFile: File) => {
-    setFile(uploadedFile)
+  const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
+    if (!file) {
+      setError('Сначала загрузите изображение')
+      return
+    }
+
     setResult('')
     setFlashResult('')
     setError(null)
@@ -23,111 +32,69 @@ export default function ImageAnalysisPage() {
     try {
       const prompt = 'Проанализируйте медицинское изображение. Опишите все патологические изменения, локализацию, размеры, плотность, контуры.'
 
-      if (mode === 'validated') {
-        // Сначала быстрый анализ через Gemini
-        try {
-          const flashFormData = new FormData()
-          flashFormData.append('file', uploadedFile)
-          flashFormData.append('prompt', prompt)
-          flashFormData.append('mode', 'fast')
+      // Для режима validated используем специальный двухэтапный анализ: Gemini JSON → Opus
+      // Для других режимов используем обычный анализ
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('prompt', prompt)
+      formData.append('mode', analysisMode) // validated, precise, или fast
+      formData.append('useStreaming', useStream.toString())
 
-          const flashResponse = await fetch('/api/analyze/image', {
+      if (useStream) {
+        // Streaming режим
+        console.log('📡 [CLIENT] Запуск streaming режима для режима:', analysisMode)
+        setResult('') // Очищаем предыдущий результат для стриминга
+        setLoading(true)
+        
+        try {
+          const response = await fetch('/api/analyze/image', {
             method: 'POST',
-            body: flashFormData,
+            body: formData,
           })
 
-          const flashData = await flashResponse.json()
-          if (flashData.success) {
-            setFlashResult(flashData.result)
-          }
-        } catch (e) {
-          console.error('Flash analysis error:', e)
-        }
-      }
-
-      // Затем точный анализ (или только точный, если не validated)
-      const formData = new FormData()
-      formData.append('file', uploadedFile)
-      formData.append('prompt', prompt)
-      formData.append('mode', mode === 'validated' ? 'precise' : mode)
-      formData.append('useStreaming', useStreaming.toString())
-
-      if (useStreaming) {
-        // Streaming режим
-        console.log('📡 [CLIENT] Запуск streaming режима')
-        const response = await fetch('/api/analyze/image', {
-          method: 'POST',
-          body: formData,
-        })
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          console.error('❌ [CLIENT] Streaming ошибка:', response.status, errorText)
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-        
-        console.log('✅ [CLIENT] Streaming ответ получен, Content-Type:', response.headers.get('Content-Type'))
-
-        const reader = response.body?.getReader()
-        const decoder = new TextDecoder()
-        let accumulatedText = ''
-
-        if (reader) {
-          console.log('📡 [STREAMING] Начало чтения потока')
-          let buffer = ''
-          
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) {
-              console.log('📡 [STREAMING] Поток завершён')
-              break
-            }
-
-            const chunk = decoder.decode(value, { stream: true })
-            buffer += chunk
-            
-            // Обрабатываем полные строки (SSE формат использует \n или \r\n)
-            const lines = buffer.split(/\r?\n/)
-            buffer = lines.pop() || ''
-
-            for (const line of lines) {
-              // Пропускаем пустые строки и комментарии
-              if (!line || line.trim() === '' || line.startsWith(':')) {
-                continue
-              }
-              
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6).trim()
-                if (data === '[DONE]') {
-                  console.log('📡 [STREAMING] Получен сигнал завершения')
-                  break
-                }
-
-                try {
-                  const json = JSON.parse(data)
-                  // OpenRouter формат: json.choices[0].delta.content
-                  const content = json.choices?.[0]?.delta?.content || ''
-                  if (content) {
-                    accumulatedText += content
-                    setResult(accumulatedText)
-                    console.log('📡 [STREAMING] Получен фрагмент:', content.length, 'символов, всего:', accumulatedText.length)
-                  }
-                } catch (e) {
-                  // Игнорируем ошибки парсинга отдельных строк (могут быть неполные данные)
-                  if (data && data.length > 0 && !data.includes('[DONE]')) {
-                    console.debug('⚠️ [STREAMING] Ошибка парсинга SSE:', e, 'data:', data.substring(0, 100))
-                  }
-                }
-              } else if (line.trim() && !line.startsWith(':')) {
-                // Логируем другие строки для отладки
-                console.debug('📡 [STREAMING] Другая строка:', line.substring(0, 100))
-              }
-            }
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('❌ [CLIENT] Streaming ошибка:', response.status, errorText)
+            throw new Error(`HTTP error! status: ${response.status}`)
           }
           
-          console.log('✅ [STREAMING] Итого получено:', accumulatedText.length, 'символов')
-          setModelInfo({ model: mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5', mode })
-          setLastAnalysisData({ model: mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5', mode })
+          const contentType = response.headers.get('Content-Type')
+          console.log('✅ [CLIENT] Streaming ответ получен, Content-Type:', contentType)
+          
+          if (!contentType || !contentType.includes('text/event-stream')) {
+            console.warn('⚠️ [CLIENT] Неожиданный Content-Type:', contentType)
+          }
+
+          // Используем универсальную функцию обработки streaming
+          const { handleSSEStream } = await import('@/lib/streaming-utils')
+          
+          const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5'
+          
+          await handleSSEStream(response, {
+            onChunk: (content, accumulatedText) => {
+              console.log('📡 [IMAGE ANALYSIS] Получен чанк:', content.length, 'символов, всего:', accumulatedText.length)
+              // Используем flushSync для немедленного обновления UI
+              flushSync(() => {
+                setResult(accumulatedText)
+              })
+            },
+            onError: (error) => {
+              console.error('❌ [STREAMING] Ошибка:', error)
+              setError(`Ошибка streaming: ${error.message}`)
+            },
+            onComplete: (finalText) => {
+              console.log('✅ [STREAMING] Streaming завершён успешно, итого:', finalText.length, 'символов')
+              flushSync(() => {
+                setResult(finalText)
+                setModelInfo({ model: modelUsed, mode: analysisMode })
+                setLastAnalysisData({ model: modelUsed, mode: analysisMode })
+              })
+            }
+          })
+        } catch (fetchError: any) {
+          console.error('❌ [CLIENT] Ошибка fetch:', fetchError)
+          setError(`Ошибка запроса: ${fetchError.message}`)
+          setLoading(false)
         }
       } else {
         // Обычный режим
@@ -156,6 +123,21 @@ export default function ImageAnalysisPage() {
     }
   }
 
+  const handleUpload = async (uploadedFile: File) => {
+    setFile(uploadedFile)
+    // Создаем превью изображения
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string)
+    }
+    reader.readAsDataURL(uploadedFile)
+    
+    // Не запускаем анализ автоматически при загрузке
+    setResult('')
+    setFlashResult('')
+    setError(null)
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🔍 Анализ медицинских изображений</h1>
@@ -166,28 +148,105 @@ export default function ImageAnalysisPage() {
           Поддерживаемые типы: ЭКГ, Рентген, МРТ, КТ, УЗИ, Дерматоскопия, Гистология, Офтальмология, Маммография
         </p>
         
-        <div className="mb-6 space-y-4">
-          <AnalysisModeSelector
-            value={mode}
-            onChange={setMode}
-            disabled={loading}
-          />
-          <label className="flex items-center space-x-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={useStreaming}
-              onChange={(e) => setUseStreaming(e.target.checked)}
-              disabled={loading}
-              className="w-4 h-4 text-primary-600 rounded"
-            />
-            <span className="text-sm text-gray-700">
-              📡 Streaming режим (постепенное появление текста)
-            </span>
-          </label>
-        </div>
-        
         <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} />
+        
+        {file && imagePreview && (
+          <div className="mt-6">
+            {/* Отображение загруженного изображения */}
+            <div className="mb-4 bg-white rounded-lg shadow-md p-4">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">📷 Загруженное изображение</h3>
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-shrink-0">
+                  <img 
+                    src={imagePreview} 
+                    alt="Загруженное изображение" 
+                    className="max-w-full max-h-[600px] rounded-lg shadow-lg object-contain border border-gray-200"
+                  />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-gray-600 mb-2">
+                    <strong>Имя файла:</strong> {file.name}
+                  </p>
+                  <p className="text-sm text-gray-600 mb-2">
+                    <strong>Размер:</strong> {(file.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <strong>Тип:</strong> {file.type || 'не указан'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 bg-gray-50 rounded-lg">
+            
+            <div className="mb-4 space-y-3">
+              <AnalysisModeSelector
+                value={mode}
+                onChange={setMode}
+                disabled={loading}
+              />
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useStreaming}
+                  onChange={(e) => setUseStreaming(e.target.checked)}
+                  disabled={loading}
+                  className="w-4 h-4 text-primary-600 rounded"
+                />
+                <span className="text-sm text-gray-700">
+                  📡 Streaming режим (постепенное появление текста)
+                </span>
+              </label>
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => analyzeImage('fast', false)}
+                disabled={loading}
+                className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ⚡ Быстрый анализ
+              </button>
+              <button
+                onClick={() => analyzeImage('optimized', useStreaming)}
+                disabled={loading}
+                className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ⚡ Opus двухшаговый (оптимизированный) {useStreaming ? '(стриминг)' : ''}
+              </button>
+              <button
+                onClick={() => analyzeImage('precise', useStreaming)}
+                disabled={loading}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                🎯 Точный анализ {useStreaming ? '(стриминг)' : ''}
+              </button>
+              <button
+                onClick={() => analyzeImage('validated', useStreaming)}
+                disabled={loading}
+                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ✅ С валидацией {useStreaming ? '(стриминг)' : ''}
+              </button>
+            </div>
+            </div>
+          </div>
+        )}
       </div>
+      
+      {/* Отображение изображения всегда видимо, если загружено */}
+      {file && imagePreview && (
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">📷 Загруженное изображение</h2>
+          <div className="flex justify-center">
+            <img 
+              src={imagePreview} 
+              alt="Загруженное изображение" 
+              className="max-w-full max-h-[600px] rounded-lg shadow-md object-contain border border-gray-200"
+            />
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
@@ -195,12 +254,6 @@ export default function ImageAnalysisPage() {
         </div>
       )}
 
-      {mode === 'validated' && flashResult && (
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold mb-2">⚡ Быстрый анализ (Gemini Flash)</h3>
-          <AnalysisResult result={flashResult} loading={false} model="google/gemini-3-flash-preview" mode="fast" />
-        </div>
-      )}
 
       <AnalysisResult 
         result={result} 

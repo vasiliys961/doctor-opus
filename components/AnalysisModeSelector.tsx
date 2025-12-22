@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-export type AnalysisMode = 'fast' | 'precise' | 'validated'
+export type AnalysisMode = 'fast' | 'precise' | 'validated' | 'optimized'
 
 interface AnalysisModeSelectorProps {
   value: AnalysisMode
@@ -15,19 +15,25 @@ export default function AnalysisModeSelector({ value, onChange, disabled = false
     {
       value: 'fast',
       label: '⚡ Быстрый анализ',
-      description: 'Gemini Flash — компактное заключение для первичного просмотра',
+      description: 'Gemini Flash — компактное заключение для первичного просмотра (~0.60 ₽)',
+      icon: '⚡'
+    },
+    {
+      value: 'optimized',
+      label: '⚡ Opus двухшаговый (оптимизированный)',
+      description: 'Opus Vision → Opus Text — экономия ~50% (~10-12 ₽)',
       icon: '⚡'
     },
     {
       value: 'precise',
       label: '🎯 Точный анализ',
-      description: 'Opus 4.5 — детальное заключение максимального качества',
+      description: 'Opus 4.5 — детальное заключение максимального качества (~20 ₽)',
       icon: '🎯'
     },
     {
       value: 'validated',
       label: '✅ С валидацией',
-      description: 'Gemini Flash + Opus — два заключения для сравнения',
+      description: 'Gemini JSON + Opus — два заключения для сравнения (~25 ₽)',
       icon: '✅'
     }
   ]
@@ -37,7 +43,7 @@ export default function AnalysisModeSelector({ value, onChange, disabled = false
       <label className="block text-sm font-medium text-gray-700">
         Режим анализа:
       </label>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {modes.map((mode) => (
           <button
             key={mode.value}

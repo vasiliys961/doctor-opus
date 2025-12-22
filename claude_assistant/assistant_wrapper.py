@@ -213,12 +213,19 @@ class OpenRouterAssistant:
     
     def get_response_gemini_flash(self, user_message: str, context: str = "", use_flash_3: bool = True) -> str:
         """
-        Текстовый запрос через Gemini Flash (2.5 или 3.0 Preview)
+        Текстовый запрос через Gemini Flash (2.5 или 3.0)
         
         Делегирует вызов TextClient.get_response_gemini_flash()
-        По умолчанию использует Flash 3.0 Preview с автоматическим fallback на Flash 2.5
         """
         return self._text_client.get_response_gemini_flash(user_message, context, use_flash_3)
+    
+    def get_response_gemini_3(self, user_message: str, context: str = "") -> str:
+        """
+        Текстовый запрос через Gemini 3.0 (не Flash) - для более точного анализа
+        
+        Делегирует вызов TextClient.get_response_gemini_3()
+        """
+        return self._text_client.get_response_gemini_3(user_message, context)
     
     def send_vision_request_streaming(self, prompt: str, image_array=None, metadata=None):
         """

@@ -582,6 +582,104 @@ class TextClient(BaseAPIClient):
         print(f"❌ [⚡ FLASH] [GEMINI FLASH TEXT] {final_error}")
         return f"❌ Ошибка: {final_error}"
     
+    def get_response_gemini_3(self, user_message: str, context: str = "") -> str:
+        """
+        Текстовый запрос через Gemini 3.0 (не Flash) - для более точного анализа
+        
+        Args:
+            user_message: Вопрос пользователя
+            context: Дополнительный контекст
+        
+        Returns:
+            str: Ответ от Gemini 3.0
+        """
+        # Используем Gemini 3.0 (не Flash) для более точного анализа
+        models_to_try = [
+            "google/gemini-3-pro-preview",      # Gemini 3.0 Pro Preview
+            "google/gemini-3-pro",               # Gemini 3.0 Pro (если появится)
+            "google/gemini-2.5-pro",             # Fallback на Gemini 2.5 Pro
+            "google/gemini-3-flash-preview"     # Fallback на Flash 3.0
+        ]
+        
+        full_message = f"{context}\n\nВопрос: {user_message}" if context else user_message
+        
+        print(f"🤖 [🧠 GEMINI 3.0] [GEMINI 3 TEXT] Начинаю текстовый запрос через Gemini 3.0...")
+        
+        # Пробуем каждую модель по очереди
+        last_error = None
+        for model in models_to_try:
+            print(f"📡 [🧠 GEMINI 3.0] [GEMINI 3 TEXT] Пробую модель: {model}")
+            
+            # Gemini не использует system_prompt через OpenRouter
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "user", "content": full_message}
+                ],
+                "max_tokens": 8000,
+                "temperature": 0.2
+            }
+            
+            try:
+                start_time = time.time()
+                response = requests.post(self.base_url, headers=self.headers, json=payload, timeout=120)
+                latency = time.time() - start_time
+                
+                if response.status_code == 200:
+                    result_data = response.json()
+                    result = result_data["choices"][0]["message"]["content"]
+                    
+                    tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                    log_api_call(model, True, latency, None)
+                    track_model_usage(model, True, tokens_used)
+                    
+                    # Определяем читаемое название модели
+                    if "gemini-3-pro" in model:
+                        model_name = "Gemini 3.0 Pro Preview" if "preview" in model else "Gemini 3.0 Pro"
+                    elif "gemini-2.5-pro" in model:
+                        model_name = "Gemini 2.5 Pro"
+                    else:
+                        model_name = "Gemini 3.0 Flash Preview"
+                    print(f"✅ [🧠 GEMINI 3.0] [GEMINI 3 TEXT] Модель: {model_name}, Токенов: {tokens_used}, Latency: {latency:.2f}с")
+                    log_api_success(model, latency, tokens_used, "GEMINI 3 TEXT")
+                    return result
+                elif response.status_code == 404:
+                    # Модель не найдена - пробуем следующую
+                    error_msg = f"Модель {model} недоступна на OpenRouter"
+                    print(f"⚠️ [🧠 GEMINI 3.0] [GEMINI 3 TEXT] {error_msg}, пробую следующую модель...")
+                    last_error = error_msg
+                    continue
+                elif response.status_code == 402:
+                    error_msg = f"HTTP 402: Недостаточно кредитов на OpenRouter для модели {model}"
+                    log_api_call(model, False, latency, error_msg)
+                    track_model_usage(model, False)
+                    print(f"❌ [🧠 GEMINI 3.0] [GEMINI 3 TEXT] {error_msg}")
+                    return f"❌ Ошибка: {error_msg}"
+                else:
+                    # Другие ошибки - пробуем следующую модель
+                    error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                    print(f"⚠️ [🧠 GEMINI 3.0] [GEMINI 3 TEXT] {error_msg}, пробую следующую модель...")
+                    last_error = error_msg
+                    continue
+                    
+            except requests.exceptions.Timeout:
+                error_msg = f"Таймаут запроса для модели {model} (>120 секунд)"
+                print(f"⚠️ [🧠 GEMINI 3.0] [GEMINI 3 TEXT] {error_msg}, пробую следующую модель...")
+                last_error = error_msg
+                continue
+            except Exception as e:
+                error_msg = handle_error(e, f"get_response_gemini_3 ({model})", show_to_user=False)
+                print(f"⚠️ [🧠 GEMINI 3.0] [GEMINI 3 TEXT] Ошибка с {model}: {error_msg}, пробую следующую модель...")
+                last_error = error_msg
+                continue
+        
+        # Если все модели не сработали
+        final_error = last_error or "Все модели Gemini 3.0 недоступны"
+        log_api_call(models_to_try[0] if models_to_try else "unknown", False, 0, final_error)
+        track_model_usage(models_to_try[0] if models_to_try else "unknown", False)
+        print(f"❌ [🧠 GEMINI 3.0] [GEMINI 3 TEXT] {final_error}")
+        return f"❌ Ошибка: {final_error}"
+    
     def analyze_ecg_data(self, ecg_analysis: dict, user_question: str = None) -> str:
         """
         Анализ ЭКГ данных с улучшенным контекстом

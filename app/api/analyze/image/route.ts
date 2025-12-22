@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { analyzeImage, analyzeImageFast } from '@/lib/openrouter';
-import { analyzeImageStreaming } from '@/lib/openrouter-streaming';
+import { analyzeImage, analyzeImageFast, extractImageJSON, analyzeImageOpusTwoStage } from '@/lib/openrouter';
+import { analyzeImageStreaming, analyzeImageWithJSONStreaming, analyzeImageOpusTwoStageStreaming } from '@/lib/openrouter-streaming';
 
 /**
  * API endpoint для анализа медицинских изображений
@@ -21,7 +21,8 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = formData.get('prompt') as string || 'Проанализируйте медицинское изображение.';
-    const mode = (formData.get('mode') as string) || 'precise'; // fast, precise, validated
+    const mode = (formData.get('mode') as string) || 'precise'; // fast, precise, validated, optimized
+    const imageType = (formData.get('imageType') as string) || 'universal'; // xray, ct, mri, ultrasound, dermatoscopy, ecg, universal
     const useStreamingParam = formData.get('useStreaming');
     const useStreaming = useStreamingParam === 'true' || useStreamingParam === true;
     
@@ -59,17 +60,273 @@ export async function POST(request: NextRequest) {
       modelUsed = 'anthropic/claude-opus-4.5';
     }
 
+    // Если режим optimized, используем двухшаговый Opus (Vision → Text) - экономия ~50%
+    if (mode === 'optimized') {
+      console.log('⚡ [OPTIMIZED] Запуск двухшагового Opus анализа: Vision → Text');
+      
+      if (useStreaming) {
+        try {
+          console.log('📡 [OPTIMIZED] Streaming режим для двухшагового Opus...');
+          const stream = await analyzeImageOpusTwoStageStreaming(prompt, base64Image);
+          
+          const encoder = new TextEncoder();
+          const decoder = new TextDecoder();
+          
+          const readableStream = new ReadableStream({
+            async start(controller) {
+              const reader = stream.getReader();
+              
+              try {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) {
+                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                    controller.close();
+                    break;
+                  }
+                  
+                  const chunk = decoder.decode(value, { stream: true });
+                  controller.enqueue(encoder.encode(chunk));
+                }
+              } catch (error) {
+                console.error('❌ [OPTIMIZED STREAMING] Ошибка чтения потока:', error);
+                controller.error(error);
+              } finally {
+                reader.releaseLock();
+              }
+            }
+          });
+          
+          return new Response(readableStream, {
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache, no-transform',
+              'Connection': 'keep-alive',
+              'X-Accel-Buffering': 'no',
+              'Access-Control-Allow-Origin': '*',
+            },
+          });
+        } catch (optimizedError: any) {
+          console.error('❌ [OPTIMIZED] Ошибка двухшагового Opus анализа:', optimizedError);
+          throw optimizedError;
+        }
+      } else {
+        // Обычный режим без streaming
+        try {
+          console.log('📡 [OPTIMIZED] Обычный режим для двухшагового Opus...');
+          const result = await analyzeImageOpusTwoStage({
+            prompt,
+            imageBase64: base64Image
+          });
+          
+          return NextResponse.json({
+            success: true,
+            result: result,
+            model: 'anthropic/claude-opus-4.5',
+            mode: 'optimized',
+          });
+        } catch (optimizedError: any) {
+          console.error('❌ [OPTIMIZED] Ошибка двухшагового Opus анализа:', optimizedError);
+          throw optimizedError;
+        }
+      }
+    }
+
+    // Если режим validated, используем двухэтапный анализ: JSON + Opus
+    if (mode === 'validated') {
+      console.log('✅ [VALIDATED] Запуск двухэтапного анализа: Gemini JSON → Opus');
+      
+      try {
+        // Шаг 1: Извлекаем JSON через Gemini Flash 3.0
+        console.log('📊 [VALIDATED] Шаг 1: Извлечение JSON через Gemini Flash 3.0...');
+        const jsonExtraction = await extractImageJSON({
+          imageBase64: base64Image,
+          modality: 'unknown'
+        });
+        
+        console.log('✅ [VALIDATED] JSON извлечен:', JSON.stringify(jsonExtraction).substring(0, 200));
+        
+        // Шаг 2: Анализ через Opus с JSON + изображением
+        if (useStreaming) {
+          console.log('📡 [VALIDATED] Шаг 2: Streaming анализ через Opus с JSON + изображением...');
+          const stream = await analyzeImageWithJSONStreaming(jsonExtraction, base64Image, prompt);
+          
+          const encoder = new TextEncoder();
+          const decoder = new TextDecoder();
+          
+          const readableStream = new ReadableStream({
+            async start(controller) {
+              const reader = stream.getReader();
+              
+              try {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) {
+                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                    controller.close();
+                    break;
+                  }
+                  
+                  const chunk = decoder.decode(value, { stream: true });
+                  controller.enqueue(encoder.encode(chunk));
+                }
+              } catch (error) {
+                console.error('❌ [VALIDATED STREAMING] Ошибка чтения потока:', error);
+                controller.error(error);
+              } finally {
+                reader.releaseLock();
+              }
+            }
+          });
+          
+          return new Response(readableStream, {
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache, no-transform',
+              'Connection': 'keep-alive',
+              'X-Accel-Buffering': 'no',
+              'Access-Control-Allow-Origin': '*',
+            },
+          });
+        } else {
+          // Обычный режим без streaming для validated (пока не реализован)
+          throw new Error('Режим validated без streaming пока не поддерживается');
+        }
+      } catch (validatedError: any) {
+        console.error('❌ [VALIDATED] Ошибка двухэтапного анализа:', validatedError);
+        throw validatedError;
+      }
+    }
+
     // Если streaming запрошен, возвращаем поток
     if (useStreaming) {
-      console.log('📡 [STREAMING] Запуск streaming анализа через', modelUsed);
-      const stream = await analyzeImageStreaming(prompt, base64Image, modelUsed);
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-        },
-      });
+      console.log('📡 [API STREAMING] Запуск streaming анализа через', modelUsed);
+      try {
+        const stream = await analyzeImageStreaming(prompt, base64Image, modelUsed);
+        console.log('📡 [API STREAMING] Поток от OpenRouter получен');
+        
+        // OpenRouter возвращает поток в формате SSE, но нужно правильно его обработать
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
+        
+        const readableStream = new ReadableStream({
+          async start(controller) {
+            const reader = stream.getReader();
+            let buffer = '';
+            let chunkCount = 0;
+            let firstChunkReceived = false;
+            
+            try {
+              console.log('📡 [API STREAMING] Начинаем чтение потока от OpenRouter...');
+              
+              while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) {
+                  console.log('📡 [API STREAMING] Поток от OpenRouter завершён, всего чанков:', chunkCount);
+                  // Обрабатываем оставшийся буфер
+                  if (buffer.trim()) {
+                    console.log('📡 [API STREAMING] Обрабатываем оставшийся буфер:', buffer.substring(0, 200));
+                    const lines = buffer.split(/\r?\n/);
+                    for (const line of lines) {
+                      if (line.trim() && !line.startsWith(':')) {
+                        if (line.startsWith('data: ')) {
+                          controller.enqueue(encoder.encode(line + '\n\n'));
+                        } else {
+                          const trimmedLine = line.trim();
+                          if (trimmedLine.startsWith('{') || trimmedLine.startsWith('[')) {
+                            try {
+                              JSON.parse(trimmedLine);
+                              controller.enqueue(encoder.encode('data: ' + trimmedLine + '\n\n'));
+                            } catch (e) {
+                              console.debug('⚠️ [API STREAMING] Неполный JSON в буфере:', trimmedLine.substring(0, 100));
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                  controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                  controller.close();
+                  console.log('📡 [API STREAMING] Поток закрыт, отправлен [DONE]');
+                  break;
+                }
+                
+                chunkCount++;
+                const chunk = decoder.decode(value, { stream: true });
+                
+                if (!firstChunkReceived) {
+                  console.log('📡 [API STREAMING] Первый чанк от OpenRouter:', chunk.substring(0, 500));
+                  firstChunkReceived = true;
+                }
+                
+                buffer += chunk;
+                
+                // OpenRouter возвращает поток в формате SSE, но может быть без префикса "data: "
+                // Обрабатываем полные строки (SSE формат)
+                const lines = buffer.split(/\r?\n/);
+                buffer = lines.pop() || ''; // Последняя строка может быть неполной
+                
+                for (const line of lines) {
+                  if (!line.trim() || line.startsWith(':')) {
+                    continue; // Пропускаем пустые строки и комментарии
+                  }
+                  
+                  // OpenRouter может возвращать строки с "data: " или без него
+                  if (line.startsWith('data: ')) {
+                    // Уже в правильном формате SSE
+                    controller.enqueue(encoder.encode(line + '\n\n'));
+                    console.debug('📡 [API STREAMING] Отправлена строка с data::', line.substring(0, 100));
+                  } else {
+                    // Если строка не начинается с "data: ", это может быть JSON напрямую
+                    const trimmedLine = line.trim();
+                    if (trimmedLine.startsWith('{') || trimmedLine.startsWith('[')) {
+                      try {
+                        JSON.parse(trimmedLine);
+                        // Это валидный JSON, оборачиваем в SSE формат
+                        controller.enqueue(encoder.encode('data: ' + trimmedLine + '\n\n'));
+                        console.debug('📡 [API STREAMING] Отправлена строка без data: (JSON):', trimmedLine.substring(0, 100));
+                      } catch (e) {
+                        // Не полный JSON, возможно часть строки, пропускаем пока
+                        console.debug('⚠️ [API STREAMING] Неполный JSON, пропускаем:', trimmedLine.substring(0, 100));
+                      }
+                    } else {
+                      // Не JSON, возможно часть строки, добавляем как есть
+                      controller.enqueue(encoder.encode('data: ' + trimmedLine + '\n\n'));
+                      console.debug('📡 [API STREAMING] Отправлена строка без data: (текст):', trimmedLine.substring(0, 100));
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('❌ [API STREAMING] Ошибка чтения потока:', error);
+              controller.error(error);
+            } finally {
+              reader.releaseLock();
+              console.log('🔒 [API STREAMING] Reader освобождён');
+            }
+          }
+        });
+        
+        return new Response(readableStream, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      } catch (streamError: any) {
+        console.error('❌ [STREAMING] Ошибка создания потока:', streamError);
+        console.error('❌ [STREAMING] Детали ошибки:', {
+          message: streamError.message,
+          stack: streamError.stack?.substring(0, 500)
+        });
+        // Fallback на обычный режим
+        console.log('🔄 [STREAMING] Переключение на обычный режим из-за ошибки streaming');
+        // Продолжаем выполнение в обычном режиме ниже
+      }
     }
 
     // Обычный режим без streaming
@@ -81,6 +338,7 @@ export async function POST(request: NextRequest) {
       result = await analyzeImageFast({
         prompt,
         imageBase64: base64Image,
+        imageType: imageType as 'xray' | 'ct' | 'mri' | 'ultrasound' | 'dermatoscopy' | 'ecg' | 'universal'
       });
       console.log('✅ [ANALYSIS] Gemini Flash анализ завершён');
     } else {
