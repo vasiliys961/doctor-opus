@@ -61,6 +61,7 @@ export default function ImageAnalysisPage() {
       if (data.success) {
         setResult(data.result)
         setModelInfo({ model: data.model, mode: data.mode })
+        setLastAnalysisData(data)
         console.log('✅ [CLIENT] Анализ завершён успешно')
         console.log('📊 [CLIENT] Использованная модель:', data.model || 'не указана')
         console.log('📊 [CLIENT] Режим анализа:', data.mode || 'не указан')
@@ -108,7 +109,12 @@ export default function ImageAnalysisPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} model={modelInfo.model} mode={modelInfo.mode || mode} />
+      <AnalysisResult 
+        result={result} 
+        loading={loading} 
+        model={lastAnalysisData?.model || modelInfo.model} 
+        mode={lastAnalysisData?.mode || modelInfo.mode || mode} 
+      />
     </div>
   )
 }
