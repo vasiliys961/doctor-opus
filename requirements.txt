@@ -1,7 +1,7 @@
 # Облегчённый requirements для деплоя (Replit / Cloud / Streamlit)
 # Полный список для разработки: см. requirements-dev.txt
 
-streamlit==1.48.1
+# streamlit==1.48.1  # Убрано для миграции на Vercel
 requests==2.32.4
 # numpy / pandas / Pillow берём из базового образа Streamlit Cloud
 # чтобы не собирать их из исходников под Python 3.13

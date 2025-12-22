@@ -1,0 +1,92 @@
+/**
+ * Обертка для работы с базой данных
+ * Поддерживает SQLite (локально) и PostgreSQL (Vercel Postgres)
+ */
+
+interface DatabaseConfig {
+  type: 'sqlite' | 'postgres'
+  connectionString?: string
+}
+
+// Для Vercel Postgres используем переменные окружения
+const getDatabaseConfig = (): DatabaseConfig => {
+  if (process.env.POSTGRES_URL) {
+    return {
+      type: 'postgres',
+      connectionString: process.env.POSTGRES_URL,
+    }
+  }
+  // Fallback на SQLite для локальной разработки
+  return {
+    type: 'sqlite',
+  }
+}
+
+// SQL схемы для миграции
+export const SQL_SCHEMAS = {
+  patient_notes: `
+    CREATE TABLE IF NOT EXISTS patient_notes (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER,
+      raw_text TEXT,
+      structured_note TEXT,
+      gdoc_url TEXT,
+      diagnosis TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `,
+  specialist_prompts: `
+    CREATE TABLE IF NOT EXISTS specialist_prompts (
+      id SERIAL PRIMARY KEY,
+      specialist_name TEXT NOT NULL,
+      prompt_text TEXT NOT NULL,
+      template_name TEXT,
+      is_default INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(specialist_name, template_name)
+    )
+  `,
+  analysis_feedback: `
+    CREATE TABLE IF NOT EXISTS analysis_feedback (
+      id SERIAL PRIMARY KEY,
+      analysis_type TEXT NOT NULL,
+      analysis_id TEXT,
+      ai_response TEXT,
+      feedback_type TEXT NOT NULL,
+      doctor_comment TEXT,
+      correct_diagnosis TEXT,
+      specialty TEXT,
+      correctness TEXT,
+      consent INTEGER DEFAULT 0,
+      input_case TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `,
+}
+
+// Функции для работы с БД будут вызывать Python API или использовать прямые SQL запросы
+// Для продакшена лучше использовать Vercel Postgres через @vercel/postgres
+
+export async function initDatabase() {
+  // Инициализация будет через Python API или напрямую через SQL
+  // В продакшене используем Vercel Postgres
+  return true
+}
+
+export async function saveMedicalNote(data: {
+  patient_id?: number
+  raw_text: string
+  structured_note: string
+  gdoc_url?: string
+  diagnosis?: string
+}) {
+  // Реализация через API endpoint
+  const response = await fetch('/api/database/notes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  return response.json()
+}
+

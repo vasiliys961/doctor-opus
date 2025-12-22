@@ -1,0 +1,17 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "functions": {
+    "api/**/*.py": {
+      "runtime": "python3.9"
+    }
+  },
+  "env": {
+    "OPENROUTER_API_KEY": "@openrouter-api-key",
+    "ASSEMBLYAI_API_KEY": "@assemblyai-api-key"
+  },
+  "regions": ["iad1"]
+}
+

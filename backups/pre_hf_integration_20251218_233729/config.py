@@ -83,10 +83,11 @@ def load_secrets(config_path=".streamlit/secrets.toml"):
         except Exception as e:
             print(f"⚠️ Ошибка загрузки secrets.toml: {e}")
     
-    # Попытка 2: Переменные окружения (приоритет для Vercel)
-    # Vercel использует переменные окружения напрямую
-    secrets["OPENROUTER_API_KEY"] = os.getenv("OPENROUTER_API_KEY") or secrets["OPENROUTER_API_KEY"]
-    secrets["ASSEMBLYAI_API_KEY"] = os.getenv("ASSEMBLYAI_API_KEY") or secrets["ASSEMBLYAI_API_KEY"]
+    # Попытка 2: Переменные окружения (если не найдено в файле)
+    if not secrets["OPENROUTER_API_KEY"]:
+        secrets["OPENROUTER_API_KEY"] = os.getenv("OPENROUTER_API_KEY")
+    if not secrets["ASSEMBLYAI_API_KEY"]:
+        secrets["ASSEMBLYAI_API_KEY"] = os.getenv("ASSEMBLYAI_API_KEY")
     
     return secrets
 
@@ -103,11 +104,6 @@ if not ASSEMBLYAI_API_KEY:
     print("⚠️ ВНИМАНИЕ: ASSEMBLYAI_API_KEY не найден!")
     print("   Установите ключ в .streamlit/secrets.toml или переменную окружения ASSEMBLYAI_API_KEY")
 
-if not ASSEMBLYAI_API_KEY:
-    raise RuntimeError(
-        "ASSEMBLYAI_API_KEY environment variable is required. "
-        "Set it using: export ASSEMBLYAI_API_KEY='your-key-here'"
-    )
 
 # Optional configuration from environment
 MODEL_PREFERENCE = os.getenv("MODEL_PREFERENCE", "anthropic/claude-3-5-sonnet-20241022")
