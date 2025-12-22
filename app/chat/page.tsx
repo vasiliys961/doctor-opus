@@ -1,11 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import AudioUpload from '@/components/AudioUpload'
 
 export default function ChatPage() {
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
   const [loading, setLoading] = useState(false)
+  const [showAudioUpload, setShowAudioUpload] = useState(false)
 
   const handleSend = async () => {
     if (!message.trim()) return
@@ -76,13 +78,40 @@ export default function ChatPage() {
         )}
       </div>
 
+      {showAudioUpload && (
+        <div className="mb-4 bg-white rounded-lg shadow-lg p-4">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-semibold">🎤 Загрузка аудио</h3>
+            <button
+              onClick={() => setShowAudioUpload(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          </div>
+          <AudioUpload
+            onTranscribe={(transcript) => {
+              setMessage(transcript)
+              setShowAudioUpload(false)
+            }}
+          />
+        </div>
+      )}
+
       <div className="flex gap-2">
+        <button
+          onClick={() => setShowAudioUpload(!showAudioUpload)}
+          className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors"
+          title="Загрузить аудио"
+        >
+          🎤
+        </button>
         <input
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-          placeholder="Введите ваш вопрос..."
+          placeholder="Введите ваш вопрос или загрузите аудио..."
           className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           disabled={loading}
         />
