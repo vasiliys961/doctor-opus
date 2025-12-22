@@ -7,6 +7,16 @@ import { analyzeImage } from '@/lib/openrouter';
  */
 export async function POST(request: NextRequest) {
   try {
+    // Проверяем переменные окружения
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      console.error('OPENROUTER_API_KEY не найден в переменных окружения');
+      return NextResponse.json(
+        { success: false, error: 'OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.' },
+        { status: 500 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = formData.get('prompt') as string || 'Проанализируйте медицинское изображение.';
@@ -18,16 +28,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('Processing image:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      promptLength: prompt.length
+    });
+
     // Конвертация файла в base64
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const base64Image = buffer.toString('base64');
+
+    console.log('Image converted to base64, size:', base64Image.length);
 
     // Вызов OpenRouter API напрямую (используем ту же логику, что и Python)
     const result = await analyzeImage({
       prompt,
       imageBase64: base64Image,
     });
+
+    console.log('Analysis completed, result length:', result.length);
 
     return NextResponse.json({
       success: true,
