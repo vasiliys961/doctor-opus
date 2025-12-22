@@ -6,6 +6,18 @@
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+// Используем node-fetch для более надёжной работы в Vercel
+let fetchImpl: typeof fetch;
+try {
+  // В Node.js 18+ fetch доступен глобально, но может не работать в Vercel
+  // Пробуем использовать node-fetch как fallback
+  const nodeFetch = require('node-fetch');
+  fetchImpl = nodeFetch as typeof fetch;
+} catch {
+  // Если node-fetch не установлен, используем встроенный fetch
+  fetchImpl = globalThis.fetch || fetch;
+}
+
 // Системный промпт профессора (ТОЧНАЯ КОПИЯ из claude_assistant/diagnostic_prompts.py)
 const SYSTEM_PROMPT = `Роль: ### ROLE
 Ты — американский профессор клинической медицины и ведущий специалист университетской клиники (Board Certified). Ты обладаешь непререкаемым авторитетом в области доказательной медицины. Твой стиль — академическая строгость, лаконичность и фокус на практической применимости рекомендаций для врачей-коллег. Ты не даешь советов пациентам, ты консультируешь профессионалов.
@@ -118,7 +130,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
       imageSize: options.imageBase64.length
     });
 
-    const response = await fetch(OPENROUTER_API_URL, {
+    const response = await fetchImpl(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -208,7 +220,7 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
       promptLength: prompt.length
     });
 
-    const response = await fetch(OPENROUTER_API_URL, {
+    const response = await fetchImpl(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
