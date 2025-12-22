@@ -77,9 +77,6 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   const model = options.model || MODELS[0]; // Opus 4.5 по умолчанию
   const prompt = options.prompt || 'Проанализируйте медицинское изображение.';
   
-  // Формируем промпт с системным контекстом
-  const medicalPrompt = `${SYSTEM_PROMPT}\n\n${prompt}`;
-  
   // Формируем messages для OpenRouter API
   const messages = [
     {
@@ -111,6 +108,16 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   };
 
   try {
+    // Логируем для отладки (без ключа)
+    console.log('Calling OpenRouter API:', {
+      url: OPENROUTER_API_URL,
+      model: model,
+      hasApiKey: !!apiKey,
+      apiKeyPrefix: apiKey.substring(0, 10) + '...',
+      payloadSize: JSON.stringify(payload).length,
+      imageSize: options.imageBase64.length
+    });
+
     const response = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
@@ -122,28 +129,36 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
       body: JSON.stringify(payload)
     });
 
+    console.log('OpenRouter API response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+      console.error('OpenRouter API error response:', errorText);
+      throw new Error(`OpenRouter API error: ${response.status} - ${errorText.substring(0, 500)}`);
     }
 
     const data = await response.json();
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error('Invalid response format:', JSON.stringify(data).substring(0, 500));
       throw new Error('Неверный формат ответа от OpenRouter API');
     }
 
     return data.choices[0].message.content || '';
   } catch (error: any) {
-    console.error('Error calling OpenRouter API:', error);
+    console.error('Error calling OpenRouter API:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack?.substring(0, 500)
+    });
     
     // Обработка разных типов ошибок
     if (error.name === 'AbortError' || error.name === 'TimeoutError') {
       throw new Error('Превышено время ожидания ответа от OpenRouter API. Попробуйте позже.');
     }
     
-    if (error.message.includes('fetch failed') || error.message.includes('network')) {
-      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету.');
+    if (error.message.includes('fetch failed') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки Vercel.');
     }
     
     throw new Error(`Ошибка анализа изображения: ${error.message}`);
@@ -186,6 +201,13 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
   };
 
   try {
+    console.log('Calling OpenRouter API for text:', {
+      url: OPENROUTER_API_URL,
+      model: model,
+      hasApiKey: !!apiKey,
+      promptLength: prompt.length
+    });
+
     const response = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
@@ -197,30 +219,37 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
       body: JSON.stringify(payload)
     });
 
+    console.log('OpenRouter API response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+      console.error('OpenRouter API error response:', errorText);
+      throw new Error(`OpenRouter API error: ${response.status} - ${errorText.substring(0, 500)}`);
     }
 
     const data = await response.json();
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error('Invalid response format:', JSON.stringify(data).substring(0, 500));
       throw new Error('Неверный формат ответа от OpenRouter API');
     }
 
     return data.choices[0].message.content || '';
   } catch (error: any) {
-    console.error('Error calling OpenRouter API:', error);
+    console.error('Error calling OpenRouter API:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack?.substring(0, 500)
+    });
     
     if (error.name === 'AbortError' || error.name === 'TimeoutError') {
       throw new Error('Превышено время ожидания ответа от OpenRouter API. Попробуйте позже.');
     }
     
-    if (error.message.includes('fetch failed') || error.message.includes('network')) {
-      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету.');
+    if (error.message.includes('fetch failed') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки Vercel.');
     }
     
     throw new Error(`Ошибка запроса: ${error.message}`);
   }
 }
-
