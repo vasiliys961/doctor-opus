@@ -54,14 +54,19 @@ export default function ImageAnalysisPage() {
 
       if (useStreaming) {
         // Streaming режим
+        console.log('📡 [CLIENT] Запуск streaming режима')
         const response = await fetch('/api/analyze/image', {
           method: 'POST',
           body: formData,
         })
 
         if (!response.ok) {
+          const errorText = await response.text()
+          console.error('❌ [CLIENT] Streaming ошибка:', response.status, errorText)
           throw new Error(`HTTP error! status: ${response.status}`)
         }
+        
+        console.log('✅ [CLIENT] Streaming ответ получен, Content-Type:', response.headers.get('Content-Type'))
 
         const reader = response.body?.getReader()
         const decoder = new TextDecoder()

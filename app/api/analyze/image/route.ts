@@ -22,7 +22,10 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const prompt = formData.get('prompt') as string || 'Проанализируйте медицинское изображение.';
     const mode = (formData.get('mode') as string) || 'precise'; // fast, precise, validated
-    const useStreaming = formData.get('useStreaming') === 'true';
+    const useStreamingParam = formData.get('useStreaming');
+    const useStreaming = useStreamingParam === 'true' || useStreamingParam === true;
+    
+    console.log('📡 [API] useStreaming параметр:', useStreamingParam, '→', useStreaming);
 
     if (!file) {
       return NextResponse.json(
