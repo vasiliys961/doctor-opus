@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { analyzeImage } from '@/lib/openrouter';
+import { analyzeImage, analyzeImageFast } from '@/lib/openrouter';
 
 /**
  * API endpoint для анализа медицинских изображений
@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = formData.get('prompt') as string || 'Проанализируйте медицинское изображение.';
+    const mode = (formData.get('mode') as string) || 'precise'; // fast, precise, validated
 
     if (!file) {
       return NextResponse.json(
@@ -41,12 +42,24 @@ export async function POST(request: NextRequest) {
     const base64Image = buffer.toString('base64');
 
     console.log('Image converted to base64, size:', base64Image.length);
+    console.log('Analysis mode:', mode);
 
-    // Вызов OpenRouter API напрямую (используем ту же логику, что и Python)
-    const result = await analyzeImage({
-      prompt,
-      imageBase64: base64Image,
-    });
+    // Выбор функции анализа в зависимости от режима
+    let result: string;
+    if (mode === 'fast') {
+      // Быстрый анализ через Gemini Flash
+      result = await analyzeImageFast({
+        prompt,
+        imageBase64: base64Image,
+      });
+    } else {
+      // Точный анализ через Opus
+      result = await analyzeImage({
+        prompt,
+        imageBase64: base64Image,
+        mode: 'precise',
+      });
+    }
 
     console.log('Analysis completed, result length:', result.length);
 

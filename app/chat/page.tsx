@@ -3,11 +3,15 @@
 import { useState } from 'react'
 import AudioUpload from '@/components/AudioUpload'
 
+type ModelType = 'opus' | 'sonnet'
+
 export default function ChatPage() {
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
   const [loading, setLoading] = useState(false)
   const [showAudioUpload, setShowAudioUpload] = useState(false)
+  const [useStreaming, setUseStreaming] = useState(true)
+  const [model, setModel] = useState<ModelType>('opus')
 
   const handleSend = async () => {
     if (!message.trim()) return
@@ -17,27 +21,111 @@ export default function ChatPage() {
     setMessages(prev => [...prev, { role: 'user', content: userMessage }])
     setLoading(true)
 
+    // Добавляем пустое сообщение ассистента для streaming
+    const assistantMessageIndex = messages.length
+    if (useStreaming) {
+      setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+    }
+
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: userMessage,
-          history: messages,
-        }),
-      })
+      const modelName = model === 'opus' 
+        ? 'anthropic/claude-opus-4.5' 
+        : 'anthropic/claude-sonnet-4.5'
 
-      const data = await response.json()
+      if (useStreaming) {
+        // Streaming режим
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: userMessage,
+            history: messages,
+            useStreaming: true,
+            model: modelName,
+          }),
+        })
 
-      if (data.success) {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.result }])
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
+        let accumulatedText = ''
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            const chunk = decoder.decode(value, { stream: true })
+            const lines = chunk.split('\n')
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6)
+                if (data === '[DONE]') continue
+
+                try {
+                  const json = JSON.parse(data)
+                  const content = json.choices?.[0]?.delta?.content || ''
+                  if (content) {
+                    accumulatedText += content
+                    // Обновляем последнее сообщение ассистента
+                    setMessages(prev => {
+                      const newMessages = [...prev]
+                      newMessages[assistantMessageIndex] = {
+                        role: 'assistant',
+                        content: accumulatedText
+                      }
+                      return newMessages
+                    })
+                  }
+                } catch (e) {
+                  // Игнорируем ошибки парсинга
+                }
+              }
+            }
+          }
+        }
       } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${data.error}` }])
+        // Обычный режим
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: userMessage,
+            history: messages,
+            useStreaming: false,
+            model: modelName,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (data.success) {
+          setMessages(prev => [...prev, { role: 'assistant', content: data.result }])
+        } else {
+          setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${data.error}` }])
+        }
       }
     } catch (err: any) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${err.message}` }])
+      setMessages(prev => {
+        const newMessages = [...prev]
+        if (useStreaming && newMessages[assistantMessageIndex]) {
+          newMessages[assistantMessageIndex] = {
+            role: 'assistant',
+            content: `Ошибка: ${err.message}`
+          }
+        } else {
+          newMessages.push({ role: 'assistant', content: `Ошибка: ${err.message}` })
+        }
+        return newMessages
+      })
     } finally {
       setLoading(false)
     }
@@ -97,6 +185,33 @@ export default function ChatPage() {
           />
         </div>
       )}
+
+      <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
+        <div className="flex flex-wrap gap-4 items-center">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useStreaming}
+              onChange={(e) => setUseStreaming(e.target.checked)}
+              className="w-4 h-4 text-primary-600"
+            />
+            <span className="text-sm">Streaming (постепенный ответ)</span>
+          </label>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Модель:</span>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value as ModelType)}
+              className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              disabled={loading}
+            >
+              <option value="opus">🧠 Opus 4.5 (точный)</option>
+              <option value="sonnet">🤖 Sonnet 4.5 (быстрый)</option>
+            </select>
+          </div>
+        </div>
+      </div>
 
       <div className="flex gap-2">
         <button
