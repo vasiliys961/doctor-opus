@@ -8,10 +8,6 @@
       "runtime": "python3.9"
     }
   },
-  "env": {
-    "OPENROUTER_API_KEY": "@openrouter-api-key",
-    "ASSEMBLYAI_API_KEY": "@assemblyai-api-key"
-  },
   "regions": ["iad1"]
 }
 
