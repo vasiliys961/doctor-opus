@@ -7,16 +7,8 @@
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Используем node-fetch для более надёжной работы в Vercel
-let fetchImpl: typeof fetch;
-try {
-  // В Node.js 18+ fetch доступен глобально, но может не работать в Vercel
-  // Пробуем использовать node-fetch как fallback
-  const nodeFetch = require('node-fetch');
-  fetchImpl = nodeFetch as typeof fetch;
-} catch {
-  // Если node-fetch не установлен, используем встроенный fetch
-  fetchImpl = globalThis.fetch || fetch;
-}
+// node-fetch имеет совместимый API с встроенным fetch
+import fetch from 'node-fetch';
 
 // Системный промпт профессора (ТОЧНАЯ КОПИЯ из claude_assistant/diagnostic_prompts.py)
 const SYSTEM_PROMPT = `Роль: ### ROLE
