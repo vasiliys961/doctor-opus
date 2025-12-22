@@ -72,8 +72,8 @@ export default function ChatPage() {
 
                 try {
                   const json = JSON.parse(data)
-                  // Поддерживаем два формата: наш трансформированный и оригинальный OpenRouter
-                  const content = json.content || json.choices?.[0]?.delta?.content || ''
+                  // OpenRouter формат: json.choices[0].delta.content
+                  const content = json.choices?.[0]?.delta?.content || ''
                   if (content) {
                     accumulatedText += content
                     // Обновляем последнее сообщение ассистента
@@ -84,12 +84,19 @@ export default function ChatPage() {
                           role: 'assistant',
                           content: accumulatedText
                         }
+                      } else {
+                        // Если сообщения нет, добавляем новое
+                        newMessages.push({
+                          role: 'assistant',
+                          content: accumulatedText
+                        })
                       }
                       return newMessages
                     })
                   }
                 } catch (e) {
-                  // Игнорируем ошибки парсинга
+                  // Игнорируем ошибки парсинга отдельных строк
+                  console.debug('SSE parse error:', e, 'line:', line)
                 }
               }
             }
