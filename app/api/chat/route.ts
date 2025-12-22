@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { sendTextRequest } from '@/lib/openrouter';
 
 /**
  * API endpoint для ИИ-консультанта
- * Вызывает Python serverless function с существующей логикой
+ * Использует OpenRouter API напрямую
  */
 export async function POST(request: NextRequest) {
   try {
@@ -16,27 +17,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Вызов Python serverless function
-    const pythonResponse = await fetch(`${process.env.PYTHON_API_URL || 'http://localhost:3000'}/api/python/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message,
-        history,
-      }),
-    });
+    // Формируем историю для контекста
+    const formattedHistory = history.map((msg: any) => ({
+      role: msg.role === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    }));
 
-    if (!pythonResponse.ok) {
-      throw new Error('Python API error');
-    }
-
-    const result = await pythonResponse.json();
+    // Вызов OpenRouter API напрямую
+    const result = await sendTextRequest(message, formattedHistory);
 
     return NextResponse.json({
       success: true,
-      result: result.result,
+      result: result,
     });
   } catch (error: any) {
     console.error('Error in chat:', error);

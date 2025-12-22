@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { analyzeImage } from '@/lib/openrouter';
 
 /**
  * API endpoint для анализа ЭКГ
- * Вызывает Python serverless function с существующей логикой
+ * Использует OpenRouter API напрямую
  */
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const prompt = formData.get('prompt') as string || 'Проанализируйте ЭКГ.';
+    const prompt = formData.get('prompt') as string || 'Проанализируйте ЭКГ. Опишите ритм, интервалы, сегменты, признаки ишемии, аритмии, блокады.';
 
     if (!file) {
       return NextResponse.json(
@@ -21,28 +22,15 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
     const base64Image = buffer.toString('base64');
 
-    // Вызов Python serverless function
-    const pythonResponse = await fetch(`${process.env.PYTHON_API_URL || 'http://localhost:3000'}/api/python/analyze/ecg`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image: base64Image,
-        prompt: prompt,
-        filename: file.name,
-      }),
+    // Вызов OpenRouter API напрямую
+    const result = await analyzeImage({
+      prompt,
+      imageBase64: base64Image,
     });
-
-    if (!pythonResponse.ok) {
-      throw new Error('Python API error');
-    }
-
-    const result = await pythonResponse.json();
 
     return NextResponse.json({
       success: true,
-      result: result.result,
+      result: result,
     });
   } catch (error: any) {
     console.error('Error analyzing ECG:', error);
