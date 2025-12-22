@@ -65,20 +65,25 @@ export default function ChatPage() {
 
             for (const line of lines) {
               if (line.startsWith('data: ')) {
-                const data = line.slice(6)
-                if (data === '[DONE]') continue
+                const data = line.slice(6).trim()
+                if (data === '[DONE]') {
+                  break
+                }
 
                 try {
                   const json = JSON.parse(data)
-                  const content = json.choices?.[0]?.delta?.content || ''
+                  // Поддерживаем два формата: наш трансформированный и оригинальный OpenRouter
+                  const content = json.content || json.choices?.[0]?.delta?.content || ''
                   if (content) {
                     accumulatedText += content
                     // Обновляем последнее сообщение ассистента
                     setMessages(prev => {
                       const newMessages = [...prev]
-                      newMessages[assistantMessageIndex] = {
-                        role: 'assistant',
-                        content: accumulatedText
+                      if (newMessages[assistantMessageIndex]) {
+                        newMessages[assistantMessageIndex] = {
+                          role: 'assistant',
+                          content: accumulatedText
+                        }
                       }
                       return newMessages
                     })

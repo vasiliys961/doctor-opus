@@ -109,6 +109,37 @@ export async function sendTextRequestStreaming(
     throw new Error('Response body is null');
   }
 
-  return response.body;
+  // Создаём трансформированный поток для правильного формата SSE
+  const transformer = new TransformStream({
+    transform(chunk, controller) {
+      const text = new TextDecoder().decode(chunk);
+      const lines = text.split('\n');
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') {
+            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            continue;
+          }
+          
+          try {
+            const json = JSON.parse(data);
+            const content = json.choices?.[0]?.delta?.content || '';
+            if (content) {
+              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content })}\n\n`));
+            }
+          } catch (e) {
+            // Игнорируем ошибки парсинга
+          }
+        } else if (line.trim()) {
+          // Передаём другие строки как есть
+          controller.enqueue(new TextEncoder().encode(line + '\n'));
+        }
+      }
+    }
+  });
+
+  return response.body.pipeThrough(transformer);
 }
 
