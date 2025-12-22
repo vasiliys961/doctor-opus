@@ -122,7 +122,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
       imageSize: options.imageBase64.length
     });
 
-    const response = await fetchImpl(OPENROUTER_API_URL, {
+    const response = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -212,7 +212,7 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
       promptLength: prompt.length
     });
 
-    const response = await fetchImpl(OPENROUTER_API_URL, {
+    const response = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
