@@ -35,9 +35,25 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Error analyzing image:', error);
+    
+    // Более детальная обработка ошибок
+    let errorMessage = error.message || 'Internal server error';
+    let statusCode = 500;
+    
+    if (error.message.includes('не настроен') || error.message.includes('не найден')) {
+      statusCode = 500;
+      errorMessage = 'Ошибка конфигурации: ' + errorMessage;
+    } else if (error.message.includes('fetch failed') || error.message.includes('network')) {
+      statusCode = 503;
+      errorMessage = 'Ошибка сети. Проверьте подключение к интернету.';
+    } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+      statusCode = 504;
+      errorMessage = 'Превышено время ожидания. Попробуйте позже.';
+    }
+    
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
-      { status: 500 }
+      { success: false, error: errorMessage },
+      { status: statusCode }
     );
   }
 }

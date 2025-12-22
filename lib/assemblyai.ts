@@ -22,7 +22,8 @@ export async function transcribeAudio(audioData: ArrayBuffer, mimeType: string =
   const apiKey = process.env.ASSEMBLYAI_API_KEY;
   
   if (!apiKey) {
-    throw new Error('ASSEMBLYAI_API_KEY не настроен');
+    console.error('ASSEMBLYAI_API_KEY не найден в переменных окружения');
+    throw new Error('ASSEMBLYAI_API_KEY не настроен. Проверьте настройки Vercel.');
   }
 
   try {
@@ -139,6 +140,15 @@ export async function transcribeAudio(audioData: ArrayBuffer, mimeType: string =
     return resultData.text || '';
   } catch (error: any) {
     console.error('Error transcribing audio:', error);
+    
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      throw new Error('Превышено время ожидания транскрипции. Попробуйте позже.');
+    }
+    
+    if (error.message.includes('fetch failed') || error.message.includes('network')) {
+      throw new Error('Ошибка сети при обращении к AssemblyAI. Проверьте подключение к интернету.');
+    }
+    
     throw new Error(`Ошибка транскрипции: ${error.message}`);
   }
 }

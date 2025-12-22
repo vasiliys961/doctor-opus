@@ -66,10 +66,12 @@ interface VisionRequestOptions {
  * Использует ту же логику, что и Python vision_client.py
  */
 export async function analyzeImage(options: VisionRequestOptions): Promise<string> {
+  // В Next.js API routes переменные окружения доступны через process.env
   const apiKey = process.env.OPENROUTER_API_KEY;
   
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+    console.error('OPENROUTER_API_KEY не найден в переменных окружения');
+    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
   }
 
   const model = options.model || MODELS[0]; // Opus 4.5 по умолчанию
@@ -134,6 +136,16 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     return data.choices[0].message.content || '';
   } catch (error: any) {
     console.error('Error calling OpenRouter API:', error);
+    
+    // Обработка разных типов ошибок
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      throw new Error('Превышено время ожидания ответа от OpenRouter API. Попробуйте позже.');
+    }
+    
+    if (error.message.includes('fetch failed') || error.message.includes('network')) {
+      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету.');
+    }
+    
     throw new Error(`Ошибка анализа изображения: ${error.message}`);
   }
 }
@@ -145,7 +157,8 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
   const apiKey = process.env.OPENROUTER_API_KEY;
   
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+    console.error('OPENROUTER_API_KEY не найден в переменных окружения');
+    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
   }
 
   const model = MODELS[0]; // Opus 4.5
@@ -198,6 +211,15 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
     return data.choices[0].message.content || '';
   } catch (error: any) {
     console.error('Error calling OpenRouter API:', error);
+    
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      throw new Error('Превышено время ожидания ответа от OpenRouter API. Попробуйте позже.');
+    }
+    
+    if (error.message.includes('fetch failed') || error.message.includes('network')) {
+      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету.');
+    }
+    
     throw new Error(`Ошибка запроса: ${error.message}`);
   }
 }
