@@ -105,13 +105,45 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     if (options.mode === 'fast') {
       model = MODELS.GEMINI_FLASH_30; // Gemini Flash 3.0 для быстрого анализа
     } else {
-      model = MODELS.OPUS; // Opus 4.5 для точного анализа
+      // Проверяем, является ли это сканированием документа
+      const isDocumentScan = options.prompt?.toLowerCase().includes('отсканируйте') || 
+                            options.prompt?.toLowerCase().includes('сканирование') ||
+                            options.prompt?.toLowerCase().includes('извлеките текст') ||
+                            options.prompt?.toLowerCase().includes('ocr');
+      if (isDocumentScan) {
+        model = MODELS.HAIKU; // Haiku 4.5 для сканирования документов
+      } else {
+        model = MODELS.OPUS; // Opus 4.5 для точного анализа
+      }
     }
   }
   const prompt = options.prompt || 'Проанализируйте медицинское изображение.';
   
+  // Определяем, является ли это сканированием документа (для OCR system prompt не нужен)
+  const isDocumentScan = prompt.toLowerCase().includes('отсканируйте') || 
+                        prompt.toLowerCase().includes('сканирование') ||
+                        prompt.toLowerCase().includes('извлеките текст') ||
+                        prompt.toLowerCase().includes('ocr');
+  
   // Формируем messages для OpenRouter API
-  const messages = [
+  const messages = isDocumentScan ? [
+    // Для сканирования документов system prompt не используется
+    {
+      role: 'user' as const,
+      content: [
+        {
+          type: 'text',
+          text: prompt
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:image/png;base64,${options.imageBase64}`
+          }
+        }
+      ]
+    }
+  ] : [
     {
       role: 'system' as const,
       content: SYSTEM_PROMPT

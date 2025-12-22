@@ -6,6 +6,7 @@ import AnalysisResult from '@/components/AnalysisResult'
 
 export default function DocumentPage() {
   const [file, setFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -14,6 +15,18 @@ export default function DocumentPage() {
     setFile(uploadedFile)
     setResult('')
     setError(null)
+    
+    // Создаем превью для изображений
+    if (uploadedFile.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(uploadedFile)
+    } else {
+      setImagePreview(null)
+    }
+    
     setLoading(true)
 
     try {
@@ -51,6 +64,19 @@ export default function DocumentPage() {
         </p>
         <ImageUpload onUpload={handleUpload} accept=".pdf,image/*" maxSize={50} />
       </div>
+
+      {file && imagePreview && (
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">📷 Загруженный документ</h2>
+          <div className="flex justify-center">
+            <img 
+              src={imagePreview} 
+              alt="Загруженный документ" 
+              className="max-w-full max-h-[600px] rounded-lg shadow-lg object-contain"
+            />
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">

@@ -11,6 +11,7 @@ interface ImageUploadProps {
 export default function ImageUpload({ onUpload, accept = 'image/*', maxSize = 50 }: ImageUploadProps) {
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = (file: File) => {
@@ -22,10 +23,16 @@ export default function ImageUpload({ onUpload, accept = 'image/*', maxSize = 50
       return
     }
 
-    // Проверка типа
-    if (!file.type.startsWith('image/')) {
-      setError('Пожалуйста, загрузите изображение')
-      return
+    // Проверка типа и создание превью для изображений
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    } else {
+      // Для PDF и других файлов превью не показываем
+      setPreview(null)
     }
 
     onUpload(file)
@@ -60,6 +67,15 @@ export default function ImageUpload({ onUpload, accept = 'image/*', maxSize = 50
 
   return (
     <div className="w-full">
+      {preview && (
+        <div className="mb-4">
+          <img 
+            src={preview} 
+            alt="Превью загруженного файла" 
+            className="max-w-full h-auto rounded-lg border-2 border-gray-300 max-h-96 mx-auto"
+          />
+        </div>
+      )}
       <div
         className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
           dragActive

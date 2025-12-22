@@ -51,11 +51,21 @@ export async function POST(request: NextRequest) {
     console.log('Analysis mode:', mode);
     console.log('Prompt:', prompt.substring(0, 200) + '...');
 
+    // Определяем, является ли запрос сканированием документа
+    const isDocumentScan = prompt.toLowerCase().includes('отсканируйте') || 
+                          prompt.toLowerCase().includes('сканирование') ||
+                          prompt.toLowerCase().includes('извлеките текст') ||
+                          prompt.toLowerCase().includes('ocr') ||
+                          imageType === 'document';
+
     // Выбор функции анализа в зависимости от режима
     let modelUsed: string;
     
     if (mode === 'fast') {
       modelUsed = 'google/gemini-3-flash-preview';
+    } else if (isDocumentScan) {
+      // Для сканирования документов используем Haiku/Llama вместо Opus
+      modelUsed = 'anthropic/claude-haiku-4.5';
     } else {
       modelUsed = 'anthropic/claude-opus-4.5';
     }
@@ -341,6 +351,16 @@ export async function POST(request: NextRequest) {
         imageType: imageType as 'xray' | 'ct' | 'mri' | 'ultrasound' | 'dermatoscopy' | 'ecg' | 'universal'
       });
       console.log('✅ [ANALYSIS] Gemini Flash анализ завершён');
+    } else if (isDocumentScan) {
+      // Сканирование документов через Haiku/Llama
+      console.log('📄 [DOCUMENT SCAN] Запуск сканирования через Haiku 4.5');
+      result = await analyzeImage({
+        prompt,
+        imageBase64: base64Image,
+        mode: 'precise',
+        model: 'anthropic/claude-haiku-4.5',
+      });
+      console.log('✅ [DOCUMENT SCAN] Haiku сканирование завершено');
     } else {
       // Точный анализ через Opus
       console.log('🎯 [ANALYSIS] Запуск ТОЧНОГО анализа через Opus 4.5');
