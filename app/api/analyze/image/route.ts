@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeImage, analyzeImageFast } from '@/lib/openrouter';
+import { analyzeImageStreaming } from '@/lib/openrouter-streaming';
 
 /**
  * API endpoint для анализа медицинских изображений
@@ -21,6 +22,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const prompt = formData.get('prompt') as string || 'Проанализируйте медицинское изображение.';
     const mode = (formData.get('mode') as string) || 'precise'; // fast, precise, validated
+    const useStreaming = formData.get('useStreaming') === 'true';
 
     if (!file) {
       return NextResponse.json(
@@ -46,13 +48,33 @@ export async function POST(request: NextRequest) {
     console.log('Prompt:', prompt.substring(0, 200) + '...');
 
     // Выбор функции анализа в зависимости от режима
-    let result: string;
     let modelUsed: string;
+    
+    if (mode === 'fast') {
+      modelUsed = 'google/gemini-3-flash-preview';
+    } else {
+      modelUsed = 'anthropic/claude-opus-4.5';
+    }
+
+    // Если streaming запрошен, возвращаем поток
+    if (useStreaming) {
+      console.log('📡 [STREAMING] Запуск streaming анализа через', modelUsed);
+      const stream = await analyzeImageStreaming(prompt, base64Image, modelUsed);
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // Обычный режим без streaming
+    let result: string;
     
     if (mode === 'fast') {
       // Быстрый анализ через Gemini Flash
       console.log('🚀 [ANALYSIS] Запуск БЫСТРОГО анализа через Gemini Flash');
-      modelUsed = 'google/gemini-3-flash-preview';
       result = await analyzeImageFast({
         prompt,
         imageBase64: base64Image,
@@ -61,7 +83,6 @@ export async function POST(request: NextRequest) {
     } else {
       // Точный анализ через Opus
       console.log('🎯 [ANALYSIS] Запуск ТОЧНОГО анализа через Opus 4.5');
-      modelUsed = 'anthropic/claude-opus-4.5';
       result = await analyzeImage({
         prompt,
         imageBase64: base64Image,

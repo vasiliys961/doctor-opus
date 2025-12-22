@@ -50,23 +50,86 @@ export default function ImageAnalysisPage() {
       formData.append('file', uploadedFile)
       formData.append('prompt', prompt)
       formData.append('mode', mode === 'validated' ? 'precise' : mode)
+      formData.append('useStreaming', useStreaming.toString())
 
-      const response = await fetch('/api/analyze/image', {
-        method: 'POST',
-        body: formData,
-      })
+      if (useStreaming) {
+        // Streaming режим
+        const response = await fetch('/api/analyze/image', {
+          method: 'POST',
+          body: formData,
+        })
 
-      const data = await response.json()
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
 
-      if (data.success) {
-        setResult(data.result)
-        setModelInfo({ model: data.model, mode: data.mode })
-        setLastAnalysisData(data)
-        console.log('✅ [CLIENT] Анализ завершён успешно')
-        console.log('📊 [CLIENT] Использованная модель:', data.model || 'не указана')
-        console.log('📊 [CLIENT] Режим анализа:', data.mode || 'не указан')
+        const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
+        let accumulatedText = ''
+
+        if (reader) {
+          console.log('📡 [STREAMING] Начало чтения потока')
+          let buffer = ''
+          
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) {
+              console.log('📡 [STREAMING] Поток завершён')
+              break
+            }
+
+            const chunk = decoder.decode(value, { stream: true })
+            buffer += chunk
+            
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6).trim()
+                if (data === '[DONE]') {
+                  console.log('📡 [STREAMING] Получен сигнал завершения')
+                  break
+                }
+
+                try {
+                  const json = JSON.parse(data)
+                  const content = json.choices?.[0]?.delta?.content || ''
+                  if (content) {
+                    accumulatedText += content
+                    setResult(accumulatedText)
+                    console.log('📡 [STREAMING] Получен фрагмент:', content.length, 'символов, всего:', accumulatedText.length)
+                  }
+                } catch (e) {
+                  console.warn('⚠️ [STREAMING] Ошибка парсинга SSE:', e, 'data:', data.substring(0, 100))
+                }
+              }
+            }
+          }
+          
+          console.log('✅ [STREAMING] Итого получено:', accumulatedText.length, 'символов')
+          setModelInfo({ model: mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5', mode })
+          setLastAnalysisData({ model: mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5', mode })
+        }
       } else {
-        setError(data.error || 'Ошибка при анализе')
+        // Обычный режим
+        const response = await fetch('/api/analyze/image', {
+          method: 'POST',
+          body: formData,
+        })
+
+        const data = await response.json()
+
+        if (data.success) {
+          setResult(data.result)
+          setModelInfo({ model: data.model, mode: data.mode })
+          setLastAnalysisData(data)
+          console.log('✅ [CLIENT] Анализ завершён успешно')
+          console.log('📊 [CLIENT] Использованная модель:', data.model || 'не указана')
+          console.log('📊 [CLIENT] Режим анализа:', data.mode || 'не указан')
+        } else {
+          setError(data.error || 'Ошибка при анализе')
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Произошла ошибка')
@@ -85,12 +148,24 @@ export default function ImageAnalysisPage() {
           Поддерживаемые типы: ЭКГ, Рентген, МРТ, КТ, УЗИ, Дерматоскопия, Гистология, Офтальмология, Маммография
         </p>
         
-        <div className="mb-6">
+        <div className="mb-6 space-y-4">
           <AnalysisModeSelector
             value={mode}
             onChange={setMode}
             disabled={loading}
           />
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useStreaming}
+              onChange={(e) => setUseStreaming(e.target.checked)}
+              disabled={loading}
+              className="w-4 h-4 text-primary-600 rounded"
+            />
+            <span className="text-sm text-gray-700">
+              📡 Streaming режим (постепенное появление текста)
+            </span>
+          </label>
         </div>
         
         <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} />

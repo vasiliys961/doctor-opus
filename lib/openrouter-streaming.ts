@@ -49,6 +49,9 @@ const MODELS = {
   OPUS: 'anthropic/claude-opus-4.5',
   SONNET: 'anthropic/claude-sonnet-4.5',
   HAIKU: 'anthropic/claude-haiku-4.5',
+  LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',
+  GEMINI_FLASH_25: 'google/gemini-2.5-flash',
+  GEMINI_FLASH_30: 'google/gemini-3-flash-preview',
 };
 
 /**
@@ -110,6 +113,74 @@ export async function sendTextRequestStreaming(
   }
 
   // Возвращаем поток как есть - OpenRouter уже возвращает правильный SSE формат
+  return response.body;
+}
+
+/**
+ * Streaming анализ изображения через OpenRouter API
+ * Возвращает ReadableStream для постепенной передачи данных
+ */
+export async function analyzeImageStreaming(
+  prompt: string,
+  imageBase64: string,
+  model: string = MODELS.OPUS
+): Promise<ReadableStream<Uint8Array>> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY не настроен');
+  }
+
+  const messages = [
+    {
+      role: 'system' as const,
+      content: SYSTEM_PROMPT
+    },
+    {
+      role: 'user' as const,
+      content: [
+        {
+          type: 'text',
+          text: prompt
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:image/jpeg;base64,${imageBase64}`
+          }
+        }
+      ]
+    }
+  ];
+
+  const payload = {
+    model,
+    messages,
+    max_tokens: 8000,
+    temperature: 0.2,
+    stream: true
+  };
+
+  const response = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
+      'X-Title': 'Medical AI Assistant'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+  }
+
+  if (!response.body) {
+    throw new Error('Response body is null');
+  }
+
   return response.body;
 }
 
