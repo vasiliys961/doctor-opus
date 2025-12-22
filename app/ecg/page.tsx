@@ -83,13 +83,22 @@ export default function ECGPage() {
             const chunk = decoder.decode(value, { stream: true })
             buffer += chunk
             
-            const lines = buffer.split('\n')
+            // Обрабатываем полные строки (SSE формат использует \n или \r\n)
+            const lines = buffer.split(/\r?\n/)
             buffer = lines.pop() || ''
 
             for (const line of lines) {
+              // Пропускаем пустые строки и комментарии
+              if (!line || line.trim() === '' || line.startsWith(':')) {
+                continue
+              }
+              
               if (line.startsWith('data: ')) {
                 const data = line.slice(6).trim()
-                if (data === '[DONE]') break
+                if (data === '[DONE]') {
+                  console.log('📡 [ECG STREAMING] Получен сигнал завершения')
+                  break
+                }
 
                 try {
                   const json = JSON.parse(data)
@@ -97,9 +106,12 @@ export default function ECGPage() {
                   if (content) {
                     accumulatedText += content
                     setResult(accumulatedText)
+                    console.log('📡 [ECG STREAMING] Получен фрагмент:', content.length, 'символов')
                   }
                 } catch (e) {
-                  console.warn('⚠️ [ECG STREAMING] Ошибка парсинга:', e)
+                  if (data && data.length > 0 && !data.includes('[DONE]')) {
+                    console.debug('⚠️ [ECG STREAMING] Ошибка парсинга:', e, 'data:', data.substring(0, 100))
+                  }
                 }
               }
             }

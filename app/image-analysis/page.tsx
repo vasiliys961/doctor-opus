@@ -81,10 +81,16 @@ export default function ImageAnalysisPage() {
             const chunk = decoder.decode(value, { stream: true })
             buffer += chunk
             
-            const lines = buffer.split('\n')
+            // Обрабатываем полные строки (SSE формат использует \n или \r\n)
+            const lines = buffer.split(/\r?\n/)
             buffer = lines.pop() || ''
 
             for (const line of lines) {
+              // Пропускаем пустые строки и комментарии
+              if (!line || line.trim() === '' || line.startsWith(':')) {
+                continue
+              }
+              
               if (line.startsWith('data: ')) {
                 const data = line.slice(6).trim()
                 if (data === '[DONE]') {
@@ -94,6 +100,7 @@ export default function ImageAnalysisPage() {
 
                 try {
                   const json = JSON.parse(data)
+                  // OpenRouter формат: json.choices[0].delta.content
                   const content = json.choices?.[0]?.delta?.content || ''
                   if (content) {
                     accumulatedText += content
@@ -101,8 +108,14 @@ export default function ImageAnalysisPage() {
                     console.log('📡 [STREAMING] Получен фрагмент:', content.length, 'символов, всего:', accumulatedText.length)
                   }
                 } catch (e) {
-                  console.warn('⚠️ [STREAMING] Ошибка парсинга SSE:', e, 'data:', data.substring(0, 100))
+                  // Игнорируем ошибки парсинга отдельных строк (могут быть неполные данные)
+                  if (data && data.length > 0 && !data.includes('[DONE]')) {
+                    console.debug('⚠️ [STREAMING] Ошибка парсинга SSE:', e, 'data:', data.substring(0, 100))
+                  }
                 }
+              } else if (line.trim() && !line.startsWith(':')) {
+                // Логируем другие строки для отладки
+                console.debug('📡 [STREAMING] Другая строка:', line.substring(0, 100))
               }
             }
           }
