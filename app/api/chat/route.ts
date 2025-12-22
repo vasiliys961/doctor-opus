@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendTextRequest } from '@/lib/openrouter';
+import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
 
 /**
  * API endpoint для ИИ-консультанта
- * Использует OpenRouter API напрямую
+ * Поддерживает обычный режим и streaming
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { message, history = [] } = body;
+    const { message, history = [], useStreaming = false, model } = body;
 
     if (!message) {
       return NextResponse.json(
@@ -23,8 +24,21 @@ export async function POST(request: NextRequest) {
       content: msg.content
     }));
 
-    // Вызов OpenRouter API напрямую
-    const result = await sendTextRequest(message, formattedHistory);
+    // Если запрошен streaming, возвращаем поток
+    if (useStreaming) {
+      const stream = await sendTextRequestStreaming(message, formattedHistory, model);
+      
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // Обычный режим - полный ответ
+    const result = await sendTextRequest(message, formattedHistory, model);
 
     return NextResponse.json({
       success: true,
