@@ -2,24 +2,40 @@
 
 import { useState } from 'react'
 import AudioUpload from '@/components/AudioUpload'
+import FileUpload from '@/components/FileUpload'
 import ReactMarkdown from 'react-markdown'
+import { logUsage } from '@/lib/simple-logger'
 
 type ModelType = 'opus' | 'sonnet'
 
 export default function ChatPage() {
   const [message, setMessage] = useState('')
-  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; files?: Array<{ name: string; size: number; type: string }> }>>([])
   const [loading, setLoading] = useState(false)
   const [showAudioUpload, setShowAudioUpload] = useState(false)
+  const [showFileUpload, setShowFileUpload] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
   const [model, setModel] = useState<ModelType>('opus')
 
   const handleSend = async () => {
-    if (!message.trim()) return
+    if (!message.trim() && selectedFiles.length === 0) return
 
-    const userMessage = message
+    const userMessage = message || (selectedFiles.length > 0 ? 'Проанализируйте прикрепленные файлы' : '')
+    const filesInfo = selectedFiles.map(f => ({
+      name: f.name,
+      size: f.size,
+      type: f.type
+    }))
+
     setMessage('')
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }])
+    setSelectedFiles([])
+    setShowFileUpload(false)
+    setMessages(prev => [...prev, { 
+      role: 'user', 
+      content: userMessage,
+      files: filesInfo.length > 0 ? filesInfo : undefined
+    }])
     setLoading(true)
 
     // Добавляем пустое сообщение ассистента для streaming
@@ -33,115 +49,228 @@ export default function ChatPage() {
         ? 'anthropic/claude-opus-4.5' 
         : 'anthropic/claude-sonnet-4.5'
 
-      if (useStreaming) {
-        // Streaming режим
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: userMessage,
-            history: messages,
-            useStreaming: true,
-            model: modelName,
-          }),
+      if (selectedFiles.length > 0) {
+        // Отправка с файлами через FormData
+        const formData = new FormData()
+        formData.append('message', userMessage)
+        formData.append('history', JSON.stringify(messages))
+        formData.append('useStreaming', useStreaming.toString())
+        formData.append('model', modelName)
+        selectedFiles.forEach(file => {
+          formData.append('files', file)
         })
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
+        if (useStreaming) {
+          // Streaming режим с файлами
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            body: formData,
+          })
 
-        const reader = response.body?.getReader()
-        const decoder = new TextDecoder()
-        let accumulatedText = ''
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`)
+          }
 
-        if (reader) {
-          console.log('📡 [STREAMING] Начало чтения потока')
-          let buffer = ''
-          
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) {
-              console.log('📡 [STREAMING] Поток завершён')
-              break
-            }
+          const reader = response.body?.getReader()
+          const decoder = new TextDecoder()
+          let accumulatedText = ''
 
-            const chunk = decoder.decode(value, { stream: true })
-            buffer += chunk
+          if (reader) {
+            console.log('📡 [STREAMING WITH FILES] Начало чтения потока')
+            let buffer = ''
             
-            // Обрабатываем полные строки
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || '' // Оставляем неполную строку в буфере
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) {
+                console.log('📡 [STREAMING WITH FILES] Поток завершён')
+                break
+              }
 
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6).trim()
-                if (data === '[DONE]') {
-                  console.log('📡 [STREAMING] Получен сигнал завершения')
-                  break
-                }
+              const chunk = decoder.decode(value, { stream: true })
+              buffer += chunk
+              
+              // Обрабатываем полные строки
+              const lines = buffer.split('\n')
+              buffer = lines.pop() || '' // Оставляем неполную строку в буфере
 
-                try {
-                  const json = JSON.parse(data)
-                  // OpenRouter формат: json.choices[0].delta.content
-                  const content = json.choices?.[0]?.delta?.content || ''
-                  if (content) {
-                    accumulatedText += content
-                    console.log('📡 [STREAMING] Получен фрагмент:', content.length, 'символов, всего:', accumulatedText.length)
-                    
-                    // Обновляем последнее сообщение ассистента
-                    setMessages(prev => {
-                      const newMessages = [...prev]
-                      if (newMessages[assistantMessageIndex]) {
-                        newMessages[assistantMessageIndex] = {
-                          role: 'assistant',
-                          content: accumulatedText
-                        }
-                      } else {
-                        // Если сообщения нет, добавляем новое
-                        newMessages.push({
-                          role: 'assistant',
-                          content: accumulatedText
-                        })
-                      }
-                      return newMessages
-                    })
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6).trim()
+                  if (data === '[DONE]') {
+                    console.log('📡 [STREAMING WITH FILES] Получен сигнал завершения')
+                    break
                   }
-                } catch (e) {
-                  // Логируем ошибки парсинга для отладки
-                  console.warn('⚠️ [STREAMING] Ошибка парсинга SSE:', e, 'data:', data.substring(0, 100))
+
+                  try {
+                    const json = JSON.parse(data)
+                    const content = json.choices?.[0]?.delta?.content || ''
+                    if (content) {
+                      accumulatedText += content
+                      
+                      setMessages(prev => {
+                        const newMessages = [...prev]
+                        if (newMessages[assistantMessageIndex]) {
+                          newMessages[assistantMessageIndex] = {
+                            role: 'assistant',
+                            content: accumulatedText
+                          }
+                        } else {
+                          newMessages.push({
+                            role: 'assistant',
+                            content: accumulatedText
+                          })
+                        }
+                        return newMessages
+                      })
+                    }
+                  } catch (e) {
+                    console.warn('⚠️ [STREAMING WITH FILES] Ошибка парсинга SSE:', e)
+                  }
                 }
-              } else if (line.trim() && !line.startsWith(':')) {
-                // Логируем другие строки для отладки
-                console.debug('📡 [STREAMING] Другая строка:', line.substring(0, 100))
               }
             }
+            
+            console.log('✅ [STREAMING WITH FILES] Итого получено:', accumulatedText.length, 'символов')
           }
-          
-          console.log('✅ [STREAMING] Итого получено:', accumulatedText.length, 'символов')
+        } else {
+          // Обычный режим с файлами
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            body: formData,
+          })
+
+          const data = await response.json()
+
+          if (data.success) {
+            setMessages(prev => [...prev, { role: 'assistant', content: data.result }])
+            logUsage({
+              section: 'chat',
+              model: modelName,
+              inputTokens: 1500,
+              outputTokens: 1200,
+            })
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${data.error}` }])
+          }
         }
       } else {
-        // Обычный режим
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: userMessage,
-            history: messages,
-            useStreaming: false,
-            model: modelName,
-          }),
-        })
+        // Отправка без файлов (обычный режим)
+        if (useStreaming) {
+          // Streaming режим
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              message: userMessage,
+              history: messages,
+              useStreaming: true,
+              model: modelName,
+            }),
+          })
 
-        const data = await response.json()
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`)
+          }
 
-        if (data.success) {
-          setMessages(prev => [...prev, { role: 'assistant', content: data.result }])
+          const reader = response.body?.getReader()
+          const decoder = new TextDecoder()
+          let accumulatedText = ''
+
+          if (reader) {
+            console.log('📡 [STREAMING] Начало чтения потока')
+            let buffer = ''
+            
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) {
+                console.log('📡 [STREAMING] Поток завершён')
+                break
+              }
+
+              const chunk = decoder.decode(value, { stream: true })
+              buffer += chunk
+              
+              // Обрабатываем полные строки
+              const lines = buffer.split('\n')
+              buffer = lines.pop() || '' // Оставляем неполную строку в буфере
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6).trim()
+                  if (data === '[DONE]') {
+                    console.log('📡 [STREAMING] Получен сигнал завершения')
+                    break
+                  }
+
+                  try {
+                    const json = JSON.parse(data)
+                    // OpenRouter формат: json.choices[0].delta.content
+                    const content = json.choices?.[0]?.delta?.content || ''
+                    if (content) {
+                      accumulatedText += content
+                      console.log('📡 [STREAMING] Получен фрагмент:', content.length, 'символов, всего:', accumulatedText.length)
+                      
+                      // Обновляем последнее сообщение ассистента
+                      setMessages(prev => {
+                        const newMessages = [...prev]
+                        if (newMessages[assistantMessageIndex]) {
+                          newMessages[assistantMessageIndex] = {
+                            role: 'assistant',
+                            content: accumulatedText
+                          }
+                        } else {
+                          // Если сообщения нет, добавляем новое
+                          newMessages.push({
+                            role: 'assistant',
+                            content: accumulatedText
+                          })
+                        }
+                        return newMessages
+                      })
+                    }
+                  } catch (e) {
+                    // Логируем ошибки парсинга для отладки
+                    console.warn('⚠️ [STREAMING] Ошибка парсинга SSE:', e, 'data:', data.substring(0, 100))
+                  }
+                } else if (line.trim() && !line.startsWith(':')) {
+                  // Логируем другие строки для отладки
+                  console.debug('📡 [STREAMING] Другая строка:', line.substring(0, 100))
+                }
+              }
+            }
+            
+            console.log('✅ [STREAMING] Итого получено:', accumulatedText.length, 'символов')
+          }
         } else {
-          setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${data.error}` }])
+          // Обычный режим
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              message: userMessage,
+              history: messages,
+              useStreaming: false,
+              model: modelName,
+            }),
+          })
+
+          const data = await response.json()
+
+          if (data.success) {
+            setMessages(prev => [...prev, { role: 'assistant', content: data.result }])
+            logUsage({
+              section: 'chat',
+              model: modelName,
+              inputTokens: 1000,
+              outputTokens: 1000,
+            })
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${data.error}` }])
+          }
         }
       }
     } catch (err: any) {
@@ -185,6 +314,19 @@ export default function ChatPage() {
                 <div className="font-semibold mb-2">
                   {msg.role === 'user' ? 'Вы' : 'ИИ-Консультант'}
                 </div>
+                {msg.files && msg.files.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {msg.files.map((file, fileIdx) => (
+                      <span
+                        key={fileIdx}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-gray-200 rounded text-xs"
+                        title={`${file.name} (${(file.size / 1024).toFixed(1)} KB)`}
+                      >
+                        📎 {file.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="prose prose-sm max-w-none">
                   {msg.role === 'user' ? (
                     <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -242,6 +384,51 @@ export default function ChatPage() {
         </div>
       )}
 
+      {showFileUpload && (
+        <div className="mb-4 bg-white rounded-lg shadow-lg p-4">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-semibold">📎 Загрузка файлов</h3>
+            <button
+              onClick={() => {
+                setShowFileUpload(false)
+                setSelectedFiles([])
+              }}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          </div>
+          <FileUpload
+            onUpload={(files) => {
+              setSelectedFiles(prev => [...prev, ...files])
+            }}
+            multiple={true}
+            maxSize={50}
+          />
+          {selectedFiles.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="text-sm font-medium mb-2">Выбранные файлы ({selectedFiles.length}):</div>
+              <div className="flex flex-wrap gap-2">
+                {selectedFiles.map((file, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 rounded text-xs"
+                  >
+                    📎 {file.name}
+                    <button
+                      onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
+                      className="text-red-500 hover:text-red-700 ml-1"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
         <div className="flex flex-wrap gap-4 items-center">
           <label className="flex items-center gap-2 cursor-pointer">
@@ -277,18 +464,29 @@ export default function ChatPage() {
         >
           🎤
         </button>
+        <button
+          onClick={() => setShowFileUpload(!showFileUpload)}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            selectedFiles.length > 0
+              ? 'bg-primary-500 hover:bg-primary-600 text-white'
+              : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+          }`}
+          title="Загрузить файлы"
+        >
+          📎 {selectedFiles.length > 0 && `(${selectedFiles.length})`}
+        </button>
         <input
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-          placeholder="Введите ваш вопрос или загрузите аудио..."
+          placeholder="Введите ваш вопрос или загрузите файлы..."
           className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           disabled={loading}
         />
         <button
           onClick={handleSend}
-          disabled={loading || !message.trim()}
+          disabled={loading || (!message.trim() && selectedFiles.length === 0)}
           className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Отправить

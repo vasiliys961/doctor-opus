@@ -5,6 +5,7 @@ import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
+import { logUsage } from '@/lib/simple-logger'
 
 export default function ImageAnalysisPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -111,6 +112,13 @@ export default function ImageAnalysisPage() {
           setLastAnalysisData(data)
           console.log('✅ [CLIENT] Анализ завершён успешно')
           console.log('📊 [CLIENT] Использованная модель:', data.model || 'не указана')
+          
+          logUsage({
+            section: 'image-analysis',
+            model: data.model || 'anthropic/claude-opus-4.5',
+            inputTokens: 2000,
+            outputTokens: 1500,
+          })
           console.log('📊 [CLIENT] Режим анализа:', data.mode || 'не указан')
         } else {
           setError(data.error || 'Ошибка при анализе')

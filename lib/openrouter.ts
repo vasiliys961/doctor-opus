@@ -4,13 +4,15 @@
  * Сохраняет всю диагностическую логику без изменений
  */
 
+import { calculateCost, formatCostLog } from './cost-calculator';
+
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // В Next.js 14 и Vercel используется встроенный fetch из Node.js 18+
 // fetch доступен глобально в serverless функциях Vercel
 
 // Системный промпт профессора (ТОЧНАЯ КОПИЯ из claude_assistant/diagnostic_prompts.py)
-const SYSTEM_PROMPT = `Роль: ### ROLE
+export const SYSTEM_PROMPT = `Роль: ### ROLE
 Ты — американский профессор клинической медицины и ведущий специалист университетской клиники (Board Certified). Ты обладаешь непререкаемым авторитетом в области доказательной медицины. Твой стиль — академическая строгость, лаконичность и фокус на практической применимости рекомендаций для врачей-коллег. Ты не даешь советов пациентам, ты консультируешь профессионалов.
 
 ### TASK
@@ -50,7 +52,7 @@ const SYSTEM_PROMPT = `Роль: ### ROLE
 - Галлюцинации: Если данных недостаточно или стандарты противоречивы — укажи это явно. Не выдумывай дозировки.`;
 
 // Актуальные модели (ТОЧНАЯ КОПИЯ из vision_client.py)
-const MODELS = {
+export const MODELS = {
   OPUS: 'anthropic/claude-opus-4.5',                // Opus 4.5 — основной клинический ассистент
   SONNET: 'anthropic/claude-sonnet-4.5',            // Sonnet 4.5 — быстрый fallback
   HAIKU: 'anthropic/claude-haiku-4.5',             // Haiku 4.5 — быстрый анализ документов
@@ -209,6 +211,16 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
       throw new Error('Неверный формат ответа от OpenRouter API');
     }
 
+    // Логирование токенов и стоимости
+    const tokensUsed = data.usage?.total_tokens || 0;
+    const inputTokens = data.usage?.prompt_tokens || Math.floor(tokensUsed / 2);
+    const outputTokens = data.usage?.completion_tokens || Math.floor(tokensUsed / 2);
+    
+    if (tokensUsed > 0) {
+      console.log(`✅ [${model}] Запрос завершен`);
+      console.log(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
+    }
+
     return data.choices[0].message.content || '';
   } catch (error: any) {
     console.error('Error calling OpenRouter API:', {
@@ -312,7 +324,15 @@ export async function analyzeImageFast(options: {
     const visionData = await visionResponse.json();
     const description = visionData.choices[0].message.content || '';
     
+    // Логирование токенов и стоимости для шага 1
+    const visionTokensUsed = visionData.usage?.total_tokens || 0;
+    const visionInputTokens = visionData.usage?.prompt_tokens || Math.floor(visionTokensUsed / 2);
+    const visionOutputTokens = visionData.usage?.completion_tokens || Math.floor(visionTokensUsed / 2);
+    
     console.log('✅ [FAST] Шаг 1 завершен, длина описания:', description.length);
+    if (visionTokensUsed > 0) {
+      console.log(`   📊 ${formatCostLog(visionModel, visionInputTokens, visionOutputTokens, visionTokensUsed)}`);
+    }
     
     // Шаг 2: Gemini 3.0 анализирует описание
     const textModel = MODELS.GEMINI_FLASH_30;
@@ -352,7 +372,15 @@ export async function analyzeImageFast(options: {
     const textData = await textResponse.json();
     const result = textData.choices[0].message.content || '';
     
+    // Логирование токенов и стоимости для шага 2
+    const textTokensUsed = textData.usage?.total_tokens || 0;
+    const textInputTokens = textData.usage?.prompt_tokens || Math.floor(textTokensUsed / 2);
+    const textOutputTokens = textData.usage?.completion_tokens || Math.floor(textTokensUsed / 2);
+    
     console.log('✅ [FAST] Шаг 2 завершен, длина результата:', result.length);
+    if (textTokensUsed > 0) {
+      console.log(`   📊 ${formatCostLog(textModel, textInputTokens, textOutputTokens, textTokensUsed)}`);
+    }
     
     return result;
   } catch (error: any) {
@@ -452,7 +480,15 @@ ${prompt}
     const visionData = await visionResponse.json();
     const description = visionData.choices[0].message.content || '';
     
+    // Логирование токенов и стоимости для шага 1
+    const visionTokensUsed = visionData.usage?.total_tokens || 0;
+    const visionInputTokens = visionData.usage?.prompt_tokens || Math.floor(visionTokensUsed / 2);
+    const visionOutputTokens = visionData.usage?.completion_tokens || Math.floor(visionTokensUsed / 2);
+    
     console.log('✅ [OPUS TWO-STAGE] Шаг 1 завершен, длина описания:', description.length);
+    if (visionTokensUsed > 0) {
+      console.log(`   📊 ${formatCostLog(visionModel, visionInputTokens, visionOutputTokens, visionTokensUsed)}`);
+    }
     
     // Шаг 2: Текстовый Opus анализирует описание и формирует директиву
     const textModel = MODELS.OPUS;
@@ -503,7 +539,15 @@ ${prompt}
     const textData = await textResponse.json();
     const result = textData.choices[0].message.content || '';
     
+    // Логирование токенов и стоимости для шага 2
+    const textTokensUsed = textData.usage?.total_tokens || 0;
+    const textInputTokens = textData.usage?.prompt_tokens || Math.floor(textTokensUsed / 2);
+    const textOutputTokens = textData.usage?.completion_tokens || Math.floor(textTokensUsed / 2);
+    
     console.log('✅ [OPUS TWO-STAGE] Шаг 2 завершен, длина результата:', result.length);
+    if (textTokensUsed > 0) {
+      console.log(`   📊 ${formatCostLog(textModel, textInputTokens, textOutputTokens, textTokensUsed)}`);
+    }
     
     return result;
   } catch (error: any) {
@@ -608,7 +652,16 @@ export async function extractImageJSON(options: { imageBase64: string; modality?
         
         try {
           const jsonExtraction = JSON.parse(jsonStr);
+          
+          // Логирование токенов и стоимости
+          const tokensUsed = resultData.usage?.total_tokens || 0;
+          const inputTokens = resultData.usage?.prompt_tokens || Math.floor(tokensUsed / 2);
+          const outputTokens = resultData.usage?.completion_tokens || Math.floor(tokensUsed / 2);
+          
           console.log(`✅ [GEMINI JSON] JSON извлечен успешно через ${model}`);
+          if (tokensUsed > 0) {
+            console.log(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
+          }
           return jsonExtraction;
         } catch (e) {
           console.warn(`⚠️ [GEMINI JSON] Ошибка парсинга JSON от ${model}, пробую следующую модель...`);
@@ -698,6 +751,16 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       console.error('Invalid response format:', JSON.stringify(data).substring(0, 500));
       throw new Error('Неверный формат ответа от OpenRouter API');
+    }
+
+    // Логирование токенов и стоимости
+    const tokensUsed = data.usage?.total_tokens || 0;
+    const inputTokens = data.usage?.prompt_tokens || Math.floor(tokensUsed / 2);
+    const outputTokens = data.usage?.completion_tokens || Math.floor(tokensUsed / 2);
+    
+    if (tokensUsed > 0) {
+      console.log(`✅ [${selectedModel}] Запрос завершен`);
+      console.log(`   📊 ${formatCostLog(selectedModel, inputTokens, outputTokens, tokensUsed)}`);
     }
 
     return data.choices[0].message.content || '';

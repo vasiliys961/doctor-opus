@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import Script from 'next/script'
-import { logUsage } from '@/lib/simple-logger'
 
 // Расширяем Window для PDF.js
 declare global {
@@ -13,9 +12,8 @@ declare global {
   }
 }
 
-export default function DocumentPage() {
+export default function LabPage() {
   const [file, setFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -30,10 +28,10 @@ export default function DocumentPage() {
 
     try {
       const pdfjs = window.pdfjsLib
-      console.log('📄 [DOC PDF] Начинаем конвертацию PDF в изображения...')
+      console.log('📄 [LAB PDF] Начинаем конвертацию PDF в изображения...')
       
       const arrayBuffer = await pdfFile.arrayBuffer()
-      console.log(`📄 [DOC PDF] Файл загружен, размер: ${arrayBuffer.byteLength} байт`)
+      console.log(`📄 [LAB PDF] Файл загружен, размер: ${arrayBuffer.byteLength} байт`)
       
       const loadingTask = pdfjs.getDocument({ 
         data: arrayBuffer,
@@ -44,7 +42,7 @@ export default function DocumentPage() {
       const totalPages = pdf.numPages
       const maxPages = Math.min(totalPages, 7) // Первые 7 страниц
 
-      console.log(`📄 [DOC PDF] Всего страниц: ${totalPages}, обрабатываем: ${maxPages}`)
+      console.log(`📄 [LAB PDF] Всего страниц: ${totalPages}, обрабатываем: ${maxPages}`)
 
       const base64Images: string[] = []
 
@@ -73,7 +71,7 @@ export default function DocumentPage() {
         
         if (base64 && base64.length > 0) {
           base64Images.push(base64)
-          console.log(`✅ [DOC PDF] Страница ${pageNum}/${maxPages} конвертирована`)
+          console.log(`✅ [LAB PDF] Страница ${pageNum}/${maxPages} конвертирована`)
         }
       }
 
@@ -81,11 +79,11 @@ export default function DocumentPage() {
         throw new Error('Не удалось конвертировать ни одной страницы PDF')
       }
 
-      console.log(`✅ [DOC PDF] Конвертация завершена. Получено ${base64Images.length} изображений`)
+      console.log(`✅ [LAB PDF] Конвертация завершена. Получено ${base64Images.length} изображений`)
       return base64Images
       
     } catch (error: any) {
-      console.error('❌ [DOC PDF] Ошибка конвертации:', error)
+      console.error('❌ [LAB PDF] Ошибка конвертации:', error)
       throw new Error(`Ошибка конвертации PDF: ${error.message}`)
     }
   }
@@ -99,7 +97,7 @@ export default function DocumentPage() {
     try {
       // Если это PDF - конвертируем в изображения на клиенте
       if (uploadedFile.type === 'application/pdf' || uploadedFile.name.toLowerCase().endsWith('.pdf')) {
-        console.log('📄 [DOC] Обнаружен PDF файл, начинаем конвертацию...')
+        console.log('📄 [LAB] Обнаружен PDF файл, начинаем конвертацию...')
         setConvertingPDF(true)
         setConversionProgress(null)
         
@@ -108,17 +106,17 @@ export default function DocumentPage() {
         setConvertingPDF(false)
         setConversionProgress(null)
         
-        console.log(`📄 [DOC] PDF конвертирован в ${pdfImages.length} изображений, отправляем на сканирование...`)
+        console.log(`📄 [LAB] PDF конвертирован в ${pdfImages.length} изображений, отправляем на анализ...`)
         
         // Отправляем изображения на сервер
-        const response = await fetch('/api/scan/document-images', {
+        const response = await fetch('/api/analyze/lab-images', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             images: pdfImages,
-            prompt: 'Отсканируйте и извлеките весь текст из медицинского документа, СОХРАНЯЯ СТРУКТУРУ: таблицы в Markdown, списки, заголовки, форматирование. Структурируйте информацию по страницам.'
+            prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.'
           }),
         })
 
@@ -126,33 +124,16 @@ export default function DocumentPage() {
 
         if (data.success) {
           setResult(data.result)
-          logUsage({
-            section: 'document',
-            model: 'anthropic/claude-haiku-4.5',
-            inputTokens: pdfImages.length * 1500,
-            outputTokens: 1000,
-          })
         } else {
-          setError(data.error || 'Ошибка при сканировании')
+          setError(data.error || 'Ошибка при анализе')
         }
       } else {
-        // Для обычных изображений - используем существующий endpoint
-        // Создаем превью для изображений
-        if (uploadedFile.type.startsWith('image/')) {
-          const reader = new FileReader()
-          reader.onloadend = () => {
-            setImagePreview(reader.result as string)
-          }
-          reader.readAsDataURL(uploadedFile)
-        } else {
-          setImagePreview(null)
-        }
-
+        // Для обычных файлов (изображения, Excel, CSV)
         const formData = new FormData()
         formData.append('file', uploadedFile)
-        formData.append('prompt', 'Отсканируйте и извлеките текст из медицинского документа, СОХРАНЯЯ СТРУКТУРУ: таблицы, списки, заголовки, форматирование.')
+        formData.append('prompt', 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.')
 
-        const response = await fetch('/api/scan/document', {
+        const response = await fetch('/api/analyze/lab', {
           method: 'POST',
           body: formData,
         })
@@ -161,14 +142,8 @@ export default function DocumentPage() {
 
         if (data.success) {
           setResult(data.result)
-          logUsage({
-            section: 'document',
-            model: 'anthropic/claude-haiku-4.5',
-            inputTokens: 1500,
-            outputTokens: 800,
-          })
         } else {
-          setError(data.error || 'Ошибка при сканировании')
+          setError(data.error || 'Ошибка при анализе')
         }
       }
     } catch (err: any) {
@@ -190,20 +165,20 @@ export default function DocumentPage() {
             window.pdfjsLib.GlobalWorkerOptions.workerSrc = 
               'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs'
             setPdfJsLoaded(true)
-            console.log('✅ PDF.js загружен для сканирования документов')
+            console.log('✅ PDF.js загружен для лабораторного анализа')
           }
         }}
       />
 
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-primary-900 mb-6">📄 Сканирование документов</h1>
+        <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 Анализ лабораторных данных</h1>
         
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Загрузите документ для сканирования</h2>
+          <h2 className="text-xl font-semibold mb-4">Загрузите файл с лабораторными данными</h2>
           <p className="text-sm text-gray-600 mb-4">
-            Поддерживаемые форматы: PDF, изображения (JPG, PNG)
+            Поддерживаемые форматы: PDF, XLSX, XLS, CSV, изображения (JPG, PNG)
           </p>
-          <ImageUpload onUpload={handleUpload} accept=".pdf,image/*" maxSize={50} />
+          <ImageUpload onUpload={handleUpload} accept=".pdf,.xlsx,.xls,.csv,image/*" maxSize={50} />
         </div>
 
         {/* Прогресс конвертации PDF */}
@@ -220,26 +195,13 @@ export default function DocumentPage() {
           </div>
         )}
 
-      {file && imagePreview && (
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">📷 Загруженный документ</h2>
-          <div className="flex justify-center">
-            <img 
-              src={imagePreview} 
-              alt="Загруженный документ" 
-              className="max-w-full max-h-[600px] rounded-lg shadow-lg object-contain"
-            />
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+            {error}
           </div>
-        </div>
-      )}
+        )}
 
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-          {error}
-        </div>
-      )}
-
-      <AnalysisResult result={result} loading={loading} />
+        <AnalysisResult result={result} loading={loading} />
       </div>
     </>
   )

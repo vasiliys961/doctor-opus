@@ -5,6 +5,7 @@ import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
+import { logUsage } from '@/lib/simple-logger'
 
 export default function XRayPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -87,6 +88,12 @@ export default function XRayPage() {
 
         if (data.success) {
           setResult(data.result)
+          logUsage({
+            section: 'xray',
+            model: data.model || 'anthropic/claude-opus-4.5',
+            inputTokens: 2000,
+            outputTokens: 1500,
+          })
         } else {
           setError(data.error || 'Ошибка при анализе')
         }

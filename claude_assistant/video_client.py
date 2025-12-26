@@ -18,6 +18,7 @@ from .diagnostic_prompts import get_system_prompt
 from .logging_handler import log_api_error, log_api_success, _get_model_name
 from utils.error_handler import handle_error, log_api_call
 from utils.performance_monitor import track_model_usage
+from utils.cost_calculator import calculate_cost, format_cost_log
 
 # Импорт функции для загрузки промптов видео (ленивая загрузка)
 # Используем функцию из оригинального claude_assistant.py
@@ -256,7 +257,18 @@ class VideoClient(BaseAPIClient):
                 result = result_data["choices"][0]["message"]["content"]
                 
                 tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
-                print(f"✅ [⚡ FLASH] [VIDEO] Модель: Gemini 2.5 Flash, Токенов: {tokens_used}, Latency: {latency:.2f}с")
+                input_tokens = result_data.get("usage", {}).get("prompt_tokens", tokens_used // 2)
+                output_tokens = result_data.get("usage", {}).get("completion_tokens", tokens_used // 2)
+                if input_tokens == tokens_used // 2 and output_tokens == tokens_used // 2:
+                    input_tokens = result_data.get("usage", {}).get("prompt_tokens", 0)
+                    output_tokens = result_data.get("usage", {}).get("completion_tokens", 0)
+                    if input_tokens == 0 and output_tokens == 0:
+                        input_tokens = tokens_used // 2
+                        output_tokens = tokens_used // 2
+                
+                cost_info = calculate_cost(input_tokens, output_tokens, model)
+                print(f"✅ [⚡ FLASH] [VIDEO] Модель: Gemini 2.5 Flash, Latency: {latency:.2f}с")
+                print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
                 log_api_call(model, True, latency, None)
                 track_model_usage(model, True, tokens_used)
                 
@@ -448,6 +460,18 @@ class VideoClient(BaseAPIClient):
             video_description = result_data_desc["choices"][0]["message"]["content"]
             
             tokens_used_desc = result_data_desc.get("usage", {}).get("total_tokens", 0)
+            input_tokens_desc = result_data_desc.get("usage", {}).get("prompt_tokens", tokens_used_desc // 2)
+            output_tokens_desc = result_data_desc.get("usage", {}).get("completion_tokens", tokens_used_desc // 2)
+            if input_tokens_desc == tokens_used_desc // 2 and output_tokens_desc == tokens_used_desc // 2:
+                input_tokens_desc = result_data_desc.get("usage", {}).get("prompt_tokens", 0)
+                output_tokens_desc = result_data_desc.get("usage", {}).get("completion_tokens", 0)
+                if input_tokens_desc == 0 and output_tokens_desc == 0:
+                    input_tokens_desc = tokens_used_desc // 2
+                    output_tokens_desc = tokens_used_desc // 2
+            
+            cost_info_desc = calculate_cost(input_tokens_desc, output_tokens_desc, model)
+            print(f"✅ [⚡ FLASH] [VIDEO DESCRIPTION] Модель: {model}, Latency: {latency_desc:.2f}с")
+            print(f"   📊 {format_cost_log(model, input_tokens_desc, output_tokens_desc, tokens_used_desc)}")
             log_api_call(model, True, latency_desc, None)
             track_model_usage(model, True, tokens_used_desc)
             
@@ -502,6 +526,18 @@ class VideoClient(BaseAPIClient):
                 specialized_result = result_data_gemini["choices"][0]["message"]["content"]
                 
                 tokens_used_gemini = result_data_gemini.get("usage", {}).get("total_tokens", 0)
+                input_tokens_gemini = result_data_gemini.get("usage", {}).get("prompt_tokens", tokens_used_gemini // 2)
+                output_tokens_gemini = result_data_gemini.get("usage", {}).get("completion_tokens", tokens_used_gemini // 2)
+                if input_tokens_gemini == tokens_used_gemini // 2 and output_tokens_gemini == tokens_used_gemini // 2:
+                    input_tokens_gemini = result_data_gemini.get("usage", {}).get("prompt_tokens", 0)
+                    output_tokens_gemini = result_data_gemini.get("usage", {}).get("completion_tokens", 0)
+                    if input_tokens_gemini == 0 and output_tokens_gemini == 0:
+                        input_tokens_gemini = tokens_used_gemini // 2
+                        output_tokens_gemini = tokens_used_gemini // 2
+                
+                cost_info_gemini = calculate_cost(input_tokens_gemini, output_tokens_gemini, model)
+                print(f"✅ [⚡ FLASH] [VIDEO GEMINI TEXT] Модель: {model}, Latency: {latency_gemini:.2f}с")
+                print(f"   📊 {format_cost_log(model, input_tokens_gemini, output_tokens_gemini, tokens_used_gemini)}")
                 log_api_call(model, True, latency_gemini, None)
                 track_model_usage(model, True, tokens_used_gemini)
                 specialized_result = f"**🎬 Быстрый анализ (Gemini Flash):**\n\n{specialized_result}"

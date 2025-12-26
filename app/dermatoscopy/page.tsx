@@ -5,6 +5,7 @@ import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
+import { logUsage } from '@/lib/simple-logger'
 
 export default function DermatoscopyPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -78,6 +79,12 @@ export default function DermatoscopyPage() {
 
         if (data.success) {
           setResult(data.result)
+          logUsage({
+            section: 'dermatoscopy',
+            model: data.model || 'anthropic/claude-opus-4.5',
+            inputTokens: 2000,
+            outputTokens: 1500,
+          })
         } else {
           setError(data.error || 'Ошибка при анализе')
         }

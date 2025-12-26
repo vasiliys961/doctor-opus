@@ -20,6 +20,7 @@ from .logging_handler import log_api_error, log_api_success, _get_model_name
 from utils.error_handler import handle_error, log_api_call
 from utils.performance_monitor import track_model_usage
 from utils.cache_manager import get_image_hash, get_cache_key, get_cached_result, save_to_cache, clear_old_cache
+from utils.cost_calculator import calculate_cost, format_cost_log
 
 # Константы из claude_assistant.py (адаптированы под текущий лимит токенов)
 API_TIMEOUT_SECONDS = 120
@@ -412,6 +413,19 @@ class VisionClient(BaseAPIClient):
                         result_data = response.json()
                         result = result_data["choices"][0]["message"]["content"]
                         tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                        input_tokens = result_data.get("usage", {}).get("prompt_tokens", tokens_used // 2)
+                        output_tokens = result_data.get("usage", {}).get("completion_tokens", tokens_used // 2)
+                        if input_tokens == tokens_used // 2 and output_tokens == tokens_used // 2:
+                            input_tokens = result_data.get("usage", {}).get("prompt_tokens", 0)
+                            output_tokens = result_data.get("usage", {}).get("completion_tokens", 0)
+                            if input_tokens == 0 and output_tokens == 0:
+                                input_tokens = tokens_used // 2
+                                output_tokens = tokens_used // 2
+                        
+                        cost_info = calculate_cost(input_tokens, output_tokens, model)
+                        model_name = _get_model_name(model)
+                        print(f"✅ [{model_name}] [CONSENSUS] Запрос завершен за {latency:.2f}с")
+                        print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
                         log_api_success(model, latency, tokens_used)
                         results.append({
                             "model": model,
@@ -501,7 +515,17 @@ class VisionClient(BaseAPIClient):
                         tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
                         input_tokens = result_data.get("usage", {}).get("prompt_tokens", tokens_used // 2)
                         output_tokens = result_data.get("usage", {}).get("completion_tokens", tokens_used // 2)
+                        if input_tokens == tokens_used // 2 and output_tokens == tokens_used // 2:
+                            input_tokens = result_data.get("usage", {}).get("prompt_tokens", 0)
+                            output_tokens = result_data.get("usage", {}).get("completion_tokens", 0)
+                            if input_tokens == 0 and output_tokens == 0:
+                                input_tokens = tokens_used // 2
+                                output_tokens = tokens_used // 2
+                        
+                        cost_info = calculate_cost(input_tokens, output_tokens, model)
                         model_name = _get_model_name(model)
+                        print(f"✅ [{model_name}] Запрос завершен за {latency:.2f}с")
+                        print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
                         log_api_success(model, latency, tokens_used, f"{model_name}")
                         
                         # Сохраняем информацию о последнем запросе для статистики
@@ -572,7 +596,19 @@ class VisionClient(BaseAPIClient):
                         result = result_data["choices"][0]["message"]["content"]
                         
                         tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                        input_tokens = result_data.get("usage", {}).get("prompt_tokens", tokens_used // 2)
+                        output_tokens = result_data.get("usage", {}).get("completion_tokens", tokens_used // 2)
+                        if input_tokens == tokens_used // 2 and output_tokens == tokens_used // 2:
+                            input_tokens = result_data.get("usage", {}).get("prompt_tokens", 0)
+                            output_tokens = result_data.get("usage", {}).get("completion_tokens", 0)
+                            if input_tokens == 0 and output_tokens == 0:
+                                input_tokens = tokens_used // 2
+                                output_tokens = tokens_used // 2
+                        
+                        cost_info = calculate_cost(input_tokens, output_tokens, model)
                         model_name = _get_model_name(model)
+                        print(f"✅ [{model_name}] [FALLBACK] Запрос завершен за {latency:.2f}с")
+                        print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
                         log_api_success(model, latency, tokens_used, f"FALLBACK {model_name}")
                         
                         if is_document or (force_model and force_model.lower() == "llama"):
@@ -784,6 +820,16 @@ class VisionClient(BaseAPIClient):
                     result = result_data["choices"][0]["message"]["content"]
                     
                     tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                    input_tokens = result_data.get("usage", {}).get("prompt_tokens", tokens_used // 2)
+                    output_tokens = result_data.get("usage", {}).get("completion_tokens", tokens_used // 2)
+                    if input_tokens == tokens_used // 2 and output_tokens == tokens_used // 2:
+                        input_tokens = result_data.get("usage", {}).get("prompt_tokens", 0)
+                        output_tokens = result_data.get("usage", {}).get("completion_tokens", 0)
+                        if input_tokens == 0 and output_tokens == 0:
+                            input_tokens = tokens_used // 2
+                            output_tokens = tokens_used // 2
+                    
+                    cost_info = calculate_cost(input_tokens, output_tokens, model_to_try)
                     log_api_call(model_to_try, True, latency, None)
                     track_model_usage(model_to_try, True, tokens_used)
                     
@@ -793,7 +839,8 @@ class VisionClient(BaseAPIClient):
                     else:
                         model_name = "Gemini 2.5 Flash"
                     
-                    print(f"✅ [⚡ FLASH] [GEMINI FLASH] Модель: {model_name}, Токенов: {tokens_used}, Latency: {latency:.2f}с")
+                    print(f"✅ [⚡ FLASH] [GEMINI FLASH] Модель: {model_name}, Latency: {latency:.2f}с")
+                    print(f"   📊 {format_cost_log(model_to_try, input_tokens, output_tokens, tokens_used)}")
                     log_api_success(model_to_try, latency, tokens_used, "GEMINI FLASH")
                     return f"**⚡ Быстрый анализ ({model_name}):**\n\n{result}"
                 elif response.status_code == 402:
@@ -1251,11 +1298,22 @@ class VisionClient(BaseAPIClient):
                         json_extraction = json.loads(json_str)
                         
                         tokens_used = result_data.get("usage", {}).get("total_tokens", 0)
+                        input_tokens = result_data.get("usage", {}).get("prompt_tokens", tokens_used // 2)
+                        output_tokens = result_data.get("usage", {}).get("completion_tokens", tokens_used // 2)
+                        if input_tokens == tokens_used // 2 and output_tokens == tokens_used // 2:
+                            input_tokens = result_data.get("usage", {}).get("prompt_tokens", 0)
+                            output_tokens = result_data.get("usage", {}).get("completion_tokens", 0)
+                            if input_tokens == 0 and output_tokens == 0:
+                                input_tokens = tokens_used // 2
+                                output_tokens = tokens_used // 2
+                        
+                        cost_info = calculate_cost(input_tokens, output_tokens, model)
                         log_api_call(model, True, latency, None)
                         track_model_usage(model, True, tokens_used)
                         
                         model_name = "Gemini 3.0 Flash Preview" if "gemini-3-flash" in model else "Gemini 2.5 Flash"
-                        print(f"✅ [⚡ FLASH] [GEMINI JSON] Модель: {model_name}, Токенов: {tokens_used}, Latency: {latency:.2f}с")
+                        print(f"✅ [⚡ FLASH] [GEMINI JSON] Модель: {model_name}, Latency: {latency:.2f}с")
+                        print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
                         log_api_success(model, latency, tokens_used, "GEMINI JSON")
                         return json_extraction
                     except json.JSONDecodeError as e:

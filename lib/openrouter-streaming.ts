@@ -3,6 +3,8 @@
  * Реализует Server-Sent Events (SSE) для постепенного получения ответов
  */
 
+import { calculateCost, formatCostLog } from './cost-calculator';
+
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Системный промпт профессора (ТОЧНАЯ КОПИЯ)
@@ -257,7 +259,15 @@ ${prompt}
     const visionData = await visionResponse.json();
     const description = visionData.choices[0].message.content || '';
     
+    // Логирование токенов и стоимости для шага 1
+    const visionTokensUsed = visionData.usage?.total_tokens || 0;
+    const visionInputTokens = visionData.usage?.prompt_tokens || Math.floor(visionTokensUsed / 2);
+    const visionOutputTokens = visionData.usage?.completion_tokens || Math.floor(visionTokensUsed / 2);
+    
     console.log('✅ [OPUS TWO-STAGE STREAMING] Шаг 1 завершен, длина описания:', description.length);
+    if (visionTokensUsed > 0) {
+      console.log(`   📊 ${formatCostLog(MODELS.OPUS, visionInputTokens, visionOutputTokens, visionTokensUsed)}`);
+    }
     
     // Шаг 2: Текстовый Opus формирует директиву со стримингом
     const textMessages = [

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { getUsageBySections, getCurrentMonthName, clearCurrentMonthStats } from '@/lib/simple-logger'
 
 // Цены моделей (для расчета условных единиц за 1M токенов)
 const MODEL_PRICING = {
@@ -24,13 +25,24 @@ interface ModelStats {
   totalCost: number
 }
 
+interface SectionStats {
+  sectionName: string
+  calls: number
+  costUnits: number
+  models: { [model: string]: number }
+}
+
 export default function StatisticsPage() {
   const [stats, setStats] = useState<ModelStats[]>([])
   const [totalCost, setTotalCost] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [sectionStats, setSectionStats] = useState<Record<string, SectionStats>>({})
+  const [monthTotalCost, setMonthTotalCost] = useState(0)
+  const [monthTotalCalls, setMonthTotalCalls] = useState(0)
 
   useEffect(() => {
     loadStatistics()
+    loadSectionStatistics()
   }, [])
 
   const loadStatistics = () => {
@@ -94,11 +106,39 @@ export default function StatisticsPage() {
     return cost * PRICE_MULTIPLIER
   }
 
+  const loadSectionStatistics = () => {
+    try {
+      const data = getUsageBySections()
+      setSectionStats(data)
+      
+      // Подсчитать общую стоимость и количество вызовов за месяц
+      let totalCost = 0
+      let totalCalls = 0
+      Object.values(data).forEach(section => {
+        totalCost += section.costUnits
+        totalCalls += section.calls
+      })
+      setMonthTotalCost(totalCost)
+      setMonthTotalCalls(totalCalls)
+    } catch (error) {
+      console.error('Error loading section statistics:', error)
+    }
+  }
+
   const clearStatistics = () => {
     if (confirm('Вы уверены, что хотите очистить всю статистику?')) {
       localStorage.removeItem('modelStatistics')
       setStats([])
       setTotalCost(0)
+    }
+  }
+
+  const clearMonthStatistics = () => {
+    if (confirm('Вы уверены, что хотите очистить статистику текущего месяца?')) {
+      clearCurrentMonthStats()
+      setSectionStats({})
+      setMonthTotalCost(0)
+      setMonthTotalCalls(0)
     }
   }
 
@@ -117,7 +157,7 @@ export default function StatisticsPage() {
     )
   }
 
-  if (stats.length === 0) {
+  if (stats.length === 0 && Object.keys(sectionStats).length === 0) {
     return (
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 Статистика использования</h1>
@@ -125,6 +165,9 @@ export default function StatisticsPage() {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
           <p className="text-blue-800">
             📈 Статистика пока недоступна. Используйте функции анализа для накопления данных.
+          </p>
+          <p className="text-sm text-blue-600 mt-2">
+            Попробуйте выполнить анализ в разделах: Лабораторные данные, ЭКГ или Генетика
           </p>
         </div>
       </div>
@@ -135,18 +178,104 @@ export default function StatisticsPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-primary-900">📊 Статистика использования</h1>
-        <button
-          onClick={clearStatistics}
-          className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
-        >
-          🔄 Очистить статистику
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={clearMonthStatistics}
+            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            🗓️ Очистить месяц
+          </button>
+          <button
+            onClick={clearStatistics}
+            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            🔄 Очистить всё
+          </button>
+        </div>
       </div>
 
-      {/* Общая стоимость */}
+      {/* Статистика за текущий месяц */}
+      <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg shadow-lg p-6 mb-6">
+        <div className="text-center">
+          <p className="text-lg opacity-90 mb-2">📅 {getCurrentMonthName()}</p>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div>
+              <p className="text-sm opacity-80">Потрачено</p>
+              <p className="text-3xl font-bold">{monthTotalCost.toFixed(2)} у.е.</p>
+            </div>
+            <div>
+              <p className="text-sm opacity-80">Запросов</p>
+              <p className="text-3xl font-bold">{monthTotalCalls}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Статистика по разделам */}
+      {Object.keys(sectionStats).length > 0 && (
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">📂 По разделам</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Раздел
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Запросов
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Стоимость (у.е.)
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    % от общей
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {Object.entries(sectionStats)
+                  .sort(([, a], [, b]) => b.costUnits - a.costUnits)
+                  .map(([key, section]) => {
+                    const percentage = monthTotalCost > 0 
+                      ? ((section.costUnits / monthTotalCost) * 100).toFixed(1)
+                      : '0.0'
+                    
+                    return (
+                      <tr key={key} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {section.sectionName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {formatNumber(section.calls)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-primary-700">
+                          {section.costUnits.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          <div className="flex items-center">
+                            <div className="w-full bg-gray-200 rounded-full h-2 mr-2" style={{ maxWidth: '100px' }}>
+                              <div
+                                className="bg-primary-500 h-2 rounded-full"
+                                style={{ width: `${percentage}%` }}
+                              ></div>
+                            </div>
+                            <span>{percentage}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Общая стоимость всех запросов */}
       <div className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white rounded-lg shadow-lg p-6 mb-6">
         <div className="text-center">
-          <p className="text-lg opacity-90 mb-2">💰 Общая стоимость всех запросов</p>
+          <p className="text-lg opacity-90 mb-2">💰 Общая стоимость всех запросов (за все время)</p>
           <p className="text-4xl font-bold">≈ {totalCost.toFixed(2)} усл. ед.</p>
         </div>
       </div>

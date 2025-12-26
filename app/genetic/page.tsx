@@ -5,6 +5,7 @@ import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import ReactMarkdown from 'react-markdown'
 import { handleSSEStream } from '@/lib/streaming-utils'
+import { logUsage } from '@/lib/simple-logger'
 
 declare global {
   interface Window {
@@ -300,6 +301,15 @@ export default function GeneticPage() {
 
       console.log('✅ [GENETIC PAGE] Данные извлечены, длина:', extractionData.extractedData?.length)
       setExtractedData(extractionData.extractedData || '')
+      
+      // Логирование использования (этап извлечения)
+      logUsage({
+        section: 'genetic',
+        model: 'google/gemini-2.0-flash-exp:free',
+        inputTokens: 3000, // примерное значение для PDF
+        outputTokens: 2000,
+      })
+      
       setLoading(false)
 
     } catch (err: any) {
@@ -398,6 +408,15 @@ export default function GeneticPage() {
         } else {
           setError(consultData.error || 'Ошибка при анализе')
         }
+        
+        // Логирование использования (этап консультации)
+        logUsage({
+          section: 'genetic',
+          model: 'anthropic/claude-opus-4.5',
+          inputTokens: 4000, // примерное значение для консультации
+          outputTokens: 3000,
+        })
+        
         setLoading(false)
       }
     } catch (err: any) {
