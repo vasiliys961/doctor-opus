@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>PDF Converter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <script>
+        // Настройка PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Слушаем сообщения от родительского окна
+        window.addEventListener('message', async (event) => {
+            if (event.data.type === 'CONVERT_PDF') {
+                try {
+                    const pdfData = event.data.pdfData;
+                    const maxPages = event.data.maxPages || 7;
+
+                    // Загружаем PDF
+                    const loadingTask = pdfjsLib.getDocument({ data: atob(pdfData) });
+                    const pdf = await loadingTask.promise;
+                    
+                    const totalPages = pdf.numPages;
+                    const pagesToProcess = Math.min(totalPages, maxPages);
+
+                    console.log(`Обработка ${pagesToProcess} из ${totalPages} страниц`);
+
+                    const base64Images = [];
+
+                    for (let pageNum = 1; pageNum <= pagesToProcess; pageNum++) {
+                        const page = await pdf.getPage(pageNum);
+                        const viewport = page.getViewport({ scale: 2.0 });
+
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.width = viewport.width;
+                        canvas.height = viewport.height;
+
+                        await page.render({
+                            canvasContext: context,
+                            viewport: viewport
+                        }).promise;
+
+                        const base64 = canvas.toDataURL('image/png').split(',')[1];
+                        base64Images.push(base64);
+
+                        // Отправляем прогресс
+                        window.parent.postMessage({
+                            type: 'CONVERSION_PROGRESS',
+                            page: pageNum,
+                            total: pagesToProcess
+                        }, '*');
+                    }
+
+                    // Отправляем результат
+                    window.parent.postMessage({
+                        type: 'CONVERSION_COMPLETE',
+                        images: base64Images
+                    }, '*');
+
+                } catch (error) {
+                    window.parent.postMessage({
+                        type: 'CONVERSION_ERROR',
+                        error: error.message
+                    }, '*');
+                }
+            }
+        });
+
+        // Сообщаем что готовы
+        window.parent.postMessage({ type: 'CONVERTER_READY' }, '*');
+    </script>
+</body>
+</html>
+

@@ -30,6 +30,9 @@ export async function POST(request: NextRequest) {
       question = '',
       mode = 'professor',
       useStreaming = mode === 'professor', // по умолчанию стриминг для «профессора»
+      history = [], // История диалога для продолжения разговора
+      isFollowUp = false, // Флаг что это продолжение диалога
+      files = [], // Дополнительные файлы (base64)
     } = body || {};
 
     if (!analysis || typeof analysis !== 'string' || analysis.trim().length === 0) {
@@ -39,17 +42,93 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const contextBlock =
-      clinicalContext && clinicalContext.trim().length > 0
-        ? `КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext.trim()}\n\n`
+    // Если это продолжение диалога, используем историю
+    let messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
+    
+    if (isFollowUp && history && history.length > 0) {
+      // Продолжение диалога - используем историю
+      const contextBlock =
+        clinicalContext && clinicalContext.trim().length > 0
+          ? `КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext.trim()}\n\n`
+          : '';
+      
+      const systemPrompt = `${contextBlock}ИССХОДНЫЕ ДАННЫЕ ГЕНЕТИЧЕСКОГО АНАЛИЗА:\n\n${analysis}\n\n
+Ты ведущий врач-генетик-консультант. Ранее ты провел анализ генетических данных пациента и дал заключение.
+Теперь пациент задает дополнительные вопросы. Отвечай профессионально, опираясь на предыдущий анализ и историю диалога.`;
+
+      messages.push({
+        role: 'system',
+        content: systemPrompt,
+      });
+
+      // Добавляем историю диалога
+      history.forEach((msg: any) => {
+        if (msg.role === 'user' || msg.role === 'assistant') {
+          messages.push({
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content: msg.content,
+          });
+        }
+      });
+
+      // Добавляем текущий вопрос с файлами
+      if (question && question.trim().length > 0 || files.length > 0) {
+        const userContent: any[] = [];
+        
+        // Добавляем текст вопроса если есть
+        if (question && question.trim().length > 0) {
+          userContent.push({
+            type: 'text',
+            text: question.trim(),
+          });
+        }
+        
+        // Добавляем информацию о файлах в текст
+        if (files.length > 0) {
+          const filesInfo = files.map((f: any) => `Файл: ${f.name} (${f.type})`).join('\n');
+          userContent.push({
+            type: 'text',
+            text: `\n\nПРИКРЕПЛЕННЫЕ ФАЙЛЫ:\n${filesInfo}\n\nПроанализируй эти файлы в контексте генетического анализа и ответь на вопрос выше.`,
+          });
+          
+          // Добавляем изображения как image_url для Vision API
+          files.forEach((f: any) => {
+            if (f.type.startsWith('image/')) {
+              userContent.push({
+                type: 'image_url',
+                image_url: {
+                  url: `data:${f.type};base64,${f.base64}`,
+                },
+              });
+            }
+          });
+        }
+        
+        messages.push({
+          role: 'user',
+          content: userContent.length === 1 && userContent[0].type === 'text' 
+            ? userContent[0].text 
+            : userContent,
+        });
+      }
+    } else {
+      // Первый запрос - стандартная логика
+      const contextBlock =
+        clinicalContext && clinicalContext.trim().length > 0
+          ? `КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext.trim()}\n\n`
+          : '';
+
+      const questionBlock =
+        question && question.trim().length > 0
+          ? `ДОПОЛНИТЕЛЬНЫЙ ЗАПРОС ОТ ВРАЧА:\n${question.trim()}\n\n`
+          : 'Сформируй итоговое заключение врача-генетика для истории болезни и плана ведения пациента.\n\n';
+
+      // Добавляем информацию о файлах если есть
+      const filesBlock = files.length > 0
+        ? `ПРИКРЕПЛЕННЫЕ ДОПОЛНИТЕЛЬНЫЕ ФАЙЛЫ:\n${files.map((f: any) => `- ${f.name} (${f.type})`).join('\n')}\n\nПроанализируй эти файлы в контексте генетического анализа.\n\n`
         : '';
 
-    const questionBlock =
-      question && question.trim().length > 0
-        ? `ДОПОЛНИТЕЛЬНЫЙ ЗАПРОС ОТ ВРАЧА:\n${question.trim()}\n\n`
-        : 'Сформируй итоговое заключение врача-генетика для истории болезни и плана ведения пациента.\n\n';
-
-    const userPrompt = `${contextBlock}${questionBlock}ИССХОДНЫЕ ДАННЫЕ ГЕНЕТИЧЕСКОГО АНАЛИЗА / ПРЕДЫДУЩЕЕ ЗАКЛЮЧЕНИЕ:\n\n${analysis}\n\n
+      const userPrompt = `${contextBlock}${questionBlock}${filesBlock}ИССХОДНЫЕ ДАННЫЕ ГЕНЕТИЧЕСКОГО АНАЛИЗА / ПРЕДЫДУЩЕЕ ЗАКЛЮЧЕНИЕ:\n\n${analysis}\n\n
 ТВОЯ ЗАДАЧА:
 - Не пересказывать дословно текст выше, а на его основе сформировать чёткое, структурированное КЛИНИЧЕСКОЕ ЗАКЛЮЧЕНИЕ врача-генетика.
 - Сделать акцент на: патогенных и вероятно патогенных вариантах, фармакогенетике, нутригеномике, рисках заболеваний и стратегии превентивной медицины/лонгевити.
@@ -65,24 +144,53 @@ export async function POST(request: NextRequest) {
 ПИШИ КАК ВРАЧ ДЛЯ ВРАЧА (не для пациента), профессиональным медицинским языком, с конкретикой.
 Избегай «воды», сосредоточься на клинически значимых выводах и действиях.`;
 
+      messages.push({
+        role: 'system',
+        content:
+          mode === 'fast'
+            ? 'Ты врач-генетик. Дай краткое, но клинически полезное заключение для врача на основе списка SNP и контекста.'
+            : 'Ты ведущий врач-генетик-консультант. На основе генетического анализа и клинического контекста формируешь клинически применимое заключение для врача-коллеги, без лишней воды.',
+      });
+      
+      // Если есть изображения, используем массив content
+      if (files.length > 0 && files.some((f: any) => f.type.startsWith('image/'))) {
+        const userContent: any[] = [
+          {
+            type: 'text',
+            text: userPrompt,
+          },
+        ];
+        
+        // Добавляем изображения
+        files.forEach((f: any) => {
+          if (f.type.startsWith('image/')) {
+            userContent.push({
+              type: 'image_url',
+              image_url: {
+                url: `data:${f.type};base64,${f.base64}`,
+              },
+            });
+          }
+        });
+        
+        messages.push({
+          role: 'user',
+          content: userContent,
+        });
+      } else {
+        messages.push({
+          role: 'user',
+          content: userPrompt,
+        });
+      }
+    }
+
     const consultModel =
       mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-sonnet-4.5';
 
     const payload: any = {
       model: consultModel,
-      messages: [
-        {
-          role: 'system' as const,
-          content:
-            mode === 'fast'
-              ? 'Ты врач-генетик. Дай краткое, но клинически полезное заключение для врача на основе списка SNP и контекста.'
-              : 'Ты ведущий врач-генетик-консультант. На основе генетического анализа и клинического контекста формируешь клинически применимое заключение для врача-коллеги, без лишней воды.',
-        },
-        {
-          role: 'user' as const,
-          content: userPrompt,
-        },
-      ],
+      messages: messages,
       max_tokens: 6000,
       temperature: 0.25,
       stream: useStreaming,

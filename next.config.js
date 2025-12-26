@@ -15,6 +15,12 @@ const nextConfig = {
       crypto: false,
     };
     
+    // Поддержка .mjs файлов для pdfjs-dist
+    config.resolve.extensionAlias = {
+      '.js': ['.js', '.ts', '.tsx', '.mjs'],
+      '.mjs': ['.mjs', '.js'],
+    };
+    
     // Для serverless функций используем встроенный fetch
     if (isServer) {
       config.resolve.alias = {
