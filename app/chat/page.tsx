@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import AudioUpload from '@/components/AudioUpload'
+import ReactMarkdown from 'react-markdown'
 
 type ModelType = 'opus' | 'sonnet'
 
@@ -184,7 +185,32 @@ export default function ChatPage() {
                 <div className="font-semibold mb-2">
                   {msg.role === 'user' ? 'Вы' : 'ИИ-Консультант'}
                 </div>
-                <div className="whitespace-pre-wrap">{msg.content}</div>
+                <div className="prose prose-sm max-w-none">
+                  {msg.role === 'user' ? (
+                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                  ) : (
+                    <ReactMarkdown
+                      components={{
+                        h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-3 mb-2" {...props} />,
+                        h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-2 mb-1" {...props} />,
+                        h3: ({node, ...props}) => <h3 className="text-base font-bold mt-2 mb-1" {...props} />,
+                        p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                        strong: ({node, ...props}) => <strong className="font-bold text-gray-900" {...props} />,
+                        ul: ({node, ...props}) => <ul className="list-disc ml-6 mb-2" {...props} />,
+                        ol: ({node, ...props}) => <ol className="list-decimal ml-6 mb-2" {...props} />,
+                        li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                        code: ({node, inline, ...props}: any) => 
+                          inline ? (
+                            <code className="bg-gray-200 px-1 rounded text-sm" {...props} />
+                          ) : (
+                            <code className="block bg-gray-200 p-2 rounded text-sm my-2" {...props} />
+                          ),
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  )}
+                </div>
               </div>
             ))}
             {loading && (

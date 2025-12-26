@@ -1,16 +1,298 @@
 'use client'
 
+import { useState, useEffect } from 'react'
+
+// Цены моделей (для расчета условных единиц за 1M токенов)
+const MODEL_PRICING = {
+  'anthropic/claude-opus-4.5': { input: 15.0, output: 75.0 },
+  'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
+  'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
+  'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
+  'google/gemini-3-flash-preview': { input: 0.50, output: 3.00 },
+}
+
+const PRICE_MULTIPLIER = 100 // Множитель для условных единиц
+
+interface ModelStats {
+  model: string
+  totalCalls: number
+  successfulCalls: number
+  failedCalls: number
+  totalTokens: number
+  inputTokens: number
+  outputTokens: number
+  totalCost: number
+}
+
 export default function StatisticsPage() {
+  const [stats, setStats] = useState<ModelStats[]>([])
+  const [totalCost, setTotalCost] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadStatistics()
+  }, [])
+
+  const loadStatistics = () => {
+    try {
+      // Загружаем статистику из localStorage
+      const savedStats = localStorage.getItem('modelStatistics')
+      if (savedStats) {
+        const parsedStats = JSON.parse(savedStats)
+        const statsArray: ModelStats[] = []
+        let total = 0
+
+        Object.entries(parsedStats).forEach(([model, data]: [string, any]) => {
+          const cost = calculateModelCost(
+            data.inputTokens || 0,
+            data.outputTokens || 0,
+            model
+          )
+          total += cost
+
+          statsArray.push({
+            model,
+            totalCalls: data.totalCalls || 0,
+            successfulCalls: data.successfulCalls || 0,
+            failedCalls: data.failedCalls || 0,
+            totalTokens: data.totalTokens || 0,
+            inputTokens: data.inputTokens || 0,
+            outputTokens: data.outputTokens || 0,
+            totalCost: cost,
+          })
+        })
+
+        setStats(statsArray.sort((a, b) => b.totalCalls - a.totalCalls))
+        setTotalCost(total)
+      }
+    } catch (error) {
+      console.error('Error loading statistics:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const calculateModelCost = (inputTokens: number, outputTokens: number, model: string): number => {
+    const modelKey = Object.keys(MODEL_PRICING).find(key => 
+      model.toLowerCase().includes(key.toLowerCase()) || 
+      key.toLowerCase().includes(model.toLowerCase())
+    )
+
+    if (!modelKey) {
+      // Дефолтные цены для неизвестных моделей
+      if (model.toLowerCase().includes('opus')) {
+        return ((inputTokens / 1_000_000) * 15.0 + (outputTokens / 1_000_000) * 75.0) * PRICE_MULTIPLIER
+      } else if (model.toLowerCase().includes('sonnet')) {
+        return ((inputTokens / 1_000_000) * 3.0 + (outputTokens / 1_000_000) * 15.0) * PRICE_MULTIPLIER
+      } else {
+        return ((inputTokens / 1_000_000) * 0.30 + (outputTokens / 1_000_000) * 2.50) * PRICE_MULTIPLIER
+      }
+    }
+
+    const pricing = MODEL_PRICING[modelKey as keyof typeof MODEL_PRICING]
+    const cost = (inputTokens / 1_000_000) * pricing.input + (outputTokens / 1_000_000) * pricing.output
+    return cost * PRICE_MULTIPLIER
+  }
+
+  const clearStatistics = () => {
+    if (confirm('Вы уверены, что хотите очистить всю статистику?')) {
+      localStorage.removeItem('modelStatistics')
+      setStats([])
+      setTotalCost(0)
+    }
+  }
+
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat('ru-RU').format(num)
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 Статистика использования</h1>
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <p className="text-gray-600">Загрузка...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (stats.length === 0) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 Статистика использования</h1>
+        
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <p className="text-blue-800">
+            📈 Статистика пока недоступна. Используйте функции анализа для накопления данных.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 Статистика</h1>
-      
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <p className="text-gray-600">
-          Страница статистики будет реализована после настройки базы данных.
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-primary-900">📊 Статистика использования</h1>
+        <button
+          onClick={clearStatistics}
+          className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
+        >
+          🔄 Очистить статистику
+        </button>
+      </div>
+
+      {/* Общая стоимость */}
+      <div className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white rounded-lg shadow-lg p-6 mb-6">
+        <div className="text-center">
+          <p className="text-lg opacity-90 mb-2">💰 Общая стоимость всех запросов</p>
+          <p className="text-4xl font-bold">≈ {totalCost.toFixed(2)} усл. ед.</p>
+        </div>
+      </div>
+
+      {/* Таблица статистики */}
+      <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-6">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Модель
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Всего вызовов
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Успешных
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Неудачных
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Успешность
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Токенов
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Стоимость (усл. ед.)
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {stats.map((stat, index) => {
+                const successRate = stat.totalCalls > 0 
+                  ? ((stat.successfulCalls / stat.totalCalls) * 100).toFixed(1)
+                  : '0.0'
+                
+                return (
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {stat.model}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      {formatNumber(stat.totalCalls)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                      {formatNumber(stat.successfulCalls)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
+                      {formatNumber(stat.failedCalls)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      <span className={`font-semibold ${
+                        parseFloat(successRate) >= 90 ? 'text-green-600' : 
+                        parseFloat(successRate) >= 70 ? 'text-yellow-600' : 
+                        'text-red-600'
+                      }`}>
+                        {successRate}%
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      {formatNumber(stat.totalTokens)}
+                      <div className="text-xs text-gray-500">
+                        ↓ {formatNumber(stat.inputTokens)} / ↑ {formatNumber(stat.outputTokens)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-primary-700">
+                      {stat.totalCost.toFixed(2)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Графики */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* График успешности */}
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Успешность моделей</h2>
+          <div className="space-y-3">
+            {stats.map((stat, index) => {
+              const successRate = stat.totalCalls > 0 
+                ? (stat.successfulCalls / stat.totalCalls) * 100
+                : 0
+              
+              return (
+                <div key={index}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-gray-700 truncate" title={stat.model}>
+                      {stat.model.split('/').pop()}
+                    </span>
+                    <span className="font-semibold text-gray-900">{successRate.toFixed(1)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className="bg-gradient-to-r from-green-400 to-green-600 h-3 rounded-full transition-all"
+                      style={{ width: `${successRate}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* График количества вызовов */}
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Количество вызовов</h2>
+          <div className="space-y-3">
+            {stats.map((stat, index) => {
+              const maxCalls = Math.max(...stats.map(s => s.totalCalls))
+              const percentage = (stat.totalCalls / maxCalls) * 100
+              
+              return (
+                <div key={index}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-gray-700 truncate" title={stat.model}>
+                      {stat.model.split('/').pop()}
+                    </span>
+                    <span className="font-semibold text-gray-900">{formatNumber(stat.totalCalls)}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className="bg-gradient-to-r from-primary-400 to-primary-600 h-3 rounded-full transition-all"
+                      style={{ width: `${percentage}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Информация */}
+      <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <p className="text-sm text-yellow-800">
+          <strong>ℹ️ Примечание:</strong> Стоимость рассчитывается в условных единицах на основе актуальных цен моделей. 
+          Статистика сохраняется локально в браузере.
         </p>
       </div>
     </div>
   )
 }
-

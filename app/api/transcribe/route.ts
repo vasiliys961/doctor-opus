@@ -16,6 +16,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('📁 Получен файл:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      sizeInMB: (file.size / 1024 / 1024).toFixed(2)
+    })
+
     // Проверка размера файла (максимум 2GB для AssemblyAI)
     if (file.size > 2 * 1024 * 1024 * 1024) {
       return NextResponse.json(
@@ -25,10 +32,34 @@ export async function POST(request: NextRequest) {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const mimeType = file.type || 'audio/webm';
+    let mimeType = file.type || 'audio/webm';
+    
+    // Если MIME тип не определен или octet-stream, пытаемся определить по расширению
+    if (!mimeType || mimeType === 'application/octet-stream' || mimeType === '') {
+      const extension = file.name.split('.').pop()?.toLowerCase()
+      if (extension === 'webm') {
+        mimeType = 'audio/webm'
+      } else if (extension === 'mp4' || extension === 'm4a') {
+        mimeType = 'audio/mp4'
+      } else if (extension === 'ogg') {
+        mimeType = 'audio/ogg'
+      } else if (extension === 'wav') {
+        mimeType = 'audio/wav'
+      } else if (extension === 'mp3') {
+        mimeType = 'audio/mpeg'
+      } else {
+        // Дефолтное значение для WebM
+        mimeType = 'audio/webm'
+      }
+      console.log(`🔧 MIME тип не определен, использую: ${mimeType} (по расширению: ${extension})`)
+    }
+
+    console.log('🚀 Отправка в AssemblyAI с MIME:', mimeType)
 
     // Вызов AssemblyAI API
     const transcript = await transcribeAudio(arrayBuffer, mimeType);
+
+    console.log('✅ Транскрипция завершена успешно')
 
     return NextResponse.json({
       success: true,

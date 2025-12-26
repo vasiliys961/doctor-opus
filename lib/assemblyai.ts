@@ -28,16 +28,14 @@ export async function transcribeAudio(audioData: ArrayBuffer, mimeType: string =
 
   try {
     // Шаг 1: Загрузка файла на AssemblyAI
-    const uploadFormData = new FormData();
-    const blob = new Blob([audioData], { type: mimeType });
-    uploadFormData.append('file', blob, 'audio.webm');
-
+    // AssemblyAI требует бинарные данные напрямую, а не FormData
     const uploadResponse = await fetch(`${ASSEMBLYAI_API_URL}/upload`, {
       method: 'POST',
       headers: {
         'authorization': apiKey,
+        'content-type': mimeType, // Важно: указываем правильный MIME тип
       },
-      body: uploadFormData,
+      body: audioData, // Отправляем бинарные данные напрямую
     });
 
     if (!uploadResponse.ok) {

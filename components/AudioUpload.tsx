@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 interface AudioUploadProps {
   onTranscribe: (transcript: string) => void
@@ -12,10 +12,33 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [transcribing, setTranscribing] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const [recordingTime, setRecordingTime] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop()
+      }
+    }
+  }, [])
 
   const handleFile = async (file: File) => {
     setError(null)
+    
+    console.log('📄 Обработка файла:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      sizeInMB: (file.size / 1024 / 1024).toFixed(2)
+    })
     
     // Проверка размера
     if (file.size > maxSize * 1024 * 1024) {
@@ -24,7 +47,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
     }
 
     // Проверка типа
-    if (!file.type.startsWith('audio/')) {
+    if (!file.type.startsWith('audio/') && !file.type.includes('webm') && !file.type.includes('octet-stream')) {
       setError('Пожалуйста, загрузите аудиофайл')
       return
     }
@@ -34,6 +57,8 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
     try {
       const formData = new FormData()
       formData.append('file', file)
+      
+      console.log('🚀 Отправка на транскрипцию...')
 
       const response = await fetch('/api/transcribe', {
         method: 'POST',
@@ -41,17 +66,104 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
       })
 
       const data = await response.json()
+      
+      console.log('📥 Ответ от API:', data)
 
       if (data.success) {
+        console.log('✅ Транскрипция успешна')
         onTranscribe(data.transcript)
       } else {
+        console.error('❌ Ошибка транскрипции:', data.error)
         setError(data.error || 'Ошибка транскрипции')
       }
     } catch (err: any) {
+      console.error('❌ Исключение при транскрипции:', err)
       setError(err.message || 'Произошла ошибка при транскрипции')
     } finally {
       setTranscribing(false)
     }
+  }
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      
+      // Определяем поддерживаемый MIME тип
+      let mimeType = 'audio/webm'
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus'
+      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+        mimeType = 'audio/webm'
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        mimeType = 'audio/mp4'
+      } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+        mimeType = 'audio/ogg'
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType })
+      mediaRecorderRef.current = mediaRecorder
+      chunksRef.current = []
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data)
+        }
+      }
+
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType })
+        
+        // Создаем файл из blob с правильным MIME типом
+        const extension = mimeType.includes('webm') ? 'webm' : 
+                         mimeType.includes('mp4') ? 'mp4' : 
+                         mimeType.includes('ogg') ? 'ogg' : 'webm'
+        const file = new File([blob], `recording.${extension}`, { type: mimeType })
+        
+        console.log('📁 Создан файл для транскрипции:', {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          mimeType: mimeType
+        })
+        
+        // Останавливаем все треки
+        stream.getTracks().forEach(track => track.stop())
+        
+        // Отправляем на транскрипцию
+        await handleFile(file)
+        
+        // Сброс таймера
+        setRecordingTime(0)
+        if (timerRef.current) {
+          clearInterval(timerRef.current)
+        }
+      }
+
+      mediaRecorder.start()
+      setRecording(true)
+      setError(null)
+      
+      // Запускаем таймер
+      setRecordingTime(0)
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1)
+      }, 1000)
+    } catch (err: any) {
+      setError('Не удалось получить доступ к микрофону: ' + err.message)
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+      setRecording(false)
+    }
+  }
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
   const handleDrag = (e: React.DragEvent) => {
@@ -88,7 +200,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
           dragActive
             ? 'border-primary-500 bg-primary-50'
             : 'border-gray-300 hover:border-primary-400'
-        } ${transcribing ? 'opacity-50 cursor-not-allowed' : ''}`}
+        } ${transcribing || recording ? 'opacity-50 cursor-not-allowed' : ''}`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
@@ -100,7 +212,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
           accept={accept}
           onChange={handleChange}
           className="hidden"
-          disabled={transcribing}
+          disabled={transcribing || recording}
         />
         <div className="space-y-4">
           {transcribing ? (
@@ -108,18 +220,47 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
               <div className="text-primary-900 font-semibold">Идёт транскрипция...</div>
             </>
+          ) : recording ? (
+            <>
+              <div className="relative">
+                <div className="text-4xl animate-pulse">🔴</div>
+                <div className="absolute inset-0 rounded-full bg-red-500 opacity-20 animate-ping"></div>
+              </div>
+              <div className="text-primary-900 font-semibold text-xl">
+                Идёт запись... {formatTime(recordingTime)}
+              </div>
+              <button
+                onClick={stopRecording}
+                className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-semibold"
+              >
+                ⏹️ Остановить запись
+              </button>
+            </>
           ) : (
             <>
               <div className="text-4xl">🎤</div>
-              <div>
+              
+              {/* Кнопка записи с микрофона */}
+              <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+                <button
+                  onClick={startRecording}
+                  className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-semibold flex items-center gap-2"
+                >
+                  🎙️ Записать с микрофона
+                </button>
+                <span className="text-gray-500">или</span>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="text-primary-600 hover:text-primary-700 font-semibold underline"
+                  className="px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold flex items-center gap-2"
                 >
-                  Нажмите для загрузки аудио
+                  📁 Загрузить файл
                 </button>
-                <span className="text-gray-600"> или перетащите файл сюда</span>
               </div>
+              
+              <p className="text-sm text-gray-600 mt-2">
+                Вы также можете перетащить аудиофайл в эту область
+              </p>
+              
               <p className="text-sm text-gray-500">
                 Поддерживаемые форматы: MP3, WAV, M4A, WEBM, OGG, FLAC
                 <br />
@@ -131,10 +272,9 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
       </div>
       {error && (
         <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-          {error}
+          ❌ {error}
         </div>
       )}
     </div>
   )
 }
-

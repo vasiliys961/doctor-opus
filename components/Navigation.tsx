@@ -25,8 +25,8 @@ export default function Navigation() {
   ]
 
   return (
-    <nav className="bg-gradient-to-b from-primary-900 via-primary-800 to-primary-900 text-white shadow-lg">
-      <div className="container mx-auto px-4 py-4">
+    <nav className="bg-gradient-to-b from-primary-900 via-primary-800 to-primary-900 text-white shadow-lg min-h-screen sticky top-0">
+      <div className="px-4 py-4">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold">🧠 Меню</h1>
         </div>

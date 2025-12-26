@@ -18,10 +18,16 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body>
-        <Navigation />
-        <main className="min-h-screen">
-          {children}
-        </main>
+        <div className="flex min-h-screen">
+          {/* Sidebar слева */}
+          <aside className="w-80 flex-shrink-0 fixed h-screen overflow-y-auto">
+            <Navigation />
+          </aside>
+          {/* Основной контент справа с отступом от sidebar */}
+          <main className="flex-1 ml-80 p-8">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   )
