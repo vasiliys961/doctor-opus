@@ -1,0 +1,152 @@
+'use client'
+
+import { useState, useRef } from 'react'
+import { compressMedicalImage } from '@/lib/image-compression'
+
+interface ImageUploadProps {
+  onUpload: (file: File) => void
+  accept?: string
+  maxSize?: number // в MB
+}
+
+export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', maxSize = 50 }: ImageUploadProps) {
+  const [dragActive, setDragActive] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [isCompressing, setIsCompressing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = async (file: File) => {
+    setError(null)
+    
+    // Проверка размера оригинала (до сжатия)
+    if (file.size > maxSize * 1024 * 1024) {
+      setError(`Файл слишком большой. Максимальный размер: ${maxSize}MB`)
+      return
+    }
+
+    // Проверка типа
+    const isDicom = file.name.toLowerCase().endsWith('.dcm') || file.name.toLowerCase().endsWith('.dicom');
+    const isImage = file.type.startsWith('image/');
+
+    let fileToUpload = file;
+
+    if (isImage) {
+      setIsCompressing(true);
+      try {
+        fileToUpload = await compressMedicalImage(file);
+        
+        // Создание превью для изображения
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          setPreview(reader.result as string)
+        }
+        reader.readAsDataURL(fileToUpload)
+      } catch (err) {
+        console.error("Compression error:", err);
+      } finally {
+        setIsCompressing(false);
+      }
+    } else if (isDicom) {
+      // Для DICOM показываем иконку, так как браузер не умеет их рендерить напрямую
+      setPreview(null) 
+    } else {
+      // Для PDF и других файлов превью не показываем
+      setPreview(null)
+    }
+
+    onUpload(fileToUpload)
+  }
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true)
+    } else if (e.type === 'dragleave') {
+      setDragActive(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0])
+    }
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault()
+    if (e.target.files && e.target.files[0]) {
+      handleFile(e.target.files[0])
+    }
+  }
+
+  return (
+    <div className="w-full">
+      {preview && (
+        <div className="mb-4">
+          <img 
+            src={preview} 
+            alt="Превью загруженного файла" 
+            className="max-w-full h-auto rounded-lg border-2 border-gray-300 max-h-96 mx-auto"
+          />
+        </div>
+      )}
+      <div
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+          dragActive
+            ? 'border-primary-500 bg-primary-50'
+            : 'border-gray-300 hover:border-primary-400'
+        }`}
+        onDragEnter={handleDrag}
+        onDragLeave={handleDrag}
+        onDragOver={handleDrag}
+        onDrop={handleDrop}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={accept}
+          onChange={handleChange}
+          className="hidden"
+        />
+        <div className="space-y-4">
+          {isCompressing ? (
+            <div className="flex flex-col items-center space-y-2">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
+              <p className="text-primary-600 font-medium">Оптимизация изображения...</p>
+            </div>
+          ) : (
+            <>
+              <div className="text-4xl">📁</div>
+              <div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-primary-600 hover:text-primary-700 font-semibold underline"
+                >
+                  Нажмите для загрузки
+                </button>
+                <span className="text-gray-600"> или перетащите файл сюда</span>
+              </div>
+            </>
+          )}
+          <p className="text-sm text-gray-500">
+            Поддерживаемые форматы: JPG, PNG, TIFF, DICOM, PDF
+            <br />
+            Максимальный размер: {maxSize}MB
+          </p>
+        </div>
+      </div>
+      {error && (
+        <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+

@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Тестирование системы подписки</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 900px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 5px;
+      transition: transform 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+    }
+    button.danger {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    .section {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 12px;
+      margin: 20px 0;
+    }
+    .result {
+      background: #fff;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 15px;
+      border-left: 4px solid #667eea;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .success {
+      color: #10b981;
+      font-weight: bold;
+    }
+    .error {
+      color: #ef4444;
+      font-weight: bold;
+    }
+    .info {
+      color: #3b82f6;
+    }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+    }
+    .stat-card {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      border: 2px solid #e5e7eb;
+    }
+    .stat-value {
+      font-size: 32px;
+      font-weight: bold;
+      color: #667eea;
+    }
+    .stat-label {
+      color: #6b7280;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 Тестирование системы подписки</h1>
+    <p class="subtitle">Инструмент для проверки работы балансовой системы</p>
+
+    <!-- Статистика -->
+    <div id="stats" class="stats"></div>
+
+    <!-- Управление балансом -->
+    <div class="section">
+      <h3>💎 Управление балансом</h3>
+      <button onclick="activatePackage('trial')">Пробный (250 ед, 500₽)</button>
+      <button onclick="activatePackage('basic')">Базовый (500 ед, 1 000₽)</button>
+      <button onclick="activatePackage('pro')">Профессиональный (1 250 ед, 2 500₽)</button>
+      <button class="danger" onclick="clearData()">Очистить данные</button>
+    </div>
+
+    <!-- Тестирование списания -->
+    <div class="section">
+      <h3>💸 Тестирование списания</h3>
+      <button onclick="testDeduct('gemini', 'fast')">Gemini Flash (Быстрый)</button>
+      <button onclick="testDeduct('opus', 'precise')">Opus 4.5 (Точный)</button>
+      <button onclick="testDeduct('gpt4o', 'balanced')">GPT-4o (Балансный)</button>
+      <button onclick="testDeduct('sonnet', 'precise')">Sonnet 4.5 (Точный)</button>
+    </div>
+
+    <!-- Проверка данных -->
+    <div class="section">
+      <h3>📊 Проверка данных</h3>
+      <button onclick="checkBalance()">Проверить баланс</button>
+      <button onclick="checkTransactions()">История транзакций</button>
+      <button onclick="estimateCosts()">Оценка стоимости</button>
+      <button onclick="checkLocalStorage()">Все данные localStorage</button>
+    </div>
+
+    <!-- Результат -->
+    <div id="result" class="result" style="display: none;"></div>
+  </div>
+
+  <script>
+    // Симуляция данных о моделях и ценах
+    const modelPricing = {
+      'gemini': {
+        model: 'google/gemini-2.0-flash-exp:free',
+        inputPrice: 0,
+        outputPrice: 0,
+        avgInput: 500,
+        avgOutput: 1000
+      },
+      'opus': {
+        model: 'anthropic/claude-opus-4.5',
+        inputPrice: 15 / 1_000_000,
+        outputPrice: 75 / 1_000_000,
+        avgInput: 1000,
+        avgOutput: 2500
+      },
+      'gpt4o': {
+        model: 'openai/gpt-4o',
+        inputPrice: 2.5 / 1_000_000,
+        outputPrice: 10 / 1_000_000,
+        avgInput: 800,
+        avgOutput: 2000
+      },
+      'sonnet': {
+        model: 'anthropic/claude-sonnet-4.5',
+        inputPrice: 3 / 1_000_000,
+        outputPrice: 15 / 1_000_000,
+        avgInput: 1000,
+        avgOutput: 2500
+      }
+    };
+
+    const USD_TO_CREDITS = 100;
+
+    function log(message, type = 'info') {
+      const result = document.getElementById('result');
+      result.style.display = 'block';
+      const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+      const time = new Date().toLocaleTimeString('ru-RU');
+      result.innerHTML += `<div class="${className}">[${time}] ${message}</div>`;
+      result.scrollTop = result.scrollHeight;
+      updateStats();
+    }
+
+    function clearLog() {
+      const result = document.getElementById('result');
+      result.innerHTML = '';
+      result.style.display = 'none';
+    }
+
+    function updateStats() {
+      const balance = JSON.parse(localStorage.getItem('userSubscriptionBalance') || 'null');
+      const transactions = JSON.parse(localStorage.getItem('userTransactions') || '[]');
+      
+      const statsHtml = balance ? `
+        <div class="stat-card">
+          <div class="stat-value">${balance.currentCredits.toLocaleString('ru-RU')}</div>
+          <div class="stat-label">Текущий баланс (ед.)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${balance.initialCredits.toLocaleString('ru-RU')}</div>
+          <div class="stat-label">Начальный баланс</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${balance.totalSpent.toLocaleString('ru-RU')}</div>
+          <div class="stat-label">Потрачено всего</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${transactions.length}</div>
+          <div class="stat-label">Транзакций</div>
+        </div>
+      ` : '<div class="stat-card" style="grid-column: 1/-1; text-align: center;"><p style="color: #6b7280;">Баланс не активирован. Выберите пакет выше.</p></div>';
+      
+      document.getElementById('stats').innerHTML = statsHtml;
+    }
+
+    function activatePackage(packageKey) {
+      clearLog();
+      const packages = {
+        trial: { name: 'Пробный', credits: 250, priceRub: 500 },
+        basic: { name: 'Базовый', credits: 500, priceRub: 1000 },
+        pro: { name: 'Профессиональный', credits: 1250, priceRub: 2500 }
+      };
+      
+      const pkg = packages[packageKey];
+      
+      // Повторная покупка - добавляем к текущему балансу
+      const existingBalance = JSON.parse(localStorage.getItem('userSubscriptionBalance') || 'null');
+      const currentCredits = existingBalance ? existingBalance.currentCredits : 0;
+      const newTotalCredits = currentCredits + pkg.credits;
+      
+      const balance = {
+        initialCredits: newTotalCredits,
+        currentCredits: newTotalCredits,
+        totalSpent: existingBalance ? existingBalance.totalSpent : 0,
+        packageName: pkg.name,
+        packagePriceRub: pkg.priceRub,
+        purchaseDate: new Date().toISOString(),
+        expiryDate: null
+      };
+      
+      localStorage.setItem('userSubscriptionBalance', JSON.stringify(balance));
+      
+      if (existingBalance) {
+        log(`✅ Пополнение: +${pkg.credits} ед. Новый баланс: ${newTotalCredits} ед.`, 'success');
+      } else {
+        log(`✅ Активирован пакет "${pkg.name}": ${pkg.credits} единиц за ${pkg.priceRub.toLocaleString('ru-RU')} ₽`, 'success');
+      }
+      
+      updateStats();
+    }
+
+    function testDeduct(modelKey, mode) {
+      clearLog();
+      const balance = JSON.parse(localStorage.getItem('userSubscriptionBalance') || 'null');
+      
+      if (!balance) {
+        log('❌ Баланс не активирован! Выберите пакет сначала.', 'error');
+        return;
+      }
+      
+      const pricing = modelPricing[modelKey];
+      const inputTokens = pricing.avgInput;
+      const outputTokens = pricing.avgOutput;
+      const costUsd = (inputTokens * pricing.inputPrice) + (outputTokens * pricing.outputPrice);
+      const costCredits = Math.ceil(costUsd * USD_TO_CREDITS);
+      
+      log(`🔄 Попытка списания для модели: ${pricing.model}`);
+      log(`📊 Токены: ${inputTokens} вх / ${outputTokens} вых`);
+      log(`💵 Стоимость: $${costUsd.toFixed(4)} USD = ${costCredits} ед.`);
+      
+      if (balance.currentCredits < costCredits) {
+        log(`❌ Недостаточно единиц! Нужно: ${costCredits}, доступно: ${balance.currentCredits}`, 'error');
+        return;
+      }
+      
+      balance.currentCredits -= costCredits;
+      balance.totalSpent += costCredits;
+      localStorage.setItem('userSubscriptionBalance', JSON.stringify(balance));
+      
+      const transaction = {
+        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        date: new Date().toISOString(),
+        section: 'test',
+        sectionName: 'Тест',
+        model: pricing.model,
+        inputTokens: inputTokens,
+        outputTokens: outputTokens,
+        costUsd: costUsd,
+        costCredits: costCredits,
+        operation: `Тестовый анализ (${mode})`
+      };
+      
+      const transactions = JSON.parse(localStorage.getItem('userTransactions') || '[]');
+      transactions.push(transaction);
+      localStorage.setItem('userTransactions', JSON.stringify(transactions));
+      
+      log(`✅ Списано ${costCredits} ед. Остаток: ${balance.currentCredits} ед.`, 'success');
+      updateStats();
+    }
+
+    function checkBalance() {
+      clearLog();
+      const balance = JSON.parse(localStorage.getItem('userSubscriptionBalance') || 'null');
+      
+      if (!balance) {
+        log('ℹ️ Баланс не активирован');
+        return;
+      }
+      
+      log('💰 ТЕКУЩИЙ БАЛАНС:');
+      log(`  Пакет: ${balance.packageName} (${balance.packagePriceRub} ₽)`);
+      log(`  Начальный баланс: ${balance.initialCredits} ед.`);
+      log(`  Текущий баланс: ${balance.currentCredits} ед.`);
+      log(`  Потрачено: ${balance.totalSpent} ед.`);
+      log(`  Использовано: ${((balance.totalSpent / balance.initialCredits) * 100).toFixed(1)}%`);
+      log(`  Активирован: ${new Date(balance.purchaseDate).toLocaleString('ru-RU')}`);
+    }
+
+    function checkTransactions() {
+      clearLog();
+      const transactions = JSON.parse(localStorage.getItem('userTransactions') || '[]');
+      
+      if (transactions.length === 0) {
+        log('ℹ️ Транзакций пока нет');
+        return;
+      }
+      
+      log(`📜 ИСТОРИЯ ТРАНЗАКЦИЙ (${transactions.length}):`, 'success');
+      transactions.slice(-10).reverse().forEach((txn, idx) => {
+        log(`\n[${transactions.length - idx}] ${new Date(txn.date).toLocaleTimeString('ru-RU')}`);
+        log(`  ${txn.sectionName}: ${txn.operation}`);
+        log(`  Модель: ${txn.model.split('/').pop()}`);
+        log(`  Токены: ${(txn.inputTokens + txn.outputTokens).toLocaleString('ru-RU')} (${txn.inputTokens}+${txn.outputTokens})`);
+        log(`  Стоимость: -${txn.costCredits} ед. ($${txn.costUsd.toFixed(4)})`);
+      });
+    }
+
+    function estimateCosts() {
+      clearLog();
+      log('📊 ОЦЕНКА СТОИМОСТИ ОПЕРАЦИЙ:', 'success');
+      
+      Object.entries(modelPricing).forEach(([key, pricing]) => {
+        const costUsd = (pricing.avgInput * pricing.inputPrice) + (pricing.avgOutput * pricing.outputPrice);
+        const costCredits = Math.ceil(costUsd * USD_TO_CREDITS);
+        
+        log(`\n${pricing.model.split('/').pop()}:`);
+        log(`  Средние токены: ${pricing.avgInput} вх / ${pricing.avgOutput} вых`);
+        log(`  Стоимость: ${costCredits} ед. ($${costUsd.toFixed(4)} USD)`);
+      });
+    }
+
+    function checkLocalStorage() {
+      clearLog();
+      log('💾 ВСЕ ДАННЫЕ В LOCALSTORAGE:', 'success');
+      
+      const balance = localStorage.getItem('userSubscriptionBalance');
+      const transactions = localStorage.getItem('userTransactions');
+      
+      if (balance) {
+        log('\n📦 userSubscriptionBalance:');
+        log(`<pre>${JSON.stringify(JSON.parse(balance), null, 2)}</pre>`);
+      }
+      
+      if (transactions) {
+        const txns = JSON.parse(transactions);
+        log(`\n📦 userTransactions (${txns.length} записей):`);
+        log(`<pre>${JSON.stringify(txns.slice(-3), null, 2)}</pre>`);
+        if (txns.length > 3) {
+          log(`... и ещё ${txns.length - 3} транзакций`);
+        }
+      }
+      
+      if (!balance && !transactions) {
+        log('ℹ️ Данных пока нет');
+      }
+    }
+
+    function clearData() {
+      if (confirm('Удалить все данные баланса и транзакций?')) {
+        localStorage.removeItem('userSubscriptionBalance');
+        localStorage.removeItem('userTransactions');
+        clearLog();
+        log('🗑️ Все данные очищены', 'success');
+        updateStats();
+      }
+    }
+
+    // Обновляем статистику при загрузке
+    updateStats();
+  </script>
+</body>
+</html>
+

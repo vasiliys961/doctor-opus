@@ -1,43 +1,26 @@
+# Dependencies
+node_modules/
+.next/
+out/
+
+# Environment variables
+.env
+.env.local
+.env.production.local
+.env.development.local
+
+# Vercel
+.vercel
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
 venv/
 env/
 ENV/
-.venv
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Streamlit
-.streamlit/secrets.toml
-**/.streamlit/secrets.toml
-modules/.streamlit/secrets.toml
-modules/**/secrets.toml
 
 # Database
 *.db
@@ -45,124 +28,25 @@ modules/**/secrets.toml
 *.sqlite3
 
 # Logs
-*.log
 logs/
+*.log
 
 # Cache
 cache/
-*.pkl
-.cache/
-
-# Temporary files
-temp/
-tmp/
-*.tmp
+.temp/
 
 # Uploads
 uploads/
-generated_documents/
-exports/
+temp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Config и секреты (НЕ КОММИТИТЬ API ключи!)
-# config.py - НЕ должен быть здесь! Это код приложения, должен быть в git
-# config.py безопасен - не содержит ключей, только загружает из secrets/env
-config.local.py
-.env
-.env.local
-.env.*
-*.env
-secrets.toml
-*.secrets.toml
-
-# Backups
-backups/
-
-# Test files
-test_*.py
-*_test.py
-
-# Временные файлы с ключами и отчетами
-*КЛЮЧ*.md
-*КЛЮЧ*.txt
-*СЕКРЕТ*.md
-*СЕКРЕТ*.txt
-*API*.md
-*ОШИБКА*.md
-*ДИАГНОСТИКА*.md
-*ПРОБЛЕМА*.md
-*РЕШЕНИЕ*.md
-*ИНСТРУКЦИЯ*.md
-*ОТПРАВКА*.md
-*ОТКАТ*.md
-*ПЕРЕЗАПУСТ*.md
-*ИСПРАВЛЕНИЕ*.md
-*ИСПРАВЛЕНИЕ*.txt
-*КОМАНДЫ*.txt
-*ЗАВЕРШЕНИЕ*.txt
-*СТАТУС*.md
-*ФИНАЛЬНАЯ*.md
-*КАЧЕСТВО*.md
-*ВСЕ_СОХРАНЕНО.md
-requirements-cloud.txt
-
-
-# === КРИТИЧЕСКИ ВАЖНО: МЕДИЦИНСКИЕ ДАННЫЕ ===
-# База данных с данными пациентов
-data/medical_data.db
-medical_data.db
-*.db
-*.sqlite
-*.sqlite3
-
-# Пользовательские загруженные файлы
-uploads/*
-!uploads/.gitignore
-
-# Генерируемые документы
-generated_documents/*
-!generated_documents/.gitignore
-
-# === ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА СЕКРЕТОВ ===
 .streamlit/secrets.toml
-**/secrets.toml
-**/.streamlit/secrets.toml
-modules/.streamlit/secrets.toml
-modules/.streamlit/
-modules/**/secrets.toml
-.env
-.env.local
-.env.*
-*.env
-*КЛЮЧ*.md
-*СЕКРЕТ*.md
-*API*.txt
-
-# === ВРЕМЕННЫЕ И ЛОГИ ===
-*.log
-*.tmp
-*.bak
-.cache/
-
-# === OS-SPECIFIC ===
-.DS_Store
-Thumbs.db
-
-# === FEEDBACK SYSTEM ===
-# Сырые отзывы содержат ПИ и не должны попадать в git
-data/raw_feedback/
-data/models/
-*.ckpt
-*.pt
-*.pth
-# Анонимизированные данные МОГУТ быть в git (решение принимается пользователем)
-
-# === DEVELOPMENT MODE ===
-# Файл для режима разработки (обход системы подписки)
-.dev_mode
-
-# Внутренние документы и отчеты (не пушить на GitHub)
-internal_docs/
+.streamlit/secrets.toml

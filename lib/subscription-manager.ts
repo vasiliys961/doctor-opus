@@ -1,0 +1,265 @@
+/**
+ * Система управления балансом подписчика (в единицах)
+ * БЕЗОПАСНАЯ ВЕРСИЯ - с полной изоляцией и обработкой ошибок
+ */
+
+import { calculateCost } from './cost-calculator';
+
+// Глобальный флаг включения системы (ОТКЛЮЧЕНО ПО УМОЛЧАНИЮ)
+const SUBSCRIPTION_ENABLED = process.env.NEXT_PUBLIC_SUBSCRIPTION_ENABLED === 'true';
+
+// Курс конвертации USD -> единицы (настраивается через .env)
+const USD_TO_CREDITS_RATE = parseInt(process.env.NEXT_PUBLIC_USD_TO_CREDITS || '100');
+
+// Пакеты подписки (100% маржа)
+// При курсе 100 ед./USD: 1000₽ = ~500 ед., 2500₽ = ~1250 ед.
+export const SUBSCRIPTION_PACKAGES = {
+  trial: { 
+    name: 'Пробный', 
+    credits: 250,
+    priceRub: 500,
+    bonusPercent: 0
+  },
+  basic: { 
+    name: 'Базовый', 
+    credits: 500,
+    priceRub: 1000,
+    bonusPercent: 0
+  },
+  pro: { 
+    name: 'Профессиональный', 
+    credits: 1250,
+    priceRub: 2500,
+    bonusPercent: 0
+  },
+} as const;
+
+export interface SubscriptionBalance {
+  initialCredits: number;
+  currentCredits: number;
+  totalSpent: number;
+  packageName: string;
+  packagePriceRub: number;
+  purchaseDate: string;
+  expiryDate: string | null;
+}
+
+export interface Transaction {
+  id: string;
+  date: string;
+  section: string;
+  sectionName: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  costCredits: number;
+  operation: string;
+}
+
+const BALANCE_KEY = 'userSubscriptionBalance';
+const TRANSACTIONS_KEY = 'userTransactions';
+
+/**
+ * Проверка доступности системы
+ */
+export function isSubscriptionEnabled(): boolean {
+  return SUBSCRIPTION_ENABLED;
+}
+
+/**
+ * Безопасное получение баланса
+ */
+export function getBalance(): SubscriptionBalance | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    if (!window.localStorage) return null;
+    
+    const data = localStorage.getItem(BALANCE_KEY);
+    if (!data) return null;
+    
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('⚠️ [SUBSCRIPTION] Error loading balance:', error);
+    return null;
+  }
+}
+
+/**
+ * Инициализация баланса (покупка пакета)
+ */
+export function initializeBalance(packageKey: keyof typeof SUBSCRIPTION_PACKAGES): boolean {
+  try {
+    const pkg = SUBSCRIPTION_PACKAGES[packageKey];
+    if (!pkg) {
+      console.error('❌ [SUBSCRIPTION] Invalid package');
+      return false;
+    }
+
+    // Повторная покупка - добавляем к текущему балансу
+    const existingBalance = getBalance();
+    const currentCredits = existingBalance ? existingBalance.currentCredits : 0;
+    const newTotalCredits = currentCredits + pkg.credits;
+
+    const balance: SubscriptionBalance = {
+      initialCredits: newTotalCredits,
+      currentCredits: newTotalCredits,
+      totalSpent: existingBalance ? existingBalance.totalSpent : 0,
+      packageName: pkg.name,
+      packagePriceRub: pkg.priceRub,
+      purchaseDate: new Date().toISOString(),
+      expiryDate: null,
+    };
+
+    localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
+    
+    if (existingBalance) {
+      console.log(`✅ [SUBSCRIPTION] Пополнение: +${pkg.credits} ед. Новый баланс: ${newTotalCredits} ед.`);
+    } else {
+      console.log(`✅ [SUBSCRIPTION] Пакет "${pkg.name}" активирован: ${pkg.credits} ед.`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('❌ [SUBSCRIPTION] Error initializing balance:', error);
+    return false;
+  }
+}
+
+/**
+ * Получение транзакций
+ */
+export function getTransactions(): Transaction[] {
+  try {
+    if (typeof window === 'undefined') return [];
+    const data = localStorage.getItem(TRANSACTIONS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('⚠️ [SUBSCRIPTION] Error loading transactions:', error);
+    return [];
+  }
+}
+
+/**
+ * Списание единиц (БЕЗОПАСНАЯ версия)
+ */
+export function deductBalance(params: {
+  section: string;
+  sectionName: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  operation: string;
+}): { success: boolean; message?: string; cost?: number } {
+  try {
+    // Если система отключена - пропускаем
+    if (!SUBSCRIPTION_ENABLED) {
+      return { success: true };
+    }
+
+    const balance = getBalance();
+    
+    // Если баланса нет - не блокируем, просто пропускаем
+    if (!balance) {
+      console.log('ℹ️ [SUBSCRIPTION] Баланс не активирован, операция выполняется без списания');
+      return { success: true };
+    }
+
+    // Расчет стоимости
+    const costInfo = calculateCost(params.inputTokens, params.outputTokens, params.model);
+    const costCredits = Math.ceil(costInfo.totalCostUsd * USD_TO_CREDITS_RATE);
+
+    // Проверка достаточности средств
+    if (balance.currentCredits < costCredits) {
+      console.warn(`⚠️ [SUBSCRIPTION] Недостаточно единиц: нужно ${costCredits}, доступно ${balance.currentCredits}`);
+      return { 
+        success: false, 
+        message: `Недостаточно единиц. Требуется: ${costCredits}, доступно: ${balance.currentCredits}`,
+        cost: costCredits
+      };
+    }
+
+    // Списание
+    balance.currentCredits -= costCredits;
+    balance.totalSpent += costCredits;
+    localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
+
+    // Транзакция
+    const transaction: Transaction = {
+      id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      date: new Date().toISOString(),
+      section: params.section,
+      sectionName: params.sectionName,
+      model: params.model,
+      inputTokens: params.inputTokens,
+      outputTokens: params.outputTokens,
+      costUsd: costInfo.totalCostUsd,
+      costCredits: costCredits,
+      operation: params.operation,
+    };
+
+    const transactions = getTransactions();
+    transactions.push(transaction);
+    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+
+    console.log(`💰 [SUBSCRIPTION] Списано ${costCredits} ед. Остаток: ${balance.currentCredits} ед.`);
+    
+    return { success: true, cost: costCredits };
+  } catch (error) {
+    console.error('❌ [SUBSCRIPTION] Error deducting balance:', error);
+    // При ошибке не блокируем работу
+    return { success: true };
+  }
+}
+
+/**
+ * Процент использования
+ */
+export function getUsagePercentage(): number {
+  try {
+    const balance = getBalance();
+    if (!balance || balance.initialCredits === 0) return 0;
+    return (balance.totalSpent / balance.initialCredits) * 100;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Оценка стоимости операции
+ */
+export function estimateCost(inputTokens: number, outputTokens: number, model: string): number {
+  try {
+    const costInfo = calculateCost(inputTokens, outputTokens, model);
+    return Math.ceil(costInfo.totalCostUsd * USD_TO_CREDITS_RATE);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Очистка данных (для тестирования)
+ */
+export function clearBalance(): void {
+  try {
+    localStorage.removeItem(BALANCE_KEY);
+    localStorage.removeItem(TRANSACTIONS_KEY);
+    console.log('🗑️ [SUBSCRIPTION] Данные очищены');
+  } catch (error) {
+    console.error('❌ [SUBSCRIPTION] Error clearing data:', error);
+  }
+}
+
+/**
+ * Стоимость 1 единицы в рублях
+ */
+export function getCreditPriceInRub(packageKey: keyof typeof SUBSCRIPTION_PACKAGES): number {
+  try {
+    const pkg = SUBSCRIPTION_PACKAGES[packageKey];
+    const creditsWithBonus = Math.floor(pkg.credits * (1 + pkg.bonusPercent / 100));
+    return pkg.priceRub / creditsWithBonus;
+  } catch {
+    return 0;
+  }
+}
+

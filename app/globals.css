@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-50: #e0f2f1;
+  --primary-100: #b2dfdb;
+  --primary-200: #80cbc4;
+  --primary-300: #4db6ac;
+  --primary-400: #26a69a;
+  --primary-500: #009688;
+  --primary-600: #00897b;
+  --primary-700: #00796b;
+  --primary-800: #00695c;
+  --primary-900: #004d40;
+  
+  --secondary-50: #f1f8e9;
+  --secondary-100: #dcedc8;
+  --secondary-200: #c5e1a5;
+  --secondary-300: #aed581;
+  --secondary-400: #9ccc65;
+  --secondary-500: #8bc34a;
+  --secondary-600: #7cb342;
+  --secondary-700: #689f38;
+  --secondary-800: #558b2f;
+  --secondary-900: #33691e;
+
+  --text-main: #262730;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+* {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+  color: inherit;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: #ffffff;
+  background-image: radial-gradient(at 0% 0%, rgba(0, 77, 64, 0.03) 0, transparent 50%), 
+                    radial-gradient(at 50% 0%, rgba(224, 242, 241, 0.3) 0, transparent 50%);
+  color: var(--text-main);
+  min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-size: 16px;
+  line-height: 1.5; /* Более компактно как в бекенде */
+  overflow-x: hidden;
+}
+
+/* Touch-friendly элементы */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* Минимальные размеры для touch-target */
+@media (pointer: coarse) {
+  button, 
+  a,
+  input[type="checkbox"],
+  input[type="radio"],
+  select {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Улучшенная прокрутка на iOS */
+.overflow-y-auto,
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Плавная прокрутка */
+html {
+  scroll-behavior: smooth;
+}
+
+.module-card {
+  padding: 1.2rem;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .module-card:hover {
+    background-color: rgba(0, 150, 136, 0.08);
+    border-color: rgba(0, 150, 136, 0.3);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px rgba(0, 150, 136, 0.2);
+  }
+}
+
+@media (hover: none) {
+  .module-card:active {
+    background-color: rgba(0, 150, 136, 0.08);
+    border-color: rgba(0, 150, 136, 0.3);
+    transform: scale(0.98);
+  }
+}
+
+/* Адаптивный текст для мобильных */
+@media (max-width: 640px) {
+  body {
+    font-size: 14px;
+  }
+}
+
+/* Улучшенные фокусы для доступности */
+*:focus-visible {
+  outline: 2px solid #009688;
+  outline-offset: 2px;
+}
+
