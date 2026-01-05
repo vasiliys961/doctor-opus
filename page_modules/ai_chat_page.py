@@ -56,7 +56,7 @@ def show_ai_chat():
     with st.expander("💡 Полезные подсказки", expanded=True):
         st.info("""
         **💡 Советы по использованию:**
-        - ИИ-консультант использует Claude Opus 4.5 для ответов
+        - Вы можете переключаться между моделями **Opus 4.5** (максимальная точность) и **Sonnet 4.5** (быстрота)
         - Можно загружать файлы для контекста (ЭКГ, анализы, документы)
         - История диалога сохраняется в базе данных
         - Можно очистить историю и начать новый диалог
@@ -81,7 +81,24 @@ def show_ai_chat():
                     else:
                         st.error(msg)
         with col2:
-            st.info("💡 Используется Claude Opus 4.5")
+            # Выбор модели для чата
+            selected_model_type = st.selectbox(
+                "🤖 Выберите модель:",
+                ["Opus 4.5 (Точный)", "Sonnet 4.5 (Быстрый)", "Gemini 3.0 Flash (Мгновенный)"],
+                index=0,
+                key="chat_model_selection",
+                help="Opus 4.5 — точность. Sonnet 4.5 — баланс. Gemini 3.0 Flash — мгновенная скорость."
+            )
+            use_sonnet = "Sonnet" in selected_model_type
+            use_gemini = "Gemini" in selected_model_type
+            
+            # Показываем статус выбранной модели
+            if use_gemini:
+                st.warning("⚡ Используется Gemini 3.0 Flash (Preview)")
+            elif use_sonnet:
+                st.info("💡 Используется Claude Sonnet 4.5")
+            else:
+                st.info("💡 Используется Claude Opus 4.5")
         with col3:
             if st.button("🗑️ Очистить историю"):
                 # Удаляем из session_state
@@ -500,12 +517,21 @@ def show_ai_chat():
             # Используем streaming для более комфортного общения
             with st.chat_message("assistant"):
                 try:
-                    text_generator = assistant.get_response_streaming(user_input, context=context, use_sonnet_4_5=False)
-                    response = st.write_stream(text_generator)
+                    if use_gemini:
+                        # Используем Gemini Flash (обычный режим, так как стриминг для Gemini в этом методе не реализован)
+                        response = assistant.get_response_gemini_flash(user_input, context=context)
+                        st.write(response)
+                    else:
+                        # Используем выбранную модель Claude (Opus или Sonnet)
+                        text_generator = assistant.get_response_streaming(user_input, context=context, use_sonnet_4_5=use_sonnet)
+                        response = st.write_stream(text_generator)
                 except Exception as e:
                     # Fallback на обычный режим если streaming не работает
-                    st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
-                    response = assistant.get_response(user_input, context=context, use_sonnet_4_5=False)
+                    st.warning("⚠️ Ошибка или streaming недоступен, используем обычный режим...")
+                    if use_gemini:
+                        response = assistant.get_response_gemini_flash(user_input, context=context)
+                    else:
+                        response = assistant.get_response(user_input, context=context, use_sonnet_4_5=use_sonnet)
                     st.write(response)
             
             # Убеждаемся что response - строка

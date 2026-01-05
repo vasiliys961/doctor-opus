@@ -5,8 +5,39 @@ import sqlite3
 import datetime
 from typing import Optional, Dict, List
 import logging
+try:
+    from feedback.anonymizer import MedicalAnonymizer
+    anonymizer = MedicalAnonymizer()
+except ImportError:
+    anonymizer = None
 
 logger = logging.getLogger(__name__)
+
+def _cleanup_old_feedback(conn, limit=1000):
+    """
+    Оставляет в базе только последние N записей, удаляя самые старые.
+    Это предотвращает бесконечный рост базы данных.
+    """
+    try:
+        cursor = conn.cursor()
+        # Сначала получаем количество записей
+        cursor.execute("SELECT COUNT(*) FROM analysis_feedback")
+        count = cursor.fetchone()[0]
+        
+        if count > limit:
+            # Удаляем старые записи, оставляя только последние {limit} по ID
+            cursor.execute(f"""
+                DELETE FROM analysis_feedback 
+                WHERE id NOT IN (
+                    SELECT id FROM analysis_feedback 
+                    ORDER BY id DESC 
+                    LIMIT {limit}
+                )
+            """)
+            deleted = cursor.rowcount
+            logger.info(f"🧹 Скользящее окно: удалено {deleted} старых записей (всего было {count})")
+    except Exception as e:
+        logger.error(f"Ошибка при очистке старой обратной связи: {e}")
 
 def save_feedback(
     analysis_type: str,
@@ -39,6 +70,14 @@ def save_feedback(
         True если успешно сохранено, False в случае ошибки
     """
     try:
+        # Анонимизация данных перед сохранением
+        if anonymizer:
+            doctor_comment = anonymizer.anonymize(doctor_comment) if doctor_comment else doctor_comment
+            correct_diagnosis = anonymizer.anonymize(correct_diagnosis) if correct_diagnosis else correct_diagnosis
+            input_case = anonymizer.anonymize(input_case) if input_case else input_case
+            # ai_response обычно не содержит ПИ, но на всякий случай можно тоже пропустить (опционально)
+            # ai_response = anonymizer.anonymize(ai_response) if ai_response else ai_response
+
         # Убеждаемся что таблица обновлена
         from database import init_feedback_table
         init_feedback_table()
@@ -68,6 +107,10 @@ def save_feedback(
             ''', (analysis_type, analysis_id, ai_response, feedback_type, doctor_comment, correct_diagnosis))
         
         conn.commit()
+        
+        # Применяем скользящее окно (оставляем последние 1000 записей)
+        _cleanup_old_feedback(conn, limit=1000)
+        
         conn.close()
         
         logger.info(f"Обратная связь сохранена: тип={analysis_type}, feedback_type={feedback_type}, specialty={specialty}")

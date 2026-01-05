@@ -18,7 +18,7 @@ from .diagnostic_prompts import get_system_prompt
 from .logging_handler import log_api_error, log_api_success, _get_model_name
 from utils.error_handler import handle_error, log_api_call
 from utils.performance_monitor import track_model_usage
-from utils.cost_calculator import calculate_cost, format_cost_log
+from utils.cost_calculator import calculate_cost, format_cost_log, format_cost_log_fancy
 
 # Импорт функции для загрузки промптов видео (ленивая загрузка)
 # Используем функцию из оригинального claude_assistant.py
@@ -268,7 +268,7 @@ class VideoClient(BaseAPIClient):
                 
                 cost_info = calculate_cost(input_tokens, output_tokens, model)
                 print(f"✅ [⚡ FLASH] [VIDEO] Модель: Gemini 2.5 Flash, Latency: {latency:.2f}с")
-                print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
+                print(format_cost_log_fancy(model, input_tokens, output_tokens, tokens_used))
                 log_api_call(model, True, latency, None)
                 track_model_usage(model, True, tokens_used)
                 
@@ -303,21 +303,15 @@ class VideoClient(BaseAPIClient):
         description_only: bool = False
     ) -> dict:
         """
-        Двухэтапный анализ видео (улучшенный, как для изображений):
-        1. Этап 1: Gemini Vision описывает видео (структурированное описание БЕЗ диагноза)
-        2. Этап 2: Текстовый анализ описания (Gemini Flash или Opus)
-        
-        Args:
-            description_only: Если True, возвращает только описание (для дальнейшего использования)
-        
-        Returns:
-            dict: {
-                'description': str - структурированное описание видео (Этап 1),
-                'specialized': str - результат текстового анализа (Этап 2, Gemini),
-                'final': str - итоговое заключение от профессора (Этап 2, Opus, опционально)
-            }
+        Двухэтапный анализ видео (актуальная версия v3.31):
+        1. Этап 1: Gemini 2.5 Vision описывает видео (структурированно, без диагноза)
+        2. Этап 2: Gemini 3.0 Flash анализирует описание и формирует директиву
         """
-        # Определяем источник видео
+        # Определяем модели
+        model_vision = "google/gemini-2.5-flash"
+        model_text = "google/gemini-3-flash-preview"
+
+        # Определяем источник видео и MIME-тип
         video_bytes = None
         video_mime = "video/mp4"
         
@@ -325,261 +319,98 @@ class VideoClient(BaseAPIClient):
             video_bytes = video_data if isinstance(video_data, bytes) else video_data.read()
             if hasattr(video_data, 'name'):
                 filename = video_data.name.lower()
-                if filename.endswith('.mov'):
-                    video_mime = "video/quicktime"
-                elif filename.endswith('.avi'):
-                    video_mime = "video/x-msvideo"
-                elif filename.endswith('.webm'):
-                    video_mime = "video/webm"
-                elif filename.endswith('.mkv'):
-                    video_mime = "video/x-matroska"
+                if filename.endswith('.mov'): video_mime = "video/quicktime"
+                elif filename.endswith('.avi'): video_mime = "video/x-msvideo"
+                elif filename.endswith('.webm'): video_mime = "video/webm"
+                elif filename.endswith('.mkv'): video_mime = "video/x-matroska"
         elif video_path:
             with open(video_path, 'rb') as f:
                 video_bytes = f.read()
             ext = os.path.splitext(video_path)[1].lower()
-            mime_map = {
-                '.mov': 'video/quicktime',
-                '.avi': 'video/x-msvideo',
-                '.webm': 'video/webm',
-                '.mkv': 'video/x-matroska',
-                '.mp4': 'video/mp4'
-            }
+            mime_map = {'.mov': 'video/quicktime', '.avi': 'video/x-msvideo', '.webm': 'video/webm', '.mkv': 'video/x-matroska', '.mp4': 'video/mp4'}
             video_mime = mime_map.get(ext, 'video/mp4')
         else:
-            return {
-                'description': "❌ Ошибка: Не предоставлены данные видео",
-                'specialized': None,
-                'final': None
-            }
+            return {'description': "❌ Ошибка: Не предоставлены данные видео", 'specialized': None, 'final': None}
         
         if not video_bytes or len(video_bytes) == 0:
-            return {
-                'description': "❌ Ошибка: Видео-файл пуст",
-                'specialized': None,
-                'final': None
-            }
-        
-        # Проверка размера (максимум 100MB)
-        max_size = 100 * 1024 * 1024
-        video_size_mb = len(video_bytes) / 1024 / 1024
-        if len(video_bytes) > max_size:
-            return {
-                'description': f"❌ Ошибка: Размер видео превышает 100MB ({video_size_mb:.1f}MB)",
-                'specialized': None,
-                'final': None
-            }
+            return {'description': "❌ Ошибка: Видео-файл пуст", 'specialized': None, 'final': None}
         
         # Кодируем видео в base64
-        try:
-            video_base64 = base64.b64encode(video_bytes).decode()
-        except Exception as e:
-            return {
-                'description': f"❌ Ошибка кодирования видео: {str(e)}",
-                'specialized': None,
-                'final': None
-            }
+        video_base64 = base64.b64encode(video_bytes).decode()
         
-        # Этап 1: Gemini Vision — структурированное описание видео (БЕЗ диагноза)
+        # --- ЭТАП 1: ОПИСАНИЕ (Vision) ---
         desc_prompt = """Ты — врач-специалист по интерпретации медицинских видео.
 По представленному видео выполни ПОДРОБНОЕ, но КОМПАКТНОЕ ОПИСАНИЕ без формулировки окончательного диагноза и без плана лечения.
 
 Структура описания (строго по пунктам, без таблиц):
-1) ТЕХНИЧЕСКОЕ КАЧЕСТВО И ТИП ИССЛЕДОВАНИЯ:
-   - что исследуется, качество видео, артефакты, видимость структур.
-2) ДИНАМИЧЕСКИЕ ИЗМЕНЕНИЯ И НАБЛЮДАЕМЫЕ ПРОЦЕССЫ:
-   - опиши только реально видимые значимые изменения, движения, функциональные тесты, патологические процессы в динамике.
-3) КРИТИЧЕСКИЕ/ОСТРЫЕ НАХОДКИ (если есть):
-   - признаки острой патологии, требующей срочного внимания.
-4) ВРЕМЕННЫЕ ХАРАКТЕРИСТИКИ:
-   - важные моменты с указанием времени (если возможно), последовательность событий.
-
-ВАЖНО:
-- НЕ формулируй окончательный диагноз и НЕ давай клинический план.
-- Пиши связным текстом и короткими списками, без таблиц и без раздела «источники/ссылки».
-- Сделай полный проход по всем пунктам, не обрывай описание на середине."""
+1) ТЕХНИЧЕСКОЕ КАЧЕСТВО И ТИП ИССЛЕДОВАНИЯ
+2) ДИНАМИЧЕСКИЕ ИЗМЕНЕНИЯ И НАБЛЮДАЕМЫЕ ПРОЦЕССЫ
+3) КРИТИЧЕСКИЕ/ОСТРЫЕ НАХОДКИ (если есть)
+4) ВРЕМЕННЫЕ ХАРАКТЕРИСТИКИ (timestamps)"""
         
-        # Добавляем специализированный контекст, если есть
-        if study_type and study_type.strip():
-            specialized_prompt = _get_video_prompt(study_type)
-            if specialized_prompt:
-                # Адаптируем специализированный промпт для описания (убираем требования к диагнозу)
-                desc_prompt = f"""{desc_prompt}
-
-СПЕЦИАЛИЗИРОВАННЫЙ КОНТЕКСТ ДЛЯ ОПИСАНИЯ:
-{specialized_prompt}
-
-ПОМНИ: Твоя задача — ОПИСАТЬ, а не диагностировать. Не формулируй диагнозы и не давай рекомендации по лечению."""
+        if study_type:
+            specialized_ctx = _get_video_prompt(study_type)
+            if specialized_ctx:
+                desc_prompt += f"\n\nСПЕЦИАЛИЗИРОВАННЫЙ КОНТЕКСТ:\n{specialized_ctx}"
         
-        # Добавляем дополнительный контекст из prompt, если есть
         if prompt:
-            desc_prompt += f"\n\nДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ:\n{prompt}"
-        
-        # Формируем запрос для описания
-        content_desc = [
-            {
-                "type": "video_url",
-                "video_url": {
-                    "url": f"data:{video_mime};base64,{video_base64}"
-                }
-            },
-            {
-                "type": "text",
-                "text": desc_prompt
-            }
-        ]
-        
-        if metadata:
-            metadata_str = str(metadata) if not isinstance(metadata, dict) else str(metadata)
-            content_desc.append({"type": "text", "text": f"\n\nМетаданные:\n{metadata_str}"})
-        
-        model = "google/gemini-2.5-flash"
-        messages_desc = [{"role": "user", "content": content_desc}]
-        
+            desc_prompt += f"\n\nДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ ПОЛЬЗОВАТЕЛЯ:\n{prompt}"
+
         payload_desc = {
-            "model": model,
-            "messages": messages_desc,
-            "max_tokens": 4000,
-            "temperature": 0.1
+            "model": model_vision,
+            "messages": [{"role": "user", "content": [
+                {"type": "video_url", "video_url": {"url": f"data:{video_mime};base64,{video_base64}"}},
+                {"type": "text", "text": desc_prompt}
+            ]}],
+            "max_tokens": 4000, "temperature": 0.1
         }
         
         try:
-            start_time = time.time()
-            response_desc = requests.post(self.base_url, headers=self.headers, json=payload_desc, timeout=120)
-            latency_desc = time.time() - start_time
+            print(f"🚀 [VIDEO] Шаг 1: Описание через {model_vision}...")
+            resp_desc = requests.post(self.base_url, headers=self.headers, json=payload_desc, timeout=120)
+            if resp_desc.status_code != 200:
+                return {'description': f"❌ Ошибка Vision: {resp_desc.text[:200]}", 'specialized': None, 'final': None}
             
-            if response_desc.status_code != 200:
-                error_msg = f"HTTP {response_desc.status_code}: {response_desc.text[:200]}"
-                log_api_error(model, latency_desc, error_msg)
-                return {
-                    'description': f"❌ Ошибка получения описания: {error_msg}",
-                    'specialized': None,
-                    'final': None
-                }
+            video_description = resp_desc.json()["choices"][0]["message"]["content"]
             
-            result_data_desc = response_desc.json()
-            video_description = result_data_desc["choices"][0]["message"]["content"]
-            
-            tokens_used_desc = result_data_desc.get("usage", {}).get("total_tokens", 0)
-            input_tokens_desc = result_data_desc.get("usage", {}).get("prompt_tokens", tokens_used_desc // 2)
-            output_tokens_desc = result_data_desc.get("usage", {}).get("completion_tokens", tokens_used_desc // 2)
-            if input_tokens_desc == tokens_used_desc // 2 and output_tokens_desc == tokens_used_desc // 2:
-                input_tokens_desc = result_data_desc.get("usage", {}).get("prompt_tokens", 0)
-                output_tokens_desc = result_data_desc.get("usage", {}).get("completion_tokens", 0)
-                if input_tokens_desc == 0 and output_tokens_desc == 0:
-                    input_tokens_desc = tokens_used_desc // 2
-                    output_tokens_desc = tokens_used_desc // 2
-            
-            cost_info_desc = calculate_cost(input_tokens_desc, output_tokens_desc, model)
-            print(f"✅ [⚡ FLASH] [VIDEO DESCRIPTION] Модель: {model}, Latency: {latency_desc:.2f}с")
-            print(f"   📊 {format_cost_log(model, input_tokens_desc, output_tokens_desc, tokens_used_desc)}")
-            log_api_call(model, True, latency_desc, None)
-            track_model_usage(model, True, tokens_used_desc)
-            
-            # Если нужен только description, возвращаем его
+            # Логирование стоимости шага 1
+            usage_v = resp_desc.json().get("usage", {})
+            print(format_cost_log_fancy(model_vision, usage_v.get('prompt_tokens', 0), usage_v.get('completion_tokens', 0)))
+
             if description_only:
+                return {'description': video_description, 'specialized': None, 'final': None}
+
+            # --- ЭТАП 2: КЛИНИЧЕСКИЙ АНАЛИЗ (Text) ---
+            print(f"🚀 [VIDEO] Шаг 2: Анализ через {model_text}...")
+            analysis_instructions = """На основе описания видео сформируй клиническую директиву:
+1) Клинический обзор и срочность.
+2) Ключевые находки (только патология).
+3) Итоговый диагноз с МКБ-10.
+4) План действий (Step-by-Step)."""
+
+            payload_analysis = {
+                "model": model_text,
+                "messages": [{"role": "user", "content": f"ОПИСАНИЕ ВИДЕО:\n{video_description}\n\nИНСТРУКЦИЯ:\n{analysis_instructions}"}],
+                "max_tokens": 4000, "temperature": 0.2
+            }
+            
+            resp_analysis = requests.post(self.base_url, headers=self.headers, json=payload_analysis, timeout=90)
+            if resp_analysis.status_code == 200:
+                video_analysis = resp_analysis.json()["choices"][0]["message"]["content"]
+                # Логирование стоимости шага 2
+                usage_t = resp_analysis.json().get("usage", {})
+                print(format_cost_log_fancy(model_text, usage_t.get('prompt_tokens', 0), usage_t.get('completion_tokens', 0)))
+                
                 return {
                     'description': video_description,
-                    'specialized': None,
+                    'specialized': video_analysis,
                     'final': None
                 }
-            
-            # Этап 2: Текстовый анализ описания через Gemini Flash
-            text_context = (
-                "Ниже приведено текстовое описание медицинского видео, автоматически полученное "
-                "из видео Vision‑моделью Gemini. На его основе выполни полный, но КОМПАКТНЫЙ клинический анализ "
-                "и сформируй директиву для врача.\n\n"
-                "=== ОПИСАНИЕ ВИДЕО ОТ GEMINI VISION ===\n"
-                f"{video_description}\n"
-            )
-            
-            user_message_gemini = (
-                "На основе приведённого выше описания медицинского видео выполни экспертный анализ и сформируй "
-                "КРАТКУЮ, но информативную клиническую директиву для врача.\n\n"
-                "Структура ответа:\n"
-                "1) Клинический обзор (2–3 предложения, включая оценку срочности и приоритет госпитализации/наблюдения).\n"
-                "2) Ключевые находки по структурам и процессам в видео (только реально выявленные изменения).\n"
-                "3) Итоговый диагноз(ы) с основными кодами МКБ‑10 (кратко, без длинных расшифровок).\n"
-                "4) Краткий план действий: дообследования, необходимость консультаций, основные шаги лечения.\n\n"
-                "Не пиши длинные лекции по диагностике и не перечисляй всё, что в норме — указывай только реально выявленные отклонения и клинически важные выводы.\n"
-                "НЕ добавляй разделы со списками источников, ссылок или 'лог веб‑запросов'."
-            )
-            
-            # Запрос к текстовому Gemini Flash
-            messages_gemini = [
-                {"role": "user", "content": f"{text_context}\n\n{user_message_gemini}"}
-            ]
-            
-            payload_gemini = {
-                "model": model,
-                "messages": messages_gemini,
-                "max_tokens": 4000,
-                "temperature": 0.1
-            }
-            
-            start_time_gemini = time.time()
-            response_gemini = requests.post(self.base_url, headers=self.headers, json=payload_gemini, timeout=120)
-            latency_gemini = time.time() - start_time_gemini
-            
-            specialized_result = None
-            if response_gemini.status_code == 200:
-                result_data_gemini = response_gemini.json()
-                specialized_result = result_data_gemini["choices"][0]["message"]["content"]
-                
-                tokens_used_gemini = result_data_gemini.get("usage", {}).get("total_tokens", 0)
-                input_tokens_gemini = result_data_gemini.get("usage", {}).get("prompt_tokens", tokens_used_gemini // 2)
-                output_tokens_gemini = result_data_gemini.get("usage", {}).get("completion_tokens", tokens_used_gemini // 2)
-                if input_tokens_gemini == tokens_used_gemini // 2 and output_tokens_gemini == tokens_used_gemini // 2:
-                    input_tokens_gemini = result_data_gemini.get("usage", {}).get("prompt_tokens", 0)
-                    output_tokens_gemini = result_data_gemini.get("usage", {}).get("completion_tokens", 0)
-                    if input_tokens_gemini == 0 and output_tokens_gemini == 0:
-                        input_tokens_gemini = tokens_used_gemini // 2
-                        output_tokens_gemini = tokens_used_gemini // 2
-                
-                cost_info_gemini = calculate_cost(input_tokens_gemini, output_tokens_gemini, model)
-                print(f"✅ [⚡ FLASH] [VIDEO GEMINI TEXT] Модель: {model}, Latency: {latency_gemini:.2f}с")
-                print(f"   📊 {format_cost_log(model, input_tokens_gemini, output_tokens_gemini, tokens_used_gemini)}")
-                log_api_call(model, True, latency_gemini, None)
-                track_model_usage(model, True, tokens_used_gemini)
-                specialized_result = f"**🎬 Быстрый анализ (Gemini Flash):**\n\n{specialized_result}"
             else:
-                error_msg = f"HTTP {response_gemini.status_code}: {response_gemini.text[:200]}"
-                log_api_error(model, latency_gemini, error_msg)
-                specialized_result = f"❌ Ошибка текстового анализа: {error_msg}"
-            
-            # Возвращаем только описание и результат Gemini (без Opus)
-            # Итоговое заключение формируется через ИИ-консультанта в интерфейсе
-            return {
-                'description': video_description,
-                'specialized': specialized_result,
-                'final': None
-            }
-            
-        except requests.exceptions.Timeout:
-            error_msg = "Таймаут запроса (превышено 2 минуты). Видео слишком большое или API не отвечает."
-            log_api_call(model, False, 120, error_msg)
-            track_model_usage(model, False)
-            return {
-                'description': f"❌ Ошибка: {error_msg}",
-                'specialized': None,
-                'final': None
-            }
-        except requests.exceptions.RequestException as e:
-            error_msg = f"Ошибка сети: {str(e)}"
-            log_api_error(model, 0, error_msg)
-            return {
-                'description': f"❌ Ошибка сети: {error_msg}",
-                'specialized': None,
-                'final': None
-            }
+                return {'description': video_description, 'specialized': f"❌ Ошибка анализа: {resp_analysis.text[:200]}", 'final': None}
+
         except Exception as e:
-            error_msg = handle_error(e, "send_video_request_two_stage", show_to_user=False)
-            log_api_call(model, False, 0, error_msg)
-            track_model_usage(model, False)
-            return {
-                'description': f"❌ Ошибка при анализе видео: {error_msg}",
-                'specialized': None,
-                'final': None
-            }
+            return {'description': f"❌ Критическая ошибка: {str(e)}", 'specialized': None, 'final': None}
 
 
 

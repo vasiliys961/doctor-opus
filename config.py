@@ -98,19 +98,15 @@ ASSEMBLYAI_API_KEY = secrets["ASSEMBLYAI_API_KEY"]
 # Предупреждение, если ключи не найдены
 if not OPENROUTER_API_KEY:
     print("⚠️ ВНИМАНИЕ: OPENROUTER_API_KEY не найден!")
-    print("   Установите ключ в .streamlit/secrets.toml или переменную окружения OPENROUTER_API_KEY")
 if not ASSEMBLYAI_API_KEY:
-    print("⚠️ ВНИМАНИЕ: ASSEMBLYAI_API_KEY не найден!")
-    print("   Установите ключ в .streamlit/secrets.toml или переменную окружения ASSEMBLYAI_API_KEY")
+    print("⚠️ ВНИМАНИЕ: ASSEMBLYAI_API_KEY не найден! Функции распознавания голоса будут недоступны.")
 
-if not ASSEMBLYAI_API_KEY:
-    raise RuntimeError(
-        "ASSEMBLYAI_API_KEY environment variable is required. "
-        "Set it using: export ASSEMBLYAI_API_KEY='your-key-here'"
-    )
+# Убираем жесткую блокировку (raise RuntimeError), чтобы приложение запускалось
+# if not ASSEMBLYAI_API_KEY:
+#     raise RuntimeError(...)
 
 # Optional configuration from environment
-MODEL_PREFERENCE = os.getenv("MODEL_PREFERENCE", "anthropic/claude-3-5-sonnet-20241022")
+MODEL_PREFERENCE = os.getenv("MODEL_PREFERENCE", "anthropic/claude-sonnet-4.5")
 TIMEOUT = int(os.getenv("TIMEOUT", "90"))
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { compressMedicalImage } from '@/lib/image-compression'
 
 interface FileUploadProps {
   onUpload: (files: File[]) => void
@@ -18,71 +19,77 @@ export default function FileUpload({
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewFiles, setPreviewFiles] = useState<Array<{ file: File; preview?: string }>>([])
+  const [isCompressing, setIsCompressing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFiles = (files: FileList | null) => {
+  const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return
 
     setError(null)
     const validFiles: File[] = []
+    
+    setIsCompressing(true)
 
-    Array.from(files).forEach((file) => {
-      // Проверка размера
-      if (file.size > maxSize * 1024 * 1024) {
-        setError(`Файл ${file.name} слишком большой. Максимальный размер: ${maxSize}MB`)
-        return
-      }
-
-      // Проверка на дубликаты
-      const isDuplicate = previewFiles.some(p => 
-        p.file.name === file.name && 
-        p.file.size === file.size && 
-        p.file.lastModified === file.lastModified
-      )
-      
-      if (isDuplicate) {
-        setError(`Файл ${file.name} уже добавлен`)
-        return
-      }
-
-      validFiles.push(file)
-
-      // Создание превью для изображений
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          const preview = reader.result as string
-          setPreviewFiles(prev => {
-            const existing = prev.find(p => 
-              p.file.name === file.name && 
-              p.file.size === file.size
-            )
-            if (existing) {
-              return prev.map(p => 
-                p.file.name === file.name && p.file.size === file.size
-                  ? { ...p, preview }
-                  : p
-              )
-            }
-            return [...prev, { file, preview }]
-          })
+    try {
+      for (const file of Array.from(files)) {
+        // Проверка размера
+        if (file.size > maxSize * 1024 * 1024) {
+          setError(`Файл ${file.name} слишком большой. Максимальный размер: ${maxSize}MB`)
+          continue
         }
-        reader.readAsDataURL(file)
-      } else {
-        // Для не-изображений сразу добавляем в превью
-        setPreviewFiles(prev => {
-          const existing = prev.find(p => 
-            p.file.name === file.name && 
-            p.file.size === file.size
-          )
-          if (!existing) {
-            return [...prev, { file }]
+
+        // Проверка на дубликаты
+        const isDuplicate = previewFiles.some(p => 
+          p.file.name === file.name && 
+          p.file.size === file.size && 
+          p.file.lastModified === file.lastModified
+        )
+        
+        if (isDuplicate) {
+          setError(`Файл ${file.name} уже добавлен`)
+          continue
+        }
+
+        // Сжатие если это изображение
+        let processedFile = file
+        if (file.type.startsWith('image/')) {
+          processedFile = await compressMedicalImage(file)
+        }
+
+        validFiles.push(processedFile)
+
+        // Создание превью
+        if (processedFile.type.startsWith('image/')) {
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            const preview = reader.result as string
+            setPreviewFiles(prev => {
+              const existing = prev.find(p => 
+                p.file.name === processedFile.name && 
+                p.file.size === processedFile.size
+              )
+              if (existing) {
+                return prev.map(p => 
+                  p.file.name === processedFile.name && p.file.size === processedFile.size
+                    ? { ...p, preview }
+                    : p
+                )
+              }
+              return [...prev, { file: processedFile, preview }]
+            })
           }
-          return prev
-        })
+          reader.readAsDataURL(processedFile)
+        } else {
+          setPreviewFiles(prev => [...prev, { file: processedFile }])
+        }
       }
-    })
+    } catch (err) {
+      console.error("Processing error:", err)
+      setError("Ошибка при обработке файлов")
+    } finally {
+      setIsCompressing(false)
+    }
 
     if (validFiles.length > 0) {
       onUpload(validFiles)
@@ -203,26 +210,35 @@ export default function FileUpload({
         />
         
         <div className="space-y-3">
-          <div className="text-4xl">📎</div>
-          
-          {/* Кнопки для загрузки */}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold"
-            >
-              📁 Выбрать файлы
-            </button>
-            
-            <button
-              onClick={() => cameraInputRef.current?.click()}
-              className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold"
-            >
-              📷 Сделать фото
-            </button>
-          </div>
-          
-          <span className="text-gray-600">или перетащите файлы сюда</span>
+          {isCompressing ? (
+            <div className="flex flex-col items-center space-y-2">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
+              <p className="text-primary-600 font-medium">Оптимизация файлов...</p>
+            </div>
+          ) : (
+            <>
+              <div className="text-4xl">📎</div>
+              
+              {/* Кнопки для загрузки */}
+              <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold"
+                >
+                  📁 Выбрать файлы
+                </button>
+                
+                <button
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold"
+                >
+                  📷 Сделать фото
+                </button>
+              </div>
+              
+              <span className="text-gray-600">или перетащите файлы сюда</span>
+            </>
+          )}
           
           <p className="text-sm text-gray-500">
             Поддерживаемые форматы: изображения (JPG, PNG), PDF, документы (DOC, DOCX), текстовые файлы (TXT, CSV)

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeImage } from '@/lib/openrouter';
 import { analyzeImageStreaming } from '@/lib/openrouter-streaming';
+import { formatCostLog } from '@/lib/cost-calculator';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
 /**
  * API endpoint для анализа ЭКГ
@@ -8,6 +11,16 @@ import { analyzeImageStreaming } from '@/lib/openrouter-streaming';
  */
 export async function POST(request: NextRequest) {
   try {
+    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
+    /*
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+    */
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = formData.get('prompt') as string || 'Проанализируйте ЭКГ. Опишите ритм, интервалы, сегменты, признаки ишемии, аритмии, блокады.';
@@ -38,7 +51,36 @@ export async function POST(request: NextRequest) {
     if (useStreaming) {
       console.log('📡 [ECG STREAMING] Запуск streaming анализа');
       const stream = await analyzeImageStreaming(prompt, base64Image, modelUsed);
-      return new Response(stream, {
+      
+      const decoder = new TextDecoder();
+      const transformStream = new TransformStream({
+        transform(chunk, controller) {
+          const text = decoder.decode(chunk, { stream: true });
+          
+          if (text.includes('"usage":')) {
+            const lines = text.split('\n');
+            for (const line of lines) {
+              if (line.includes('"usage":')) {
+                try {
+                  const jsonStr = line.startsWith('data: ') ? line.slice(6).trim() : line.trim();
+                  const data = JSON.parse(jsonStr);
+                  if (data.usage) {
+                    console.log(formatCostLog(
+                      modelUsed,
+                      data.usage.prompt_tokens,
+                      data.usage.completion_tokens,
+                      data.usage.total_tokens
+                    ));
+                  }
+                } catch (e) {}
+              }
+            }
+          }
+          controller.enqueue(chunk);
+        }
+      });
+
+      return new Response(stream.pipeThrough(transformStream), {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
@@ -50,7 +92,7 @@ export async function POST(request: NextRequest) {
     const result = await analyzeImage({
       prompt,
       imageBase64: base64Image,
-      mode: 'precise',
+      mode: 'optimized',
     });
 
     console.log('✅ [ECG ANALYSIS] Анализ завершён:');

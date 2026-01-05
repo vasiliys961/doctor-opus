@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       const result = await analyzeImage({
         prompt: `${prompt}\n\nЭто изображение документа или медицинского бланка. Извлеки весь текст и структурируй данные.`,
         imageBase64: base64Image,
-        mode: 'precise',
+        mode: 'optimized',
       });
       
       return NextResponse.json({
@@ -263,7 +263,7 @@ export async function POST(request: NextRequest) {
               const imageResult = await analyzeImage({
                 prompt: imagePrompt,
                 imageBase64: base64Image,
-                mode: 'precise',
+                mode: 'optimized',
               });
               
               fileContent = normalizeMarkdown(imageResult);

@@ -518,6 +518,7 @@ from page_modules.ai_chat_page import show_ai_chat
 # Функция show_consultation_protocol() вынесена в page_modules/consultation_protocol_page.py
 from page_modules.consultation_protocol_page import show_consultation_protocol
 from page_modules.genetic_page import show_genetic_analysis_page
+from page_modules.manual_page import show_manual_page
 
 # --- Вспомогательная функция для клинических рекомендаций ---
 def show_clinical_recommendations(diagnosis):
@@ -807,6 +808,7 @@ def main():
         # Fallback на старый способ, если роутер недоступен
         pages = [
             "🏠 Главная",
+            "📘 Инструкция для врача",
             "🤖 ИИ-Консультант",
             "📝 Протокол приёма",
             "📈 Анализ ЭКГ",
@@ -818,6 +820,7 @@ def main():
             "🔬 Анализ дерматоскопии",
             "🔬 Анализ лабораторных данных",
             "📄 Сканирование документов",
+            "🎬 Анализ видео",
             "🔬 Расширенный ИИ-анализ",
             "📊 Сравнительный анализ",
             "🧬 Генетический анализ",
@@ -903,6 +906,8 @@ def main():
     else:
         if page == "🏠 Главная":
             show_home_page()
+        elif page == "📘 Инструкция для врача":
+            show_manual_page()
         elif page == "📈 Анализ ЭКГ":
             show_ecg_analysis()
         elif page == "🩻 Анализ рентгена":

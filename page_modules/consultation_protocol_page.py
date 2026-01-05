@@ -521,19 +521,33 @@ def show_consultation_protocol():
                     f"(шаблон врача: {template_preset}):\n{protocol_template.strip()}\n"
                 )
 
-            # Опция выбора режима генерации (streaming или обычный)
-            use_streaming = st.checkbox(
-                "📺 Постепенное появление текста (streaming)",
-                value=True,
-                help="Текст будет появляться постепенно. Если возникают проблемы, отключите эту опцию.",
-                key="protocol_use_streaming"
-            )
+            # Опции выбора режима генерации и модели
+            col_opt1, col_opt2 = st.columns(2)
+            with col_opt1:
+                use_streaming = st.checkbox(
+                    "📺 Постепенное появление текста (streaming)",
+                    value=True,
+                    help="Текст будет появляться постепенно.",
+                    key="protocol_use_streaming"
+                )
+            with col_opt2:
+                selected_model_name = st.selectbox(
+                    "🤖 Модель для протокола:",
+                    ["Sonnet 4.5 (Рекомендуется)", "Opus 4.5 (Максимальная точность)", "Gemini 3.0 Flash (Мгновенно)"],
+                    index=0,
+                    key="protocol_model_selection",
+                    help="Gemini 3.0 Flash — самая быстрая и дешевая. Sonnet 4.5 — золотая середина."
+                )
+                use_sonnet = "Sonnet" in selected_model_name
+                use_gemini = "Gemini" in selected_model_name
 
             # Генерация протокола происходит автоматически после обработки аудио/текста
-            # (как в main ветке - сразу после обработки, без отдельной кнопки)
             if raw_text:
                 assistant = OpenRouterAssistant()
+                # ... (промпт остается прежним)
                 prompt = f"""
+ВНИМАНИЕ: Начни ответ СРАЗУ с заголовка "ПРОТОКОЛ ПЕРВИЧНОГО ОСМОТРА". Не пиши никаких вводных слов, "клинических директив", анализов или приветствий. Только структурированный протокол.
+
 Вы - опытный терапевт, американский профессор клинической медицины и ведущий специалист университетской клиники с многолетним клиническим опытом.
 
 Вы совмещаете клиническую строгость и ответственность, давая ответы по клиническим проблемам внутренних болезней, включая акушерство и гинекологию, хирургию, а также помогаете обрабатывать несистемно изложенную информацию, облекая её по шаблону и стандартному протоколу осмотра терапевта с рекомендациями по обследованию и лечению.
@@ -602,22 +616,33 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
                     if use_streaming:
                         # Streaming режим - текст появляется постепенно
                         try:
-                            # Получаем генератор для streaming
-                            text_generator = assistant.get_response_streaming(prompt, use_sonnet_4_5=True)
-                            
-                            # Отображаем текст постепенно через st.write_stream
-                            structured_note = st.write_stream(text_generator)
+                            # Используем выбранную модель
+                            if use_gemini:
+                                # Для Gemini используем специальный метод
+                                response = assistant.get_response_gemini_flash(prompt)
+                                structured_note = st.write(response) or response
+                            else:
+                                # Для Claude используем основной метод со стримингом
+                                text_generator = assistant.get_response_streaming(prompt, use_sonnet_4_5=use_sonnet)
+                                # Отображаем текст постепенно через st.write_stream
+                                structured_note = st.write_stream(text_generator)
                         except Exception as stream_error:
                             # Fallback на обычный режим если streaming не работает
                             st.warning("⚠️ Streaming временно недоступен, используем обычный режим...")
                             with st.spinner("🤖 Генерация протокола (обычный режим)..."):
-                                structured_note = assistant.get_response(prompt, use_sonnet_4_5=True)
+                                if use_gemini:
+                                    structured_note = assistant.get_response_gemini_flash(prompt)
+                                else:
+                                    structured_note = assistant.get_response(prompt, use_sonnet_4_5=use_sonnet)
                                 if structured_note:
                                     st.markdown(structured_note)
                     else:
                         # Обычный режим - ждем полный ответ
                         with st.spinner("🤖 Генерация протокола..."):
-                            structured_note = assistant.get_response(prompt, use_sonnet_4_5=True)
+                            if use_gemini:
+                                structured_note = assistant.get_response_gemini_flash(prompt)
+                            else:
+                                structured_note = assistant.get_response(prompt, use_sonnet_4_5=use_sonnet)
                             if structured_note:
                                 st.markdown(structured_note)
                     
@@ -644,9 +669,11 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
                         if "sonnet" in model.lower():
                             st.success(f"✅ Протокол сгенерирован моделью Claude Sonnet 4.5")
                         elif "haiku" in model.lower():
-                            st.info(f"ℹ️ Протокол сгенерирован моделью Claude Haiku 4.5 (Sonnet был недоступен)")
+                            st.info(f"ℹ️ Протокол сгенерирован моделью Claude Haiku 4.5")
                         elif "opus" in model.lower():
                             st.info(f"ℹ️ Протокол сгенерирован моделью Claude Opus 4.5")
+                        elif "gemini" in model.lower():
+                            st.warning(f"⚡ Протокол сгенерирован моделью Gemini 3.0 Flash")
                 except Exception as e:
                     st.error(f"❌ Ошибка генерации протокола: {e}")
                     import traceback
@@ -739,7 +766,7 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
                 st.text_area(
                     "Протокол",
                     value=structured_note,
-                    height=600,
+                    height=800,  # Увеличено с 600 до 800
                     disabled=True,
                     key="protocol_display"
                 )

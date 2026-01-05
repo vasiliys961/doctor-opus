@@ -5,6 +5,9 @@ import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
+import PatientSelector from '@/components/PatientSelector'
+import AnalysisTips from '@/components/AnalysisTips'
+import FeedbackForm from '@/components/FeedbackForm'
 import { logUsage } from '@/lib/simple-logger'
 
 export default function DermatoscopyPage() {
@@ -13,7 +16,8 @@ export default function DermatoscopyPage() {
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<AnalysisMode>('precise')
+  const [mode, setMode] = useState<AnalysisMode>('optimized')
+  const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
@@ -30,11 +34,12 @@ export default function DermatoscopyPage() {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('prompt', 'Проанализируйте дерматоскопическое изображение. Опишите структуру, цвета, границы, признаки меланомы по ABCDE критериям.')
+      formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', 'dermatoscopy') // Указываем тип изображения
       formData.append('useStreaming', useStream.toString())
 
-      if (useStream && (analysisMode === 'precise' || analysisMode === 'validated' || analysisMode === 'optimized')) {
+      if (useStream && (analysisMode === 'validated' || analysisMode === 'optimized' || analysisMode === 'fast')) {
         // Streaming режим
         const response = await fetch('/api/analyze/image', {
           method: 'POST',
@@ -109,26 +114,61 @@ export default function DermatoscopyPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 Анализ дерматоскопии</h1>
       
-      <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <AnalysisTips 
+        content={{
+          fast: "двухэтапный скрининг (сначала структурированное описание структуры и цвета образования, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс точности и цены для дерматоскопии.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
+          extra: [
+            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для дерматоскопии.",
+            "📸 Вы можете загрузить снимки дерматоскопии, сделать фото или использовать ссылку.",
+            "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
+            "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
+          ]
+        }}
+      />
+      
+      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Загрузите дерматоскопическое изображение</h2>
         <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} />
       </div>
 
       {file && imagePreview && (
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">📷 Загруженное изображение</h2>
-          <div className="flex justify-center">
+          <div className="flex justify-center w-full">
             <img 
               src={imagePreview} 
               alt="Загруженное изображение" 
-              className="max-w-full max-h-[600px] rounded-lg shadow-lg object-contain"
+              className="w-full max-h-[800px] rounded-lg shadow-lg object-contain"
             />
           </div>
           
           <div className="mt-6 space-y-4">
+            <div className="mb-4">
+              <PatientSelector 
+                onSelect={(context) => setClinicalContext(context)} 
+                disabled={loading} 
+              />
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                👤 Клинический контекст пациента (жалобы, анамнез, цель исследования)
+              </label>
+              <textarea
+                value={clinicalContext}
+                onChange={(e) => setClinicalContext(e.target.value)}
+                placeholder="Пример: Пациент 45 лет, образование на спине, заметил рост и изменение цвета в последние 3 месяца. Зуд отсутствует."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4"
+                rows={3}
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500 mb-4">
+                💡 Добавление контекста значительно повышает точность и релевантность анализа.
+              </p>
+            </div>
+
             <AnalysisModeSelector
               value={mode}
               onChange={setMode}
@@ -149,32 +189,25 @@ export default function DermatoscopyPage() {
             
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => analyzeImage('fast', false)}
+                onClick={() => analyzeImage('fast', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⚡ Быстрый анализ
+                ⚡ Быстрый {useStreaming ? '(стриминг)' : ''}
               </button>
               <button
                 onClick={() => analyzeImage('optimized', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⚡ Opus двухшаговый (оптимизированный) {useStreaming ? '(стриминг)' : ''}
-              </button>
-              <button
-                onClick={() => analyzeImage('precise', useStreaming)}
-                disabled={loading}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                🎯 Точный анализ {useStreaming ? '(стриминг)' : ''}
+                ⭐ Оптимизированный {useStreaming ? '(стриминг)' : ''}
               </button>
               <button
                 onClick={() => analyzeImage('validated', useStreaming)}
                 disabled={loading}
-                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
               >
-                ✅ С валидацией {useStreaming ? '(стриминг)' : ''}
+                🧠 С валидацией {useStreaming ? '(стриминг)' : ''}
               </button>
             </div>
           </div>
@@ -187,7 +220,15 @@ export default function DermatoscopyPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} />
+      <AnalysisResult result={result} loading={loading} mode={mode} imageType="dermatoscopy" />
+
+      {result && !loading && (
+        <FeedbackForm 
+          analysisType="DERMATOSCOPY" 
+          analysisResult={result} 
+          inputCase={clinicalContext}
+        />
+      )}
     </div>
   )
 }

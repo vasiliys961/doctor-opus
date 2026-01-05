@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
+import AnalysisTips from '@/components/AnalysisTips'
+import FeedbackForm from '@/components/FeedbackForm'
 import ReactMarkdown from 'react-markdown'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
@@ -541,19 +543,26 @@ export default function GeneticPage() {
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🧬 Генетический анализ</h1>
       
+      <AnalysisTips 
+        title="Как работает генетический анализ"
+        content={{
+          fast: "первый этап: извлечение данных из сложных отчетов и VCF‑файлов. Мы используем специализированные алгоритмы для корректного чтения rsID и генотипов.",
+          validated: "второй этап: консультация «Профессора генетики» (Gemini JSON + Opus 4.5) — самый точный клинический разбор рисков; самый дорогой режим.",
+          extra: [
+            "⭐ Рекомендуемый режим: «Оптимизированный» (Sonnet 4.5) — лучший баланс глубины анализа и скорости для генетики.",
+            "🧬 Поддерживаются VCF файлы, PDF отчеты (до 7 страниц), текстовые файлы и фото бумажных бланков.",
+            "👤 Рекомендуется добавить клинический контекст для более точной интерпретации результатов.",
+            "💬 После получения заключения вы можете продолжить диалог с генетиком для уточнения деталей.",
+            "📎 Можно прикреплять дополнительные анализы и документы прямо в чат."
+          ]
+        }}
+      />
+      
       <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Загрузите генетический отчет</h2>
         <p className="text-sm text-gray-600 mb-4">
           Поддерживаемые форматы: VCF, PDF, TXT, изображения
         </p>
-        <p className="text-xs text-amber-600 mb-4">
-          💡 PDF файлы автоматически конвертируются в изображения (первые 7 страниц), затем из них извлекаются генетические данные.
-        </p>
-        {!pdfjsReady && (
-          <div className="mb-4 text-blue-600 text-sm">
-            ⏳ Загрузка библиотеки для обработки PDF...
-          </div>
-        )}
         <ImageUpload onUpload={handleUpload} accept=".vcf,.pdf,.txt,image/*" maxSize={50} />
         
         {convertingPDF && (
@@ -602,7 +611,7 @@ export default function GeneticPage() {
                 value={clinicalContext}
                 onChange={(e) => setClinicalContext(e.target.value)}
                 placeholder="Пример: Пациентка, 45 лет. Жалобы на повышенную утомляемость, головные боли. Семейный анамнез: у матери инфаркт миокарда в 60 лет. Принимает метформин, аспирин. Интересует влияние генетических вариантов на метаболизм препаратов и риски сердечно-сосудистых заболеваний."
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[100px] text-sm"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-y min-h-[100px] text-sm"
                 rows={4}
               />
               <p className="mt-1 text-xs text-gray-500">
@@ -671,7 +680,7 @@ export default function GeneticPage() {
           <button
             onClick={handleSendToGeneticist}
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-3 rounded-lg font-medium transition-colors text-base"
+            className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white px-6 py-3 rounded-lg font-medium transition-colors text-base"
           >
             {loading ? '⏳ Отправка генетику...' : '🧬 Отправить генетику'}
           </button>
@@ -682,6 +691,14 @@ export default function GeneticPage() {
         result={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
         loading={loading && !extractedData} 
       />
+
+      {result && !loading && (
+        <FeedbackForm 
+          analysisType="GENETICS" 
+          analysisResult={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
+          inputCase={clinicalContext}
+        />
+      )}
 
       {/* Продолжение диалога с генетиком */}
       {result && chatHistory.length > 0 && (

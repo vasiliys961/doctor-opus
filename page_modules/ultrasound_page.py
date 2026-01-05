@@ -206,6 +206,18 @@ def show_ultrasound_analysis():
         
         st.markdown("---")
         
+        # Поле для ручного ввода клинического контекста
+        st.subheader("📝 Клинический контекст (жалобы, анамнез)")
+        combined_context = st.text_area(
+            "Введите сведения о пациенте (жалобы, анамнез, симптомы):",
+            value="",
+            placeholder="Например: боли в правом подреберье, горечь во рту, тошнота после жирной пищи, подозрение на холецистит...",
+            help="Эта информация поможет ИИ дать более точное и персонализированное заключение.",
+            key="us_manual_context"
+        )
+        
+        st.markdown("---")
+        
         specialist_info = get_specialist_info(ImageType.ULTRASOUND) if get_specialist_info else {'role': 'Врач УЗД', 'experience': 'многолетним опытом'}
         if SPECIALIST_DETECTOR_AVAILABLE and get_specialist_prompt:
             base_prompt = f"Проанализируйте УЗИ-снимок как {specialist_info['role']} с {specialist_info['experience']}. Оцените эхогенность, структуры, патологические изменения."
@@ -277,8 +289,9 @@ def show_ultrasound_analysis():
                         st.session_state.ultrasound_vision_description = us_description
 
                         # Шаг 2: текстовый Gemini Flash — клиническая директива по описанию
+                        context_header = f"КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n{combined_context}\n\n" if combined_context else ""
                         text_context = (
-                            "Ниже приведено текстовое описание УЗИ‑исследования, автоматически полученное "
+                            f"{context_header}Ниже приведено текстовое описание УЗИ‑исследования, автоматически полученное "
                             "из изображения Vision‑моделью Gemini. На его основе выполни полный, но КОМПАКТНЫЙ клинический анализ "
                             "и сформируй директиву для врача.\n\n"
                             "=== ОПИСАНИЕ УЗИ ОТ GEMINI VISION ===\n"
@@ -320,8 +333,9 @@ def show_ultrasound_analysis():
                 perform_analysis_with_streaming = get_perform_analysis_with_streaming()
                 
                 # Локальное «подсушивание» промпта Opus: просим ответ без таблиц и лишней воды
+                context_header = f"КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n{combined_context}\n\n" if combined_context else ""
                 opus_prompt = (
-                    f"{prompt}\n\n"
+                    f"{context_header}{prompt}\n\n"
                     "ВАЖНО ДЛЯ ФОРМАТА ОТВЕТА:\n"
                     "- Сформулируй клиническую директиву ПОЛНО, но КОМПАКТНО.\n"
                     "- НЕ используй таблицы вида «Параметр / Значение», пиши обычным текстом и списками.\n"
@@ -388,8 +402,9 @@ def show_ultrasound_analysis():
                     
                     combined_text = "\n\n".join(parts)
                     
+                    context_header = f"КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n{combined_context}\n\n" if combined_context else ""
                     text_context = (
-                        "Ниже приведено текстовое описание УЗИ‑исследования и заключения разных моделей "
+                        f"{context_header}Ниже приведено текстовое описание УЗИ‑исследования и заключения разных моделей "
                         "(быстрый двухэтапный Gemini, точный Opus). На основе ВСЕЙ этой информации выполни синтезирующий анализ "
                         "и сформируй ЕДИНОЕ клиническое заключение в формате развёрнутой клинической директивы для врача.\n\n"
                         f"{combined_text}\n"
@@ -419,21 +434,25 @@ def show_ultrasound_analysis():
                     
                     use_sonnet_for_consultant = consultant_model.startswith("Claude Sonnet")
                     force_opus_for_consultant = consultant_model.startswith("Claude Opus")
-                    with st.spinner("🧠 ИИ‑консультант формирует итоговую клиническую директиву (streaming)..."):
-                        try:
-                            text_generator = assistant.get_response_streaming(
-                                user_message=user_message,
-                                context=text_context,
-                                use_sonnet_4_5=use_sonnet_for_consultant,
-                                force_opus=force_opus_for_consultant
-                            )
-                            professor_response = st.write_stream(text_generator)
-                        except Exception:
+                    
+                    # Использование streaming для итогового заключения
+                    try:
+                        text_generator = assistant.get_response_streaming(
+                            user_message=user_message,
+                            context=text_context,
+                            use_sonnet_4_5=use_sonnet_for_consultant,
+                            force_opus=force_opus_for_consultant
+                        )
+                        # st.write_stream отображает текст постепенно
+                        professor_response = st.write_stream(text_generator)
+                    except Exception:
+                        with st.spinner("🧠 ИИ‑консультант формирует заключение (обычный режим)..."):
                             professor_response = assistant.get_response(
                                 user_message=user_message,
                                 context=text_context,
                                 use_sonnet_4_5=use_sonnet_for_consultant
                             )
+                            st.write(professor_response)
                     
                     if not isinstance(professor_response, str):
                         professor_response = str(professor_response)

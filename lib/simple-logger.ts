@@ -16,8 +16,12 @@ const SECTION_NAMES: Record<string, string> = {
   'video': 'Видео',
   'document': 'Сканирование документов',
   'dermatoscopy': 'Дерматоскопия',
+  'histology': 'Гистология',
+  'retinal': 'Офтальмология (сетчатка)',
+  'mammography': 'Маммография',
   'image-analysis': 'Анализ изображений',
   'chat': 'ИИ-Консультант',
+  'protocols': 'Клинические рекомендации',
 };
 
 interface UsageBySectionData {
@@ -132,4 +136,7 @@ export function clearCurrentMonthStats(): void {
   localStorage.removeItem('usageBySections');
   console.log('🗑️ [USAGE] Current month stats cleared');
 }
+
+
+
 

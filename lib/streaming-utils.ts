@@ -72,6 +72,9 @@ export async function handleSSEStream(
         }
         if (result.done) {
           console.log('📡 [STREAMING UTILS] Получен сигнал [DONE]')
+          if (handler.onComplete) {
+            handler.onComplete(accumulatedText)
+          }
           return accumulatedText
         }
       }
@@ -129,15 +132,13 @@ function processSSELine(
       if (json.choices && json.choices[0]) {
         if (json.choices[0].delta && json.choices[0].delta.content) {
           content = json.choices[0].delta.content
-          console.log('📡 [STREAMING UTILS] Извлечён контент из delta:', content.length, 'символов')
         } else if (json.choices[0].message && json.choices[0].message.content) {
           content = json.choices[0].message.content
-          console.log('📡 [STREAMING UTILS] Извлечён контент из message:', content.length, 'символов')
-        } else {
-          console.debug('📡 [STREAMING UTILS] JSON без контента:', JSON.stringify(json).substring(0, 200))
         }
-      } else {
-        console.debug('📡 [STREAMING UTILS] JSON без choices:', JSON.stringify(json).substring(0, 200))
+      } else if (json.error) {
+        // Если пришла ошибка в JSON
+        console.error('❌ [STREAMING UTILS] Ошибка от OpenRouter:', json.error)
+        throw new Error(json.error.message || 'Ошибка OpenRouter')
       }
 
       return { content, done: false }

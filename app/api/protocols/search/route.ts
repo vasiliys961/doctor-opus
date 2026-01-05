@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { formatCostLog } from '@/lib/cost-calculator';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -10,7 +11,7 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { query, specialty = '', useStreaming = true } = body;
+    const { query, specialty = '', useStreaming = true, modelMode = 'standard' } = body;
 
     if (!query || !query.trim()) {
       return NextResponse.json(
@@ -64,22 +65,39 @@ ${specialty ? `Специальность: ${specialty}` : ''}
 - Фокус на универсальных, объединенных рекомендациях
 - Минимум сравнений российских и международных стандартов`;
 
-    const MODEL = 'anthropic/claude-haiku-4.5';
-    const MAX_TOKENS = 16000; // Увеличено для полного ответа
-    const systemPrompt = 'Ты помощник врача. Ищешь актуальные клинические рекомендации. ВСЕГДА начинай ответ СРАЗУ с раздела "1. НАЗВАНИЯ ПРОТОКОЛОВ". НЕ пиши введения. Фокус на универсальных рекомендациях. Указывай только 2-3 международных источника и 1 российский. Минимум сравнений.';
+    // Выбор модели в зависимости от режима: standard (Haiku), detailed (Sonnet) или online (Perplexity)
+    let MODEL = 'anthropic/claude-haiku-4.5';
+    let MAX_TOKENS = 16000;
+
+    if (modelMode === 'online') {
+      MODEL = 'perplexity/llama-3.1-sonar-large-128k-online';
+      MAX_TOKENS = 4000;
+    } else if (modelMode === 'detailed') {
+      MODEL = 'anthropic/claude-sonnet-4.5';
+      MAX_TOKENS = 20000;
+    }
+    
+    // Динамический системный промпт
+    let systemPrompt = '';
+    if (modelMode === 'online') {
+      systemPrompt = 'Ты — ведущий медицинский эксперт с доступом к поиску в реальном времени. Твоя задача — найти самые свежие клинические рекомендации (2024-2025 годы). Обязательно приводи прямые ссылки на первоисточники (PubMed, Cochrane, гайдлайны МЗ РФ). Твой ответ должен быть максимально актуальным и научно обоснованным. НЕ пиши введения, начинай сразу с разделов.';
+    } else if (modelMode === 'detailed') {
+      systemPrompt = 'Ты — Профессор медицины, ведущий эксперт. Твоя задача — предоставить МАКСИМАЛЬНО ПОДРОБНЫЙ, глубокий и академически строгий анализ клинических рекомендаций. Твой ответ должен быть детальным, содержать конкретные дозировки, уровни доказательности (A, B, C) и подробные алгоритмы действий для врачей. НЕ пиши введения, начинай сразу с разделов.';
+    } else {
+      systemPrompt = 'Ты помощник врача. Ищешь актуальные клинические рекомендации. ВСЕГДА начинай ответ СРАЗУ с раздела "1. НАЗВАНИЯ ПРОТОКОЛОВ". НЕ пиши введения. Фокус на универсальных рекомендациях. Указывай только 2-3 международных источника и 1 российский. Минимум сравнений.';
+    }
     
     console.log('');
     console.log('🔍 [CLINICAL RECS] ========== ПОИСК КЛИНИЧЕСКИХ РЕКОМЕНДАЦИЙ ==========');
     console.log('🔍 [CLINICAL RECS] Запрос:', `"${query}"`);
-    console.log('🔍 [CLINICAL RECS] Специальность:', specialty || 'не указана');
-    console.log('🤖 [MODEL INFO] Модель:', MODEL);
-    console.log('🤖 [MODEL INFO] Max tokens:', MAX_TOKENS);
-    console.log('🤖 [MODEL INFO] Размер промпта:', `${searchPrompt.length} символов`);
-    console.log('🤖 [MODEL INFO] Размер системного промпта:', `${systemPrompt.length} символов`);
-    console.log('🤖 [MODEL INFO] Режим:', useStreaming ? 'streaming' : 'обычный');
+    console.log('🔍 [CLINICAL RECS] Режим:', modelMode);
+    console.log('🤖 [MODEL] Модель:', MODEL);
+    console.log('🤖 [AI] Max tokens:', MAX_TOKENS);
+    console.log('🤖 [AI] Размер промпта:', `${searchPrompt.length} символов`);
+    console.log('🤖 [AI] Режим:', useStreaming ? 'streaming' : 'обычный');
     console.log('');
 
-    // Используем Claude Sonnet 4.5 через OpenRouter
+    // Используем выбранную модель через OpenRouter
     const payload = {
       model: MODEL,
       messages: [
@@ -110,7 +128,7 @@ ${specialty ? `Специальность: ${specialty}` : ''}
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ [CLINICAL RECS] Ошибка API: ${response.status}`, errorText);
+      console.error(`❌ [AI] Ошибка API: ${response.status}`, errorText);
       
       if (response.status === 402) {
         return NextResponse.json({
@@ -127,8 +145,8 @@ ${specialty ? `Специальность: ${specialty}` : ''}
 
     // Если streaming включен, возвращаем SSE поток
     if (useStreaming && response.body) {
-    console.log('📡 [CLINICAL RECS] Запуск streaming режима...');
-    console.log('📡 [CLINICAL RECS] Модель:', MODEL);
+    console.log(`📡 [${modelMode.toUpperCase()}] Запуск streaming режима...`);
+    console.log('📡 [MODEL] Модель:', MODEL);
       console.log('');
       
       const encoder = new TextEncoder();
@@ -146,6 +164,15 @@ ${specialty ? `Специальность: ${specialty}` : ''}
               const { done, value } = await reader.read();
               
               if (done) {
+                console.log('');
+                console.log(`✅ [${modelMode.toUpperCase()}] ========== STREAMING ЗАВЕРШЕН (READER DONE) ==========`);
+                
+                // Вывод красивого отчета в терминал если еще не выведен
+                const approxInputTokens = Math.ceil(searchPrompt.length / 4);
+                const approxOutputTokens = Math.ceil(totalContentLength / 4);
+                console.log(formatCostLog(MODEL, approxInputTokens, approxOutputTokens, approxInputTokens + approxOutputTokens));
+                console.log('');
+
                 controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                 controller.close();
                 break;
@@ -165,6 +192,15 @@ ${specialty ? `Специальность: ${specialty}` : ''}
                   const data = line.slice(6);
                   
                   if (data === '[DONE]') {
+                    console.log('');
+                    console.log(`✅ [${modelMode.toUpperCase()}] ========== STREAMING ЗАВЕРШЕН ==========`);
+                    
+                    // Вывод красивого отчета в терминал ПЕРЕД закрытием
+                    const approxInputTokens = Math.ceil(searchPrompt.length / 4);
+                    const approxOutputTokens = Math.ceil(totalContentLength / 4);
+                    console.log(formatCostLog(MODEL, approxInputTokens, approxOutputTokens, approxInputTokens + approxOutputTokens));
+                    console.log('');
+
                     controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                     controller.close();
                     return;
@@ -183,22 +219,15 @@ ${specialty ? `Специальность: ${specialty}` : ''}
                     }
                   } catch (e) {
                     // Игнорируем ошибки парсинга отдельных чанков
-                    console.debug('⚠️ [CLINICAL RECS] Ошибка парсинга SSE чанка:', e);
+                    console.debug('⚠️ [AI] Ошибка парсинга SSE чанка:', e);
                   }
                 }
               }
             }
             
-            console.log('');
-            console.log('✅ [CLINICAL RECS] ========== STREAMING ЗАВЕРШЕН ==========');
-            console.log('✅ [CLINICAL RECS] Модель:', MODEL);
-            console.log('✅ [CLINICAL RECS] Всего чанков:', chunkCount);
-            console.log('✅ [CLINICAL RECS] Символов в ответе:', totalContentLength);
-            console.log('✅ [CLINICAL RECS] Примерно токенов (~4 символа/токен):', Math.ceil(totalContentLength / 4));
-            console.log('✅ [CLINICAL RECS] Промпт символов:', searchPrompt.length, '(~', Math.ceil(searchPrompt.length / 4), 'токенов)');
-            console.log('');
+            console.log('📡 [STREAMING] Завершение цикла чтения...');
           } catch (error) {
-            console.error('❌ [CLINICAL RECS] Ошибка streaming:', error);
+            console.error('❌ [AI] Ошибка streaming:', error);
             controller.error(error);
           } finally {
             reader.releaseLock();
@@ -241,27 +270,25 @@ ${specialty ? `Специальность: ${specialty}` : ''}
     
     if (foundIndex > 0) {
       content = content.substring(foundIndex);
-      console.log('✂️ [CLINICAL RECS] Обрезано', foundIndex, 'символов до раздела протоколов');
+      console.log('✂️ [AI] Обрезано', foundIndex, 'символов до раздела протоколов');
     }
 
     console.log('');
-    console.log('✅ [CLINICAL RECS] ========== ОТВЕТ ПОЛУЧЕН ==========');
-    console.log('✅ [CLINICAL RECS] Модель:', MODEL);
-    console.log('✅ [CLINICAL RECS] Размер ответа:', `${content.length} символов`);
-    console.log('✅ [CLINICAL RECS] Использовано токенов промпта:', usage.prompt_tokens || 'не указано');
-    console.log('✅ [CLINICAL RECS] Использовано токенов ответа:', usage.completion_tokens || 'не указано');
-    console.log('✅ [CLINICAL RECS] Всего токенов:', tokensUsed);
+    console.log('✅ [AI] ========== ОТВЕТ ПОЛУЧЕН ==========');
+    console.log(formatCostLog(MODEL, usage.prompt_tokens || 0, usage.completion_tokens || 0, tokensUsed));
     console.log('');
 
     return NextResponse.json({
       success: true,
       content: content,
       tokensUsed: tokensUsed,
-      model: MODEL
+      model: modelMode === 'online' ? 'Perplexity Sonar (Online Search)' : 
+             modelMode === 'detailed' ? 'Claude Sonnet 4.5 (Detailed)' : 
+             'Claude Haiku 4.5 (Standard)'
     });
 
   } catch (error: any) {
-    console.error('❌ [CLINICAL RECS] Ошибка:', error);
+    console.error('❌ [AI] Ошибка:', error);
     return NextResponse.json(
       { 
         success: false, 

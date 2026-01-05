@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4;
@@ -8,6 +10,17 @@ const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4;
  */
 export async function POST(request: NextRequest) {
   try {
+    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
+    /*
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+    */
+
     console.log('🧬 [GENETIC IMAGES] Начало обработки изображений...');
 
     const body = await request.json();
@@ -71,8 +84,8 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
 - НЕ пиши никаких комментариев, объяснений или сообщений об отсутствии данных
 - Извлекай данные ТОЧНО как они указаны в таблице`;
 
-    // Используем Gemini 2.5 Flash
-    let extractionModel = 'google/gemini-2.5-flash';
+    // Используем Gemini 3.0 Flash для извлечения JSON
+    let extractionModel = 'google/gemini-3-flash-preview';
     const allExtractedData: string[] = [];
     let totalTokens = 0;
     let successCount = 0;

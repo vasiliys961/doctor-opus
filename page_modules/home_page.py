@@ -82,7 +82,7 @@ def show_home_page():
     
     # Быстрые действия
     st.subheader("⚡ Быстрые действия")
-    quick_col1, quick_col2, quick_col3, quick_col4, quick_col5 = st.columns(5)
+    quick_col1, quick_col2, quick_col3, quick_col4, quick_col5, quick_col6 = st.columns(6)
     with quick_col1:
         if st.button("📈 Анализ ЭКГ", use_container_width=True):
             st.session_state["page"] = "📈 Анализ ЭКГ"
@@ -102,6 +102,10 @@ def show_home_page():
     with quick_col5:
         if st.button("📄 Сканирование", use_container_width=True):
             st.session_state["page"] = "📄 Сканирование документов"
+            st.rerun()
+    with quick_col6:
+        if st.button("🎬 Анализ видео", use_container_width=True):
+            st.session_state["page"] = "🎬 Анализ видео"
             st.rerun()
     
     st.markdown("---")

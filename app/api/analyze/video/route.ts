@@ -1,14 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeVideoTwoStage } from '@/lib/video';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+
+// Максимальное время выполнения для тяжелых видео (5 минут)
+export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
 
 /**
  * API endpoint для анализа медицинских видео
- * Использует OpenRouter (Gemini 2.5 + Gemini 3) для двухэтапного анализа:
+ * Использует OpenRouter (Gemini 3.0 + Gemini 3.0) для двухэтапного анализа:
  * 1) Описание видео (структурированное, без диагноза)
  * 2) Клиническое заключение по этому описанию
  */
 export async function POST(request: NextRequest) {
   try {
+    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
+    /*
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+    */
+
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       console.error('OPENROUTER_API_KEY не найден в переменных окружения');
@@ -24,7 +41,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const prompt = (formData.get('prompt') as string | null) || undefined;
-    const studyType = (formData.get('studyType') as string | null) || undefined;
+    const imageType = (formData.get('imageType') as any) || 'universal';
     const patientAge = formData.get('patientAge') as string | null;
     const specialty = formData.get('specialty') as string | null;
     const urgency = formData.get('urgency') as string | null;
@@ -76,14 +93,14 @@ export async function POST(request: NextRequest) {
       fileSize: file.size,
       mimeType,
       hasPrompt: !!prompt,
-      studyType,
+      imageType,
     });
 
     const { description, analysis } = await analyzeVideoTwoStage({
       prompt: prompt || undefined,
       videoBase64,
       mimeType,
-      studyType,
+      imageType,
       metadata: Object.keys(metadata).length ? metadata : undefined,
     });
 

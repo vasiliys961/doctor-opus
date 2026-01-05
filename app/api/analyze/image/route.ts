@@ -1,410 +1,302 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { analyzeImage, analyzeImageFast, extractImageJSON, analyzeImageOpusTwoStage } from '@/lib/openrouter';
-import { analyzeImageStreaming, analyzeImageWithJSONStreaming, analyzeImageOpusTwoStageStreaming } from '@/lib/openrouter-streaming';
+import { analyzeImage, analyzeImageFast, extractImageJSON, analyzeImageOpusTwoStage, analyzeMultipleImages, analyzeMultipleImagesTwoStage, MODELS } from '@/lib/openrouter';
+import { 
+  analyzeImageStreaming, 
+  analyzeImageFastStreaming,
+  analyzeImageWithJSONStreaming, 
+  analyzeImageOpusTwoStageStreaming, 
+  analyzeMultipleImagesStreaming,
+  analyzeMultipleImagesOpusTwoStageStreaming,
+  analyzeMultipleImagesWithJSONStreaming,
+  analyzeMultipleImagesDescriptionStreaming,
+  analyzeMultipleImagesDirectiveStreaming
+} from '@/lib/openrouter-streaming';
+import { formatCostLog } from '@/lib/cost-calculator';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { extractDicomMetadata, formatDicomMetadataForAI } from '@/lib/dicom-service';
+import { processDicomJs } from "@/lib/dicom-processor";
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import path from 'path';
+import fs from 'fs/promises';
+import os from 'os';
+
+const execPromise = promisify(exec);
+
+// Максимальное время выполнения запроса (5 минут) для сложных анализов
+export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
 
 /**
  * API endpoint для анализа медицинских изображений
- * Использует OpenRouter API напрямую (как Python модули)
  */
 export async function POST(request: NextRequest) {
+  const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  
+  // Проверка авторизации ПОЛНОСТЬЮ ОТКЛЮЧЕНА
+  /*
+  if (process.env.NEXT_PUBLIC_AUTH_DISABLED !== 'true') {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+  }
+  */
+
+  // Вспомогательная функция для стриминга (должна быть объявлена ДО использования)
+  const handleStreamingResponse = async (stream: ReadableStream, modelName: string) => {
+    const decoder = new TextDecoder();
+    const transformStream = new TransformStream({
+      transform(chunk, controller) {
+        controller.enqueue(chunk);
+        const text = decoder.decode(chunk, { stream: true });
+        if (text.includes('"usage":')) {
+          const lines = text.split('\n');
+          for (const line of lines) {
+            if (line.includes('"usage":')) {
+              try {
+                const jsonStr = line.startsWith('data: ') ? line.slice(6).trim() : line.trim();
+                if (jsonStr === '[DONE]') continue;
+                const data = JSON.parse(jsonStr);
+                if (data.usage) {
+                  console.log(formatCostLog(
+                    modelName,
+                    data.usage.prompt_tokens,
+                    data.usage.completion_tokens,
+                    data.usage.total_tokens
+                  ));
+                }
+              } catch (e) {}
+            }
+          }
+        }
+      }
+    });
+
+    return new Response(stream.pipeThrough(transformStream), {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+        'Content-Encoding': 'none',
+        'X-Analysis-Id': analysisId,
+      },
+    });
+  };
+
   try {
-    // Проверяем переменные окружения
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      console.error('OPENROUTER_API_KEY не найден в переменных окружения');
-      return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.' },
-        { status: 500 }
-      );
+      return NextResponse.json({ success: false, error: 'OPENROUTER_API_KEY не настроен' }, { status: 500 });
     }
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = formData.get('prompt') as string || 'Проанализируйте медицинское изображение.';
-    const mode = (formData.get('mode') as string) || 'precise'; // fast, precise, validated, optimized
-    const imageType = (formData.get('imageType') as string) || 'universal'; // xray, ct, mri, ultrasound, dermatoscopy, ecg, universal
-    const useStreamingParam = formData.get('useStreaming');
-    const useStreaming = useStreamingParam === 'true' || useStreamingParam === true;
+    const clinicalContext = formData.get('clinicalContext') as string || '';
+    const mode = (formData.get('mode') as string) || 'optimized';
+    const stage = (formData.get('stage') as string) || 'all';
+    const imageType = (formData.get('imageType') as string) || 'universal';
+    const customModel = formData.get('model') as string | null;
+    const useStreaming = formData.get('useStreaming') === 'true';
     
-    console.log('📡 [API] useStreaming параметр:', useStreamingParam, '→', useStreaming);
-
-    if (!file) {
-      return NextResponse.json(
-        { success: false, error: 'No file provided' },
-        { status: 400 }
-      );
+    // Сбор всех изображений
+    const additionalImages: File[] = [];
+    let fileIndex = 0;
+    while (true) {
+      const additionalFile = formData.get(`additionalImage_${fileIndex}`) as File;
+      if (!additionalFile) break;
+      additionalImages.push(additionalFile);
+      fileIndex++;
     }
 
-    console.log('Processing image:', {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type,
-      promptLength: prompt.length
-    });
-
-    // Конвертация файла в base64
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const base64Image = buffer.toString('base64');
-
-    console.log('Image converted to base64, size:', base64Image.length);
-    console.log('Analysis mode:', mode);
-    console.log('Prompt:', prompt.substring(0, 200) + '...');
-
-    // Определяем, является ли запрос сканированием документа
-    const isDocumentScan = prompt.toLowerCase().includes('отсканируйте') || 
-                          prompt.toLowerCase().includes('сканирование') ||
-                          prompt.toLowerCase().includes('извлеките текст') ||
-                          prompt.toLowerCase().includes('ocr') ||
-                          imageType === 'document';
-
-    // Выбор функции анализа в зависимости от режима
-    let modelUsed: string;
-    
-    if (mode === 'fast') {
-      modelUsed = 'google/gemini-3-flash-preview';
-    } else if (isDocumentScan) {
-      // Для сканирования документов используем Haiku/Llama вместо Opus
-      modelUsed = 'anthropic/claude-haiku-4.5';
-    } else {
-      modelUsed = 'anthropic/claude-opus-4.5';
+    const allImages = file ? [file, ...additionalImages] : additionalImages;
+    if (allImages.length === 0) {
+      return NextResponse.json({ success: false, error: 'Изображения не получены' }, { status: 400 });
     }
 
-    // Если режим optimized, используем двухшаговый Opus (Vision → Text) - экономия ~50%
-    if (mode === 'optimized') {
-      console.log('⚡ [OPTIMIZED] Запуск двухшагового Opus анализа: Vision → Text');
-      
-      if (useStreaming) {
-        try {
-          console.log('📡 [OPTIMIZED] Streaming режим для двухшагового Opus...');
-          const stream = await analyzeImageOpusTwoStageStreaming(prompt, base64Image);
+    const imagesBase64: string[] = [];
+    const mimeTypes: string[] = [];
+    let dicomContext = '';
+
+    for (const img of allImages) {
+      const isDicom = img.name.toLowerCase().endsWith('.dcm') || 
+                      img.name.toLowerCase().endsWith('.dicom') || 
+                      img.type === 'application/dicom' ||
+                      img.type === ''; // Некоторые браузеры не определяют тип для .dcm
+
+      if (isDicom) {
+        console.log(`📦 [DICOM] Обнаружен DICOM файл: ${img.name}`);
+        const arrayBuffer = await img.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // 1. Нативное извлечение метаданных через JS (Безопасно и быстро)
+        const nativeMeta = extractDicomMetadata(buffer);
+        if (nativeMeta.modality) {
+          console.log(`✅ [DICOM JS] Метаданные извлечены нативно: ${nativeMeta.modality}`);
+          dicomContext += formatDicomMetadataForAI(nativeMeta);
+        }
+
+        // 2. Нативная конвертация изображения через JS (БЫСТРО)
+        const jsProcessResult = await processDicomJs(buffer);
+        
+        if (jsProcessResult.success && jsProcessResult.image) {
+          console.log(`✅ [DICOM JS] Изображение успешно обработано нативно`);
+          imagesBase64.push(jsProcessResult.image);
+          mimeTypes.push('image/png');
+        } else {
+          // 3. Fallback: Конвертация изображения через Python (если JS не справился)
+          console.log(`⚠️ [DICOM JS] Нативная обработка не удалась, переход на Python...`);
+          const tempDir = os.tmpdir();
+          const tempPath = path.join(tempDir, `dicom_${Date.now()}_${img.name.replace(/\s+/g, '_')}`);
+          await fs.writeFile(tempPath, buffer);
           
-          const encoder = new TextEncoder();
-          const decoder = new TextDecoder();
-          
-          const readableStream = new ReadableStream({
-            async start(controller) {
-              const reader = stream.getReader();
+          try {
+            const scriptPath = path.join(process.cwd(), 'scripts/process_dicom.py');
+            // Используем python3 или python в зависимости от окружения
+            const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+            const { stdout } = await execPromise(`${pythonCmd} "${scriptPath}" "${tempPath}"`);
+            const result = JSON.parse(stdout);
+            
+            if (result.success) {
+              imagesBase64.push(result.image);
+              mimeTypes.push('image/png');
               
-              try {
-                while (true) {
-                  const { done, value } = await reader.read();
-                  if (done) {
-                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                    controller.close();
-                    break;
-                  }
-                  
-                  const chunk = decoder.decode(value, { stream: true });
-                  controller.enqueue(encoder.encode(chunk));
-                }
-              } catch (error) {
-                console.error('❌ [OPTIMIZED STREAMING] Ошибка чтения потока:', error);
-                controller.error(error);
-              } finally {
-                reader.releaseLock();
+              // Если Python нашел дополнительные метаданные, которых нет в JS, добавляем их
+              if (!nativeMeta.modality && result.metadata) {
+                const m = result.metadata;
+                dicomContext += `\n[Данные из Python]: ${m.modality} ${m.body_part}\n`;
               }
+              
+              console.log(`✅ [DICOM Python] Изображение успешно конвертировано`);
+            } else {
+              console.error(`❌ [DICOM ERROR]: ${result.error}`);
+              // Резервный вариант: отправляем как есть (некоторые ИИ могут пробовать читать raw)
+              imagesBase64.push(buffer.toString('base64'));
+              mimeTypes.push(img.type || 'application/dicom');
             }
-          });
-          
-          return new Response(readableStream, {
-            headers: {
-              'Content-Type': 'text/event-stream',
-              'Cache-Control': 'no-cache, no-transform',
-              'Connection': 'keep-alive',
-              'X-Accel-Buffering': 'no',
-              'Access-Control-Allow-Origin': '*',
-            },
-          });
-        } catch (optimizedError: any) {
-          console.error('❌ [OPTIMIZED] Ошибка двухшагового Opus анализа:', optimizedError);
-          throw optimizedError;
+          } catch (e: any) {
+            console.error(`❌ [DICOM EXEC ERROR]:`, e);
+            imagesBase64.push(buffer.toString('base64'));
+            mimeTypes.push(img.type || 'application/dicom');
+          } finally {
+            await fs.unlink(tempPath).catch(() => {});
+          }
         }
       } else {
-        // Обычный режим без streaming
-        try {
-          console.log('📡 [OPTIMIZED] Обычный режим для двухшагового Opus...');
-          const result = await analyzeImageOpusTwoStage({
-            prompt,
-            imageBase64: base64Image
-          });
-          
-          return NextResponse.json({
-            success: true,
-            result: result,
-            model: 'anthropic/claude-opus-4.5',
-            mode: 'optimized',
-          });
-        } catch (optimizedError: any) {
-          console.error('❌ [OPTIMIZED] Ошибка двухшагового Opus анализа:', optimizedError);
-          throw optimizedError;
-        }
+        const arrayBuffer = await img.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        imagesBase64.push(buffer.toString('base64'));
+        mimeTypes.push(img.type);
       }
     }
 
-    // Если режим validated, используем двухэтапный анализ: JSON + Opus
-    if (mode === 'validated') {
-      console.log('✅ [VALIDATED] Запуск двухэтапного анализа: Gemini JSON → Opus');
-      
-      try {
-        // Шаг 1: Извлекаем JSON через Gemini Flash 3.0
-        console.log('📊 [VALIDATED] Шаг 1: Извлечение JSON через Gemini Flash 3.0...');
-        const jsonExtraction = await extractImageJSON({
-          imageBase64: base64Image,
-          modality: 'unknown'
-        });
-        
-        console.log('✅ [VALIDATED] JSON извлечен:', JSON.stringify(jsonExtraction).substring(0, 200));
-        
-        // Шаг 2: Анализ через Opus с JSON + изображением
-        if (useStreaming) {
-          console.log('📡 [VALIDATED] Шаг 2: Streaming анализ через Opus с JSON + изображением...');
-          const stream = await analyzeImageWithJSONStreaming(jsonExtraction, base64Image, prompt);
-          
-          const encoder = new TextEncoder();
-          const decoder = new TextDecoder();
-          
-          const readableStream = new ReadableStream({
-            async start(controller) {
-              const reader = stream.getReader();
-              
-              try {
-                while (true) {
-                  const { done, value } = await reader.read();
-                  if (done) {
-                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                    controller.close();
-                    break;
-                  }
-                  
-                  const chunk = decoder.decode(value, { stream: true });
-                  controller.enqueue(encoder.encode(chunk));
-                }
-              } catch (error) {
-                console.error('❌ [VALIDATED STREAMING] Ошибка чтения потока:', error);
-                controller.error(error);
-              } finally {
-                reader.releaseLock();
-              }
-            }
-          });
-          
-          return new Response(readableStream, {
-            headers: {
-              'Content-Type': 'text/event-stream',
-              'Cache-Control': 'no-cache, no-transform',
-              'Connection': 'keep-alive',
-              'X-Accel-Buffering': 'no',
-              'Access-Control-Allow-Origin': '*',
-            },
-          });
-        } else {
-          // Обычный режим без streaming для validated (пока не реализован)
-          throw new Error('Режим validated без streaming пока не поддерживается');
-        }
-      } catch (validatedError: any) {
-        console.error('❌ [VALIDATED] Ошибка двухэтапного анализа:', validatedError);
-        throw validatedError;
+    // Добавляем данные DICOM к клиническому контексту
+    const finalClinicalContext = dicomContext ? `${clinicalContext}\n\n${dicomContext}` : clinicalContext;
+
+    // Определяем модель в зависимости от режима
+    let modelToUse = customModel;
+    if (!modelToUse) {
+      if (mode === 'fast') {
+        modelToUse = MODELS.GEMINI_FLASH_30;
+      } else {
+        // По умолчанию для всех серьезных анализов используем SONNET 4.5.
+        // Это в 5 раз дешевле OPUS при сопоставимом качестве.
+        modelToUse = MODELS.SONNET;
       }
     }
 
-    // Если streaming запрошен, возвращаем поток
-    if (useStreaming) {
-      console.log('📡 [API STREAMING] Запуск streaming анализа через', modelUsed);
-      try {
-        const stream = await analyzeImageStreaming(prompt, base64Image, modelUsed);
-        console.log('📡 [API STREAMING] Поток от OpenRouter получен');
-        
-        // OpenRouter возвращает поток в формате SSE, но нужно правильно его обработать
-        const encoder = new TextEncoder();
-        const decoder = new TextDecoder();
-        
-        const readableStream = new ReadableStream({
-          async start(controller) {
-            const reader = stream.getReader();
-            let buffer = '';
-            let chunkCount = 0;
-            let firstChunkReceived = false;
-            
-            try {
-              console.log('📡 [API STREAMING] Начинаем чтение потока от OpenRouter...');
-              
-              while (true) {
-                const { done, value } = await reader.read();
-                
-                if (done) {
-                  console.log('📡 [API STREAMING] Поток от OpenRouter завершён, всего чанков:', chunkCount);
-                  // Обрабатываем оставшийся буфер
-                  if (buffer.trim()) {
-                    console.log('📡 [API STREAMING] Обрабатываем оставшийся буфер:', buffer.substring(0, 200));
-                    const lines = buffer.split(/\r?\n/);
-                    for (const line of lines) {
-                      if (line.trim() && !line.startsWith(':')) {
-                        if (line.startsWith('data: ')) {
-                          controller.enqueue(encoder.encode(line + '\n\n'));
-                        } else {
-                          const trimmedLine = line.trim();
-                          if (trimmedLine.startsWith('{') || trimmedLine.startsWith('[')) {
-                            try {
-                              JSON.parse(trimmedLine);
-                              controller.enqueue(encoder.encode('data: ' + trimmedLine + '\n\n'));
-                            } catch (e) {
-                              console.debug('⚠️ [API STREAMING] Неполный JSON в буфере:', trimmedLine.substring(0, 100));
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                  controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                  controller.close();
-                  console.log('📡 [API STREAMING] Поток закрыт, отправлен [DONE]');
-                  break;
-                }
-                
-                chunkCount++;
-                const chunk = decoder.decode(value, { stream: true });
-                
-                if (!firstChunkReceived) {
-                  console.log('📡 [API STREAMING] Первый чанк от OpenRouter:', chunk.substring(0, 500));
-                  firstChunkReceived = true;
-                }
-                
-                buffer += chunk;
-                
-                // OpenRouter возвращает поток в формате SSE, но может быть без префикса "data: "
-                // Обрабатываем полные строки (SSE формат)
-                const lines = buffer.split(/\r?\n/);
-                buffer = lines.pop() || ''; // Последняя строка может быть неполной
-                
-                for (const line of lines) {
-                  if (!line.trim() || line.startsWith(':')) {
-                    continue; // Пропускаем пустые строки и комментарии
-                  }
-                  
-                  // OpenRouter может возвращать строки с "data: " или без него
-                  if (line.startsWith('data: ')) {
-                    // Уже в правильном формате SSE
-                    controller.enqueue(encoder.encode(line + '\n\n'));
-                    console.debug('📡 [API STREAMING] Отправлена строка с data::', line.substring(0, 100));
-                  } else {
-                    // Если строка не начинается с "data: ", это может быть JSON напрямую
-                    const trimmedLine = line.trim();
-                    if (trimmedLine.startsWith('{') || trimmedLine.startsWith('[')) {
-                      try {
-                        JSON.parse(trimmedLine);
-                        // Это валидный JSON, оборачиваем в SSE формат
-                        controller.enqueue(encoder.encode('data: ' + trimmedLine + '\n\n'));
-                        console.debug('📡 [API STREAMING] Отправлена строка без data: (JSON):', trimmedLine.substring(0, 100));
-                      } catch (e) {
-                        // Не полный JSON, возможно часть строки, пропускаем пока
-                        console.debug('⚠️ [API STREAMING] Неполный JSON, пропускаем:', trimmedLine.substring(0, 100));
-                      }
-                    } else {
-                      // Не JSON, возможно часть строки, добавляем как есть
-                      controller.enqueue(encoder.encode('data: ' + trimmedLine + '\n\n'));
-                      console.debug('📡 [API STREAMING] Отправлена строка без data: (текст):', trimmedLine.substring(0, 100));
-                    }
-                  }
-                }
-              }
-            } catch (error) {
-              console.error('❌ [API STREAMING] Ошибка чтения потока:', error);
-              controller.error(error);
-            } finally {
-              reader.releaseLock();
-              console.log('🔒 [API STREAMING] Reader освобождён');
-            }
-          }
-        });
-        
-        return new Response(readableStream, {
-          headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache, no-transform',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no',
-            'Access-Control-Allow-Origin': '*',
-          },
-        });
-      } catch (streamError: any) {
-        console.error('❌ [STREAMING] Ошибка создания потока:', streamError);
-        console.error('❌ [STREAMING] Детали ошибки:', {
-          message: streamError.message,
-          stack: streamError.stack?.substring(0, 500)
-        });
-        // Fallback на обычный режим
-        console.log('🔄 [STREAMING] Переключение на обычный режим из-за ошибки streaming');
-        // Продолжаем выполнение в обычном режиме ниже
-      }
-    }
-
-    // Обычный режим без streaming
-    let result: string;
-    
+    // --- БЫСТРЫЙ РЕЖИМ (Fast) ---
     if (mode === 'fast') {
-      // Быстрый анализ через Gemini Flash
-      console.log('🚀 [ANALYSIS] Запуск БЫСТРОГО анализа через Gemini Flash');
-      result = await analyzeImageFast({
-        prompt,
-        imageBase64: base64Image,
-        imageType: imageType as 'xray' | 'ct' | 'mri' | 'ultrasound' | 'dermatoscopy' | 'ecg' | 'universal'
-      });
-      console.log('✅ [ANALYSIS] Gemini Flash анализ завершён');
-    } else if (isDocumentScan) {
-      // Сканирование документов через Haiku/Llama
-      console.log('📄 [DOCUMENT SCAN] Запуск сканирования через Haiku 4.5');
-      result = await analyzeImage({
-        prompt,
-        imageBase64: base64Image,
-        mode: 'precise',
-        model: 'anthropic/claude-haiku-4.5',
-      });
-      console.log('✅ [DOCUMENT SCAN] Haiku сканирование завершено');
+      if (useStreaming) {
+        // Для быстрого стриминга используем Gemini 3.0 (JSON) -> Gemini 3.0 (Описание)
+        const stream = await analyzeImageFastStreaming(prompt, imagesBase64[0], imageType, finalClinicalContext);
+        return handleStreamingResponse(stream, MODELS.GEMINI_FLASH_30);
+      } else {
+        const result = await analyzeImageFast({
+          prompt,
+          imageBase64: imagesBase64[0],
+          imageType: imageType as any,
+          clinicalContext: finalClinicalContext
+        });
+        return NextResponse.json({ success: true, result, model: modelToUse, mode, analysis_id: analysisId });
+      }
+    }
+
+    // --- ПОСЛЕДОВАТЕЛЬНЫЕ ЭТАПЫ (Шаг 1 / Шаг 2) ---
+    if (useStreaming && (stage === 'description' || stage === 'directive')) {
+      let stream: ReadableStream;
+      if (stage === 'description') {
+        stream = await analyzeMultipleImagesDescriptionStreaming(prompt, imagesBase64, imageType, finalClinicalContext, mimeTypes);
+      } else {
+        const description = formData.get('description') as string || '';
+        stream = await analyzeMultipleImagesDirectiveStreaming(prompt, description, imagesBase64, finalClinicalContext, mimeTypes);
+      }
+      return handleStreamingResponse(stream, stage === 'description' ? MODELS.SONNET : MODELS.OPUS);
+    }
+
+    // --- СТАНДАРТНЫЙ РЕЖИМ ---
+    if (allImages.length > 1) {
+      if (useStreaming) {
+        let stream: ReadableStream;
+        if (mode === 'optimized') stream = await analyzeMultipleImagesOpusTwoStageStreaming(prompt, imagesBase64, imageType as any, finalClinicalContext, mimeTypes);
+        else if (mode === 'validated') stream = await analyzeMultipleImagesWithJSONStreaming(prompt, imagesBase64, imageType as any, finalClinicalContext, mimeTypes);
+        else stream = await analyzeMultipleImagesStreaming(prompt, imagesBase64, mimeTypes, modelToUse, finalClinicalContext);
+        return handleStreamingResponse(stream, modelToUse);
+      } else {
+        // Двухэтапный анализ для нескольких изображений
+        if (mode === 'optimized' || mode === 'validated') {
+          const result = await analyzeMultipleImagesTwoStage({
+            prompt,
+            imagesBase64,
+            imageType: imageType as any,
+            clinicalContext: finalClinicalContext,
+            targetModel: modelToUse
+          });
+          return NextResponse.json({ success: true, result, model: modelToUse, mode, analysis_id: analysisId });
+        }
+        const result = await analyzeMultipleImages({ prompt, imagesBase64, mimeTypes, model: modelToUse, clinicalContext: finalClinicalContext, imageType: imageType as any });
+        return NextResponse.json({ success: true, result, model: modelToUse, mode, analysis_id: analysisId });
+      }
     } else {
-      // Точный анализ через Opus
-      console.log('🎯 [ANALYSIS] Запуск ТОЧНОГО анализа через Opus 4.5');
-      result = await analyzeImage({
-        prompt,
-        imageBase64: base64Image,
-        mode: 'precise',
-      });
-      console.log('✅ [ANALYSIS] Opus анализ завершён');
+      const base64Image = imagesBase64[0];
+      if (mode === 'optimized' && useStreaming) {
+        const stream = await analyzeImageOpusTwoStageStreaming(prompt, base64Image, imageType as any, finalClinicalContext);
+        return handleStreamingResponse(stream, MODELS.SONNET);
+      }
+      if (mode === 'validated' && useStreaming) {
+        const jsonExtraction = await extractImageJSON({ imageBase64: base64Image, modality: imageType });
+        const stream = await analyzeImageWithJSONStreaming(jsonExtraction, base64Image, prompt, mimeTypes[0], imageType as any, finalClinicalContext);
+        return handleStreamingResponse(stream, MODELS.OPUS);
+      }
+      if (useStreaming) {
+        const stream = await analyzeImageStreaming(prompt, base64Image, modelToUse, mimeTypes[0], finalClinicalContext);
+        return handleStreamingResponse(stream, modelToUse);
+      }
+      
+      // Двухэтапный анализ для optimized и validated режимов (не стриминг)
+      if (mode === 'optimized' || mode === 'validated') {
+        const result = await analyzeImageOpusTwoStage({
+          prompt,
+          imageBase64: base64Image,
+          imageType: imageType as any,
+          clinicalContext: finalClinicalContext,
+          targetModel: modelToUse
+        });
+        return NextResponse.json({ success: true, result, model: modelToUse, mode, analysis_id: analysisId });
+      }
+
+      const result = await analyzeImage({ prompt, imageBase64: base64Image, mimeType: mimeTypes[0], model: modelToUse, clinicalContext: finalClinicalContext, imageType: imageType as any });
+      return NextResponse.json({ success: true, result, model: modelToUse, mode, analysis_id: analysisId });
     }
 
-    console.log('📊 [ANALYSIS] Результат получен:');
-    console.log('  - Модель:', modelUsed);
-    console.log('  - Длина ответа:', result.length, 'символов');
-    console.log('  - Первые 200 символов:', result.substring(0, 200));
-
-    return NextResponse.json({
-      success: true,
-      result: result,
-      model: modelUsed,
-      mode: mode,
-    });
   } catch (error: any) {
-    console.error('Error analyzing image:', error);
-    
-    // Более детальная обработка ошибок
-    let errorMessage = error.message || 'Internal server error';
-    let statusCode = 500;
-    
-    if (error.message.includes('не настроен') || error.message.includes('не найден')) {
-      statusCode = 500;
-      errorMessage = 'Ошибка конфигурации: ' + errorMessage;
-    } else if (error.message.includes('fetch failed') || error.message.includes('network')) {
-      statusCode = 503;
-      errorMessage = 'Ошибка сети. Проверьте подключение к интернету.';
-    } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
-      statusCode = 504;
-      errorMessage = 'Превышено время ожидания. Попробуйте позже.';
-    }
-    
-    return NextResponse.json(
-      { success: false, error: errorMessage },
-      { status: statusCode }
-    );
+    console.error('❌ [API ERROR]:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Ошибка сервера' }, { status: 500 });
   }
 }
-

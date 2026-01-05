@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import AudioUpload from '@/components/AudioUpload'
 import FileUpload from '@/components/FileUpload'
+import AnalysisTips from '@/components/AnalysisTips'
 import ReactMarkdown from 'react-markdown'
 import { logUsage } from '@/lib/simple-logger'
 
@@ -16,7 +17,7 @@ export default function ChatPage() {
   const [showFileUpload, setShowFileUpload] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
-  const [model, setModel] = useState<ModelType>('opus')
+    const [model, setModel] = useState<'opus' | 'sonnet' | 'gemini'>('opus')
 
   const handleSend = async () => {
     if (!message.trim() && selectedFiles.length === 0) return
@@ -47,7 +48,9 @@ export default function ChatPage() {
     try {
       const modelName = model === 'opus' 
         ? 'anthropic/claude-opus-4.5' 
-        : 'anthropic/claude-sonnet-4.5'
+        : model === 'sonnet'
+          ? 'anthropic/claude-sonnet-4.5'
+          : 'google/gemini-3-flash-preview'
 
       if (selectedFiles.length > 0) {
         // Отправка с файлами через FormData
@@ -292,42 +295,57 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🤖 ИИ-Консультант</h1>
+    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-6xl">
+      <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 mb-4 sm:mb-6">🤖 ИИ-Консультант</h1>
       
-      <div className="bg-white rounded-lg shadow-lg p-6 mb-6 h-96 overflow-y-auto">
+      <AnalysisTips 
+        title="Как пользоваться ИИ-Консультантом"
+        content={{
+          fast: "используйте Gemini 3.0 Flash для мгновенных ответов на общие медицинские вопросы или быстрой навигации по документам.",
+          optimized: "выбирайте Sonnet 4.5 или Opus 4.5 для глубокого клинического разбора сложных случаев, когда важна точность каждой детали.",
+          extra: [
+            "⭐ Рекомендуемая модель: Claude Sonnet 4.5 — лучший баланс интеллекта и скорости для ежедневных задач.",
+            "🎤 Вы можете надиктовать вопрос голосом — система автоматически переведет его в текст.",
+            "📎 Прикрепляйте любые файлы: анализы, выписки, изображения для контекста обсуждения.",
+            "🔄 Streaming‑режим позволяет видеть, как ИИ формирует ответ в реальном времени.",
+            "💾 История диалога сохраняется в рамках текущей сессии для последовательного разбора."
+          ]
+        }}
+      />
+      
+      <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6 mb-4 sm:mb-6 h-[60vh] sm:h-[600px] overflow-y-auto">
         {messages.length === 0 ? (
-          <div className="text-center text-gray-500 mt-20">
+          <div className="text-center text-gray-500 mt-10 sm:mt-20 text-sm sm:text-base">
             Начните диалог с ИИ-консультантом
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {messages.map((msg, idx) => (
               <div
                 key={idx}
-                className={`p-4 rounded-lg ${
+                className={`p-3 sm:p-4 rounded-lg ${
                   msg.role === 'user'
-                    ? 'bg-primary-100 ml-12'
-                    : 'bg-gray-100 mr-12'
+                    ? 'bg-primary-100 sm:ml-12'
+                    : 'bg-gray-100 sm:mr-12'
                 }`}
               >
-                <div className="font-semibold mb-2">
+                <div className="font-semibold mb-2 text-sm sm:text-base">
                   {msg.role === 'user' ? 'Вы' : 'ИИ-Консультант'}
                 </div>
                 {msg.files && msg.files.length > 0 && (
-                  <div className="mb-2 flex flex-wrap gap-2">
+                  <div className="mb-2 flex flex-wrap gap-1 sm:gap-2">
                     {msg.files.map((file, fileIdx) => (
                       <span
                         key={fileIdx}
                         className="inline-flex items-center gap-1 px-2 py-1 bg-gray-200 rounded text-xs"
                         title={`${file.name} (${(file.size / 1024).toFixed(1)} KB)`}
                       >
-                        📎 {file.name}
+                        📎 <span className="max-w-[150px] sm:max-w-none truncate">{file.name}</span>
                       </span>
                     ))}
                   </div>
                 )}
-                <div className="prose prose-sm max-w-none">
+                <div className="prose prose-sm max-w-none text-sm sm:text-base">
                   {msg.role === 'user' ? (
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                   ) : (
@@ -365,12 +383,12 @@ export default function ChatPage() {
       </div>
 
       {showAudioUpload && (
-        <div className="mb-4 bg-white rounded-lg shadow-lg p-4">
+        <div className="mb-3 sm:mb-4 bg-white rounded-lg shadow-lg p-3 sm:p-4">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold">🎤 Загрузка аудио</h3>
+            <h3 className="font-semibold text-sm sm:text-base">🎤 Загрузка аудио</h3>
             <button
               onClick={() => setShowAudioUpload(false)}
-              className="text-gray-500 hover:text-gray-700"
+              className="text-gray-500 hover:text-gray-700 p-2 touch-manipulation"
             >
               ✕
             </button>
@@ -385,15 +403,15 @@ export default function ChatPage() {
       )}
 
       {showFileUpload && (
-        <div className="mb-4 bg-white rounded-lg shadow-lg p-4">
+        <div className="mb-3 sm:mb-4 bg-white rounded-lg shadow-lg p-3 sm:p-4">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold">📎 Загрузка файлов</h3>
+            <h3 className="font-semibold text-sm sm:text-base">📎 Загрузка файлов</h3>
             <button
               onClick={() => {
                 setShowFileUpload(false)
                 setSelectedFiles([])
               }}
-              className="text-gray-500 hover:text-gray-700"
+              className="text-gray-500 hover:text-gray-700 p-2 touch-manipulation"
             >
               ✕
             </button>
@@ -407,17 +425,17 @@ export default function ChatPage() {
           />
           {selectedFiles.length > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-200">
-              <div className="text-sm font-medium mb-2">Выбранные файлы ({selectedFiles.length}):</div>
-              <div className="flex flex-wrap gap-2">
+              <div className="text-xs sm:text-sm font-medium mb-2">Выбранные файлы ({selectedFiles.length}):</div>
+              <div className="flex flex-wrap gap-1 sm:gap-2">
                 {selectedFiles.map((file, idx) => (
                   <span
                     key={idx}
                     className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 rounded text-xs"
                   >
-                    📎 {file.name}
+                    📎 <span className="max-w-[120px] sm:max-w-[200px] truncate">{file.name}</span>
                     <button
                       onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
-                      className="text-red-500 hover:text-red-700 ml-1"
+                      className="text-red-500 hover:text-red-700 ml-1 touch-manipulation"
                     >
                       ✕
                     </button>
@@ -429,65 +447,73 @@ export default function ChatPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
-        <div className="flex flex-wrap gap-4 items-center">
-          <label className="flex items-center gap-2 cursor-pointer">
+      <div className="bg-white rounded-lg shadow-lg p-3 sm:p-4 mb-3 sm:mb-4">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4 items-start sm:items-center">
+          <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
             <input
               type="checkbox"
               checked={useStreaming}
               onChange={(e) => setUseStreaming(e.target.checked)}
-              className="w-4 h-4 text-primary-600"
+              className="w-5 h-5 sm:w-4 sm:h-4 text-primary-600"
             />
-            <span className="text-sm">Streaming (постепенный ответ)</span>
+            <span className="text-xs sm:text-sm">Streaming (постепенный ответ)</span>
           </label>
           
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Модель:</span>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Модель:</span>
             <select
               value={model}
-              onChange={(e) => setModel(e.target.value as ModelType)}
-              className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              onChange={(e) => setModel(e.target.value as any)}
+              className="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
               disabled={loading}
             >
               <option value="opus">🧠 Opus 4.5 (точный)</option>
               <option value="sonnet">🤖 Sonnet 4.5 (быстрый)</option>
+              <option value="gemini">⚡ Gemini 3.0 Flash (мгновенный)</option>
             </select>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-2">
-        <button
-          onClick={() => setShowAudioUpload(!showAudioUpload)}
-          className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors"
-          title="Загрузить аудио"
-        >
-          🎤
-        </button>
-        <button
-          onClick={() => setShowFileUpload(!showFileUpload)}
-          className={`px-4 py-2 rounded-lg transition-colors ${
-            selectedFiles.length > 0
-              ? 'bg-primary-500 hover:bg-primary-600 text-white'
-              : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-          }`}
-          title="Загрузить файлы"
-        >
-          📎 {selectedFiles.length > 0 && `(${selectedFiles.length})`}
-        </button>
-        <input
-          type="text"
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowAudioUpload(!showAudioUpload)}
+            className="px-4 py-3 sm:py-2 bg-secondary-500 hover:bg-secondary-600 active:bg-secondary-700 text-white rounded-lg transition-colors text-lg sm:text-base touch-manipulation"
+            title="Загрузить аудио"
+          >
+            🎤
+          </button>
+          <button
+            onClick={() => setShowFileUpload(!showFileUpload)}
+            className={`px-4 py-3 sm:py-2 rounded-lg transition-colors text-lg sm:text-base touch-manipulation ${
+              selectedFiles.length > 0
+                ? 'bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white'
+                : 'bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-700'
+            }`}
+            title="Загрузить файлы"
+          >
+            📎 {selectedFiles.length > 0 && `(${selectedFiles.length})`}
+          </button>
+        </div>
+        <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-          placeholder="Введите ваш вопрос или загрузите файлы..."
-          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          placeholder="Введите ваш вопрос..."
+          className="flex-1 px-4 py-3 sm:py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base touch-manipulation min-h-[50px] max-h-[200px] resize-y"
           disabled={loading}
+          rows={1}
         />
         <button
           onClick={handleSend}
           disabled={loading || (!message.trim() && selectedFiles.length === 0)}
-          className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-6 py-3 sm:py-2 bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-medium touch-manipulation"
         >
           Отправить
         </button>

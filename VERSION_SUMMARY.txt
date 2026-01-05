@@ -1,0 +1,31 @@
+================================================================================
+            МЕДИЦИНСКИЙ ИИ-АССИСТЕНТ - ВЕРСИЯ 3.39.0 (OPTIMA EDITION)
+================================================================================
+
+СТАТУС: СТАБИЛЬНАЯ СБОРКА
+ДАТА: 04.01.2026
+
+ГЛАВНЫЕ ОБНОВЛЕНИЯ:
+------------------
+1. [NEW] OPTIMA ARCHITECTURE: Полный переход на Next.js (Streamlit-бэкенд отключен).
+2. [NEW] AGENTIC WORKFLOW: Двухэтапный анализ (Gemini 3.0 Flash -> Claude 4.5).
+3. [NEW] ECONOMY MODE: Снижение стоимости анализа в 5-10 раз за счет удаления изображений на втором этапе.
+4. [NEW] PROMPT SYNC: Синхронизация всех медицинских промптов из Python в TypeScript.
+5. [NEW] AUTH READY: Подготовлена система NextAuth + Resend (Magic Links).
+
+ТЕХНИЧЕСКИЙ СТЕК:
+----------------
+- Frontend/Backend: Next.js 14 (App Router), TypeScript, Tailwind CSS
+- AI: Claude 4.5 Opus/Sonnet, Gemini 3.0 Flash (via OpenRouter)
+- Storage: IndexedDB (Client-side) / NextAuth (Auth)
+- Pricing: Актуальные тарифы 2026 года ($5/$25 для Opus)
+
+КАК ЗАПУСТИТЬ:
+-------------
+1. npm install
+2. npm run dev (Next.js теперь обрабатывает всё)
+3. Проверьте .env.local на наличие OPENROUTER_API_KEY и RESEND_API_KEY.
+
+--------------------------------------------------------------------------------
+(c) 2025-2026 Medical AI Assistant Team
+================================================================================

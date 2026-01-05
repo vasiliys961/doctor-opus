@@ -17,6 +17,7 @@ import base64
 import requests
 import time
 import datetime
+from utils.cost_calculator import calculate_cost, format_cost_log
 try:
     from .medical_ai_analyzer import EnhancedMedicalAIAnalyzer, ImageType, AnalysisResult
 except ImportError:
@@ -1056,19 +1057,21 @@ def show_ai_training_page():
         st.info("История анализов пуста")
 
 
-def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
+def search_protocols_gemini(query: str, specialty: str = "", streaming: bool = False, use_sonnet: bool = False) -> Any:
     """
-    Поиск актуальных медицинских протоколов через Claude Sonnet (через OpenRouter)
+    Поиск актуальных медицинских протоколов через Claude Sonnet 4.5 или Haiku 4.5
     
     Args:
         query: Поисковый запрос
         specialty: Специальность для уточнения поиска
+        streaming: Включить ли потоковую передачу
+        use_sonnet: Использовать ли Sonnet 4.5 вместо Haiku 4.5
     
     Returns:
-        Dict с результатами поиска и ссылками
+        Dict с результатами поиска или Генератор для streaming
     """
     try:
-        # Получаем API ключ OpenRouter (уже используется в проекте)
+        # Получаем API ключ OpenRouter
         try:
             from config import OPENROUTER_API_KEY
             api_key = OPENROUTER_API_KEY
@@ -1076,12 +1079,16 @@ def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
             api_key = st.secrets.get("OPENROUTER_API_KEY") or st.secrets.get("api_keys", {}).get("OPENROUTER_API_KEY")
         
         if not api_key:
-            return {
-                "error": "API ключ OpenRouter не найден. Добавьте OPENROUTER_API_KEY в secrets.toml",
+            error_res = {
+                "error": "API ключ OpenRouter не найден.",
                 "results": []
             }
+            if streaming:
+                def error_gen(): yield error_res["error"]
+                return error_gen()
+            return error_res
         
-        # Формируем промпт для поиска протоколов
+        # Формируем расширенный промпт для поиска
         search_prompt = f"""Найди актуальные медицинские протоколы и клинические рекомендации по теме: {query}
 Специальность: {specialty}
 
@@ -1105,21 +1112,14 @@ def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
    - Длительность лечения и критерии эффективности
 
 5. ИСТОЧНИКИ:
-   - Укажи названия источников (например: "Клинические рекомендации Минздрава РФ по...", "Рекомендации ESC по...")
-   - Укажи общие направления поиска (например: "Искать в PubMed по ключевым словам: ...")
-   - НЕ указывай конкретные PubMed ID, DOI или URL, если не уверен в их точности
-   - Если знаешь точные проверенные ссылки - укажи их в формате:
-     * PubMed: https://pubmed.ncbi.nlm.nih.gov/XXXXXXX (только если уверен)
-     * DOI: https://doi.org/10.XXXX/XXXXX (только если уверен)
-     * URL: полный рабочий адрес (только если уверен)
+   - Укажи названия источников
+   - Укажи общие направления поиска
 
 КРИТИЧЕСКИ ВАЖНО: 
 - НЕ выдумывай и НЕ генерируй ссылки, которые не проверены
-- Лучше указать только название источника и направление поиска, чем неверную ссылку
 - Используй актуальные источники (2020-2024 годы)
 - Если найдешь российские клинические рекомендации, укажи их в первую очередь."""
         
-        # Используем Claude Sonnet через OpenRouter
         url = "https://openrouter.ai/api/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -1128,61 +1128,87 @@ def search_protocols_gemini(query: str, specialty: str = "") -> Dict:
             "X-Title": "Medical Protocol Search"
         }
         
+        model_id = "anthropic/claude-sonnet-4.5" if use_sonnet else "anthropic/claude-haiku-4.5"
         payload = {
-            "model": "anthropic/claude-sonnet-4.5",
+            "model": model_id,
             "messages": [
-                {
-                    "role": "system",
-                    "content": "Ты помощник врача. Ищешь актуальные медицинские протоколы и клинические рекомендации. Всегда предоставляй структурированную информацию с ссылками на источники."
-                },
-                {
-                    "role": "user",
-                    "content": search_prompt
-                }
+                {"role": "system", "content": "Ты помощник врача. Ищешь актуальные медицинские протоколы и клинические рекомендации."},
+                {"role": "user", "content": search_prompt}
             ],
             "max_tokens": 3000,
-            "temperature": 0.3
+            "temperature": 0.3,
+            "stream": streaming
         }
         
-        print(f"🔍 [CLAUDE SONNET] Ищу протоколы: {query} ({specialty})")
-        start_time = time.time()
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        latency = time.time() - start_time
-        
-        if response.status_code == 200:
-            data = response.json()
-            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            tokens_used = data.get("usage", {}).get("total_tokens", 0)
-            
-            print(f"✅ [CLAUDE SONNET] Найдено протоколов. Токенов: {tokens_used}, Время: {latency:.2f}с")
-            
-            return {
-                "success": True,
-                "content": content,
-                "tokens_used": tokens_used,
-                "model": "Claude Sonnet 4.5"
-            }
-        elif response.status_code == 402:
-            return {
-                "error": "Недостаточно средств на OpenRouter. Пополните баланс.",
-                "results": []
-            }
+        if streaming:
+            def generator():
+                full_content = ""
+                try:
+                    # Лог начала запроса в терминал
+                    print(f"\n📡 [STREAMING] Запрос к {model_id} для: {query}")
+                    
+                    response = requests.post(url, headers=headers, json=payload, timeout=60, stream=True)
+                    if response.status_code == 200:
+                        for line in response.iter_lines():
+                            if line:
+                                line_str = line.decode('utf-8')
+                                if line_str.startswith('data: '):
+                                    data_str = line_str[6:]
+                                    if data_str.strip() == '[DONE]':
+                                        break
+                                    try:
+                                        data = json.loads(data_str)
+                                        if 'choices' in data and len(data['choices']) > 0:
+                                            delta = data['choices'][0].get('delta', {})
+                                            if 'content' in delta:
+                                                chunk = delta['content']
+                                                full_content += chunk
+                                                yield chunk
+                                    except json.JSONDecodeError:
+                                        continue
+                        
+                        # ПОСЛЕ завершения стриминга — выводим красивый отчет в терминал
+                        if full_content:
+                            from utils.cost_calculator import format_cost_log_fancy
+                            # Примерный расчет (1 слово ≈ 1.4 токена)
+                            approx_tokens = int(len(full_content.split()) * 1.4)
+                            # Распределяем вход/выход 30/70 для примерного отчета
+                            report = format_cost_log_fancy(
+                                model_id, 
+                                int(approx_tokens * 0.3), 
+                                int(approx_tokens * 0.7),
+                                total_tokens=approx_tokens
+                            )
+                            print(report)
+                    else:
+                        yield f"❌ Ошибка API ({response.status_code}): {response.text[:200]}"
+                except Exception as e:
+                    yield f"❌ Ошибка соединения: {str(e)}"
+            return generator()
         else:
-            return {
-                "error": f"Ошибка API: {response.status_code} - {response.text[:200]}",
-                "results": []
-            }
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            if response.status_code == 200:
+                data = response.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                tokens_used = data.get("usage", {}).get("total_tokens", 0)
                 
-    except requests.exceptions.Timeout:
-        return {
-            "error": "Таймаут запроса. Попробуйте еще раз.",
-            "results": []
-        }
+                # Расчет стоимости
+                input_tokens = data.get("usage", {}).get("prompt_tokens", tokens_used // 2)
+                output_tokens = data.get("usage", {}).get("completion_tokens", tokens_used // 2)
+                cost_info = calculate_cost(input_tokens, output_tokens, model_id)
+                
+                return {
+                    "success": True,
+                    "content": content,
+                    "tokens_used": tokens_used,
+                    "cost_units": cost_info['total_cost_units'],
+                    "model": "Claude Sonnet 4.5" if use_sonnet else "Claude Haiku 4.5"
+                }
+            else:
+                return {"error": f"Ошибка API: {response.status_code}", "success": False}
+                
     except Exception as e:
-        return {
-            "error": f"Ошибка поиска: {str(e)}",
-            "results": []
-        }
+        return {"error": f"Ошибка: {str(e)}", "success": False}
 
 
 def show_medical_protocols_page():
@@ -1644,10 +1670,10 @@ def show_medical_protocols_page():
         }
     }
     
-    # Поиск актуальных протоколов через Claude Sonnet
+    # Поиск актуальных протоколов через Claude Sonnet 4.5
     st.markdown("---")
     st.subheader("🔍 Поиск актуальных протоколов")
-    st.info("💡 Поиск выполняется через Claude Sonnet (через OpenRouter)")
+    st.info("💡 Поиск выполняется через Claude Sonnet 4.5 (через OpenRouter)")
     
     search_query = st.text_input(
         "Введите запрос для поиска протоколов",
@@ -1657,23 +1683,27 @@ def show_medical_protocols_page():
     
     if st.button("🔍 Найти актуальные протоколы", use_container_width=True, type="primary", key="search_protocols"):
         if search_query:
-            with st.spinner("🔍 Ищу актуальные протоколы через Claude Sonnet..."):
-                result = search_protocols_gemini(search_query, protocol_category)
+            st.markdown("### 📋 Найденные протоколы")
+            
+            # Используем контейнер для стриминга (без лишних оберток st.status, если они мешают)
+            # В ряде случаев st.status может скрывать вывод до завершения
+            placeholder = st.empty()
+            with placeholder.container():
+                text_generator = search_protocols_gemini(search_query, protocol_category, streaming=True, use_sonnet=True)
+                full_content = st.write_stream(text_generator)
+            
+            if full_content:
+                # Расчет стоимости для интерфейса
+                from utils.cost_calculator import calculate_cost
+                approx_tokens = int(len(full_content.split()) * 1.4)
+                model_id = "anthropic/claude-sonnet-4.5"
+                cost_info = calculate_cost(int(approx_tokens*0.3), int(approx_tokens*0.7), model_id)
                 
-                if result.get("success"):
-                    # Claude Sonnet возвращает структурированный текст
-                    st.markdown("### 📋 Найденные протоколы")
-                    st.markdown(result.get("content", ""))
-                    
-                    if result.get("tokens_used"):
-                        st.caption(f"📊 Использовано токенов: {result.get('tokens_used')}")
-                    
-                    st.caption(f"🤖 Поиск выполнен через {result.get('model', 'Claude Sonnet 4.5')}")
-                else:
-                    error_msg = result.get("error", "Неизвестная ошибка")
-                    st.error(f"❌ {error_msg}")
-                    if "API ключ" in error_msg:
-                        st.info("💡 Для использования поиска добавьте OPENROUTER_API_KEY в `.streamlit/secrets.toml`")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.caption(f"🤖 Модель: **Claude Sonnet 4.5**")
+                with col2:
+                    st.caption(f"📊 Расход: ~**{approx_tokens}** токенов (**{cost_info['total_cost_units']:.2f}** у.е.)")
         else:
             st.warning("⚠️ Введите запрос для поиска")
     
@@ -1706,18 +1736,30 @@ def show_medical_protocols_page():
                 
                 # Кнопка для поиска актуальных протоколов по конкретному протоколу
                 if st.button(f"🔍 Найти актуальные протоколы: {protocol_name}", key=f"search_{protocol_name}"):
-                    with st.spinner("Ищу актуальные протоколы через Claude Sonnet..."):
-                        search_result = search_protocols_gemini(
+                    st.markdown("### 📋 Актуальные протоколы:")
+                    
+                    placeholder = st.empty()
+                    with placeholder.container():
+                        text_generator = search_protocols_gemini(
                             f"{protocol_name} {protocol_data['описание']}", 
-                            protocol_category
+                            protocol_category,
+                            streaming=True,
+                            use_sonnet=True
                         )
-                        if search_result.get("success"):
-                            st.markdown("### 📋 Актуальные протоколы:")
-                            st.markdown(search_result.get("content", ""))
-                            if search_result.get("tokens_used"):
-                                st.caption(f"📊 Использовано токенов: {search_result.get('tokens_used')}")
-                        else:
-                            st.error(f"Ошибка поиска: {search_result.get('error', 'Неизвестная ошибка')}")
+                        full_content = st.write_stream(text_generator)
+                    
+                    if full_content:
+                        # Расчет стоимости
+                        from utils.cost_calculator import calculate_cost
+                        approx_tokens = int(len(full_content.split()) * 1.4)
+                        model_id = "anthropic/claude-sonnet-4.5"
+                        cost_info = calculate_cost(int(approx_tokens*0.3), int(approx_tokens*0.7), model_id)
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.caption(f"🤖 Модель: **Claude Sonnet 4.5**")
+                        with col2:
+                            st.caption(f"📊 Расход: ~**{approx_tokens}** токенов (**{cost_info['total_cost_units']:.2f}** у.е.)")
     
     # Кастомные протоколы
     st.subheader("➕ Добавить собственный протокол")

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendTextRequest } from '@/lib/openrouter';
 import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
+import { formatCostLog } from '@/lib/cost-calculator';
 
 /**
  * API endpoint для генерации протокола осмотра через Claude Sonnet 4.5
@@ -12,11 +13,12 @@ export async function POST(request: NextRequest) {
     console.log('⏰ [PROTOCOL API] Время:', new Date().toISOString());
     
     const body = await request.json();
-    const { rawText, useStreaming = true } = body;
+    const { rawText, useStreaming = true, model = 'sonnet' } = body;
 
     console.log('📥 [PROTOCOL API] Получен запрос:', {
       размер_текста: rawText ? `${rawText.length} символов` : 'нет данных',
-      useStreaming: useStreaming
+      useStreaming: useStreaming,
+      model: model
     });
 
     if (!rawText || !rawText.trim()) {
@@ -27,9 +29,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ОРИГИНАЛЬНЫЙ ПРОМПТ ИЗ PYTHON ВЕРСИИ (БЕЗ ЖЕСТКИХ ЗАПРЕТОВ)
-    const prompt = `Вы - опытный терапевт, американский профессор клинической медицины и ведущий специалист университетской клиники с многолетним клиническим опытом.
+    // ... prompt definition ...
+    const prompt = `ВНИМАНИЕ: Начни ответ СРАЗУ с заголовка "ПРОТОКОЛ ПЕРВИЧНОГО ОСМОТРА". Не пиши никаких вводных слов, "клинических директив", анализов или приветствий. Только структурированный протокол.
 
+Вы - опытный терапевт, американский профессор клинической медицины и ведущий специалист университетской клиники с многолетним клиническим опытом.
+    
 Вы совмещаете клиническую строгость и ответственность, давая ответы по клиническим проблемам внутренних болезней, включая акушерство и гинекологию, хирургию, а также помогаете обрабатывать несистемно изложенную информацию, облекая её по шаблону и стандартному протоколу осмотра терапевта с рекомендациями по обследованию и лечению.
 
 Ваша задача - создать полный и структурированный протокол осмотра пациента на основании представленной пользователем неструктурированной информации, включающих перечень жалоб, истории появления симптомов и жалоб, данных объективного осмотра, приведенных данных лабораторных тестов и инструментальных исследований. Использовать как модель протокола шаблоны. Постарайтесь вместить всю информацию на 2 страницы, поскольку скачанный файл в формате .doc будет использоваться для печати.
@@ -86,10 +90,13 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
 
 Медицинские рекомендации - опираться только на проверенные международные источники; для каждого ключевого лечебного шага указывать ссылку и год публикации (предпочтительно ≤5 лет).`;
 
-
-
-    // Используем Claude Sonnet 4.5 для протокола (как в Python бекенде: use_sonnet_4_5=True)
-    const MODEL = 'anthropic/claude-sonnet-4.5';
+    // Выбор модели для протокола
+    const MODEL = model === 'opus' 
+      ? 'anthropic/claude-opus-4.5' 
+      : (model === 'gemini' || model === 'google/gemini-3-flash-preview')
+        ? 'google/gemini-3-flash-preview'
+        : 'anthropic/claude-sonnet-4.5';
+    
     const MAX_TOKENS = 8000;
     
     // Если запрошен streaming, возвращаем поток
@@ -105,9 +112,37 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
       
       const stream = await sendTextRequestStreaming(prompt, [], MODEL);
       
+      const decoder = new TextDecoder();
+      const transformStream = new TransformStream({
+        transform(chunk, controller) {
+          const text = decoder.decode(chunk, { stream: true });
+          
+          if (text.includes('"usage":')) {
+            const lines = text.split('\n');
+            for (const line of lines) {
+              if (line.includes('"usage":')) {
+                try {
+                  const jsonStr = line.startsWith('data: ') ? line.slice(6).trim() : line.trim();
+                  const data = JSON.parse(jsonStr);
+                  if (data.usage) {
+                    console.log(formatCostLog(
+                      MODEL,
+                      data.usage.prompt_tokens,
+                      data.usage.completion_tokens,
+                      data.usage.total_tokens
+                    ));
+                  }
+                } catch (e) {}
+              }
+            }
+          }
+          controller.enqueue(chunk);
+        }
+      });
+
       console.log('✅ [PROTOCOL API] Streaming поток создан, отправка клиенту...');
       
-      return new Response(stream, {
+      return new Response(stream.pipeThrough(transformStream), {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
@@ -143,12 +178,7 @@ UpToDate, PubMed, Cochrane, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, GOLD, KDIGO (�
       protocol: result,
     });
   } catch (error: any) {
-    console.error('');
-    console.error('❌ [PROTOCOL API] ========== ОШИБКА ГЕНЕРАЦИИ ПРОТОКОЛА ==========');
     console.error('❌ [PROTOCOL API] Ошибка:', error.message);
-    console.error('❌ [PROTOCOL API] Stack:', error.stack?.substring(0, 500));
-    console.error('');
-    
     return NextResponse.json(
       { success: false, error: error.message || 'Ошибка генерации протокола' },
       { status: 500 }

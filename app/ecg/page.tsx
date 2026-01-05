@@ -5,6 +5,10 @@ import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
+import PatientSelector from '@/components/PatientSelector'
+import AnalysisTips from '@/components/AnalysisTips'
+import FeedbackForm from '@/components/FeedbackForm'
+import VoiceInput from '@/components/VoiceInput'
 import { logUsage } from '@/lib/simple-logger'
 
 export default function ECGPage() {
@@ -15,7 +19,9 @@ export default function ECGPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [modelInfo, setModelInfo] = useState<string>('')
-  const [mode, setMode] = useState<AnalysisMode>('precise')
+  const [analysisId, setAnalysisId] = useState<string>('')
+  const [mode, setMode] = useState<AnalysisMode>('optimized')
+  const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true) // Включаем стриминг по умолчанию для точного анализа
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
@@ -37,7 +43,8 @@ export default function ECGPage() {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('prompt', prompt)
-      formData.append('mode', analysisMode) // validated, precise, или fast
+      formData.append('clinicalContext', clinicalContext)
+      formData.append('mode', analysisMode) // validated, optimized, или fast
       formData.append('imageType', 'ecg') // Указываем тип изображения для использования специфичных промптов
       formData.append('useStreaming', useStream.toString())
 
@@ -52,6 +59,9 @@ export default function ECGPage() {
             method: 'POST',
             body: formData,
           })
+
+          const headerId = response.headers.get('X-Analysis-Id')
+          if (headerId) setAnalysisId(headerId)
 
           if (!response.ok) {
             const errorText = await response.text()
@@ -159,7 +169,8 @@ export default function ECGPage() {
             }
             
             console.log('✅ [ECG STREAMING] Итого получено:', accumulatedText.length, 'символов, чанков:', chunkCount)
-            setModelInfo('anthropic/claude-opus-4.5')
+            const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4'
+            setModelInfo(modelUsed)
             
             // Убеждаемся, что финальный результат установлен
             if (accumulatedText.length > 0) {
@@ -192,6 +203,7 @@ export default function ECGPage() {
 
         if (data.success) {
           setResult(data.result)
+          setAnalysisId(data.analysis_id || '')
           setModelInfo(data.model || 'anthropic/claude-opus-4.5')
           console.log('✅ [ECG CLIENT] Анализ ЭКГ завершён')
           console.log('📊 [ECG CLIENT] Использованная модель:', data.model || 'Opus 4.5 (по умолчанию)')
@@ -230,43 +242,59 @@ export default function ECGPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">📈 Анализ ЭКГ</h1>
       
-      <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <AnalysisTips 
+        content={{
+          fast: "двухэтапный скрининг ЭКГ (сначала детализированное, но компактное описание кривой, затем текстовый разбор), даёт краткое заключение и оценку риска, удобно для быстрого первичного просмотра.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс цены и качества для анализа кривых ЭКГ.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
+          extra: [
+            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для анализа кривых ЭКГ.",
+            "📸 Вы можете загрузить файл с ЭКГ, сделать фото с камеры или использовать ссылку.",
+            "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
+            "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
+          ]
+        }}
+      />
+      
+      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Загрузите изображение ЭКГ</h2>
         
         <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} />
         
         {file && imagePreview && (
           <div className="mt-6">
-            {/* Отображение загруженного изображения */}
-            <div className="mb-4 bg-white rounded-lg shadow-md p-4">
-              <h3 className="text-lg font-semibold text-gray-800 mb-3">📷 Загруженное изображение ЭКГ</h3>
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-shrink-0">
-                  <img 
-                    src={imagePreview} 
-                    alt="Загруженное изображение ЭКГ" 
-                    className="max-w-full max-h-[600px] rounded-lg shadow-lg object-contain border border-gray-200"
-                  />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-gray-600 mb-2">
-                    <strong>Имя файла:</strong> {file.name}
-                  </p>
-                  <p className="text-sm text-gray-600 mb-2">
-                    <strong>Размер:</strong> {(file.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Тип:</strong> {file.type || 'не указан'}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
             <div className="p-4 bg-gray-50 rounded-lg">
             
+            <div className="mb-4">
+              <PatientSelector 
+                onSelect={(context) => setClinicalContext(context)} 
+                disabled={loading} 
+              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-semibold text-gray-700">
+                  👤 Клинический контекст пациента (жалобы, анамнез, цель исследования)
+                </label>
+                <VoiceInput 
+                  onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
+                  disabled={loading}
+                />
+              </div>
+              <textarea
+                value={clinicalContext}
+                onChange={(e) => setClinicalContext(e.target.value)}
+                placeholder="Пример: Пациент 55 лет, боли в груди при нагрузке, в анамнезе ИБС. Оценить наличие ишемических изменений."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4"
+                rows={3}
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500 mb-4">
+                💡 Добавление контекста значительно повышает точность и релевантность анализа.
+              </p>
+            </div>
+
             <div className="mb-4 space-y-3">
               <AnalysisModeSelector
                 value={mode}
@@ -289,32 +317,25 @@ export default function ECGPage() {
             
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => analyzeImage('fast', false)}
+                onClick={() => analyzeImage('fast', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⚡ Быстрый анализ
+                ⚡ Быстрый {useStreaming ? '(стриминг)' : ''}
               </button>
               <button
                 onClick={() => analyzeImage('optimized', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⚡ Opus двухшаговый (оптимизированный) {useStreaming ? '(стриминг)' : ''}
-              </button>
-              <button
-                onClick={() => analyzeImage('precise', useStreaming)}
-                disabled={loading}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                🎯 Точный анализ {useStreaming ? '(стриминг)' : ''}
+                ⭐ Оптимизированный {useStreaming ? '(стриминг)' : ''}
               </button>
               <button
                 onClick={() => analyzeImage('validated', useStreaming)}
                 disabled={loading}
-                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
               >
-                ✅ С валидацией {useStreaming ? '(стриминг)' : ''}
+                🧠 С валидацией {useStreaming ? '(стриминг)' : ''}
               </button>
             </div>
             </div>
@@ -322,16 +343,20 @@ export default function ECGPage() {
         )}
       </div>
       
-      {/* Отображение изображения всегда видимо, если загружено */}
       {file && imagePreview && (
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">📷 Загруженное изображение ЭКГ</h2>
-          <div className="flex justify-center">
+          <div className="flex justify-center w-full">
             <img 
               src={imagePreview} 
               alt="Загруженное изображение ЭКГ" 
-              className="max-w-full max-h-[600px] rounded-lg shadow-md object-contain border border-gray-200"
+              className="w-full max-h-[800px] rounded-lg shadow-md object-contain border border-gray-200"
             />
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600 border-t pt-4">
+            <p><strong>Имя:</strong> {file.name}</p>
+            <p><strong>Размер:</strong> {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+            <p><strong>Тип:</strong> {file.type || 'не указан'}</p>
           </div>
         </div>
       )}
@@ -343,7 +368,22 @@ export default function ECGPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} model={modelInfo} />
+      <AnalysisResult 
+        result={result} 
+        loading={loading} 
+        model={modelInfo} 
+        mode={mode}
+        imageType="ecg"
+      />
+
+      {result && !loading && (
+        <FeedbackForm 
+          analysisType="ECG" 
+          analysisId={analysisId}
+          analysisResult={result} 
+          inputCase={clinicalContext}
+        />
+      )}
     </div>
   )
 }

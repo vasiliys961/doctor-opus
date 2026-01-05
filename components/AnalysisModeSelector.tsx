@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-export type AnalysisMode = 'fast' | 'precise' | 'validated' | 'optimized'
+export type AnalysisMode = 'fast' | 'optimized' | 'validated'
 
 interface AnalysisModeSelectorProps {
   value: AnalysisMode
@@ -15,26 +15,20 @@ export default function AnalysisModeSelector({ value, onChange, disabled = false
     {
       value: 'fast',
       label: '⚡ Быстрый анализ',
-      description: 'Gemini Flash — компактное заключение для первичного просмотра (~0.60 ед.)',
+      description: 'Gemini 3.0 — компактное заключение для первичного просмотра (~0.60 ед.)',
       icon: '⚡'
     },
     {
       value: 'optimized',
-      label: '⚡ Opus двухшаговый (оптимизированный)',
-      description: 'Opus Vision → Opus Text — экономия ~50% (~10-12 ед.)',
-      icon: '⚡'
-    },
-    {
-      value: 'precise',
-      label: '🎯 Точный анализ',
-      description: 'Opus 4.5 — детальное заключение максимального качества (~20 ед.)',
-      icon: '🎯'
+      label: '⭐ Оптимизированный (Рекомендуется)',
+      description: 'Gemini JSON + Sonnet 4.5 — лучший баланс точности и цены (~2 ед.)',
+      icon: '⭐'
     },
     {
       value: 'validated',
-      label: '✅ С валидацией',
-      description: 'Gemini JSON + Opus — два заключения для сравнения (~25 ед.)',
-      icon: '✅'
+      label: '🧠 С валидацией (Макс. точность)',
+      description: 'Gemini JSON + Opus 4.5 — самый точный экспертный анализ; самый дорогой (~10-12 ед.)',
+      icon: '🧠'
     }
   ]
 

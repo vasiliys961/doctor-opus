@@ -1,20 +1,59 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } from 'docx'
 import { saveAs } from 'file-saver'
+import { saveAnalysisResult, getAllPatients, Patient } from '@/lib/patient-db'
 
 interface AnalysisResultProps {
   result: string
   loading?: boolean
   model?: string
   mode?: string
+  imageType?: string
 }
 
-export default function AnalysisResult({ result, loading = false, model, mode }: AnalysisResultProps) {
+export default function AnalysisResult({ result, loading = false, model, mode, imageType }: AnalysisResultProps) {
   const [copied, setCopied] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [showPatientSelector, setShowPatientSelector] = useState(false)
+  const [patients, setPatients] = useState<Patient[]>([])
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (showPatientSelector) {
+      loadPatients()
+    }
+  }, [showPatientSelector])
+
+  const loadPatients = async () => {
+    try {
+      const allPatients = await getAllPatients()
+      setPatients(allPatients)
+    } catch (error) {
+      console.error('Ошибка при загрузке пациентов:', error)
+    }
+  }
+
+  const handleSaveToPatient = async (patientId: string) => {
+    setSaving(true)
+    try {
+      await saveAnalysisResult({
+        patientId,
+        type: 'image', // Можно расширить в зависимости от контекста
+        conclusion: result,
+        imageType: imageType
+      })
+      alert('Результат успешно сохранен в карту пациента!')
+      setShowPatientSelector(false)
+    } catch (error) {
+      console.error('Ошибка при сохранении:', error)
+      alert('Не удалось сохранить результат.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const getModelDisplayName = (modelName?: string) => {
     if (!modelName) return null
@@ -43,30 +82,52 @@ export default function AnalysisResult({ result, loading = false, model, mode }:
       const lines = result.split('\n')
       const paragraphs: any[] = []
 
-      // Заголовок документа
+      // Медицинский заголовок
       paragraphs.push(
         new Paragraph({
-          text: 'Результат анализа',
-          heading: HeadingLevel.HEADING_1,
-          spacing: { before: 240, after: 120 },
+          children: [
+            new TextRun({ text: "МЕДИЦИНСКИЙ КОНСУЛЬТАТИВНЫЙ ОТЧЕТ", bold: true, size: 28 }),
+          ],
           alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
         })
       )
 
-      // Информация о модели
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: `Дата: ${new Date().toLocaleDateString('ru-RU')}`, size: 20 }),
+          ],
+          alignment: AlignmentType.RIGHT,
+          spacing: { after: 400 },
+        })
+      )
+
+      // Информация о модели (техническая сноска)
       if (model) {
-        const modelText = `Использована модель: ${getModelDisplayName(model) || model}${mode ? ` (${mode === 'fast' ? 'быстрый' : mode === 'precise' ? 'точный' : 'с валидацией'})` : ''}`
+        const modelName = getModelDisplayName(model) || model;
+        const analysisMode = mode === 'fast' ? 'быстрый' : mode === 'optimized' ? 'оптимизированный' : 'с валидацией';
+        
         paragraphs.push(
           new Paragraph({
-            text: modelText,
-            spacing: { after: 240 },
-            alignment: AlignmentType.CENTER,
+            children: [
+              new TextRun({ 
+                text: `Техническая информация: Анализ выполнен ИИ-системой (модель ${modelName}, режим: ${analysisMode}). `,
+                italics: true,
+                size: 16,
+                color: "666666"
+              }),
+            ],
+            spacing: { after: 200 },
           })
         )
       }
 
-      // Разделитель
-      paragraphs.push(new Paragraph({ text: '' }))
+      // Разделительная линия (горизонтальная черта)
+      paragraphs.push(new Paragraph({ 
+        text: "________________________________________________________________________________",
+        spacing: { after: 300 }
+      }))
 
       // Парсим содержимое
       for (const line of lines) {
@@ -363,7 +424,7 @@ export default function AnalysisResult({ result, loading = false, model, mode }:
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 mt-6">
+    <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mt-6">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-xl font-bold text-primary-900">Результат анализа</h3>
@@ -376,11 +437,28 @@ export default function AnalysisResult({ result, loading = false, model, mode }:
           {model && (
             <p className="text-sm text-gray-600 mt-1">
               Использована модель: <span className="font-semibold">{getModelDisplayName(model)}</span>
-              {mode && <span className="ml-2">({mode === 'fast' ? 'быстрый' : mode === 'precise' ? 'точный' : 'с валидацией'})</span>}
+              {mode && <span className="ml-2">({mode === 'fast' ? 'быстрый' : mode === 'optimized' ? 'оптимизированный' : 'с валидацией'})</span>}
             </p>
           )}
+          <a 
+            href="https://medcalculator.vercel.app" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 mt-2 bg-indigo-50 px-2 py-1 rounded-md transition-colors"
+          >
+            🧮 Проверить через Мед. калькуляторы
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setShowPatientSelector(true)}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm flex items-center gap-2"
+          >
+            📌 В карту пациента
+          </button>
           <button
             onClick={handleCopy}
             className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors text-sm"
@@ -395,13 +473,74 @@ export default function AnalysisResult({ result, loading = false, model, mode }:
             {downloading ? '⏳ Скачивание...' : '📄 Скачать .docx'}
           </button>
           <button
-            onClick={handleShare}
+            onClick={() => window.print()}
             className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors text-sm"
+          >
+            🖨️ Печать
+          </button>
+          <button
+            onClick={handleShare}
+            className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors text-sm"
           >
             🔗 Поделиться
           </button>
         </div>
       </div>
+
+      {/* Модальное окно выбора пациента */}
+      {showPatientSelector && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center bg-indigo-50 rounded-t-xl">
+              <h4 className="font-bold text-indigo-900">Выберите пациента</h4>
+              <button 
+                onClick={() => setShowPatientSelector(false)}
+                className="text-gray-500 hover:text-gray-700 p-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto p-2 flex-grow">
+              {patients.length === 0 ? (
+                <div className="p-8 text-center">
+                  <p className="text-gray-500 mb-4">База пациентов пуста</p>
+                  <a 
+                    href="/patients" 
+                    className="text-indigo-600 hover:underline font-semibold"
+                  >
+                    Перейти к созданию пациента
+                  </a>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {patients.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => handleSaveToPatient(p.id)}
+                      disabled={saving}
+                      className="w-full text-left p-3 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-200 group"
+                    >
+                      <div className="font-semibold text-gray-900 group-hover:text-indigo-700">{p.name}</div>
+                      <div className="text-xs text-gray-500">
+                        {p.age} лет • {p.diagnosis || 'Нет диагноза'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-3 border-t bg-gray-50 rounded-b-xl text-center">
+              <button 
+                onClick={() => setShowPatientSelector(false)}
+                className="text-sm text-gray-600 hover:text-gray-800"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="prose max-w-none">
         <div 
           className="text-gray-800 leading-relaxed text-base"

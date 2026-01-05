@@ -4,6 +4,8 @@ import { promisify } from 'util';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const gunzipAsync = promisify(gunzip);
@@ -19,6 +21,17 @@ const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4;
  */
 export async function POST(request: NextRequest) {
   try {
+    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
+    /*
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+    */
+
     console.log('🧬 [GENETIC] Этап 1: начало обработки запроса (только извлечение)...');
 
     const formData = await request.formData();

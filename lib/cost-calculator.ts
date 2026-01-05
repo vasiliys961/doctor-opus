@@ -2,18 +2,17 @@
  * Утилита для расчета стоимости использования моделей OpenRouter
  */
 
-// Цены моделей в USD за 1M токенов (актуальные цены OpenRouter)
+// Цены моделей в USD за 1M токенов (актуальные цены OpenRouter - обновлено 04.01.2026)
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  'anthropic/claude-opus-4.5': { input: 15.0, output: 75.0 },
+  'anthropic/claude-opus-4.5': { input: 5.0, output: 25.0 },
   'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
-  'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
-  'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.50, output: 2.50 },
-  'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
-  'google/gemini-3-flash-preview': { input: 0.50, output: 3.00 },
-  'google/gemini-3-flash': { input: 0.50, output: 3.00 },
+  'anthropic/claude-haiku-4.5': { input: 0.25, output: 1.25 },
+  'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },
+  'google/gemini-3-flash-preview': { input: 0.10, output: 0.40 },
+  'google/gemini-3-flash': { input: 0.10, output: 0.40 },
   'google/gemini-3-pro-preview': { input: 1.25, output: 5.00 },
-  'google/gemini-3-pro': { input: 1.25, output: 5.00 },
-  'google/gemini-2.5-pro': { input: 1.25, output: 5.00 },
+  'google/gemini-2.5-flash': { input: 0.10, output: 0.40 },
+  'perplexity/llama-3.1-sonar-large-128k-online': { input: 1.0, output: 1.0 },
 };
 
 // Множитель для перевода в условные единицы (USD * 100)
@@ -50,7 +49,7 @@ function getModelPricing(model: string): { input: number; output: number } {
   } else if (modelLower.includes('sonnet')) {
     return { input: 3.0, output: 15.0 };
   } else if (modelLower.includes('haiku')) {
-    return { input: 1.0, output: 5.0 };
+    return { input: 0.25, output: 1.25 };
   } else if (modelLower.includes('gemini-3-pro')) {
     return { input: 1.25, output: 5.00 };
   } else if (modelLower.includes('gemini-3-flash')) {
@@ -97,13 +96,29 @@ export function formatCostLog(
   outputTokens: number,
   totalTokens?: number
 ): string {
-  const total = totalTokens ?? inputTokens + outputTokens;
+  const total = totalTokens ?? (inputTokens + outputTokens);
   const costInfo = calculateCost(inputTokens, outputTokens, model);
   
-  return (
-    `Модель: ${model} | ` +
-    `Токены: ${total.toLocaleString('ru-RU')} (вход: ${inputTokens.toLocaleString('ru-RU')}, выход: ${outputTokens.toLocaleString('ru-RU')}) | ` +
-    `Стоимость: $${costInfo.totalCostUsd.toFixed(6)} USD (${costInfo.totalCostUnits.toFixed(4)} у.е.)`
-  );
-}
+  // Используем ANSI-коды для цветов в терминале
+  const cyan = '\x1b[36m';
+  const green = '\x1b[32m';
+  const yellow = '\x1b[33m';
+  const magenta = '\x1b[35m';
+  const reset = '\x1b[0m';
+  const bold = '\x1b[1m';
 
+  const modelDisplay = model.split('/').pop() || model;
+
+  return `
+${cyan}╔══════════════════════════════════════════════════════════════╗${reset}
+${cyan}║${reset} ${bold}${green}                💰 ОТЧЕТ ОБ ИСПОЛЬЗОВАНИИ${reset}                     ${cyan}║${reset}
+${cyan}╠══════════════════════════════════════════════════════════════╣${reset}
+${cyan}║${reset} 🤖 ${bold}Модель:${reset}   ${yellow}${modelDisplay.padEnd(43)}${reset} ${cyan}║${reset}
+${cyan}║${reset} 📊 ${bold}Токены:${reset}   ${magenta}${total.toLocaleString('ru-RU').padEnd(43)}${reset} ${cyan}║${reset}
+${cyan}║${reset}    (Вход: ${inputTokens.toLocaleString('ru-RU')} / Выход: ${outputTokens.toLocaleString('ru-RU')})             ${cyan}║${reset}
+${cyan}╠══════════════════════════════════════════════════════════════╣${reset}
+${cyan}║${reset} 💎 ${bold}Единицы:${reset}  ${bold}${green}${costInfo.totalCostUnits.toFixed(2).padEnd(43)}${reset} ${cyan}║${reset}
+${cyan}║${reset} 💵 USD:${reset}      $${costInfo.totalCostUsd.toFixed(4).padEnd(42)} ${cyan}║${reset}
+${cyan}╚══════════════════════════════════════════════════════════════╝${reset}
+`;
+}

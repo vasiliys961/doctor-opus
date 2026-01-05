@@ -63,6 +63,33 @@ export const SQL_SCHEMAS = {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `,
+  users: `
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      name TEXT,
+      email TEXT UNIQUE,
+      email_verified TIMESTAMP,
+      image TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `,
+  sessions: `
+    CREATE TABLE IF NOT EXISTS sessions (
+      id SERIAL PRIMARY KEY,
+      session_token TEXT UNIQUE NOT NULL,
+      user_id INTEGER NOT NULL,
+      expires TIMESTAMP NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `,
+  verification_tokens: `
+    CREATE TABLE IF NOT EXISTS verification_tokens (
+      identifier TEXT NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      expires TIMESTAMP NOT NULL,
+      PRIMARY KEY (identifier, token)
+    )
+  `,
 }
 
 // Функции для работы с БД будут вызывать Python API или использовать прямые SQL запросы

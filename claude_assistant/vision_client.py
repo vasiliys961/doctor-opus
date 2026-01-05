@@ -20,7 +20,7 @@ from .logging_handler import log_api_error, log_api_success, _get_model_name
 from utils.error_handler import handle_error, log_api_call
 from utils.performance_monitor import track_model_usage
 from utils.cache_manager import get_image_hash, get_cache_key, get_cached_result, save_to_cache, clear_old_cache
-from utils.cost_calculator import calculate_cost, format_cost_log
+from utils.cost_calculator import calculate_cost, format_cost_log, format_cost_log_fancy
 
 # Константы из claude_assistant.py (адаптированы под текущий лимит токенов)
 API_TIMEOUT_SECONDS = 120
@@ -425,7 +425,7 @@ class VisionClient(BaseAPIClient):
                         cost_info = calculate_cost(input_tokens, output_tokens, model)
                         model_name = _get_model_name(model)
                         print(f"✅ [{model_name}] [CONSENSUS] Запрос завершен за {latency:.2f}с")
-                        print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
+                        print(format_cost_log_fancy(model, input_tokens, output_tokens, tokens_used))
                         log_api_success(model, latency, tokens_used)
                         results.append({
                             "model": model,
@@ -525,7 +525,7 @@ class VisionClient(BaseAPIClient):
                         cost_info = calculate_cost(input_tokens, output_tokens, model)
                         model_name = _get_model_name(model)
                         print(f"✅ [{model_name}] Запрос завершен за {latency:.2f}с")
-                        print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
+                        print(format_cost_log_fancy(model, input_tokens, output_tokens, tokens_used))
                         log_api_success(model, latency, tokens_used, f"{model_name}")
                         
                         # Сохраняем информацию о последнем запросе для статистики
@@ -608,7 +608,7 @@ class VisionClient(BaseAPIClient):
                         cost_info = calculate_cost(input_tokens, output_tokens, model)
                         model_name = _get_model_name(model)
                         print(f"✅ [{model_name}] [FALLBACK] Запрос завершен за {latency:.2f}с")
-                        print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
+                        print(format_cost_log_fancy(model, input_tokens, output_tokens, tokens_used))
                         log_api_success(model, latency, tokens_used, f"FALLBACK {model_name}")
                         
                         if is_document or (force_model and force_model.lower() == "llama"):
@@ -840,7 +840,7 @@ class VisionClient(BaseAPIClient):
                         model_name = "Gemini 2.5 Flash"
                     
                     print(f"✅ [⚡ FLASH] [GEMINI FLASH] Модель: {model_name}, Latency: {latency:.2f}с")
-                    print(f"   📊 {format_cost_log(model_to_try, input_tokens, output_tokens, tokens_used)}")
+                    print(format_cost_log_fancy(model_to_try, input_tokens, output_tokens, tokens_used))
                     log_api_success(model_to_try, latency, tokens_used, "GEMINI FLASH")
                     return f"**⚡ Быстрый анализ ({model_name}):**\n\n{result}"
                 elif response.status_code == 402:
@@ -1313,7 +1313,7 @@ class VisionClient(BaseAPIClient):
                         
                         model_name = "Gemini 3.0 Flash Preview" if "gemini-3-flash" in model else "Gemini 2.5 Flash"
                         print(f"✅ [⚡ FLASH] [GEMINI JSON] Модель: {model_name}, Latency: {latency:.2f}с")
-                        print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
+                        print(format_cost_log_fancy(model, input_tokens, output_tokens, tokens_used))
                         log_api_success(model, latency, tokens_used, "GEMINI JSON")
                         return json_extraction
                     except json.JSONDecodeError as e:

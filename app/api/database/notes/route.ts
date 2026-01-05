@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
 /**
  * API endpoint для работы с медицинскими записями
@@ -6,6 +8,17 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 export async function POST(request: NextRequest) {
   try {
+    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
+    /*
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+    */
+
     const body = await request.json();
 
     // Вызов Python serverless function для работы с БД
@@ -38,6 +51,17 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
+    /*
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+    */
+
     const { searchParams } = new URL(request.url);
     const patientId = searchParams.get('patient_id');
 

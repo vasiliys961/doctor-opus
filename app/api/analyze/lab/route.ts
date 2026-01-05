@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeImage, sendTextRequest } from '@/lib/openrouter';
 import { detectFileType } from '@/lib/file-extractor';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import * as XLSX from 'xlsx';
+
+// Максимальное время выполнения (5 минут)
+export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
 
 /**
  * API endpoint для анализа лабораторных данных
@@ -10,9 +16,21 @@ import * as XLSX from 'xlsx';
  */
 export async function POST(request: NextRequest) {
   try {
+    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
+    /*
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+    */
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = formData.get('prompt') as string || 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.';
+    const clinicalContext = formData.get('clinicalContext') as string || '';
 
     if (!file) {
       return NextResponse.json(
@@ -42,10 +60,13 @@ export async function POST(request: NextRequest) {
         const base64Image = buffer.toString('base64');
         console.log('🖼️ [LAB] Base64 размер:', base64Image.length, 'символов');
         
+        let fullPrompt = `${prompt}\n\nЭто изображение лабораторного бланка или медицинского документа. Проанализируйте изображение и извлеките все лабораторные показатели, их значения, единицы измерения и референсные диапазоны.`;
+        
         const result = await analyzeImage({
-          prompt: `${prompt}\n\nЭто изображение лабораторного бланка или медицинского документа. Проанализируйте изображение и извлеките все лабораторные показатели, их значения, единицы измерения и референсные диапазоны.`,
+          prompt: fullPrompt,
           imageBase64: base64Image,
           mode: 'fast', // Gemini Flash для быстрого анализа
+          clinicalContext
         });
         
         console.log('✅ [LAB] Результат анализа изображения получен, длина:', result.length, 'символов');
@@ -91,7 +112,12 @@ export async function POST(request: NextRequest) {
           csvText += `\n\n=== Лист "${sheetName}" ===\n${csv}`;
         });
 
-        const result = await sendTextRequest(`${prompt}\n\nДанные из Excel файла:\n${csvText}`);
+        let fullPrompt = `${prompt}\n\nДанные из Excel файла:\n${csvText}`;
+        if (clinicalContext) {
+          fullPrompt = `${fullPrompt}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${clinicalContext}`;
+        }
+
+        const result = await sendTextRequest(fullPrompt);
         
         return NextResponse.json({
           success: true,
@@ -136,7 +162,12 @@ export async function POST(request: NextRequest) {
           textContent = textContent.substring(0, maxSize) + '\n\n... (файл обрезан, слишком большой)';
         }
 
-        const result = await sendTextRequest(`${prompt}\n\nДанные:\n${textContent}`);
+        let fullPrompt = `${prompt}\n\nДанные:\n${textContent}`;
+        if (clinicalContext) {
+          fullPrompt = `${fullPrompt}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${clinicalContext}`;
+        }
+
+        const result = await sendTextRequest(fullPrompt);
         
         return NextResponse.json({
           success: true,

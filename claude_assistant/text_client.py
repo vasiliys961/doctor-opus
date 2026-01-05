@@ -21,7 +21,7 @@ from .diagnostic_prompts import get_system_prompt
 from .logging_handler import log_api_error, log_api_success, _get_model_name
 from utils.error_handler import handle_error, log_api_call
 from utils.performance_monitor import track_model_usage
-from utils.cost_calculator import calculate_cost, format_cost_log
+from utils.cost_calculator import calculate_cost, format_cost_log, format_cost_log_fancy
 
 
 class TextClient(BaseAPIClient):
@@ -134,7 +134,7 @@ class TextClient(BaseAPIClient):
                     
                     # Логирование в терминал с полной информацией
                     print(f"✅ [{model_name}] Запрос завершен за {latency:.2f}с")
-                    print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
+                    print(format_cost_log_fancy(model, input_tokens, output_tokens, tokens_used))
                     
                     # Сохраняем информацию о последнем запросе для статистики
                     try:
@@ -279,7 +279,7 @@ class TextClient(BaseAPIClient):
                                                 cost_info = calculate_cost(input_tokens_stream, output_tokens_stream, model)
                                                 
                                                 print(f"✅ [{model_type}]{force_msg} [STREAMING] Модель: {model_name}, Токенов: {tokens_received}, Latency: {latency:.2f}с", file=sys.stderr)
-                                                print(f"   📊 {format_cost_log(model, input_tokens_stream, output_tokens_stream, tokens_received)}", file=sys.stderr)
+                                                print(format_cost_log_fancy(model, input_tokens_stream, output_tokens_stream, tokens_received), file=sys.stderr)
                                                 log_api_success(model, latency, tokens_received, context_msg)
                                                 return
                                             try:
@@ -478,7 +478,7 @@ class TextClient(BaseAPIClient):
                     cost_info = calculate_cost(input_tokens, output_tokens, model)
                     model_type = "🧠 OPUS" if "opus" in model.lower() else "🤖 SONNET" if "sonnet" in model.lower() else "⚡ FLASH" if "gemini" in model.lower() or "flash" in model.lower() else "❓ UNKNOWN"
                     print(f"✅ [{model_type}] [NO SYSTEM] Модель: {model_name}, Latency: {latency:.2f}с")
-                    print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
+                    print(format_cost_log_fancy(model, input_tokens, output_tokens, tokens_used))
                     log_api_call(model, True, latency, None)
                     track_model_usage(model, True, tokens_used)
 
@@ -586,7 +586,7 @@ class TextClient(BaseAPIClient):
                     else:
                         model_name = "Gemini 2.5 Flash"
                     print(f"✅ [⚡ FLASH] [GEMINI FLASH TEXT] Модель: {model_name}, Latency: {latency:.2f}с")
-                    print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
+                    print(format_cost_log_fancy(model, input_tokens, output_tokens, tokens_used))
                     log_api_success(model, latency, tokens_used, "GEMINI FLASH TEXT")
                     return result
                 elif response.status_code == 404:
@@ -692,7 +692,7 @@ class TextClient(BaseAPIClient):
                     else:
                         model_name = "Gemini 3.0 Flash Preview"
                     print(f"✅ [🧠 GEMINI 3.0] [GEMINI 3 TEXT] Модель: {model_name}, Latency: {latency:.2f}с")
-                    print(f"   📊 {format_cost_log(model, input_tokens, output_tokens, tokens_used)}")
+                    print(format_cost_log_fancy(model, input_tokens, output_tokens, tokens_used))
                     log_api_success(model, latency, tokens_used, "GEMINI 3 TEXT")
                     return result
                 elif response.status_code == 404:

@@ -2,6 +2,11 @@
 
 import { useState } from 'react'
 import AnalysisResult from '@/components/AnalysisResult'
+import AnalysisTips from '@/components/AnalysisTips'
+import FeedbackForm from '@/components/FeedbackForm'
+import PatientSelector from '@/components/PatientSelector'
+import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
+import VoiceInput from '@/components/VoiceInput'
 import { logUsage } from '@/lib/simple-logger'
 
 export default function VideoPage() {
@@ -9,8 +14,8 @@ export default function VideoPage() {
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [description, setDescription] = useState<string>('')
-  const [studyType, setStudyType] = useState<string>('')
+  const [clinicalContext, setClinicalContext] = useState<string>('')
+  const [imageType, setImageType] = useState<ImageModality>('universal')
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -40,12 +45,10 @@ export default function VideoPage() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      if (description) {
-        formData.append('prompt', description)
+      if (clinicalContext) {
+        formData.append('prompt', clinicalContext)
       }
-      if (studyType) {
-        formData.append('studyType', studyType)
-      }
+      formData.append('imageType', imageType)
 
       console.log('🎬 [VIDEO] Отправка видео на анализ...')
       
@@ -61,11 +64,11 @@ export default function VideoPage() {
         let fullResult = ''
         
         if (data.description) {
-          fullResult += `## 📝 ЭТАП 1: Описание видео (Gemini 2.5 Flash)\n\n${data.description}\n\n`
+          fullResult += `## 📝 ЭТАП 1: Описание видео (Gemini 3.0 Flash)\n\n${data.description}\n\n`
         }
         
         if (data.analysis) {
-          fullResult += `## 🏥 ЭТАП 2: Клиническое заключение (Gemini 3 Flash)\n\n${data.analysis}`
+          fullResult += `## 🏥 ЭТАП 2: Клиническая директива (Профессор)\n\n${data.analysis}`
         }
         
         setResult(fullResult || data.result || 'Анализ выполнен')
@@ -73,15 +76,9 @@ export default function VideoPage() {
         // Логирование использования (двухэтапный анализ)
         logUsage({
           section: 'video',
-          model: 'google/gemini-2.5-flash',
-          inputTokens: 5000, // видео требует больше токенов
-          outputTokens: 2000,
-        })
-        logUsage({
-          section: 'video',
           model: 'google/gemini-3-flash-preview',
-          inputTokens: 2000,
-          outputTokens: 2500,
+          inputTokens: 5000, 
+          outputTokens: 4000,
         })
       } else {
         setError(data.error || 'Ошибка при анализе видео')
@@ -95,16 +92,22 @@ export default function VideoPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🎬 Анализ видео</h1>
       
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <p className="text-sm text-blue-800">
-          <strong>Двухэтапный анализ:</strong><br />
-          1️⃣ <strong>Gemini 2.5 Flash</strong> — подробное описание видео<br />
-          2️⃣ <strong>Gemini 3 Flash</strong> — клиническое заключение по описанию
-        </p>
-      </div>
+      <AnalysisTips 
+        content={{
+          fast: "двухэтапный скрининг (сначала структурированное описание видео через Gemini Vision, затем текстовый разбор через Gemini Flash), даёт компактное заключение и общий сигнал риска.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для детального клинического разбора видеоматериалов; самый дорогой режим.",
+          extra: [
+            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — лучший баланс глубины анализа и стоимости для видео.",
+            "🎞️ Вы можете загрузить файл видео (MP4, MOV, AVI, WebM, MKV, максимум 100MB).",
+            "⏱️ Для длинных видео (>50MB или >5 минут) рекомендуется использовать ключевые фрагменты.",
+            "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
+            "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
+          ]
+        }}
+      />
 
       <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Загрузите видео для анализа</h2>
@@ -118,6 +121,7 @@ export default function VideoPage() {
             <input
               type="file"
               accept="video/*"
+              capture="environment"
               onChange={handleFileChange}
               className="block w-full text-sm text-gray-500
                 file:mr-4 file:py-2 file:px-4
@@ -135,37 +139,35 @@ export default function VideoPage() {
           </div>
 
           {/* Тип исследования */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Тип исследования (необязательно)
-            </label>
-            <select
-              value={studyType}
-              onChange={(e) => setStudyType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">Выберите тип...</option>
-              <option value="fgds">ФГДС (гастроскопия)</option>
-              <option value="colonoscopy">Колоноскопия</option>
-              <option value="echo">Эхокардиография</option>
-              <option value="chest_ct">КТ грудной клетки</option>
-              <option value="ultrasound">УЗИ</option>
-              <option value="bronchoscopy">Бронхоскопия</option>
-              <option value="other">Другое</option>
-            </select>
-          </div>
+          <ModalitySelector
+            value={imageType}
+            onChange={setImageType}
+            disabled={loading}
+          />
 
-          {/* Дополнительный контекст */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Дополнительный контекст (необязательно)
-            </label>
+          {/* Пациент и контекст */}
+          <div className="space-y-4 pt-4 border-t border-gray-100">
+            <PatientSelector 
+              onSelect={(context) => setClinicalContext(context)} 
+              disabled={loading} 
+            />
+            
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-gray-700">
+                Дополнительный контекст
+              </label>
+              <VoiceInput 
+                onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
+                disabled={loading}
+              />
+            </div>
             <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              value={clinicalContext}
+              onChange={(e) => setClinicalContext(e.target.value)}
               placeholder="Укажите дополнительную информацию: жалобы пациента, анамнез, цель исследования..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+              rows={4}
+              disabled={loading}
             />
           </div>
 
@@ -173,9 +175,9 @@ export default function VideoPage() {
           <button
             onClick={handleAnalyze}
             disabled={loading || !file}
-            className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
           >
-            {loading ? '⏳ Анализ видео...' : '🎬 Начать анализ'}
+            {loading ? '⏳ Анализ видео Gemini 3.0...' : '🎬 Начать экспертный анализ'}
           </button>
         </div>
       </div>
@@ -187,15 +189,23 @@ export default function VideoPage() {
       )}
 
       {loading && (
-        <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-6">
+        <div className="bg-primary-50 border border-primary-200 text-primary-800 px-4 py-3 rounded mb-6">
           <div className="flex items-center">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-700 mr-3"></div>
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600 mr-3"></div>
             <span>Анализ видео может занять 30-60 секунд...</span>
           </div>
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} />
+      <AnalysisResult result={result} loading={loading} imageType={imageType} />
+
+      {result && !loading && (
+        <FeedbackForm 
+          analysisType="VIDEO" 
+          analysisResult={result} 
+          inputCase={clinicalContext}
+        />
+      )}
     </div>
   )
 }

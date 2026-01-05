@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import ImageUpload from '@/components/ImageUpload'
+import PatientSelector from '@/components/PatientSelector'
 import AnalysisResult from '@/components/AnalysisResult'
+import AnalysisTips from '@/components/AnalysisTips'
+import FeedbackForm from '@/components/FeedbackForm'
 import Script from 'next/script'
 import { logUsage } from '@/lib/simple-logger'
 
@@ -21,6 +24,7 @@ export default function LabPage() {
   const [convertingPDF, setConvertingPDF] = useState(false)
   const [conversionProgress, setConversionProgress] = useState<{ current: number; total: number } | null>(null)
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
+  const [clinicalContext, setClinicalContext] = useState('')
 
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
     if (!window.pdfjsLib) {
@@ -117,7 +121,8 @@ export default function LabPage() {
           },
           body: JSON.stringify({
             images: pdfImages,
-            prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.'
+            prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
+            clinicalContext: clinicalContext
           }),
         })
 
@@ -140,6 +145,7 @@ export default function LabPage() {
         const formData = new FormData()
         formData.append('file', uploadedFile)
         formData.append('prompt', 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.')
+        formData.append('clinicalContext', clinicalContext)
 
         const response = await fetch('/api/analyze/lab', {
           method: 'POST',
@@ -185,11 +191,46 @@ export default function LabPage() {
         }}
       />
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
         <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 Анализ лабораторных данных</h1>
         
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+        <AnalysisTips 
+          content={{
+            fast: "анализ лабораторных бланков (выделение показателей, их значений и референсов), структурирование данных для удобного просмотра.",
+            validated: "самый точный клинический разбор (Gemini JSON + Opus 4.5) — детальная оценка отклонений от нормы; самый дорогой режим.",
+            extra: [
+              "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности извлечения данных и цены.",
+              "📄 Вы можете загрузить PDF, Excel (XLSX/XLS), CSV или просто фото бланка.",
+              "🔍 Система автоматически распознает таблицы и переводит их в цифровой формат.",
+              "💾 Результаты можно сохранить и использовать для сравнительного анализа в будущем."
+            ]
+          }}
+        />
+        
+        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Загрузите файл с лабораторными данными</h2>
+          
+          <div className="mb-6">
+            <PatientSelector 
+              onSelect={(context) => setClinicalContext(context)} 
+              disabled={loading} 
+            />
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              👤 Клинический контекст пациента (жалобы, диагноз, цель анализа)
+            </label>
+            <textarea
+              value={clinicalContext}
+              onChange={(e) => setClinicalContext(e.target.value)}
+              placeholder="Пример: Пациент 40 лет, слабость, быстрая утомляемость. Подозрение на железодефицитную анемию."
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4"
+              rows={3}
+              disabled={loading}
+            />
+            <p className="text-xs text-gray-500 mb-4">
+              💡 Клинический контекст поможет системе точнее интерпретировать отклонения от нормы.
+            </p>
+          </div>
+
           <p className="text-sm text-gray-600 mb-4">
             Поддерживаемые форматы: PDF, XLSX, XLS, CSV, изображения (JPG, PNG)
           </p>
@@ -198,9 +239,9 @@ export default function LabPage() {
 
         {/* Прогресс конвертации PDF */}
         {convertingPDF && (
-          <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-6">
+          <div className="bg-primary-100 border border-primary-400 text-primary-700 px-4 py-3 rounded mb-6">
             <div className="flex items-center">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-700 mr-3"></div>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-700 mr-3"></div>
               <span>
                 {conversionProgress 
                   ? `Конвертация PDF: страница ${conversionProgress.current} из ${conversionProgress.total}...`
@@ -217,6 +258,14 @@ export default function LabPage() {
         )}
 
         <AnalysisResult result={result} loading={loading} />
+
+        {result && !loading && (
+          <FeedbackForm 
+            analysisType="LAB" 
+            analysisResult={result} 
+            inputCase={clinicalContext}
+          />
+        )}
       </div>
     </>
   )

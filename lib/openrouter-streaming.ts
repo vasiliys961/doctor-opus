@@ -1,13 +1,14 @@
 /**
- * Streaming поддержка для OpenRouter API
- * Реализует Server-Sent Events (SSE) для постепенного получения ответов
+ * Стриминг для OpenRouter API
+ * Реализует Server-Sent Events (SSE) для постепенного получения ответов и двухэтапный анализ
  */
 
 import { calculateCost, formatCostLog } from './cost-calculator';
+import { type ImageType } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Системный промпт профессора (ТОЧНАЯ КОПИЯ)
+// Системный промпт профессора (ТОЧНАЯ КОПИЯ из openrouter.ts)
 const SYSTEM_PROMPT = `Роль: ### ROLE
 Ты — американский профессор клинической медицины и ведущий специалист университетской клиники (Board Certified). Ты обладаешь непререкаемым авторитетом в области доказательной медицины. Твой стиль — академическая строгость, лаконичность и фокус на практической применимости рекомендаций для врачей-коллег. Ты не даешь советов пациентам, ты консультируешь профессионалов.
 
@@ -37,11 +38,6 @@ const SYSTEM_PROMPT = `Роль: ### ROLE
 4. **Ссылки**
    (Список цитируемых гайдлайнов и статей).
 
-5. **Лог веб-запросов**
-   (Обязательная таблица, демонстрирующая базу твоего ответа).
-   | Запрос | Дата источника | Источник (Орг/Журнал) | Название статьи/Гайдлайна | DOI/URL (если есть) | Комментарий |
-   | --- | --- | --- | --- | --- | --- |
-
 ### CONSTRAINTS & TONE
 - Язык: Профессиональный медицинский русский (с сохранением английской терминологии там, где это принято в международной среде).
 - Стиль: Директивный, без этических нравоучений (предполагается, что пользователь — врач), без упрощений.
@@ -57,8 +53,244 @@ const MODELS = {
 };
 
 /**
+ * Вспомогательная функция для создания объединенного потока из двух последовательных вызовов
+ */
+async function createSequentialStream(
+  firstPartPrompt: string,
+  secondPartPrompt: string,
+  imagesBase64: string[],
+  model: string,
+  apiKey: string,
+  mimeTypes: string[] = []
+): Promise<ReadableStream<Uint8Array>> {
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  // Запускаем процесс асинхронно
+  (async () => {
+    try {
+      let accumulatedFirstPart = '';
+
+      // --- ЧАСТЬ 1: Описание ---
+      console.log(`📡 [SEQUENTIAL] Запуск Части 1 (Описание)...`);
+      const response1 = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
+          'X-Title': 'Medical AI Assistant'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'Ты — эксперт-диагност. Дай максимально краткое, но емкое описание патологий. Фокусируйся на фактах для врача. Не пиши вступлений.' },
+            { 
+              role: 'user', 
+              content: [
+                { type: 'text', text: firstPartPrompt },
+                ...imagesBase64.map((img, i) => ({
+                  type: 'image_url',
+                  image_url: { url: `data:${mimeTypes[i] || 'image/png'};base64,${img}` }
+                }))
+              ]
+            }
+          ],
+          max_tokens: 3000,
+          temperature: 0.2,
+          stream: true
+        })
+      });
+
+      if (!response1.ok) throw new Error(`Step 1 failed: ${response1.status}`);
+      
+      const reader1 = response1.body!.getReader();
+      writer.write(encoder.encode('data: {"choices": [{"delta": {"content": "## 🔍 ОБЪЕКТИВНЫЙ СТАТУС (ОПИСАНИЕ)\\n\\n"}}]}\n\n'));
+
+      while (true) {
+        const { done, value } = await reader1.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        writer.write(value);
+
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+            try {
+              const data = JSON.parse(line.slice(6));
+              accumulatedFirstPart += data.choices[0]?.delta?.content || '';
+            } catch (e) {}
+          }
+        }
+      }
+
+      // Пингуем канал, чтобы не закрылся
+      writer.write(encoder.encode(': keep-alive\\n\\n'));
+
+      // --- ЧАСТЬ 2: Клиника ---
+      console.log(`📡 [SEQUENTIAL] Запуск Части 2 (Директива)...`);
+      const response2 = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
+          'X-Title': 'Medical AI Assistant'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { 
+              role: 'user', 
+              content: `ИНСТРУКЦИЯ: ${secondPartPrompt}\n\nОПИСАНИЕ СНИМКОВ:\n${accumulatedFirstPart}\n\nСФОРМУЛИРУЙ ТОЛЬКО ДИАГНОЗЫ, ПЛАН ЛЕЧЕНИЯ И ССЫЛКИ.` 
+            }
+          ],
+          max_tokens: 5000,
+          temperature: 0.2,
+          stream: true
+        })
+      });
+
+      if (!response2.ok) {
+        const errorText = await response2.text();
+        throw new Error(`Part 2 error: ${response2.status} - ${errorText}`);
+      }
+
+      const reader2 = response2.body!.getReader();
+      // Выводим разделитель перед второй частью
+      writer.write(encoder.encode('\n\ndata: {"choices": [{"delta": {"content": "\\n\\n---\\n\\n## 🩺 КЛИНИЧЕСКАЯ ДИРЕКТИВА\\n\\n"}}]}\n\n'));
+
+      while (true) {
+        const { done, value } = await reader2.read();
+        if (done) break;
+        writer.write(value); // Стримим вторую часть
+      }
+
+      // Явно сигнализируем о завершении
+      writer.write(encoder.encode('data: [DONE]\n\n'));
+    } catch (error: any) {
+      console.error('Sequential Stream Error:', error);
+      writer.write(encoder.encode(`data: {"error": "${error.message.replace(/"/g, '\\"')}"}\n\n`));
+    } finally {
+      writer.close();
+    }
+  })();
+
+  return readable;
+}
+
+/**
+ * Streaming быстрый анализ (Gemini 3.0 JSON -> Gemini 3.0 Professor Mode)
+ */
+export async function analyzeImageFastStreaming(
+  prompt: string,
+  imageBase64: string,
+  imageType?: string,
+  clinicalContext?: string
+): Promise<ReadableStream<Uint8Array>> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const { extractImageJSON } = await import('./openrouter');
+  const jsonExtraction = await extractImageJSON({
+    imageBase64,
+    modality: imageType || 'unknown'
+  });
+
+  const { getDirectivePrompt } = await import('./prompts');
+  const directivePrompt = getDirectivePrompt(imageType as any, prompt);
+
+  const contextPrompt = `Ниже приведены данные из изображения. Как Профессор медицины, проанализируй их.
+    
+=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ ОТ GEMINI 3.0 ===
+${JSON.stringify(jsonExtraction, null, 2)}
+
+=== КОНТЕКСТ ===
+${clinicalContext || 'Нет'}
+
+=== ИНСТРУКЦИЯ ===
+${directivePrompt}`;
+
+  return createSequentialStream(
+    "Выполни краткий обзор находок.",
+    contextPrompt,
+    [imageBase64],
+    MODELS.GEMINI_FLASH_30,
+    apiKey,
+    ['image/png']
+  );
+}
+
+/**
+ * Streaming оптимизированный анализ для множественных изображений (Gemini JSON → Sonnet)
+ */
+export async function analyzeMultipleImagesOpusTwoStageStreaming(
+  prompt: string,
+  imagesBase64: string[],
+  imageType?: ImageType,
+  clinicalContext?: string,
+  mimeTypes: string[] = []
+): Promise<ReadableStream<Uint8Array>> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  try {
+    console.log(`🚀 [MULTI-OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
+    const { extractImageJSON } = await import('./openrouter');
+    const jsonExtraction = await extractImageJSON({
+      imagesBase64,
+      modality: imageType || 'unknown'
+    });
+    
+    const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
+    const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
+    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
+
+    const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
+    const step2Prompt = clinicalPromptCriteria;
+
+    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.SONNET, apiKey, mimeTypes);
+  } catch (error: any) {
+    throw error;
+  }
+}
+
+/**
+ * Streaming анализ множественных изображений через Opus с использованием JSON от Gemini (Validated)
+ */
+export async function analyzeMultipleImagesWithJSONStreaming(
+  prompt: string,
+  imagesBase64: string[],
+  imageType?: ImageType,
+  clinicalContext?: string,
+  mimeTypes: string[] = []
+): Promise<ReadableStream<Uint8Array>> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  try {
+    const { extractImageJSON } = await import('./openrouter');
+    const jsonExtraction = await extractImageJSON({ imagesBase64, modality: imageType || 'unknown' });
+    
+    const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
+    const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
+    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
+
+    const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
+    const step2Prompt = clinicalPromptCriteria;
+
+    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes);
+  } catch (error: any) {
+    throw error;
+  }
+}
+
+/**
  * Streaming запрос для текстового чата
- * Возвращает ReadableStream для постепенной передачи данных
  */
 export async function sendTextRequestStreaming(
   prompt: string,
@@ -66,33 +298,13 @@ export async function sendTextRequestStreaming(
   model: string = MODELS.OPUS
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
-  }
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const messages = [
-    {
-      role: 'system' as const,
-      content: SYSTEM_PROMPT
-    },
-    ...history.map(msg => ({
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content
-    })),
-    {
-      role: 'user' as const,
-      content: prompt
-    }
+    { role: 'system' as const, content: SYSTEM_PROMPT },
+    ...history.map(msg => ({ role: msg.role as 'user' | 'assistant', content: msg.content })),
+    { role: 'user' as const, content: prompt }
   ];
-
-  const payload = {
-    model,
-    messages,
-    max_tokens: 8000,
-    temperature: 0.2,
-    stream: true
-  };
 
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
@@ -102,66 +314,37 @@ export async function sendTextRequestStreaming(
       'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
       'X-Title': 'Medical AI Assistant'
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: 8192,
+      temperature: 0.2,
+      stream: true,
+      stream_options: { include_usage: true }
+    })
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
-  }
-
-  if (!response.body) {
-    throw new Error('Response body is null');
-  }
-
-  // Возвращаем поток как есть - OpenRouter уже возвращает правильный SSE формат
-  return response.body;
+  if (!response.ok) throw new Error(`API error: ${response.status}`);
+  return response.body!;
 }
 
 /**
  * Streaming анализ изображения через OpenRouter API
- * Возвращает ReadableStream для постепенной передачи данных
  */
 export async function analyzeImageStreaming(
   prompt: string,
   imageBase64: string,
-  model: string = MODELS.OPUS
+  model: string = MODELS.OPUS,
+  mimeType: string = 'image/png',
+  clinicalContext?: string
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  let fullPrompt = prompt;
+  if (clinicalContext) {
+    fullPrompt = `${prompt}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${clinicalContext}`;
   }
-
-  const messages = [
-    {
-      role: 'system' as const,
-      content: SYSTEM_PROMPT
-    },
-    {
-      role: 'user' as const,
-      content: [
-        {
-          type: 'text',
-          text: prompt
-        },
-        {
-          type: 'image_url',
-          image_url: {
-            url: `data:image/png;base64,${imageBase64}`
-          }
-        }
-      ]
-    }
-  ];
-
-  const payload = {
-    model,
-    messages,
-    max_tokens: 8000,
-    temperature: 0.2,
-    stream: true
-  };
 
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
@@ -171,215 +354,104 @@ export async function analyzeImageStreaming(
       'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
       'X-Title': 'Medical AI Assistant'
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { 
+          role: 'user', 
+          content: [
+            { type: 'text', text: fullPrompt },
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }
+          ] 
+        }
+      ],
+      max_tokens: 8192,
+      temperature: 0.2,
+      stream: true,
+      stream_options: { include_usage: true }
+    })
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
-  }
-
-  if (!response.body) {
-    throw new Error('Response body is null');
-  }
-
-  return response.body;
+  if (!response.ok) throw new Error(`API error: ${response.status}`);
+  return response.body!;
 }
 
 /**
- * Streaming оптимизированный двухшаговый Opus анализ (Vision → Text)
- * Этап 1: Opus Vision описывает изображение коротким промптом (без system prompt)
- * Этап 2: Opus Text формирует директиву со стримингом
+ * Streaming оптимизированный анализ (Gemini JSON → Sonnet)
  */
 export async function analyzeImageOpusTwoStageStreaming(
   prompt: string,
-  imageBase64: string
+  imageBase64: string,
+  imageType?: ImageType,
+  clinicalContext?: string
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
-  }
-
-  // Шаг 1: Opus Vision описывает изображение коротким промптом (БЕЗ system prompt)
-  const shortDescriptionPrompt = `Ты — эксперт-радиолог/кардиолог. По изображению выполни ПОДРОБНОЕ, но КОМПАКТНОЕ ОПИСАНИЕ без финального диагноза.
-
-${prompt}
-
-ВАЖНО:
-- НЕ формулируй окончательный диагноз и НЕ давай клинический план.
-- Пиши связным текстом и короткими списками, без таблиц.
-- Опиши все видимые находки, локализацию, размеры, плотность, контуры.`;
-
-  const visionMessages = [
-    {
-      role: 'user' as const,
-      content: [
-        {
-          type: 'text',
-          text: shortDescriptionPrompt
-        },
-        {
-          type: 'image_url',
-          image_url: {
-            url: `data:image/png;base64,${imageBase64}`,
-            detail: 'low' // LOW resolution для экономии
-          }
-        }
-      ]
-    }
-  ];
-
-  const visionPayload = {
-    model: MODELS.OPUS,
-    messages: visionMessages,
-    max_tokens: 2000,
-    temperature: 0.1
-  };
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   try {
-    console.log('🚀 [OPUS TWO-STAGE STREAMING] Шаг 1: Opus Vision описывает изображение...');
+    const { extractImageJSON } = await import('./openrouter');
+    const jsonExtraction = await extractImageJSON({ imageBase64, modality: imageType || 'unknown' });
     
-    const visionResponse = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-        'X-Title': 'Medical AI Assistant'
-      },
-      body: JSON.stringify(visionPayload)
-    });
+    const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
+    const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
+    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
 
-    if (!visionResponse.ok) {
-      const errorText = await visionResponse.text();
-      throw new Error(`OpenRouter API error: ${visionResponse.status} - ${errorText}`);
-    }
+    const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
+    const step2Prompt = clinicalPromptCriteria;
 
-    const visionData = await visionResponse.json();
-    const description = visionData.choices[0].message.content || '';
-    
-    // Логирование токенов и стоимости для шага 1
-    const visionTokensUsed = visionData.usage?.total_tokens || 0;
-    const visionInputTokens = visionData.usage?.prompt_tokens || Math.floor(visionTokensUsed / 2);
-    const visionOutputTokens = visionData.usage?.completion_tokens || Math.floor(visionTokensUsed / 2);
-    
-    console.log('✅ [OPUS TWO-STAGE STREAMING] Шаг 1 завершен, длина описания:', description.length);
-    if (visionTokensUsed > 0) {
-      console.log(`   📊 ${formatCostLog(MODELS.OPUS, visionInputTokens, visionOutputTokens, visionTokensUsed)}`);
-    }
-    
-    // Шаг 2: Текстовый Opus формирует директиву со стримингом
-    const textMessages = [
-      {
-        role: 'system' as const,
-        content: SYSTEM_PROMPT
-      },
-      {
-        role: 'user' as const,
-        content: `Ниже приведено текстовое описание медицинского изображения, автоматически полученное из изображения Vision‑моделью Opus. На его основе выполни полный анализ и сформируй детальную клиническую директиву для врача.
-
-=== ОПИСАНИЕ ОТ OPUS VISION ===
-${description}
-
-${prompt}
-
-Сформируй полную клиническую директиву на основе этого описания.`
-      }
-    ];
-
-    const textPayload = {
-      model: MODELS.OPUS,
-      messages: textMessages,
-      max_tokens: 4000,
-      temperature: 0.2,
-      stream: true
-    };
-
-    console.log('🚀 [OPUS TWO-STAGE STREAMING] Шаг 2: Opus Text формирует директиву со стримингом...');
-    
-    const textResponse = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-        'X-Title': 'Medical AI Assistant'
-      },
-      body: JSON.stringify(textPayload)
-    });
-
-    if (!textResponse.ok) {
-      const errorText = await textResponse.text();
-      throw new Error(`OpenRouter API error: ${textResponse.status} - ${errorText}`);
-    }
-
-    if (!textResponse.body) {
-      throw new Error('Response body is null');
-    }
-
-    return textResponse.body;
+    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.SONNET, apiKey, ['image/png']);
   } catch (error: any) {
-    console.error('Error in analyzeImageOpusTwoStageStreaming:', error);
     throw error;
   }
 }
 
 /**
  * Streaming анализ изображения через Opus с использованием JSON от Gemini
- * Opus анализирует JSON + изображение вместе
  */
 export async function analyzeImageWithJSONStreaming(
   jsonExtraction: any,
   imageBase64: string,
-  prompt: string = 'Проанализируйте медицинское изображение на основе предоставленных структурированных данных.'
+  prompt: string = 'Проанализируйте медицинское изображение.',
+  mimeType: string = 'image/png',
+  imageType?: ImageType,
+  clinicalContext?: string
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
+  const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
+  const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
+
+  const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
+  const step2Prompt = clinicalPromptCriteria;
+
+  return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType]);
+}
+
+/**
+ * Streaming анализ множественных изображений
+ */
+export async function analyzeMultipleImagesStreaming(
+  prompt: string,
+  imagesBase64: string[],
+  mimeTypes: string[] = [],
+  model: string = MODELS.OPUS,
+  clinicalContext?: string
+): Promise<ReadableStream<Uint8Array>> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  let fullPrompt = prompt;
+  if (clinicalContext) {
+    fullPrompt = `${prompt}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${clinicalContext}`;
   }
 
-  // Формируем промпт с JSON данными
-  const jsonPrompt = `Ниже приведены структурированные данные, автоматически извлеченные из медицинского изображения моделью Gemini Vision. Используй эти данные как основу для анализа, но также внимательно изучи само изображение для полной клинической интерпретации.
-
-=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ ОТ GEMINI VISION ===
-${JSON.stringify(jsonExtraction, null, 2)}
-
-=== ИНСТРУКЦИИ ===
-${prompt}
-
-ВАЖНО: Используй и JSON данные, и само изображение для формирования полной клинической директивы. JSON предоставляет структурированную информацию, но ты должен проверить и дополнить её, анализируя изображение напрямую.`;
-
-  const messages = [
-    {
-      role: 'system' as const,
-      content: SYSTEM_PROMPT
-    },
-    {
-      role: 'user' as const,
-      content: [
-        {
-          type: 'text',
-          text: jsonPrompt
-        },
-        {
-          type: 'image_url',
-          image_url: {
-            url: `data:image/png;base64,${imageBase64}`
-          }
-        }
-      ]
-    }
-  ];
-
-  const payload = {
-    model: MODELS.OPUS,
-    messages,
-    max_tokens: 8000,
-    temperature: 0.2,
-    stream: true
-  };
+  const contentItems: any[] = [{ type: 'text', text: fullPrompt }];
+  imagesBase64.forEach((img, i) => {
+    contentItems.push({ type: 'image_url', image_url: { url: `data:${mimeTypes[i] || 'image/png'};base64,${img}` } });
+  });
 
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
@@ -389,18 +461,19 @@ ${prompt}
       'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
       'X-Title': 'Medical AI Assistant'
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: contentItems }
+      ],
+      max_tokens: 8000,
+      temperature: 0.2,
+      stream: true,
+      stream_options: { include_usage: true }
+    })
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
-  }
-
-  if (!response.body) {
-    throw new Error('Response body is null');
-  }
-
-  return response.body;
+  if (!response.ok) throw new Error(`API error: ${response.status}`);
+  return response.body!;
 }
-

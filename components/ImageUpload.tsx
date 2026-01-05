@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { compressMedicalImage } from '@/lib/image-compression'
 
 interface ImageUploadProps {
   onUpload: (file: File) => void
@@ -8,34 +9,53 @@ interface ImageUploadProps {
   maxSize?: number // в MB
 }
 
-export default function ImageUpload({ onUpload, accept = 'image/*', maxSize = 50 }: ImageUploadProps) {
+export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', maxSize = 50 }: ImageUploadProps) {
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const [isCompressing, setIsCompressing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
     setError(null)
     
-    // Проверка размера
+    // Проверка размера оригинала (до сжатия)
     if (file.size > maxSize * 1024 * 1024) {
       setError(`Файл слишком большой. Максимальный размер: ${maxSize}MB`)
       return
     }
 
-    // Проверка типа и создание превью для изображений
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setPreview(reader.result as string)
+    // Проверка типа
+    const isDicom = file.name.toLowerCase().endsWith('.dcm') || file.name.toLowerCase().endsWith('.dicom');
+    const isImage = file.type.startsWith('image/');
+
+    let fileToUpload = file;
+
+    if (isImage) {
+      setIsCompressing(true);
+      try {
+        fileToUpload = await compressMedicalImage(file);
+        
+        // Создание превью для изображения
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          setPreview(reader.result as string)
+        }
+        reader.readAsDataURL(fileToUpload)
+      } catch (err) {
+        console.error("Compression error:", err);
+      } finally {
+        setIsCompressing(false);
       }
-      reader.readAsDataURL(file)
+    } else if (isDicom) {
+      // Для DICOM показываем иконку, так как браузер не умеет их рендерить напрямую
+      setPreview(null) 
     } else {
       // Для PDF и других файлов превью не показываем
       setPreview(null)
     }
 
-    onUpload(file)
+    onUpload(fileToUpload)
   }
 
   const handleDrag = (e: React.DragEvent) => {
@@ -95,16 +115,25 @@ export default function ImageUpload({ onUpload, accept = 'image/*', maxSize = 50
           className="hidden"
         />
         <div className="space-y-4">
-          <div className="text-4xl">📁</div>
-          <div>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="text-primary-600 hover:text-primary-700 font-semibold underline"
-            >
-              Нажмите для загрузки
-            </button>
-            <span className="text-gray-600"> или перетащите файл сюда</span>
-          </div>
+          {isCompressing ? (
+            <div className="flex flex-col items-center space-y-2">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
+              <p className="text-primary-600 font-medium">Оптимизация изображения...</p>
+            </div>
+          ) : (
+            <>
+              <div className="text-4xl">📁</div>
+              <div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-primary-600 hover:text-primary-700 font-semibold underline"
+                >
+                  Нажмите для загрузки
+                </button>
+                <span className="text-gray-600"> или перетащите файл сюда</span>
+              </div>
+            </>
+          )}
           <p className="text-sm text-gray-500">
             Поддерживаемые форматы: JPG, PNG, TIFF, DICOM, PDF
             <br />

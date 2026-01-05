@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+
+// Максимальное время выполнения запроса (5 минут)
+export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -15,6 +21,17 @@ const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4; // 0.4 единицы за 1000 т
  */
 export async function POST(request: NextRequest) {
   try {
+    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
+    /*
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+    */
+
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -236,8 +253,9 @@ export async function POST(request: NextRequest) {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache, no-transform',
-          Connection: 'keep-alive',
+          'Connection': 'keep-alive',
           'X-Accel-Buffering': 'no',
+          'Content-Encoding': 'none',
           'Access-Control-Allow-Origin': '*',
         },
       });

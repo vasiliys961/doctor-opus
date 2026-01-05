@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import AudioUpload from '@/components/AudioUpload'
+import VoiceInput from '@/components/VoiceInput'
 import ReactMarkdown from 'react-markdown'
 import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } from 'docx'
 import { saveAs } from 'file-saver'
@@ -12,6 +13,7 @@ export default function ProtocolPage() {
   const [protocol, setProtocol] = useState('')
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
+  const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini'>('sonnet')
 
   const handleGenerateProtocol = async () => {
     if (!rawText.trim()) return
@@ -30,6 +32,7 @@ export default function ProtocolPage() {
           body: JSON.stringify({
             rawText,
             useStreaming: true,
+            model: model,
           }),
         })
 
@@ -83,6 +86,7 @@ export default function ProtocolPage() {
           body: JSON.stringify({
             rawText,
             useStreaming: false,
+            model: model,
           }),
         })
 
@@ -226,13 +230,23 @@ export default function ProtocolPage() {
           <h2 className="text-xl font-semibold mb-4">Ввод данных для протокола</h2>
           
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Введите данные для протокола:
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Введите данные для протокола:
+              </label>
+              <div className="flex gap-2">
+                <VoiceInput 
+                  onTranscript={(text) => setRawText(prev => prev ? prev + ' ' + text : text)}
+                  disabled={loading}
+                  className="!bg-indigo-600 !text-white hover:!bg-indigo-700"
+                  placeholder="Диктовать (бесплатно)"
+                />
+              </div>
+            </div>
             <textarea
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
-              placeholder="Опишите жалобы, анамнез заболевания, данные объективного осмотра, результаты обследований... или нажмите 🎤 для записи голосом"
+              placeholder="Опишите жалобы, анамнез заболевания, данные объективного осмотра, результаты обследований... или используйте 🎤 для диктовки"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               rows={12}
               disabled={loading}
@@ -242,15 +256,15 @@ export default function ProtocolPage() {
           <div className="flex gap-2 mb-4">
             <button
               onClick={() => setShowAudioUpload(!showAudioUpload)}
-              className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors flex items-center gap-2"
-              title="Загрузить аудио"
+              className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors flex items-center gap-2 text-sm"
+              title="Загрузить аудио файл (AssemblyAI)"
               disabled={loading}
             >
-              🎤 Записать голосом
+              📁 Загрузить аудио (Expert)
             </button>
             <button
               onClick={() => setRawText('')}
-              className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
               title="Очистить текст"
               disabled={!rawText || loading}
             >
@@ -258,7 +272,7 @@ export default function ProtocolPage() {
             </button>
           </div>
 
-          <div className="mb-4">
+          <div className="mb-4 flex flex-col sm:flex-row gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -267,8 +281,22 @@ export default function ProtocolPage() {
                 className="w-4 h-4 text-primary-600"
                 disabled={loading}
               />
-              <span className="text-sm">Streaming (постепенная генерация)</span>
+              <span className="text-sm">Streaming</span>
             </label>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Модель:</span>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value as any)}
+                className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                disabled={loading}
+              >
+                <option value="sonnet">🤖 Sonnet 4.5</option>
+                <option value="opus">🧠 Opus 4.5</option>
+                <option value="gemini">⚡ Gemini 3.0 Flash</option>
+              </select>
+            </div>
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -336,7 +364,7 @@ export default function ProtocolPage() {
 
           {protocol && (
             <div className="prose prose-sm max-w-none">
-              <div className="border border-gray-200 rounded-lg p-6 bg-white max-h-[600px] overflow-y-auto protocol-content">
+              <div className="border border-gray-200 rounded-lg p-6 bg-white max-h-[800px] overflow-y-auto protocol-content">
                 <ReactMarkdown
                   components={{
                     h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-4 mb-2" {...props} />,

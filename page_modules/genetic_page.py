@@ -416,6 +416,14 @@ def show_genetic_analysis_page():
                                     answer_generator = assistant.get_response_streaming(chat_context, context="", use_sonnet_4_5=False, force_opus=False)
                                     answer = st.write_stream(answer_generator)
                                     
+                                    if answer:
+                                        # Примерный расчет для streaming
+                                        from utils.cost_calculator import calculate_cost
+                                        approx_tokens = len(answer.split()) * 1.4
+                                        model_id = "anthropic/claude-haiku-4.5"
+                                        cost_info = calculate_cost(int(approx_tokens*0.3), int(approx_tokens*0.7), model_id)
+                                        st.caption(f"📊 Расход: ~**{int(approx_tokens)}** токенов (**{cost_info['total_cost_units']:.2f}** у.е.)")
+                                    
                                     # Сохраняем ответ в историю
                                     st.session_state[chat_key].append({
                                         'role': 'assistant',
@@ -750,6 +758,14 @@ def show_genetic_analysis_page():
                                         
                                         # Отображаем streaming ответ
                                         ai_interpretation = st.write_stream(text_generator)
+                                        
+                                        if ai_interpretation:
+                                            # Примерный расчет для streaming
+                                            from utils.cost_calculator import calculate_cost
+                                            approx_tokens = len(ai_interpretation.split()) * 1.4
+                                            model_id = "anthropic/claude-haiku-4.5" # По умолчанию используется в text_client если не указано
+                                            cost_info = calculate_cost(int(approx_tokens*0.3), int(approx_tokens*0.7), model_id)
+                                            st.caption(f"📊 Расход: ~**{int(approx_tokens)}** токенов (**{cost_info['total_cost_units']:.2f}** у.е.)")
                                         
                                         # Проверяем результат
                                         if not ai_interpretation or len(ai_interpretation.strip()) == 0:

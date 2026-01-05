@@ -1105,8 +1105,15 @@ JSON обязательно!
                         if "choices" in result and len(result["choices"]) > 0:
                             content = result["choices"][0]["message"]["content"]
                             tokens_used = result.get("usage", {}).get("total_tokens", 0)
+                            input_tokens = result.get("usage", {}).get("prompt_tokens", tokens_used // 2)
+                            output_tokens = result.get("usage", {}).get("completion_tokens", tokens_used // 2)
+                            
                             print(f"✅ [РАСШИРЕННЫЙ АНАЛИЗ] Успешный ответ от модели: {model_name}", file=sys.stderr, flush=True)
-                            print(f"📊 [РАСШИРЕННЫЙ АНАЛИЗ] Задержка: {latency:.2f}с, Токенов: {tokens_used}, Символов ответа: {len(content)}", file=sys.stderr, flush=True)
+                            
+                            # Вывод красивого отчета в терминал
+                            from utils.cost_calculator import format_cost_log_fancy
+                            print(format_cost_log_fancy(model, input_tokens, output_tokens, tokens_used), file=sys.stderr, flush=True)
+                            
                             return content, model_name, tokens_used
                         else:
                             print(f"Пустой ответ от модели: {model}")
@@ -1266,9 +1273,14 @@ JSON обязательно!
                                     except json.JSONDecodeError:
                                         continue
                         latency = time.time() - start_time
-                        print(f"✅ [STREAMING РАСШИРЕННЫЙ АНАЛИЗ] Завершено. Модель: {model_name}, символов: {len(full_response)}, время: {latency:.2f}с")
-                        # Не делаем return здесь, чтобы генератор мог продолжить работу
+                        print(f"✅ [STREAMING РАСШИРЕННЫЙ АНАЛИЗ] Завершено. Модель: {model_name}, время: {latency:.2f}с")
+                        
+                        # Вывод красивого отчета в терминал
                         if full_response:
+                            from utils.cost_calculator import format_cost_log_fancy
+                            approx_tokens = int(len(full_response.split()) * 1.4)
+                            report = format_cost_log_fancy(model, int(approx_tokens*0.3), int(approx_tokens*0.7), total_tokens=approx_tokens)
+                            print(report)
                             return  # Успешно завершили, выходим из цикла моделей
                         else:
                             continue  # Если ответ пустой, пробуем следующую модель
