@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sendTextRequest } from '@/lib/openrouter';
 import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
 import { formatCostLog } from '@/lib/cost-calculator';
+import { anonymizeText } from '@/lib/anonymization';
 
 /**
  * API endpoint для генерации протокола осмотра через Claude Sonnet 4.5
@@ -13,7 +14,8 @@ export async function POST(request: NextRequest) {
     console.log('⏰ [PROTOCOL API] Время:', new Date().toISOString());
     
     const body = await request.json();
-    const { rawText, useStreaming = true, model = 'sonnet' } = body;
+    const { rawText: rawIncomingText, useStreaming = true, model = 'sonnet' } = body;
+    const rawText = anonymizeText(rawIncomingText);
 
     console.log('📥 [PROTOCOL API] Получен запрос:', {
       размер_текста: rawText ? `${rawText.length} символов` : 'нет данных',

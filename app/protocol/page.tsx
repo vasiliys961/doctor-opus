@@ -1,8 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import AudioUpload from '@/components/AudioUpload'
-import VoiceInput from '@/components/VoiceInput'
+
+const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
+
 import ReactMarkdown from 'react-markdown'
 import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } from 'docx'
 import { saveAs } from 'file-saver'

@@ -5,6 +5,7 @@ import { sendTextRequestWithFiles, sendTextRequestStreamingWithFiles } from '@/l
 import { formatCostLog } from '@/lib/cost-calculator';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { anonymizeText, anonymizeObject } from '@/lib/anonymization';
 
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
@@ -37,11 +38,11 @@ export async function POST(request: NextRequest) {
     // Проверяем, является ли запрос FormData (с файлами) или JSON
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
-      message = (formData.get('message') as string) || '';
+      message = anonymizeText((formData.get('message') as string) || '');
       const historyStr = formData.get('history') as string;
       if (historyStr) {
         try {
-          history = JSON.parse(historyStr);
+          history = anonymizeObject(JSON.parse(historyStr));
         } catch (e) {
           console.warn('Failed to parse history:', e);
         }
@@ -54,15 +55,15 @@ export async function POST(request: NextRequest) {
       files = fileEntries.filter(f => f instanceof File && f.size > 0);
     } else {
       const body = await request.json();
-      message = body.message || '';
-      history = body.history || [];
+      message = anonymizeText(body.message || '');
+      history = anonymizeObject(body.history || []);
       useStreaming = body.useStreaming || false;
       model = body.model;
     }
 
     const selectedModel = (model === 'sonnet' || model === 'anthropic/claude-sonnet-4.5') 
       ? 'anthropic/claude-sonnet-4.5' 
-      : (model === 'gemini' || model.includes('gemini'))
+      : (model && (model === 'gemini' || model.includes('gemini')))
         ? 'google/gemini-3-flash-preview'
         : 'anthropic/claude-opus-4.5';
 

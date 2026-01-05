@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import * as XLSX from 'xlsx';
 import AdmZip from 'adm-zip';
 import { normalizeMarkdown } from '@/lib/markdown-utils';
+import { anonymizeText } from '@/lib/anonymization';
 
 const gunzipAsync = promisify(gunzip);
 
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const prompt = formData.get('prompt') as string || 'Извлеки всю информацию из файла. Структурируй данные.';
+    const prompt = anonymizeText(formData.get('prompt') as string || 'Извлеки всю информацию из файла. Структурируй данные.');
 
     if (!file) {
       return NextResponse.json(

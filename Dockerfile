@@ -29,7 +29,7 @@ RUN npm run build
 FROM python:3.10-slim
 
 LABEL maintainer="Doctor Opus Team"
-LABEL version="3.38.0"
+LABEL version="3.39.0"
 
 WORKDIR /app
 
@@ -64,7 +64,6 @@ COPY --from=node-builder /app/next.config.js ./next.config.js
 # Копируем остальные необходимые файлы (скрипты, либы)
 COPY scripts/ ./scripts/
 COPY lib/ ./lib/
-COPY prompts/ ./prompts/
 # Копируем корневые файлы проекта
 COPY *.ts *.js *.json ./
 

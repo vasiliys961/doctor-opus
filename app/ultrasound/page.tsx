@@ -7,7 +7,7 @@ import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisTips from '@/components/AnalysisTips'
-import VoiceInput from '@/components/VoiceInput'
+import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
 import FeedbackForm from '@/components/FeedbackForm'
 import { logUsage } from '@/lib/simple-logger'
 

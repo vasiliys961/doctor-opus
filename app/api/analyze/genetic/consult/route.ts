@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Если это продолжение диалога, используем историю
-    let messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
+    let messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string | any[] }> = [];
     
     if (isFollowUp && history && history.length > 0) {
       // Продолжение диалога - используем историю

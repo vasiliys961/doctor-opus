@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
+import dynamic from 'next/dynamic'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
@@ -10,8 +11,10 @@ import PatientSelector from '@/components/PatientSelector'
 import DeviceSync from '@/components/DeviceSync'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
-import DicomViewer from '@/components/DicomViewer'
-import VoiceInput from '@/components/VoiceInput'
+
+const DicomViewer = dynamic(() => import('@/components/DicomViewer'), { ssr: false })
+const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
+
 import { validateMedicalImage, ImageValidationResult } from '@/lib/image-validator'
 import { logUsage } from '@/lib/simple-logger'
 

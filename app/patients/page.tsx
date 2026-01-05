@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { getAllPatients, savePatient, deletePatient, Patient, getPatientHistory, deleteHistoryRecord, AnalysisRecord } from '@/lib/patient-db'
 import ReactMarkdown from 'react-markdown'
-import VoiceInput from '@/components/VoiceInput'
+
+const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([])

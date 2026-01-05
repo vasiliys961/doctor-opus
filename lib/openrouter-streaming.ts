@@ -427,7 +427,50 @@ export async function analyzeImageWithJSONStreaming(
   const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
   const step2Prompt = clinicalPromptCriteria;
 
-  return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType]);
+    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType]);
+}
+
+/**
+ * Стриминг для получения ТОЛЬКО описания изображений (Шаг 1 в ручном режиме)
+ */
+export async function analyzeMultipleImagesDescriptionStreaming(
+  prompt: string,
+  imagesBase64: string[],
+  imageType: string = 'universal',
+  clinicalContext?: string,
+  mimeTypes: string[] = []
+): Promise<ReadableStream<Uint8Array>> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const { getDescriptionPrompt } = await import('./prompts');
+  const descriptionPrompt = getDescriptionPrompt(imageType as any);
+
+  const fullPrompt = `${descriptionPrompt}\n\n${prompt}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
+
+  return analyzeMultipleImagesStreaming(fullPrompt, imagesBase64, mimeTypes, MODELS.SONNET, '');
+}
+
+/**
+ * Стриминг для получения ТОЛЬКО клинической директивы на основе описания (Шаг 2 в ручном режиме)
+ */
+export async function analyzeMultipleImagesDirectiveStreaming(
+  prompt: string,
+  description: string,
+  imagesBase64: string[],
+  clinicalContext?: string,
+  mimeTypes: string[] = []
+): Promise<ReadableStream<Uint8Array>> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const { getDirectivePrompt } = await import('./prompts');
+  const directivePrompt = getDirectivePrompt('universal', prompt);
+
+  const fullPrompt = `${directivePrompt}\n\nОПИСАНИЕ ИССЛЕДОВАНИЯ:\n${description}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
+
+  // Для директивы используем Opus или Sonnet
+  return analyzeMultipleImagesStreaming(fullPrompt, imagesBase64, mimeTypes, MODELS.SONNET, '');
 }
 
 /**

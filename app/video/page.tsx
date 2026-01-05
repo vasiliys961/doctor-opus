@@ -1,12 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import PatientSelector from '@/components/PatientSelector'
 import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
-import VoiceInput from '@/components/VoiceInput'
+
+const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
+
 import { logUsage } from '@/lib/simple-logger'
 
 export default function VideoPage() {

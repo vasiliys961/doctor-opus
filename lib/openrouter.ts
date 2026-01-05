@@ -834,7 +834,11 @@ export async function analyzeMultipleImages(options: {
 /**
  * Текстовый запрос к OpenRouter API (для чата)
  */
-export async function sendTextRequest(prompt: string, history: Array<{role: string, content: string}> = []): Promise<string> {
+export async function sendTextRequest(
+  prompt: string, 
+  history: Array<{role: string, content: string}> = [],
+  model: string = MODELS.OPUS
+): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   
   if (!apiKey) {
@@ -842,7 +846,7 @@ export async function sendTextRequest(prompt: string, history: Array<{role: stri
     throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
   }
 
-  const selectedModel = MODELS.OPUS; // Opus 4.5 по умолчанию
+  const selectedModel = model;
   
   const messages = [
     {

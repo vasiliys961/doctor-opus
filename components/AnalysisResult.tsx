@@ -196,7 +196,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           paragraphs.push(
             new Paragraph({
               children: textRuns,
-              numbering: { level: 0 },
+              bullet: { level: 0 },
               spacing: { after: 60 },
             })
           )
@@ -242,6 +242,13 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   const parseMarkdownTextRuns = (text: string): TextRun[] => {
     if (!text) return [new TextRun({ text: '' })]
     
+    interface ParsedRun {
+      text: string;
+      bold?: boolean;
+      italics?: boolean;
+      font?: string;
+    }
+
     // Сначала обрабатываем код (он в обратных кавычках и не конфликтует)
     const codeParts: Array<{ start: number; end: number; text: string }> = []
     const codeRegex = /`([^`]+)`/g
@@ -250,7 +257,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       codeParts.push({ start: match.index, end: match.index + match[0].length, text: match[1] })
     }
 
-    const textRuns: TextRun[] = []
+    const runs: ParsedRun[] = []
     let lastIndex = 0
     let codeIndex = 0
 
@@ -262,11 +269,11 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         if (i > lastIndex) {
           const beforeCode = text.substring(lastIndex, i)
           if (beforeCode) {
-            textRuns.push(...parseBoldItalicTextRuns(beforeCode))
+            runs.push(...parseBoldItalicParsedRuns(beforeCode))
           }
         }
         // Добавляем код
-        textRuns.push(new TextRun({ text: codeParts[codeIndex].text, font: 'Courier New' }))
+        runs.push({ text: codeParts[codeIndex].text, font: 'Courier New' })
         lastIndex = codeParts[codeIndex].end
         i = codeParts[codeIndex].end - 1
         codeIndex++
@@ -278,17 +285,19 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     if (lastIndex < text.length) {
       const remainingText = text.substring(lastIndex)
       if (remainingText) {
-        textRuns.push(...parseBoldItalicTextRuns(remainingText))
+        runs.push(...parseBoldItalicParsedRuns(remainingText))
       }
     }
 
-    return textRuns.length > 0 ? textRuns : [new TextRun({ text })]
+    return runs.length > 0 
+      ? runs.map(r => new TextRun({ text: r.text, bold: r.bold, italics: r.italics, font: r.font }))
+      : [new TextRun({ text })]
   }
 
-  const parseBoldItalicTextRuns = (text: string): TextRun[] => {
-    if (!text) return [new TextRun({ text: '' })]
+  const parseBoldItalicParsedRuns = (text: string): Array<{text: string, bold?: boolean, italics?: boolean}> => {
+    if (!text) return [{ text: '' }]
     
-    const textRuns: TextRun[] = []
+    const runs: Array<{text: string, bold?: boolean, italics?: boolean}> = []
     let lastIndex = 0
 
     // Сначала обрабатываем жирный текст **text**
@@ -301,14 +310,14 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         const beforeText = text.substring(lastIndex, match.index)
         if (beforeText) {
           // Проверяем на курсив в этом тексте
-          textRuns.push(...parseItalicTextRuns(beforeText))
+          runs.push(...parseItalicParsedRuns(beforeText))
         }
       }
       // Bold текст (может содержать курсив)
       const boldText = match[1]
-      const boldRuns = parseItalicTextRuns(boldText)
+      const boldRuns = parseItalicParsedRuns(boldText)
       boldRuns.forEach(run => {
-        textRuns.push(new TextRun({ text: run.text, bold: true, italics: run.italics }))
+        runs.push({ text: run.text, bold: true, italics: run.italics })
       })
       lastIndex = match.index + match[0].length
     }
@@ -317,17 +326,17 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     if (lastIndex < text.length) {
       const remainingText = text.substring(lastIndex)
       if (remainingText) {
-        textRuns.push(...parseItalicTextRuns(remainingText))
+        runs.push(...parseItalicParsedRuns(remainingText))
       }
     }
 
-    return textRuns.length > 0 ? textRuns : [new TextRun({ text })]
+    return runs.length > 0 ? runs : [{ text }]
   }
 
-  const parseItalicTextRuns = (text: string): TextRun[] => {
-    if (!text) return [new TextRun({ text: '' })]
+  const parseItalicParsedRuns = (text: string): Array<{text: string, italics?: boolean}> => {
+    if (!text) return [{ text: '' }]
     
-    const textRuns: TextRun[] = []
+    const runs: Array<{text: string, italics?: boolean}> = []
     let lastIndex = 0
     let i = 0
 
@@ -353,12 +362,12 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           if (i > lastIndex) {
             const beforeText = text.substring(lastIndex, i)
             if (beforeText) {
-              textRuns.push(new TextRun({ text: beforeText }))
+              runs.push({ text: beforeText })
             }
           }
           // Курсив текст
           const italicText = text.substring(i + 1, endIndex)
-          textRuns.push(new TextRun({ text: italicText, italics: true }))
+          runs.push({ text: italicText, italics: true })
           lastIndex = endIndex + 1
           i = endIndex + 1
           continue
@@ -371,11 +380,11 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     if (lastIndex < text.length) {
       const remainingText = text.substring(lastIndex)
       if (remainingText) {
-        textRuns.push(new TextRun({ text: remainingText }))
+        runs.push({ text: remainingText })
       }
     }
 
-    return textRuns.length > 0 ? textRuns : [new TextRun({ text })]
+    return runs.length > 0 ? runs : [{ text }]
   }
 
 

@@ -8,7 +8,7 @@ import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSel
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
-import VoiceInput from '@/components/VoiceInput'
+import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
 import { logUsage } from '@/lib/simple-logger'
 
 export default function ECGPage() {

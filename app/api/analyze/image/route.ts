@@ -14,6 +14,7 @@ import {
 import { formatCostLog } from '@/lib/cost-calculator';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { anonymizeText } from "@/lib/anonymization";
 import { extractDicomMetadata, formatDicomMetadataForAI } from '@/lib/dicom-service';
 import { processDicomJs } from "@/lib/dicom-processor";
 import { exec } from 'child_process';
@@ -97,8 +98,8 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const prompt = formData.get('prompt') as string || 'Проанализируйте медицинское изображение.';
-    const clinicalContext = formData.get('clinicalContext') as string || '';
+    const prompt = anonymizeText(formData.get('prompt') as string || 'Проанализируйте медицинское изображение.');
+    const clinicalContext = anonymizeText(formData.get('clinicalContext') as string || '');
     const mode = (formData.get('mode') as string) || 'optimized';
     const stage = (formData.get('stage') as string) || 'all';
     const imageType = (formData.get('imageType') as string) || 'universal';

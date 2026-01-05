@@ -59,7 +59,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
           feedback_type: correctness === "❌ Ошибка" ? "incorrect_diagnosis" : 
                          correctness === "⚠️ Частично верно" ? "needs_improvement" : "correct",
           doctor_comment: anonymizeText(comment),
-          correct_diagnosis: anonymizeText(correctness !== "✅ Полностью верно" ? correctDiagnosis : null || ''),
+          correct_diagnosis: anonymizeText(correctness !== "✅ Полностью верно" ? correctDiagnosis : ''),
           specialty,
           correctness,
           consent,

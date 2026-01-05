@@ -8,8 +8,6 @@
  * но адаптирована под формат OpenRouter Chat Completions и под TypeScript.
  */
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-
 import { getDescriptionPrompt, getDirectivePrompt, ImageType } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
