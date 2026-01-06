@@ -13,7 +13,7 @@ import { getDescriptionPrompt, getDirectivePrompt, ImageType } from './prompts';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const MODELS = {
-  GEMINI_FLASH_30: 'google/gemini-3-flash-preview',
+  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',
 } as const;
 
 export interface AnalyzeVideoOptions {
@@ -70,7 +70,7 @@ export async function analyzeVideoTwoStage(
   ];
 
   const descriptionPayload = {
-    model: MODELS.GEMINI_FLASH_30,
+    model: MODELS.GEMINI_3_FLASH,
     messages: [
       {
         role: 'user' as const,
@@ -86,8 +86,8 @@ export async function analyzeVideoTwoStage(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-      'X-Title': 'Medical AI Assistant',
+      'HTTP-Referer': 'https://doctor-opus.vercel.app',
+      'X-Title': 'Doctor Opus',
     },
     body: JSON.stringify(descriptionPayload),
   });
@@ -105,7 +105,7 @@ export async function analyzeVideoTwoStage(
   const analysisPrompt = getDirectivePrompt(imageType, options.prompt);
 
   const analysisPayload = {
-    model: MODELS.GEMINI_FLASH_30,
+    model: MODELS.GEMINI_3_FLASH,
     messages: [
       {
         role: 'system' as const,
@@ -125,8 +125,8 @@ export async function analyzeVideoTwoStage(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-      'X-Title': 'Medical AI Assistant',
+      'HTTP-Referer': 'https://doctor-opus.vercel.app',
+      'X-Title': 'Doctor Opus',
     },
     body: JSON.stringify(analysisPayload),
   });

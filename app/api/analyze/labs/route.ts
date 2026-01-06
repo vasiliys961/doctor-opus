@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     }
 
     const payload = {
-      model: MODELS.GEMINI_FLASH_30,
+      model: MODELS.GEMINI_3_FLASH,
       messages: [
         {
           role: 'system',

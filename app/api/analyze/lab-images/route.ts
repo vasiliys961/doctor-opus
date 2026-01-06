@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { analyzeImage, sendTextRequest } from '@/lib/openrouter';
+import { analyzeImage, sendTextRequest, MODELS } from '@/lib/openrouter';
+import { 
+  analyzeImageStreaming, 
+  sendTextRequestStreaming, 
+  analyzeMultipleImagesStreaming,
+  analyzeMultipleImagesOpusTwoStageStreaming,
+  analyzeMultipleImagesWithJSONStreaming
+} from '@/lib/openrouter-streaming';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
@@ -12,20 +19,25 @@ export const dynamic = 'force-dynamic';
  * Принимает изображения в base64 и анализирует их через Vision API
  */
 export async function POST(request: NextRequest) {
-  try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
-        { status: 401 }
-      );
-    }
-    */
+  const analysisId = `lab_images_${Date.now()}`;
+  
+  // Вспомогательная функция для стриминга
+  const handleStreamingResponse = (stream: ReadableStream) => {
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+        'X-Analysis-Id': analysisId,
+      },
+    });
+  };
 
+  try {
+    // ... (auth check remains commented out)
     const body = await request.json();
-    const { images, prompt, clinicalContext } = body;
+    const { images, prompt, clinicalContext, mode, useStreaming } = body;
 
     if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
@@ -42,7 +54,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`🔬 [LAB IMAGES] Получено ${images.length} изображений для анализа`);
+    // Определение модели на основе режима
+    let modelToUse = MODELS.GEMINI_3_FLASH;
+    if (mode === 'optimized') modelToUse = MODELS.SONNET;
+    else if (mode === 'validated') modelToUse = MODELS.OPUS;
+
+    console.log(`🔬 [LAB IMAGES] Получено ${images.length} изображений для анализа, режим: ${mode}, модель: ${modelToUse}, streaming: ${useStreaming}`);
+
+    // Если запрошен стриминг для нескольких изображений
+    if (useStreaming && images.length > 1) {
+      console.log('📡 [LAB IMAGES] Запуск мульти-изображений стриминга...');
+      let stream: ReadableStream;
+      
+      if (mode === 'optimized') {
+        stream = await analyzeMultipleImagesOpusTwoStageStreaming(prompt, images, 'universal', clinicalContext);
+      } else if (mode === 'validated') {
+        stream = await analyzeMultipleImagesWithJSONStreaming(prompt, images, 'universal', clinicalContext);
+      } else {
+        stream = await analyzeMultipleImagesStreaming(prompt, images, images.map(() => 'image/png'), modelToUse, clinicalContext);
+      }
+      
+      return handleStreamingResponse(stream);
+    }
 
     const results: string[] = [];
 
@@ -54,13 +87,13 @@ export async function POST(request: NextRequest) {
         : `Продолжение анализа лабораторного отчета. Страница ${i + 1} из ${images.length}. Извлеките все лабораторные показатели, их значения, единицы измерения и референсные диапазоны.`;
       
       try {
-        console.log(`🖼️ [LAB IMAGES] Анализ страницы ${i + 1}/${images.length} через Gemini Flash...`);
+        console.log(`🖼️ [LAB IMAGES] Анализ страницы ${i + 1}/${images.length} в режиме ${mode} (${modelToUse})...`);
         
         const pageResult = await analyzeImage({
           prompt: pagePrompt,
           imageBase64: imageBase64,
-          mode: 'fast', // Gemini Flash для быстрого анализа
-          clinicalContext: i === 0 ? clinicalContext : undefined // Передаем контекст только для первой страницы
+          model: modelToUse, // Передаем модель явно
+          clinicalContext: i === 0 ? clinicalContext : undefined
         });
         
         results.push(`\n\n=== Страница ${i + 1} ===\n${pageResult}`);
@@ -74,8 +107,8 @@ export async function POST(request: NextRequest) {
     // Если страниц несколько, объединяем результаты
     let finalResult = results.join('\n');
     
-    if (images.length > 1) {
-      console.log('📊 [LAB IMAGES] Структурирование данных со всех страниц...');
+    if (images.length > 1 || results.length > 0) {
+      console.log(`📊 [LAB IMAGES] Финальное структурирование через ${modelToUse}...`);
       // Запрашиваем финальную структуризацию всех страниц
       let structuredPrompt = `Объедини и структурируй данные из всех страниц лабораторного отчета:\n\n${finalResult}\n\nСоздай единый структурированный отчет со всеми показателями, их значениями, единицами измерения и референсными диапазонами.`;
       
@@ -83,7 +116,12 @@ export async function POST(request: NextRequest) {
         structuredPrompt = `${structuredPrompt}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${clinicalContext}`;
       }
       
-      finalResult = await sendTextRequest(structuredPrompt);
+      if (useStreaming) {
+        const stream = await sendTextRequestStreaming(structuredPrompt, [], modelToUse);
+        return handleStreamingResponse(stream);
+      }
+
+      finalResult = await sendTextRequest(structuredPrompt, [], modelToUse);
     }
 
     console.log('✅ [LAB IMAGES] Анализ завершен успешно');

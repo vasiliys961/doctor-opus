@@ -181,7 +181,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
                 lastError
               );
               // Пробуем другую модель если текущая не работает
-              if (retries === 3 && extractionModel === 'google/gemini-2.5-flash') {
+              if (retries === 3 && extractionModel === 'google/gemini-3-flash-preview') {
                 console.log(`🔄 [GENETIC IMAGES] Пробуем альтернативную модель для страницы ${pageNumber}...`);
                 extractionPayload.model = 'google/gemini-1.5-flash';
               }

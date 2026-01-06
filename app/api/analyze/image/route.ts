@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
     let modelToUse = customModel;
     if (!modelToUse) {
       if (mode === 'fast') {
-        modelToUse = MODELS.GEMINI_FLASH_30;
+        modelToUse = MODELS.GEMINI_3_FLASH;
       } else {
         // По умолчанию для всех серьезных анализов используем SONNET 4.5.
         // Это в 5 раз дешевле OPUS при сопоставимом качестве.
@@ -215,9 +215,9 @@ export async function POST(request: NextRequest) {
     // --- БЫСТРЫЙ РЕЖИМ (Fast) ---
     if (mode === 'fast') {
       if (useStreaming) {
-        // Для быстрого стриминга используем Gemini 3.0 (JSON) -> Gemini 3.0 (Описание)
+        // Для быстрого стриминга используем Gemini (JSON) -> Gemini (Описание)
         const stream = await analyzeImageFastStreaming(prompt, imagesBase64[0], imageType, finalClinicalContext);
-        return handleStreamingResponse(stream, MODELS.GEMINI_FLASH_30);
+        return handleStreamingResponse(stream, MODELS.GEMINI_3_FLASH);
       } else {
         const result = await analyzeImageFast({
           prompt,

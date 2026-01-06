@@ -9,6 +9,7 @@ const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false
 import ReactMarkdown from 'react-markdown'
 import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } from 'docx'
 import { saveAs } from 'file-saver'
+import { DEFAULT_TEMPLATES, ProtocolTemplate } from '@/lib/protocol-templates'
 
 export default function ProtocolPage() {
   const [rawText, setRawText] = useState('')
@@ -17,6 +18,12 @@ export default function ProtocolPage() {
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
   const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini'>('sonnet')
+  
+  // Состояния для специалистов и шаблонов
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATES[0].id)
+  const [specialistName, setSpecialistName] = useState(DEFAULT_TEMPLATES[0].specialist)
+  const [customTemplate, setCustomTemplate] = useState(DEFAULT_TEMPLATES[0].content)
+  const [isEditingTemplate, setIsEditingTemplate] = useState(false)
 
   const handleGenerateProtocol = async () => {
     if (!rawText.trim()) return
@@ -25,81 +32,46 @@ export default function ProtocolPage() {
     setProtocol('')
 
     try {
+      const payload = {
+        rawText,
+        useStreaming: useStreaming,
+        model: model,
+        templateId: selectedTemplateId,
+        customTemplate: customTemplate,
+        specialistName: specialistName
+      };
+
       if (useStreaming) {
-        // Streaming режим
         const response = await fetch('/api/protocol', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            rawText,
-            useStreaming: true,
-            model: model,
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
         })
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 
         const reader = response.body?.getReader()
         const decoder = new TextDecoder()
         let accumulatedText = ''
 
         if (reader) {
-          let buffer = ''
-          
           while (true) {
             const { done, value } = await reader.read()
             if (done) break
-
             const chunk = decoder.decode(value, { stream: true })
-            buffer += chunk
-            
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ''
-
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6).trim()
-                if (data === '[DONE]') break
-
-                try {
-                  const json = JSON.parse(data)
-                  const content = json.choices?.[0]?.delta?.content || ''
-                  if (content) {
-                    accumulatedText += content
-                    setProtocol(accumulatedText)
-                  }
-                } catch (e) {
-                  console.warn('Ошибка парсинга SSE:', e)
-                }
-              }
-            }
+            accumulatedText += chunk
+            setProtocol(accumulatedText)
           }
         }
       } else {
-        // Обычный режим
         const response = await fetch('/api/protocol', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            rawText,
-            useStreaming: false,
-            model: model,
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
         })
-
         const data = await response.json()
-
-        if (data.success) {
-          setProtocol(data.protocol)
-        } else {
-          setProtocol(`Ошибка: ${data.error}`)
-        }
+        if (data.success) setProtocol(data.protocol)
+        else setProtocol(`Ошибка: ${data.error}`)
       }
     } catch (err: any) {
       setProtocol(`Ошибка: ${err.message}`)
@@ -108,98 +80,48 @@ export default function ProtocolPage() {
     }
   }
 
+  // Функция применения шаблона
+  const applyTemplate = (tpl: ProtocolTemplate) => {
+    setSelectedTemplateId(tpl.id)
+    setSpecialistName(tpl.specialist)
+    setCustomTemplate(tpl.content)
+  }
+
   const handleExportToDocx = async () => {
     if (!protocol) return
-
     try {
-      // Парсим markdown и создаем параграфы для DOCX
       const lines = protocol.split('\n')
       const paragraphs: any[] = []
-
       for (const line of lines) {
         if (!line.trim()) {
-          // Пустая строка
           paragraphs.push(new Paragraph({ text: '' }))
           continue
         }
-
-        // Заголовок H1
         if (line.startsWith('# ')) {
-          paragraphs.push(
-            new Paragraph({
-              text: line.replace('# ', ''),
-              heading: HeadingLevel.HEADING_1,
-              spacing: { before: 240, after: 120 },
-            })
-          )
-        }
-        // Заголовок H2
-        else if (line.startsWith('## ')) {
-          paragraphs.push(
-            new Paragraph({
-              text: line.replace('## ', ''),
-              heading: HeadingLevel.HEADING_2,
-              spacing: { before: 200, after: 100 },
-            })
-          )
-        }
-        // Заголовок H3
-        else if (line.startsWith('### ')) {
-          paragraphs.push(
-            new Paragraph({
-              text: line.replace('### ', ''),
-              heading: HeadingLevel.HEADING_3,
-              spacing: { before: 160, after: 80 },
-            })
-          )
-        }
-        // Текст с bold
-        else {
+          paragraphs.push(new Paragraph({ text: line.replace('# ', ''), heading: HeadingLevel.HEADING_1, spacing: { before: 240, after: 120 } }))
+        } else if (line.startsWith('## ')) {
+          paragraphs.push(new Paragraph({ text: line.replace('## ', ''), heading: HeadingLevel.HEADING_2, spacing: { before: 200, after: 100 } }))
+        } else if (line.startsWith('### ')) {
+          paragraphs.push(new Paragraph({ text: line.replace('### ', ''), heading: HeadingLevel.HEADING_3, spacing: { before: 160, after: 80 } }))
+        } else {
           const textRuns: TextRun[] = []
           const boldRegex = /\*\*(.*?)\*\*/g
           let lastIndex = 0
           let match
-
           while ((match = boldRegex.exec(line)) !== null) {
-            // Текст до bold
-            if (match.index > lastIndex) {
-              textRuns.push(new TextRun({ text: line.substring(lastIndex, match.index) }))
-            }
-            // Bold текст
+            if (match.index > lastIndex) textRuns.push(new TextRun({ text: line.substring(lastIndex, match.index) }))
             textRuns.push(new TextRun({ text: match[1], bold: true }))
             lastIndex = match.index + match[0].length
           }
-
-          // Оставшийся текст
-          if (lastIndex < line.length) {
-            textRuns.push(new TextRun({ text: line.substring(lastIndex) }))
-          }
-
-          paragraphs.push(
-            new Paragraph({
-              children: textRuns.length > 0 ? textRuns : [new TextRun({ text: line })],
-              spacing: { after: 120 },
-            })
-          )
+          if (lastIndex < line.length) textRuns.push(new TextRun({ text: line.substring(lastIndex) }))
+          paragraphs.push(new Paragraph({ children: textRuns.length > 0 ? textRuns : [new TextRun({ text: line })], spacing: { after: 120 } }))
         }
       }
-
-      // Создаем документ
-      const doc = new Document({
-        sections: [
-          {
-            properties: {},
-            children: paragraphs,
-          },
-        ],
-      })
-
-      // Экспортируем
+      const doc = new Document({ sections: [{ properties: {}, children: paragraphs }] })
       const blob = await Packer.toBlob(doc)
       saveAs(blob, `Протокол_приема_${new Date().toISOString().split('T')[0]}.docx`)
     } catch (err: any) {
       alert('Ошибка экспорта: ' + err.message)
-      console.error('Export error:', err)
     }
   }
 
@@ -211,178 +133,133 @@ export default function ProtocolPage() {
         <div className="mb-4 bg-white rounded-lg shadow-lg p-4">
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-semibold">🎤 Загрузка аудио</h3>
-            <button
-              onClick={() => setShowAudioUpload(false)}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              ✕
-            </button>
+            <button onClick={() => setShowAudioUpload(false)} className="text-gray-500 hover:text-gray-700">✕</button>
           </div>
-          <AudioUpload
-            onTranscribe={(transcript) => {
-              setRawText(prev => prev ? prev + '\n\n' + transcript : transcript)
-              setShowAudioUpload(false)
-            }}
-          />
+          <AudioUpload onTranscribe={(transcript) => {
+            setRawText(prev => prev ? prev + '\n\n' + transcript : transcript)
+            setShowAudioUpload(false)
+          }} />
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Левая колонка - ввод данных */}
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">Ввод данных для протокола</h2>
+          <h2 className="text-xl font-semibold mb-4">Настройки и ввод данных</h2>
+
+          {/* Специалист и Шаблоны */}
+          <div className="mb-6 space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">👨‍⚕️ Кто проводит осмотр:</label>
+              <input 
+                type="text"
+                value={specialistName}
+                onChange={(e) => setSpecialistName(e.target.value)}
+                placeholder="Например: Врач-невролог Иванов И.И."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Быстрые шаблоны:</label>
+              <div className="flex flex-wrap gap-2">
+                {DEFAULT_TEMPLATES.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    onClick={() => applyTemplate(tpl)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
+                      selectedTemplateId === tpl.id 
+                        ? 'bg-primary-500 text-white border-primary-600 shadow-sm' 
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400 hover:bg-primary-50'
+                    }`}
+                  >
+                    {tpl.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsEditingTemplate(!isEditingTemplate)}
+              className="text-xs text-primary-600 hover:underline flex items-center gap-1"
+            >
+              {isEditingTemplate ? '🔼 Свернуть шаблон' : '⚙️ Редактировать структуру шаблона'}
+            </button>
+
+            {isEditingTemplate && (
+              <div className="mt-2 animate-in fade-in slide-in-from-top-1">
+                <textarea
+                  value={customTemplate}
+                  onChange={(e) => setCustomTemplate(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none min-h-[200px] font-mono"
+                />
+              </div>
+            )}
+          </div>
           
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Введите данные для протокола:
-              </label>
-              <div className="flex gap-2">
-                <VoiceInput 
-                  onTranscript={(text) => setRawText(prev => prev ? prev + ' ' + text : text)}
-                  disabled={loading}
-                  className="!bg-indigo-600 !text-white hover:!bg-indigo-700"
-                  placeholder="Диктовать (бесплатно)"
-                />
-              </div>
+              <label className="block text-sm font-medium text-gray-700">Текст для обработки:</label>
+              <VoiceInput 
+                onTranscript={(text) => setRawText(prev => prev ? prev + ' ' + text : text)}
+                disabled={loading}
+                className="!bg-indigo-600 !text-white hover:!bg-indigo-700"
+                placeholder="Диктовать"
+              />
             </div>
             <textarea
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
-              placeholder="Опишите жалобы, анамнез заболевания, данные объективного осмотра, результаты обследований... или используйте 🎤 для диктовки"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              rows={12}
+              placeholder="Введите данные осмотра или используйте 🎤..."
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none min-h-[300px]"
               disabled={loading}
             />
           </div>
 
           <div className="flex gap-2 mb-4">
-            <button
-              onClick={() => setShowAudioUpload(!showAudioUpload)}
-              className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors flex items-center gap-2 text-sm"
-              title="Загрузить аудио файл (AssemblyAI)"
-              disabled={loading}
-            >
-              📁 Загрузить аудио (Expert)
+            <button onClick={() => setShowAudioUpload(!showAudioUpload)} className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors text-sm" disabled={loading}>
+              📁 Аудио файл
             </button>
-            <button
-              onClick={() => setRawText('')}
-              className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
-              title="Очистить текст"
-              disabled={!rawText || loading}
-            >
+            <button onClick={() => setRawText('')} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm" disabled={!rawText || loading}>
               🗑️ Очистить
             </button>
           </div>
 
-          <div className="mb-4 flex flex-col sm:flex-row gap-4">
+          <div className="mb-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useStreaming}
-                onChange={(e) => setUseStreaming(e.target.checked)}
-                className="w-4 h-4 text-primary-600"
-                disabled={loading}
-              />
+              <input type="checkbox" checked={useStreaming} onChange={(e) => setUseStreaming(e.target.checked)} className="w-4 h-4 text-primary-600" disabled={loading} />
               <span className="text-sm">Streaming</span>
             </label>
-            
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Модель:</span>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value as any)}
-                className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                disabled={loading}
-              >
-                <option value="sonnet">🤖 Sonnet 4.5</option>
-                <option value="opus">🧠 Opus 4.5</option>
-                <option value="gemini">⚡ Gemini 3.0 Flash</option>
-              </select>
-            </div>
+            <select value={model} onChange={(e) => setModel(e.target.value as any)} className="px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
+              <option value="sonnet">🤖 Sonnet 4.5</option>
+              <option value="opus">🧠 Opus 4.5</option>
+              <option value="gemini">⚡ Gemini 3.0</option>
+            </select>
           </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <p className="text-sm text-blue-800">
-              💡 <strong>Советы:</strong> Вы можете использовать голосовую запись через AssemblyAI для транскрипции или вставить готовый текст. Протокол генерируется с использованием промпта американского профессора.
-            </p>
-          </div>
-
-          <button
-            onClick={handleGenerateProtocol}
-            disabled={!rawText.trim() || loading}
-            className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
-          >
-            {loading ? '⏳ Генерация протокола...' : '📝 Создать протокол'}
+          <button onClick={handleGenerateProtocol} disabled={!rawText.trim() || loading} className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50 font-semibold shadow-md">
+            {loading ? '⏳ Генерация...' : '📝 Создать протокол'}
           </button>
         </div>
 
-        {/* Правая колонка - результат */}
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">Сгенерированный протокол</h2>
             {protocol && (
               <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(protocol)
-                    alert('Протокол скопирован в буфер обмена')
-                  }}
-                  className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm"
-                  title="Копировать текст"
-                >
-                  📋 Копировать
-                </button>
-                <button
-                  onClick={handleExportToDocx}
-                  className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm"
-                  title="Скачать DOCX"
-                >
-                  📄 Скачать DOCX
-                </button>
-                <button
-                  onClick={() => setProtocol('')}
-                  className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-sm"
-                  title="Очистить"
-                >
-                  🗑️
-                </button>
+                <button onClick={() => { navigator.clipboard.writeText(protocol); alert('Скопировано'); }} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm">📋</button>
+                <button onClick={handleExportToDocx} className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">📄 DOCX</button>
               </div>
             )}
           </div>
           
-          {!protocol && !loading && (
-            <div className="text-center text-gray-500 py-12">
-              <div className="text-4xl mb-4">📄</div>
-              <p>Протокол появится здесь после генерации</p>
+          {protocol ? (
+            <div className="prose prose-sm max-w-none border border-gray-200 rounded-lg p-6 bg-white overflow-y-auto max-h-[800px]">
+              <ReactMarkdown>{protocol}</ReactMarkdown>
             </div>
-          )}
-
-          {loading && !protocol && (
-            <div className="text-center text-gray-500 py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-              <p>Генерация протокола...</p>
-            </div>
-          )}
-
-          {protocol && (
-            <div className="prose prose-sm max-w-none">
-              <div className="border border-gray-200 rounded-lg p-6 bg-white max-h-[800px] overflow-y-auto protocol-content">
-                <ReactMarkdown
-                  components={{
-                    h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-4 mb-2" {...props} />,
-                    h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-3 mb-2" {...props} />,
-                    h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-2 mb-1" {...props} />,
-                    p: ({node, ...props}) => <p className="mb-2" {...props} />,
-                    strong: ({node, ...props}) => <strong className="font-bold text-gray-900" {...props} />,
-                    ul: ({node, ...props}) => <ul className="list-disc ml-6 mb-2" {...props} />,
-                    ol: ({node, ...props}) => <ol className="list-decimal ml-6 mb-2" {...props} />,
-                    li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                  }}
-                >
-                  {protocol}
-                </ReactMarkdown>
-              </div>
+          ) : (
+            <div className="text-center text-gray-500 py-20 border-2 border-dashed border-gray-100 rounded-lg">
+              {loading ? <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div> : <p className="text-4xl mb-4 opacity-20">📄</p>}
+              <p>{loading ? 'ИИ формирует протокол...' : 'Результат появится здесь'}</p>
             </div>
           )}
         </div>

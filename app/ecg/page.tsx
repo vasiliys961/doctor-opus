@@ -169,7 +169,7 @@ export default function ECGPage() {
             }
             
             console.log('✅ [ECG STREAMING] Итого получено:', accumulatedText.length, 'символов, чанков:', chunkCount)
-            const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4'
+            const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5'
             setModelInfo(modelUsed)
             
             // Убеждаемся, что финальный результат установлен

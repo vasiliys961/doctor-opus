@@ -5,11 +5,11 @@ import { getUsageBySections, getCurrentMonthName, clearCurrentMonthStats } from 
 
 // Цены моделей (для расчета условных единиц за 1M токенов)
 const MODEL_PRICING = {
-  'anthropic/claude-opus-4.5': { input: 15.0, output: 75.0 },
+  'anthropic/claude-opus-4.5': { input: 5.0, output: 25.0 },
   'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
-  'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
   'google/gemini-3-flash-preview': { input: 0.50, output: 3.00 },
+  'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },
 }
 
 const PRICE_MULTIPLIER = 100 // Множитель для условных единиц
@@ -97,7 +97,7 @@ export default function StatisticsPage() {
       } else if (model.toLowerCase().includes('sonnet')) {
         return ((inputTokens / 1_000_000) * 3.0 + (outputTokens / 1_000_000) * 15.0) * PRICE_MULTIPLIER
       } else {
-        return ((inputTokens / 1_000_000) * 0.30 + (outputTokens / 1_000_000) * 2.50) * PRICE_MULTIPLIER
+        return ((inputTokens / 1_000_000) * 0.10 + (outputTokens / 1_000_000) * 0.40) * PRICE_MULTIPLIER
       }
     }
 

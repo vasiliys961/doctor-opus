@@ -48,8 +48,8 @@ const MODELS = {
   SONNET: 'anthropic/claude-sonnet-4.5',
   HAIKU: 'anthropic/claude-haiku-4.5',
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',
-  GEMINI_FLASH_25: 'google/gemini-2.5-flash',
-  GEMINI_FLASH_30: 'google/gemini-3-flash-preview',
+  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',
+  GEMINI_3_PRO: 'google/gemini-3-flash-preview',
 };
 
 /**
@@ -80,8 +80,8 @@ async function createSequentialStream(
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-          'X-Title': 'Medical AI Assistant'
+          'HTTP-Referer': 'https://doctor-opus.vercel.app',
+          'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify({
           model,
@@ -137,8 +137,8 @@ async function createSequentialStream(
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-          'X-Title': 'Medical AI Assistant'
+          'HTTP-Referer': 'https://doctor-opus.vercel.app',
+          'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify({
           model,
@@ -219,7 +219,7 @@ ${directivePrompt}`;
     "Выполни краткий обзор находок.",
     contextPrompt,
     [imageBase64],
-    MODELS.GEMINI_FLASH_30,
+    MODELS.GEMINI_3_FLASH,
     apiKey,
     ['image/png']
   );
@@ -311,8 +311,8 @@ export async function sendTextRequestStreaming(
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-      'X-Title': 'Medical AI Assistant'
+      'HTTP-Referer': 'https://doctor-opus.vercel.app',
+      'X-Title': 'Doctor Opus'
     },
     body: JSON.stringify({
       model,
@@ -351,8 +351,8 @@ export async function analyzeImageStreaming(
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-      'X-Title': 'Medical AI Assistant'
+      'HTTP-Referer': 'https://doctor-opus.vercel.app',
+      'X-Title': 'Doctor Opus'
     },
     body: JSON.stringify({
       model,
@@ -501,8 +501,8 @@ export async function analyzeMultipleImagesStreaming(
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-      'X-Title': 'Medical AI Assistant'
+      'HTTP-Referer': 'https://doctor-opus.vercel.app',
+      'X-Title': 'Doctor Opus'
     },
     body: JSON.stringify({
       model,

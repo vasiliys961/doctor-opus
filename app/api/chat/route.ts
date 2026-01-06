@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendTextRequest } from '@/lib/openrouter';
+import { sendTextRequest, MODELS } from '@/lib/openrouter';
 import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
 import { sendTextRequestWithFiles, sendTextRequestStreamingWithFiles } from '@/lib/openrouter-files';
 import { formatCostLog } from '@/lib/cost-calculator';
@@ -61,11 +61,11 @@ export async function POST(request: NextRequest) {
       model = body.model;
     }
 
-    const selectedModel = (model === 'sonnet' || model === 'anthropic/claude-sonnet-4.5') 
-      ? 'anthropic/claude-sonnet-4.5' 
+    const selectedModel = (model === 'sonnet' || model === MODELS.SONNET) 
+      ? MODELS.SONNET 
       : (model && (model === 'gemini' || model.includes('gemini')))
-        ? 'google/gemini-3-flash-preview'
-        : 'anthropic/claude-opus-4.5';
+        ? MODELS.GEMINI_3_FLASH
+        : MODELS.OPUS;
 
     if (!message && files.length === 0) {
       return NextResponse.json(

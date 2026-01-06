@@ -49,12 +49,12 @@ export const SYSTEM_PROMPT = `Роль: ### ROLE
 
 // Актуальные модели (последние версии)
 export const MODELS = {
-  OPUS: 'anthropic/claude-opus-4.5',                   // Claude Opus 4.5
-  SONNET: 'anthropic/claude-sonnet-4.5',               // Claude Sonnet 4.5
-  HAIKU: 'anthropic/claude-haiku-4.5',                 // Claude Haiku 4.5
-  LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',   // Резерв
-  GEMINI_FLASH_25: 'google/gemini-2.5-flash',          // Gemini Flash 2.5
-  GEMINI_FLASH_30: 'google/gemini-3-flash-preview'     // Gemini Flash 3.0 Preview
+  OPUS: 'anthropic/claude-opus-4.5',                       // Claude Opus 4.5
+  SONNET: 'anthropic/claude-sonnet-4.5',                 // Claude Sonnet 4.5
+  HAIKU: 'anthropic/claude-haiku-4.5',                     // Claude Haiku 4.5
+  LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
+  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
+  GEMINI_3_PRO: 'google/gemini-3-pro-preview'            // Gemini 3 Pro Preview
 };
 
 const MODELS_LIST = [
@@ -125,7 +125,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   let model = options.model;
   if (!model) {
     if (options.mode === 'fast') {
-      model = MODELS.GEMINI_FLASH_30; // Gemini Flash 3.0 для быстрого анализа
+      model = MODELS.GEMINI_3_FLASH; // Gemini Flash 1.5 для быстрого анализа
     } else {
       // Проверяем, является ли это сканированием документа
       const isDocumentScan = options.prompt?.toLowerCase().includes('отсканируйте') || 
@@ -221,9 +221,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-        'X-Title': 'Medical AI Assistant'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     }, 120000); // Таймаут 120 сек
@@ -303,7 +301,7 @@ export async function analyzeImageFast(options: {
     const { getDirectivePrompt } = await import('./prompts');
     const directivePrompt = getDirectivePrompt(imageType, options.prompt);
 
-    const textModel = MODELS.GEMINI_FLASH_30;
+    const textModel = MODELS.GEMINI_3_FLASH;
     
     const contextPrompt = `Ты — Профессор медицины. На основе этих данных и своей экспертизы дай клиническую директиву.
 
@@ -485,7 +483,8 @@ export async function extractImageJSON(options: {
   imagesBase64?: string[]; 
   modality?: string 
 }): Promise<any> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY не настроен');
@@ -498,10 +497,10 @@ export async function extractImageJSON(options: {
     throw new Error('Не предоставлено ни одного изображения для извлечения JSON');
   }
   
-  // Используем Gemini 3.0 Flash для извлечения JSON (по требованию пользователя)
+  // Используем Gemini Flash для извлечения JSON
   const modelsToTry = [
-    MODELS.GEMINI_FLASH_30,
-    MODELS.GEMINI_FLASH_25,
+    MODELS.GEMINI_3_FLASH,
+    MODELS.GEMINI_3_PRO,
     'google/gemini-2.0-flash-001'
   ];
 
@@ -567,9 +566,7 @@ ${specialistInstructions}
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-          'X-Title': 'Medical AI Assistant'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
       });

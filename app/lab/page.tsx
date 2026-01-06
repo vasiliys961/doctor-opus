@@ -1,13 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisResult from '@/components/AnalysisResult'
+import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import Script from 'next/script'
 import { logUsage } from '@/lib/simple-logger'
+import { handleSSEStream } from '@/lib/streaming-utils'
 
 // Расширяем Window для PDF.js
 declare global {
@@ -21,10 +24,12 @@ export default function LabPage() {
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mode, setMode] = useState<AnalysisMode>('optimized')
   const [convertingPDF, setConvertingPDF] = useState(false)
   const [conversionProgress, setConversionProgress] = useState<{ current: number; total: number } | null>(null)
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
   const [clinicalContext, setClinicalContext] = useState('')
+  const [useStreaming, setUseStreaming] = useState(true)
 
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
     if (!window.pdfjsLib) {
@@ -93,20 +98,30 @@ export default function LabPage() {
     }
   }
 
-  const handleUpload = async (uploadedFile: File) => {
+  const handleFileSelect = (uploadedFile: File) => {
     setFile(uploadedFile)
+    setResult('')
+    setError(null)
+  }
+
+  const handleAnalyze = async () => {
+    if (!file) {
+      setError('Сначала выберите файл для анализа')
+      return
+    }
+
     setResult('')
     setError(null)
     setLoading(true)
 
     try {
       // Если это PDF - конвертируем в изображения на клиенте
-      if (uploadedFile.type === 'application/pdf' || uploadedFile.name.toLowerCase().endsWith('.pdf')) {
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
         console.log('📄 [LAB] Обнаружен PDF файл, начинаем конвертацию...')
         setConvertingPDF(true)
         setConversionProgress(null)
         
-        const pdfImages = await convertPDFToImages(uploadedFile)
+        const pdfImages = await convertPDFToImages(file)
         
         setConvertingPDF(false)
         setConversionProgress(null)
@@ -121,29 +136,57 @@ export default function LabPage() {
           },
           body: JSON.stringify({
             images: pdfImages,
+            mode: mode,
+            useStreaming: useStreaming,
             prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
             clinicalContext: clinicalContext
           }),
         })
 
-        const data = await response.json()
-
-        if (data.success) {
-          setResult(data.result)
-          // Логирование использования (примерные значения для PDF)
-          logUsage({
-            section: 'lab',
-            model: 'google/gemini-3-flash-preview',
-            inputTokens: pdfImages.length * 2000, // примерно 2000 токенов на изображение
-            outputTokens: 1000,
+        if (useStreaming) {
+          await handleSSEStream(response, {
+            onChunk: (content, accumulatedText) => {
+              flushSync(() => {
+                setResult(accumulatedText)
+              })
+            },
+            onError: (err) => {
+              console.error('❌ [STREAMING] Ошибка:', err)
+              setError(`Ошибка стриминга: ${err.message}`)
+            },
+            onComplete: (finalText) => {
+              const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
+                              mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+              logUsage({
+                section: 'lab',
+                model: modelUsed,
+                inputTokens: pdfImages.length * 2000,
+                outputTokens: 1000,
+              })
+            }
           })
         } else {
-          setError(data.error || 'Ошибка при анализе')
+          const data = await response.json()
+          if (data.success) {
+            setResult(data.result)
+            const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
+                            mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+            logUsage({
+              section: 'lab',
+              model: modelUsed,
+              inputTokens: pdfImages.length * 2000,
+              outputTokens: 1000,
+            })
+          } else {
+            setError(data.error || 'Ошибка при анализе')
+          }
         }
       } else {
         // Для обычных файлов (изображения, Excel, CSV)
         const formData = new FormData()
-        formData.append('file', uploadedFile)
+        formData.append('file', file)
+        formData.append('mode', mode)
+        formData.append('useStreaming', useStreaming.toString())
         formData.append('prompt', 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.')
         formData.append('clinicalContext', clinicalContext)
 
@@ -152,19 +195,43 @@ export default function LabPage() {
           body: formData,
         })
 
-        const data = await response.json()
-
-        if (data.success) {
-          setResult(data.result)
-          // Логирование использования (примерные значения)
-          logUsage({
-            section: 'lab',
-            model: 'google/gemini-3-flash-preview',
-            inputTokens: 1500,
-            outputTokens: 800,
+        if (useStreaming) {
+          await handleSSEStream(response, {
+            onChunk: (content, accumulatedText) => {
+              flushSync(() => {
+                setResult(accumulatedText)
+              })
+            },
+            onError: (err) => {
+              console.error('❌ [STREAMING] Ошибка:', err)
+              setError(`Ошибка стриминга: ${err.message}`)
+            },
+            onComplete: (finalText) => {
+              const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
+                              mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+              logUsage({
+                section: 'lab',
+                model: modelUsed,
+                inputTokens: 1500,
+                outputTokens: 800,
+              })
+            }
           })
         } else {
-          setError(data.error || 'Ошибка при анализе')
+          const data = await response.json()
+          if (data.success) {
+            setResult(data.result)
+            const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
+                            mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+            logUsage({
+              section: 'lab',
+              model: modelUsed,
+              inputTokens: 1500,
+              outputTokens: 800,
+            })
+          } else {
+            setError(data.error || 'Ошибка при анализе')
+          }
         }
       }
     } catch (err: any) {
@@ -173,6 +240,11 @@ export default function LabPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleUpload = async (uploadedFile: File) => {
+    // Эта функция больше не запускает анализ автоматически, а только сохраняет файл
+    handleFileSelect(uploadedFile)
   }
 
   return (
@@ -231,10 +303,55 @@ export default function LabPage() {
             </p>
           </div>
 
+          <div className="mb-6">
+            <AnalysisModeSelector
+              value={mode}
+              onChange={setMode}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="mb-6">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useStreaming}
+                onChange={(e) => setUseStreaming(e.target.checked)}
+                disabled={loading}
+                className="w-4 h-4 text-primary-600 rounded"
+              />
+              <span className="text-sm text-gray-700">
+                📡 Streaming режим (постепенное появление текста)
+              </span>
+            </label>
+          </div>
+
           <p className="text-sm text-gray-600 mb-4">
             Поддерживаемые форматы: PDF, XLSX, XLS, CSV, изображения (JPG, PNG)
           </p>
           <ImageUpload onUpload={handleUpload} accept=".pdf,.xlsx,.xls,.csv,image/*" maxSize={50} />
+
+          {file && !loading && (
+            <div className="mt-8 flex flex-col items-center border-t pt-6">
+              <div className="flex items-center gap-3 mb-4 text-primary-800">
+                <span className="text-2xl">📄</span>
+                <span className="font-semibold">{file.name}</span>
+                <button 
+                  onClick={() => setFile(null)} 
+                  className="text-red-500 hover:text-red-700 text-sm underline"
+                >
+                  Удалить
+                </button>
+              </div>
+              <button
+                onClick={handleAnalyze}
+                className="w-full sm:w-auto px-10 py-4 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 transition-all shadow-lg transform hover:scale-105 active:scale-95 flex items-center justify-center gap-3"
+              >
+                <span className="text-xl">🚀</span>
+                Запустить анализ ({mode === 'fast' ? 'Быстрый' : mode === 'optimized' ? 'Оптимизированный' : 'Точный'})
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Прогресс конвертации PDF */}
