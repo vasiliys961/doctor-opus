@@ -10,6 +10,7 @@ import ReactMarkdown from 'react-markdown'
 import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } from 'docx'
 import { saveAs } from 'file-saver'
 import { DEFAULT_TEMPLATES, ProtocolTemplate } from '@/lib/protocol-templates'
+import { handleSSEStream } from '@/lib/streaming-utils'
 
 export default function ProtocolPage() {
   const [rawText, setRawText] = useState('')
@@ -50,19 +51,11 @@ export default function ProtocolPage() {
 
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 
-        const reader = response.body?.getReader()
-        const decoder = new TextDecoder()
-        let accumulatedText = ''
-
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            const chunk = decoder.decode(value, { stream: true })
-            accumulatedText += chunk
-            setProtocol(accumulatedText)
+        await handleSSEStream(response, {
+          onChunk: (text) => {
+            setProtocol(prev => prev + text)
           }
-        }
+        })
       } else {
         const response = await fetch('/api/protocol', {
           method: 'POST',
