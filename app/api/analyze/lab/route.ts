@@ -32,7 +32,6 @@ export async function POST(request: NextRequest) {
   };
 
   try {
-    // ... (auth check remains commented out)
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = formData.get('prompt') as string || 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.';
@@ -82,7 +81,7 @@ export async function POST(request: NextRequest) {
         const result = await analyzeImage({
           prompt: fullPrompt,
           imageBase64: base64Image,
-          model: modelToUse, // Передаем модель явно
+          model: modelToUse,
           clinicalContext
         });
         
@@ -180,16 +179,6 @@ export async function POST(request: NextRequest) {
         );
       }
     }
-        
-        return NextResponse.json({ success: true, result });
-      } catch (textError: any) {
-        console.error('❌ [LAB] Ошибка обработки текстового файла:', textError);
-        return NextResponse.json(
-          { success: false, error: `Ошибка обработки текстового файла: ${textError.message}` },
-          { status: 500 }
-        );
-      }
-    }
 
     // Неподдерживаемый формат
     return NextResponse.json(
@@ -204,4 +193,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
