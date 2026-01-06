@@ -9,7 +9,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
   'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },
   'google/gemini-3-flash-preview': { input: 0.50, output: 3.00 },
-  'perplexity/llama-3.1-sonar-large-128k-online': { input: 1.0, output: 1.0 },
+  'perplexity/sonar': { input: 1.0, output: 1.0 },
 };
 
 // Множитель для перевода в условные единицы (USD * 100)

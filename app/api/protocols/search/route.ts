@@ -70,7 +70,7 @@ ${specialty ? `Специальность: ${specialty}` : ''}
     let MAX_TOKENS = 16000;
 
     if (modelMode === 'online') {
-      MODEL = 'perplexity/llama-3.1-sonar-large-128k-online';
+      MODEL = 'perplexity/sonar';
       MAX_TOKENS = 4000;
     } else if (modelMode === 'detailed') {
       MODEL = 'anthropic/claude-sonnet-4.5';

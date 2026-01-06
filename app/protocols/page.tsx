@@ -109,7 +109,7 @@ export default function ClinicalProtocolsPage() {
         setTokensUsed(finalTokens);
 
         // Логирование и списание баланса
-        const modelId = modelMode === 'online' ? 'perplexity/llama-3.1-sonar-large-128k-online' : 
+        const modelId = modelMode === 'online' ? 'perplexity/sonar' : 
                         modelMode === 'detailed' ? 'anthropic/claude-sonnet-4.5' : 
                         'anthropic/claude-haiku-4.5';
         
