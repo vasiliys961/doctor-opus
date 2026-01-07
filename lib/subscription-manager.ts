@@ -112,13 +112,24 @@ export function upgradeBalanceToRegistered(): void {
     const balance = getBalance();
     if (!balance) return;
 
-    // Если пакет все еще анонимный или начальный, добавляем бонус
-    if (balance.packageName.includes('Анонимный') || balance.packageName === 'Стартовый (Free)') {
-      balance.currentCredits += REGISTERED_BONUS;
-      balance.initialCredits += REGISTERED_BONUS;
+    const targetTotal = ANONYMOUS_BALANCE + REGISTERED_BONUS;
+
+    // Если пакет все еще анонимный или начальный (со старым балансом), корректируем до 30 ед.
+    if (balance.packageName.includes('Анонимный') || balance.packageName.includes('Free')) {
+      // Чтобы не было 50 (30 старых + 20 новых), устанавливаем ровно 30 итого
+      if (balance.initialCredits < targetTotal) {
+        const diff = targetTotal - balance.initialCredits;
+        balance.currentCredits += diff;
+        balance.initialCredits = targetTotal;
+      } else if (balance.initialCredits > targetTotal && balance.packageName.includes('Free')) {
+        // Если вдруг было 50 или больше в "Free" режиме, сбрасываем до 30
+        balance.initialCredits = targetTotal;
+        balance.currentCredits = Math.min(balance.currentCredits, targetTotal);
+      }
+      
       balance.packageName = 'Стартовый (Зарегистрирован)';
       localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
-      console.log(`🎁 [SUBSCRIPTION] Бонус за регистрацию зачислен: +${REGISTERED_BONUS} ед.`);
+      console.log(`🎁 [SUBSCRIPTION] Баланс обновлен до стартового: ${targetTotal} ед.`);
     }
   } catch (error) {
     console.error('❌ [SUBSCRIPTION] Error upgrading balance:', error);

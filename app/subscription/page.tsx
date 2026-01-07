@@ -158,11 +158,23 @@ export default function SubscriptionPage() {
           </div>
         )}
 
-        {/* Информация о стоимости операций */}
         <div className="mt-8 bg-white rounded-xl shadow-lg p-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">
-            📊 Примерная стоимость операций
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-gray-800">
+              📊 Примерная стоимость операций
+            </h2>
+            <button 
+              onClick={() => {
+                if (confirm('Сбросить текущий баланс и кэш для тестирования?')) {
+                  localStorage.clear();
+                  window.location.reload();
+                }
+              }}
+              className="text-[10px] text-gray-400 hover:text-red-500 transition-colors uppercase tracking-widest font-bold"
+            >
+              🔄 Сброс данных (Debug)
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
             <div className="border border-gray-200 rounded-lg p-4">
               <p className="font-semibold text-gray-800 mb-1">⚡ Быстрый анализ (Gemini)</p>
