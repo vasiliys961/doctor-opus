@@ -43,6 +43,8 @@ export function logUsage(params: {
   outputTokens: number;
 }): void {
   try {
+    if (typeof window === 'undefined') return;
+    
     // Проверка и очистка при смене месяца
     checkAndResetMonth();
 
@@ -89,6 +91,8 @@ export function logUsage(params: {
  * Проверить текущий месяц и очистить данные при необходимости
  */
 function checkAndResetMonth(): void {
+  if (typeof window === 'undefined') return;
+  
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
   const monthKey = `${currentYear}-${currentMonth}`;
@@ -108,6 +112,7 @@ function checkAndResetMonth(): void {
  */
 export function getUsageBySections(): UsageBySectionData {
   try {
+    if (typeof window === 'undefined') return {};
     const savedData = localStorage.getItem('usageBySections');
     return savedData ? JSON.parse(savedData) : {};
   } catch (error) {
@@ -133,6 +138,7 @@ export function getCurrentMonthName(): string {
  * Очистить статистику текущего месяца
  */
 export function clearCurrentMonthStats(): void {
+  if (typeof window === 'undefined') return;
   localStorage.removeItem('usageBySections');
   console.log('🗑️ [USAGE] Current month stats cleared');
 }

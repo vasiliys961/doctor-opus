@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { SUBSCRIPTION_PACKAGES, initializeBalance, getBalance, isSubscriptionEnabled, SubscriptionBalance } from '@/lib/subscription-manager'
+import { SUBSCRIPTION_PACKAGES, initializeBalance, getBalance, isSubscriptionEnabled } from '@/lib/subscription-manager'
+import type { SubscriptionBalance } from '@/lib/subscription-manager'
 import { useRouter } from 'next/navigation'
 
 export default function SubscriptionPage() {

@@ -63,6 +63,8 @@ export function getFromCache(key: string): string | null {
  */
 export function saveToCache(key: string, result: string, model: string): void {
   try {
+    if (typeof window === 'undefined') return;
+    
     const entry: CacheEntry = {
       result,
       model,
@@ -82,6 +84,7 @@ export function saveToCache(key: string, result: string, model: string): void {
  */
 function cleanupCache() {
   try {
+    if (typeof window === 'undefined') return;
     const keys = Object.keys(localStorage);
     const cacheKeys = keys.filter(k => k.startsWith(CACHE_KEY_PREFIX));
     
