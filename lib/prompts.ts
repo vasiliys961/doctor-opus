@@ -125,10 +125,166 @@ export const SPECIALIST_CRITERIA = {
     title: 'Медицинская Визуализация',
     requirements: 'Проведи систематический анализ всех видимых структур и выяви отклонения.',
     pathologies: 'Все визуально определяемые патологии.'
+  },
+  cardiology_echo: {
+    title: 'Эхокардиография (ЭхоКГ)',
+    requirements: 'Оцените размеры камер, толщину стенок, фракцию выброса (EF), работу клапанов, наличие регургитации.',
+    pathologies: 'Пороки сердца, кардиомиопатии, вегетации, выпот в перикарде.',
+  },
+  oncology_histology: {
+    title: 'Онкоморфология',
+    requirements: 'Оцените экспрессию маркеров, архитектуру ткани, границы резекции.',
+    pathologies: 'Метастазы, специфические типы опухолей, края R0/R1.',
+  },
+  hematology_blood_morphology: {
+    title: 'Морфология мазок крови',
+    requirements: 'Оцените форму и размеры эритроцитов, лейкоцитарную формулу, наличие атипичных клеток.',
+    pathologies: 'Бласты, анемии, тромбоцитопении, паразитарные инвазии.',
+  },
+  endocrinology_thyroid_ultrasound: {
+    title: 'УЗИ щитовидной железы (TI-RADS)',
+    requirements: 'Оцените объем долей, эхогенность, узловые образования по системе TI-RADS.',
+    pathologies: 'Узловой зоб, тиреоидит, подозрение на рак щитовидной железы.',
+  },
+  neurology_mri_brain: {
+    title: 'МРТ головного мозга (Нейровизуализация)',
+    requirements: 'Оцените дифференциацию серого и белого вещества, состояние желудочков, базальных ганглиев.',
+    pathologies: 'Острое нарушение мозгового кровообращения (ОНМК), демиелинизация (PC), глиомы.',
+  },
+  radiology_chest_ct: {
+    title: 'КТ органов грудной клетки',
+    requirements: 'Оцените состояние паренхимы легких, средостения, лимфоузлов.',
+    pathologies: 'Очаги (nodules), эмфизема, интерстициальные изменения.',
   }
 };
 
 export type ImageType = keyof typeof SPECIALIST_CRITERIA;
+
+export type Specialty = 
+  | 'universal' 
+  | 'cardiology' 
+  | 'neurology' 
+  | 'radiology' 
+  | 'oncology' 
+  | 'hematology' 
+  | 'endocrinology' 
+  | 'gynecology' 
+  | 'rheumatology'
+  | 'gastroenterology'
+  | 'dermatology'
+  | 'pediatrics';
+
+/**
+ * ПРОСТЫЕ КОНТЕКСТЫ ДЛЯ АНАЛИЗА ИЗОБРАЖЕНИЙ
+ * Фокус на точности описания и клинической значимости без академического перегруза.
+ */
+export const SPECIALTY_CONTEXTS: Record<Specialty, string> = {
+  universal: '',
+  cardiology: `
+### КАРДИОЛОГИЧЕСКИЙ КОНТЕКСТ:
+- Приоритет: выявление ишемии, инфарктов, аритмий, признаков сердечной недостаточности.
+- Используй стратификацию риска (CHA2DS2-VASc, HAS-BLED), если применимо.
+`,
+  neurology: `
+### НЕВРОЛОГИЧЕСКИЙ КОНТЕКСТ:
+- Для МРТ/КТ мозга: дифференциация острого инсульта, хронической ишемии, демиелинизации.
+- Оценивай масс-эффект и дислокацию срединных структур.
+`,
+  radiology: `
+### РЕНТГЕНОЛОГИЧЕСКИЙ КОНТЕКСТ:
+- Отчет в RSNA style: морфология, плотность (HU), накопление контраста.
+- Рекомендации для дальнейшего наблюдения (follow-up).
+`,
+  oncology: `
+### ОНКОЛОГИЧЕСКИЙ КОНТЕКСТ:
+- Поиск признаков злокачественности, стадирование по TNM.
+- Оценивай границы образований и лимфаденопатию.
+`,
+  hematology: `
+### ГЕМАТОЛОГИЧЕСКИЙ КОНТЕКСТ:
+- Анализ мазков крови и костного мозга: бластные клетки, морфология всех ростков.
+`,
+  endocrinology: `
+### ЭНДОКРИНОЛОГИЧЕСКИЙ КОНТЕКСТ:
+- Оценивай объем желез, структуру, узлы по TI-RADS.
+`,
+  gynecology: `
+### ГИНЕКОЛОГИЧЕСКИЙ КОНТЕКСТ:
+- УЗИ/МРТ: эндометрий (фаза цикла), миомы, кисты яичников.
+`,
+  rheumatology: `
+### РЕВМАТОЛОГИЧЕСКИЙ КОНТЕКСТ:
+- Оценивай признаки синовита, эрозий, сужения суставных щелей.
+`,
+  gastroenterology: `
+### ГАСТРОЭНТЕРОЛОГИЧЕСКИЙ КОНТЕКСТ:
+- Анализ заболеваний ЖКТ и печени.
+`,
+  dermatology: `
+### ДЕРМАТОЛОГИЧЕСКИЙ КОНТЕКСТ:
+- Анализ кожных покровов и новообразований.
+`,
+  pediatrics: `
+### ПЕДИАТРИЧЕСКИЙ КОНТЕКСТ:
+- Анализ данных с учетом возрастных норм развития ребенка.
+`
+};
+
+/**
+ * КОНТЕКСТЫ ТИТАНОВ (ИСКЛЮЧИТЕЛЬНО ДЛЯ ИИ-КОНСУЛЬТАНТА)
+ * Глубокая академическая база для текстовых консультаций.
+ */
+export const TITAN_CONTEXTS: Record<Specialty, string> = {
+  universal: '',
+  cardiology: `
+### РОЛЬ: КАРДИОЛОГ (ШКОЛА ЮДЖИНА БРАУНВАЛЬДА)
+Ты — эксперт мирового уровня. База: Braunwald's Heart Disease 12th Ed (2024) и ESC/ACC 2025.
+- Гемодинамика, электрофизиология, стратификация риска внезапной смерти.
+`,
+  neurology: `
+### РОЛЬ: НЕВРОЛОГ / НЕЙРОРАДИОЛОГ (ШКОЛА ЭНН ОСБОРН)
+Ты — эксперт нейровизуализации. База: Osborn's Brain 3rd Ed (2024).
+- Дифференциальный диагноз сосудистых катастроф и нейродегенерации.
+`,
+  radiology: `
+### РОЛЬ: РЕНТГЕНОЛОГ (МЕТОДОЛОГИЯ БЕНДЖАМИНА ФЕЛСОНА)
+Ты — врач-рентгенолог экспертного уровня. Используешь RSNA structured reporting.
+`,
+  oncology: `
+### РОЛЬ: ОНКОЛОГ (ШКОЛА ВИНСЕНТА ДЕ ВИТА)
+Ты — онколог экспертного уровня. База: DeVita's Oncology 12th Ed (2024) и NCCN 2025.
+- Стадирование по TNM 9th Ed, ответ на терапию по RECIST 1.1.
+`,
+  hematology: `
+### РОЛЬ: ГЕМАТОЛОГ (ШКОЛА МАКСВЕЛЛА ВИНТРОБА)
+Ты — эксперт в области заболеваний крови. База: Wintrobe's Clinical Hematology 15th Ed (2024).
+`,
+  endocrinology: `
+### РОЛЬ: АКАДЕМИК ЭНДОКРИНОЛОГ (ШКОЛА МЕЛЬНИЧЕНКО)
+Ты — ведущий эксперт академического уровня. База: Williams Textbook of Endocrinology 15th Ed (2024), гайдлайны ATA 2025 и РАЭ 2024-2025.
+- Тиреоидология (TIRADS), нейроэндокринология, надпочечники.
+`,
+  gynecology: `
+### РОЛЬ: ГИНЕКОЛОГ (ШКОЛА УИЛЬЯМСА / НОВАКА)
+Ты — эксперт в области репродуктивного здоровья. База: Williams Obstetrics 27th Ed (2024).
+`,
+  rheumatology: `
+### РОЛЬ: РЕВМАТОЛОГ (ШКОЛА КЕЛЛИ / ФАЙРШТЕЙНА)
+Ты — эксперт в системных заболеваниях соединительной ткани. База: Kelley's Rheumatology 12th Ed (2024).
+`,
+  gastroenterology: `
+### РОЛЬ: ГАСТРОЭНТЕРОЛОГ (ШКОЛА СЛЕЙЗЕНДЖЕРА)
+Ты — эксперт в заболеваниях ЖКТ и печени. База: Sleisenger & Fordtran's Gastrointestinal and Liver Disease 12th Ed (2024).
+`,
+  dermatology: `
+### РОЛЬ: ДЕРМАТОЛОГ (ШКОЛА ТОМАСА ФИЦПАТРИКА)
+Ты — эксперт в дерматологии. База: Fitzpatrick's Dermatology 10th Ed (2024).
+`,
+  pediatrics: `
+### РОЛЬ: ПЕДИАТР (ШКОЛА УОЛДО НЕЛЬСОНА)
+Ты — детский врач экспертного уровня. База: Nelson Textbook of Pediatrics 22nd Ed (2024).
+`
+};
 
 /**
  * Генерирует супер-промпт для Gemini Flash (Шаг 1: Специалист)
@@ -173,10 +329,9 @@ ${criteria.pathologies}
  * Генерирует промпт для КЛИНИЧЕСКОЙ ДИРЕКТИВЫ (Шаг 2: Работа Профессора)
  * Фокус на синтезе данных из JSON, диагнозе и плане лечения.
  */
-export function getDirectivePrompt(imageType: ImageType, userPrompt: string = ''): string {
+export function getDirectivePrompt(imageType: ImageType, userPrompt: string = '', specialty?: Specialty): string {
   const criteria = SPECIALIST_CRITERIA[imageType] || SPECIALIST_CRITERIA.universal;
-
-  return `
+  let prompt = `
 Ты — Профессор клинической медицины. Твоя задача: проанализировать технические данные (JSON) от Специалиста и сформировать финальную КЛИНИЧЕСКУЮ ДИРЕКТИВУ.
 
 ### СПРАВОЧНИК JSON (ДЛЯ РАСШИФРОВКИ):
@@ -199,18 +354,30 @@ export function getDirectivePrompt(imageType: ImageType, userPrompt: string = ''
 
 ### ДОПОЛНИТЕЛЬНЫЙ ЗАПРОС:
 ${userPrompt || 'Сформируй полный клинический план.'}
-
-${COMMON_FORMAT}
-
-ВАЖНО: Твое решение должно основываться на доказательной медицине.
 `;
+
+  // Добавляем специализированный контекст (простой для анализа снимков)
+  if (specialty && SPECIALTY_CONTEXTS[specialty]) {
+    prompt += `\n${SPECIALTY_CONTEXTS[specialty]}`;
+  }
+
+  prompt += `\n${COMMON_FORMAT}\n\nВАЖНО: Твое решение должно основываться на доказательной медицине.`;
+
+  return prompt;
+}
+
+/**
+ * Псевдоним для getDirectivePrompt с поддержкой специализации
+ */
+export function getSpecializedPrompt(imageType: ImageType, specialty?: Specialty, userPrompt?: string): string {
+  return getDirectivePrompt(imageType, userPrompt, specialty);
 }
 
 // Fallback функции для обратной совместимости
-export function getPrompt(imageType: ImageType, mode: 'fast' | 'optimized'): string {
-  return mode === 'fast' ? getDescriptionPrompt(imageType) : getDirectivePrompt(imageType);
+export function getPrompt(imageType: ImageType, mode: 'fast' | 'optimized', specialty?: Specialty): string {
+  return mode === 'fast' ? getDescriptionPrompt(imageType) : getDirectivePrompt(imageType, '', specialty);
 }
 
-export function getFastAnalysisPrompt(imageType: ImageType): string {
-  return getDirectivePrompt(imageType, 'Дай краткую, но точную директиву.');
+export function getFastAnalysisPrompt(imageType: ImageType, specialty?: Specialty): string {
+  return getDirectivePrompt(imageType, 'Дай максимально краткий, но точный разбор основных патологий.', specialty);
 }

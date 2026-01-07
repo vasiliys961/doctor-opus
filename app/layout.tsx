@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import Navigation from '@/components/Navigation'
-import BalanceWidget from '@/components/BalanceWidget'
 import { Providers } from '@/components/Providers'
+import LegalFooter from '@/components/LegalFooter'
 
 export const metadata: Metadata = {
   title: 'Медицинский ИИ-Ассистент',
@@ -41,14 +41,12 @@ export default function RootLayout({
             {/* Навигация - адаптивная для всех устройств */}
             <Navigation />
             
-            {/* Виджет баланса - фиксированный в правом верхнем углу */}
-            <div className="fixed top-4 right-4 z-50 w-80 hidden lg:block">
-              <BalanceWidget />
-            </div>
-            
             {/* Основной контент с адаптивными отступами */}
-            <main className="flex-1 pt-16 lg:pt-0 p-4 sm:p-6 lg:p-8">
-              {children}
+            <main className="flex-1 flex flex-col pt-16 lg:pt-0 p-4 sm:p-6 lg:p-8">
+              <div className="flex-1">
+                {children}
+              </div>
+              <LegalFooter />
             </main>
           </div>
         </Providers>

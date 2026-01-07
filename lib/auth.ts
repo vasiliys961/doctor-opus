@@ -1,5 +1,6 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { sendWelcomeEmail } from "./email-service";
 
 /**
  * Упрощенная конфигурация авторизации для режима тестирования (Optima Edition).
@@ -16,6 +17,14 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         // В режиме разработки/тестирования разрешаем вход с любыми данными
         console.log("Авторизация в процессе для:", credentials?.email);
+        
+        // Отправляем приветственное письмо асинхронно
+        if (credentials?.email && credentials.email.includes('@')) {
+          sendWelcomeEmail(credentials.email).catch(err => {
+            console.error('Ошибка при отправке приветственного письма:', err);
+          });
+        }
+
         return { id: "1", name: "Врач-эксперт", email: credentials?.email || "doctor@example.com" };
       }
     }),

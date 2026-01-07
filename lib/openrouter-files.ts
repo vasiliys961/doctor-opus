@@ -5,24 +5,16 @@
 
 import { MODELS, SYSTEM_PROMPT } from './openrouter';
 import { calculateCost, formatCostLog } from './cost-calculator';
+import { Specialty, TITAN_CONTEXTS } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /**
- * Конвертация файла в base64
+ * Конвертация файла в base64 (Серверная версия для Node.js)
  */
 async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // Убираем префикс data:image/...;base64,
-      const base64 = result.split(',')[1] || result;
-      resolve(base64);
-    };
-    reader.onerror = () => reject(new Error('Ошибка чтения файла'));
-    reader.readAsDataURL(file);
-  });
+  const arrayBuffer = await file.arrayBuffer();
+  return Buffer.from(arrayBuffer).toString('base64');
 }
 
 /**
@@ -95,7 +87,8 @@ export async function sendTextRequestWithFiles(
   prompt: string,
   history: Array<{ role: string; content: string }> = [],
   files: File[],
-  model: string = MODELS.OPUS
+  model: string = MODELS.OPUS,
+  specialty?: Specialty
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -106,10 +99,15 @@ export async function sendTextRequestWithFiles(
   // Подготавливаем контент с файлами
   const messageContent = await prepareMessageContent(prompt, files);
 
+  let systemPrompt = SYSTEM_PROMPT;
+  if (specialty && TITAN_CONTEXTS[specialty]) {
+    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+  }
+
   const messages = [
     {
       role: 'system' as const,
-      content: SYSTEM_PROMPT
+      content: systemPrompt
     },
     ...history.map(msg => ({
       role: msg.role as 'user' | 'assistant',
@@ -184,7 +182,8 @@ export async function sendTextRequestStreamingWithFiles(
   prompt: string,
   history: Array<{ role: string; content: string }> = [],
   files: File[],
-  model: string = MODELS.OPUS
+  model: string = MODELS.OPUS,
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -195,10 +194,15 @@ export async function sendTextRequestStreamingWithFiles(
   // Подготавливаем контент с файлами
   const messageContent = await prepareMessageContent(prompt, files);
 
+  let systemPrompt = SYSTEM_PROMPT;
+  if (specialty && TITAN_CONTEXTS[specialty]) {
+    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+  }
+
   const messages = [
     {
       role: 'system' as const,
-      content: SYSTEM_PROMPT
+      content: systemPrompt
     },
     ...history.map(msg => ({
       role: msg.role as 'user' | 'assistant',

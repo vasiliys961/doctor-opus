@@ -18,6 +18,7 @@ const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false
 import { validateMedicalImage, ImageValidationResult } from '@/lib/image-validator'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
+import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-cache'
 
 export default function ImageAnalysisPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -90,6 +91,33 @@ export default function ImageAnalysisPage() {
 
     try {
       const prompt = 'Проанализируйте медицинское изображение. Опишите все патологические изменения, локализацию, размеры, плотность, контуры.'
+
+      // Пытаемся получить изображение в base64 для кэша
+      let imageBase64 = '';
+      if (isDicom && dicomAnalysisImage) {
+        imageBase64 = dicomAnalysisImage;
+      } else if (imagePreview) {
+        imageBase64 = imagePreview;
+      }
+
+      // Проверка кэша
+      if (imageBase64) {
+        const cacheKey = getAnalysisCacheKey(imageBase64, clinicalContext + labsContext + imageType, analysisMode);
+        const cachedResult = getFromCache(cacheKey);
+        
+        if (cachedResult) {
+          console.log('📦 [CACHE] Найдено в кэше, пропускаем запрос');
+          setResult(cachedResult);
+          setLoading(false);
+          setModelInfo({ 
+            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5', 
+            mode: analysisMode + ' (из кэша)' 
+          });
+          return;
+        }
+        // Сохраняем ключ для записи после завершения
+        (window as any)._currentCacheKey = cacheKey;
+      }
 
       const formData = new FormData()
       
@@ -185,6 +213,9 @@ export default function ImageAnalysisPage() {
             },
             onComplete: (finalText) => {
               console.log('✅ [IMAGE-ANALYSIS STREAMING] Анализ завершен')
+              if ((window as any)._currentCacheKey) {
+                saveToCache((window as any)._currentCacheKey, finalText, analysisMode);
+              }
             }
           })
         } catch (fetchError: any) {
@@ -205,6 +236,10 @@ export default function ImageAnalysisPage() {
           setModelInfo({ model: data.model, mode: data.mode })
           setLastAnalysisData(data)
           
+          if ((window as any)._currentCacheKey) {
+            saveToCache((window as any)._currentCacheKey, data.result, analysisMode);
+          }
+
           logUsage({
             section: imageType !== 'universal' ? imageType : 'image-analysis',
             model: data.model || 'anthropic/claude-opus-4.5',

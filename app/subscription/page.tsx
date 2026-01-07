@@ -1,16 +1,22 @@
 'use client'
 
-import { useState } from 'react'
-import { SUBSCRIPTION_PACKAGES, initializeBalance, getBalance, isSubscriptionEnabled } from '@/lib/subscription-manager'
+import { useState, useEffect } from 'react'
+import { SUBSCRIPTION_PACKAGES, initializeBalance, getBalance, isSubscriptionEnabled, SubscriptionBalance } from '@/lib/subscription-manager'
 import { useRouter } from 'next/navigation'
 
 export default function SubscriptionPage() {
   const router = useRouter()
   const [selectedPackage, setSelectedPackage] = useState<keyof typeof SUBSCRIPTION_PACKAGES | null>(null)
-  const currentBalance = getBalance()
+  const [currentBalance, setCurrentBalance] = useState<SubscriptionBalance | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    setCurrentBalance(getBalance())
+  }, [])
 
   // Если система отключена
-  if (!isSubscriptionEnabled()) {
+  if (mounted && !isSubscriptionEnabled()) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
@@ -28,6 +34,8 @@ export default function SubscriptionPage() {
       </div>
     )
   }
+
+  if (!mounted) return <div className="min-h-screen bg-gray-50" />;
 
   const handlePurchase = () => {
     if (!selectedPackage) return

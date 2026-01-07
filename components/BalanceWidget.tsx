@@ -1,21 +1,30 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getBalance, getUsagePercentage, isSubscriptionEnabled } from '@/lib/subscription-manager'
+import { getBalance, getUsagePercentage, isSubscriptionEnabled, upgradeBalanceToRegistered } from '@/lib/subscription-manager'
 import { getUsageBySections } from '@/lib/simple-logger'
 import type { SubscriptionBalance } from '@/lib/subscription-manager'
 import Link from 'next/link'
+import { useSession } from 'next-auth/react'
 
 export default function BalanceWidget() {
+  const { data: session } = useSession()
   const [balance, setBalance] = useState<SubscriptionBalance | null>(null)
   const [usagePercent, setUsagePercent] = useState(0)
   const [isVisible, setIsVisible] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     // Проверяем, включена ли система
     if (!isSubscriptionEnabled()) {
       setIsVisible(false)
       return
+    }
+
+    // Если пользователь вошел в систему, проверяем бонус за регистрацию
+    if (session?.user) {
+      upgradeBalanceToRegistered()
     }
 
     loadBalance()
@@ -23,7 +32,7 @@ export default function BalanceWidget() {
     // Обновлять каждые 10 секунд
     const interval = setInterval(loadBalance, 10000)
     return () => clearInterval(interval)
-  }, [])
+  }, [session])
 
   const loadBalance = () => {
     try {
@@ -37,8 +46,8 @@ export default function BalanceWidget() {
     }
   }
 
-  // Не показываем виджет только если система полностью отключена
-  if (!isVisible) {
+  // Не показываем виджет, пока не примонтирован (предотвращает Hydration Error) или если система отключена
+  if (!mounted || !isVisible) {
     return null
   }
 
@@ -66,58 +75,61 @@ export default function BalanceWidget() {
   }
 
   const isLowBalance = balance.currentCredits < (balance.initialCredits * 0.2)
-  const isCriticalBalance = balance.currentCredits < (balance.initialCredits * 0.1)
+  const isCriticalBalance = balance.currentCredits <= 0
+  const isNegative = balance.currentCredits < 0
   
-  const bgColor = isCriticalBalance
+  const bgColor = isNegative
+    ? 'bg-gradient-to-r from-red-600 to-red-800'
+    : isCriticalBalance
     ? 'bg-gradient-to-r from-red-500 to-pink-600'
     : isLowBalance 
     ? 'bg-gradient-to-r from-orange-500 to-red-500' 
     : 'bg-gradient-to-r from-teal-500 to-emerald-600'
 
   return (
-    <Link href="/balance">
-      <div className={`${bgColor} text-white rounded-lg p-4 shadow-lg hover:shadow-xl transition-all cursor-pointer`}>
+    <Link href="/subscription">
+      <div className={`${bgColor} text-white rounded-lg p-4 shadow-lg hover:shadow-xl transition-all cursor-pointer border border-white/10`}>
         <div className="flex items-start justify-between mb-3">
           <div>
-            <p className="text-xs opacity-90 mb-1">Баланс</p>
-            <p className="text-3xl font-bold">
+            <p className="text-[10px] uppercase tracking-wider opacity-80 mb-1">Доступный остаток</p>
+            <p className="text-3xl font-bold flex items-baseline">
               {balance.currentCredits.toLocaleString('ru-RU')}
-              <span className="text-lg ml-2 opacity-90">ед.</span>
+              <span className="text-sm ml-1 opacity-80 font-normal">ед.</span>
             </p>
-            <p className="text-xs opacity-90 mt-1">
-              из {balance.initialCredits.toLocaleString('ru-RU')} ед. · {balance.packageName}
+            <p className="text-[10px] opacity-70 mt-1">
+              Пакет: {balance.packageName}
             </p>
           </div>
           
-          {isCriticalBalance && (
-            <span className="bg-white text-red-600 text-xs px-2 py-1 rounded-full font-semibold animate-pulse">
-              ⚠️ Критично!
+          {isNegative && (
+            <span className="bg-white text-red-700 text-[10px] px-2 py-1 rounded-full font-bold animate-pulse shadow-sm">
+              ДОЛИМИТ
             </span>
           )}
-          {isLowBalance && !isCriticalBalance && (
-            <span className="bg-white text-orange-600 text-xs px-2 py-1 rounded-full font-semibold">
-              Низкий
+          {isCriticalBalance && !isNegative && (
+            <span className="bg-white text-red-600 text-[10px] px-2 py-1 rounded-full font-bold shadow-sm">
+              ⚠️ ПОПОЛНИТЬ
             </span>
           )}
         </div>
 
         {/* Прогресс-бар */}
-        <div className="w-full bg-white bg-opacity-30 rounded-full h-2 mb-2">
+        <div className="w-full bg-black/20 rounded-full h-1.5 mb-2 overflow-hidden">
           <div 
-            className="bg-white rounded-full h-2 transition-all duration-500"
-            style={{ width: `${Math.max(0, 100 - usagePercent)}%` }}
+            className={`h-full transition-all duration-1000 ${isNegative ? 'bg-red-300' : 'bg-white'}`}
+            style={{ width: `${Math.max(0, Math.min(100, (balance.currentCredits / balance.initialCredits) * 100))}%` }}
           />
         </div>
 
-        <div className="flex items-center justify-between text-xs">
+        <div className="flex items-center justify-between text-[10px] font-medium opacity-90">
           <span>Потрачено: {balance.totalSpent.toLocaleString('ru-RU')} ед.</span>
-          <span>{(100 - usagePercent).toFixed(1)}%</span>
+          <span>{Math.max(0, Math.round((balance.currentCredits / balance.initialCredits) * 100))}%</span>
         </div>
 
-        {isLowBalance && (
-          <div className="mt-3 pt-3 border-t border-white border-opacity-30">
-            <p className="text-xs text-center opacity-90">
-              Нажмите для пополнения →
+        {(isLowBalance || isNegative) && (
+          <div className="mt-3 pt-2 border-t border-white/20">
+            <p className="text-[10px] text-center font-bold uppercase tracking-widest animate-bounce">
+              Активировать пакет →
             </p>
           </div>
         )}

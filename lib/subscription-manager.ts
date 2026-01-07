@@ -9,6 +9,11 @@ import { calculateCost } from './cost-calculator';
 const SUBSCRIPTION_ENABLED = true;
 const SUBSCRIPTION_STRICT_MODE = process.env.NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE === 'true';
 
+// Настройки стартового баланса
+export const ANONYMOUS_BALANCE = 10; // 10 ед. анонимно
+export const REGISTERED_BONUS = 20;  // +20 ед. за регистрацию
+export const SOFT_LIMIT = -5;        // Разрешаем уходить в минус до -5 ед.
+
 // Курс конвертации USD -> единицы (настраивается через .env)
 const USD_TO_CREDITS_RATE = parseInt(process.env.NEXT_PUBLIC_USD_TO_CREDITS || '100');
 
@@ -77,12 +82,46 @@ export function getBalance(): SubscriptionBalance | null {
     if (!window.localStorage) return null;
     
     const data = localStorage.getItem(BALANCE_KEY);
-    if (!data) return null;
+    if (!data) {
+      // Инициализируем анонимный баланс
+      const initialBalance: SubscriptionBalance = {
+        initialCredits: ANONYMOUS_BALANCE,
+        currentCredits: ANONYMOUS_BALANCE,
+        totalSpent: 0,
+        packageName: 'Пробный (Анонимный)',
+        packagePriceRub: 0,
+        purchaseDate: new Date().toISOString(),
+        expiryDate: null,
+      };
+      localStorage.setItem(BALANCE_KEY, JSON.stringify(initialBalance));
+      return initialBalance;
+    };
     
     return JSON.parse(data);
   } catch (error) {
     console.error('⚠️ [SUBSCRIPTION] Error loading balance:', error);
     return null;
+  }
+}
+
+/**
+ * Апгрейд баланса после регистрации (+20 ед)
+ */
+export function upgradeBalanceToRegistered(): void {
+  try {
+    const balance = getBalance();
+    if (!balance) return;
+
+    // Если пакет все еще анонимный или начальный, добавляем бонус
+    if (balance.packageName.includes('Анонимный') || balance.packageName === 'Стартовый (Free)') {
+      balance.currentCredits += REGISTERED_BONUS;
+      balance.initialCredits += REGISTERED_BONUS;
+      balance.packageName = 'Стартовый (Зарегистрирован)';
+      localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
+      console.log(`🎁 [SUBSCRIPTION] Бонус за регистрацию зачислен: +${REGISTERED_BONUS} ед.`);
+    }
+  } catch (error) {
+    console.error('❌ [SUBSCRIPTION] Error upgrading balance:', error);
   }
 }
 
@@ -170,17 +209,17 @@ export function deductBalance(params: {
     const costInfo = calculateCost(params.inputTokens, params.outputTokens, params.model);
     const costCredits = Math.ceil(costInfo.totalCostUsd * USD_TO_CREDITS_RATE);
 
-    // Проверка достаточности средств (только если строгий режим включен)
-    if (SUBSCRIPTION_STRICT_MODE && balance.currentCredits < costCredits) {
-      console.warn(`⚠️ [SUBSCRIPTION] Недостаточно единиц: нужно ${costCredits}, доступно ${balance.currentCredits}`);
+    // Проверка достаточности средств с учетом "мягкого лимита"
+    if (SUBSCRIPTION_STRICT_MODE && (balance.currentCredits - costCredits) < SOFT_LIMIT) {
+      console.warn(`⚠️ [SUBSCRIPTION] Превышен лимит: нужно ${costCredits}, доступно ${balance.currentCredits}, лимит ${SOFT_LIMIT}`);
       return { 
         success: false, 
-        message: `Недостаточно единиц. Требуется: ${costCredits}, доступно: ${balance.currentCredits}`,
+        message: `Недостаточно единиц. Баланс: ${balance.currentCredits}, требуется: ${costCredits}. Пожалуйста, пополните пакет.`,
         cost: costCredits
       };
     }
 
-    // Списание (происходит всегда, даже если уходим в минус в не-строгом режиме)
+    // Списание (происходит всегда, если не заблокировано выше)
     balance.currentCredits -= costCredits;
     balance.totalSpent += costCredits;
     localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));

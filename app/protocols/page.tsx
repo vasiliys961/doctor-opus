@@ -65,9 +65,6 @@ export default function ClinicalProtocolsPage() {
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let accumulatedText = '';
       let detectedModel = modelMode === 'online' ? 'Perplexity Sonar (Online)' : 
                           modelMode === 'detailed' ? 'Claude Sonnet 4.5' : 
                           'Claude Haiku 4.5';

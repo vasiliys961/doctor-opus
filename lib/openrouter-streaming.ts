@@ -4,7 +4,7 @@
  */
 
 import { calculateCost, formatCostLog } from './cost-calculator';
-import { type ImageType } from './prompts';
+import { type ImageType, type Specialty } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -250,7 +250,8 @@ export async function analyzeImageFastStreaming(
   prompt: string,
   imageBase64: string,
   imageType?: string,
-  clinicalContext?: string
+  clinicalContext?: string,
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
@@ -264,7 +265,7 @@ export async function analyzeImageFastStreaming(
   const initialUsage = extractionResult.usage;
 
   const { getDirectivePrompt } = await import('./prompts');
-  const directivePrompt = getDirectivePrompt(imageType as any, prompt);
+  const directivePrompt = getDirectivePrompt(imageType as any, prompt, specialty);
 
   const contextPrompt = `Ниже приведены данные из изображения. Как Профессор медицины, проанализируй их.
     
@@ -407,13 +408,21 @@ function createTransformWithUsage(stream: ReadableStream, model: string): Readab
 export async function sendTextRequestStreaming(
   prompt: string,
   history: Array<{role: string, content: string}> = [],
-  model: string = MODELS.OPUS
+  model: string = MODELS.OPUS,
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
+  const { TITAN_CONTEXTS } = await import('./prompts');
+  
+  let systemPrompt = SYSTEM_PROMPT;
+  if (specialty && TITAN_CONTEXTS[specialty]) {
+    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+  }
+
   const messages = [
-    { role: 'system' as const, content: SYSTEM_PROMPT },
+    { role: 'system' as const, content: systemPrompt },
     ...history.map(msg => ({ role: msg.role as 'user' | 'assistant', content: msg.content })),
     { role: 'user' as const, content: prompt }
   ];
@@ -496,7 +505,8 @@ export async function analyzeImageOpusTwoStageStreaming(
   prompt: string,
   imageBase64: string,
   imageType?: ImageType,
-  clinicalContext?: string
+  clinicalContext?: string,
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
@@ -509,7 +519,7 @@ export async function analyzeImageOpusTwoStageStreaming(
     
     const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
     const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
-    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
+    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;

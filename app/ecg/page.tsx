@@ -12,6 +12,7 @@ import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/c
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { handleSSEStream } from '@/lib/streaming-utils'
+import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-cache'
 
 export default function ECGPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -40,6 +41,23 @@ export default function ECGPage() {
 
     try {
       const prompt = 'Проанализируйте ЭКГ. Опишите ритм, интервалы, сегменты, признаки ишемии, аритмии, блокады.'
+
+      // Проверка кэша
+      if (imagePreview) {
+        const cacheKey = getAnalysisCacheKey(imagePreview, clinicalContext + 'ecg', analysisMode);
+        const cachedResult = getFromCache(cacheKey);
+        
+        if (cachedResult) {
+          console.log('📦 [CACHE] Найдено в кэше ЭКГ, пропускаем запрос');
+          setResult(cachedResult);
+          setLoading(false);
+          setModelInfo(analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
+                        analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5');
+          return;
+        }
+        // Сохраняем ключ для записи после завершения
+        (window as any)._currentCacheKey = cacheKey;
+      }
 
       // Для режима validated используем специальный двухэтапный анализ: Gemini JSON → Opus
       // Для других режимов используем обычный анализ
@@ -93,6 +111,9 @@ export default function ECGPage() {
             },
             onComplete: (finalText) => {
               console.log('✅ [ECG STREAMING] Анализ завершен')
+              if ((window as any)._currentCacheKey) {
+                saveToCache((window as any)._currentCacheKey, finalText, analysisMode);
+              }
             },
             onError: (err) => {
               console.error('❌ [ECG STREAMING] Ошибка:', err)
@@ -117,6 +138,11 @@ export default function ECGPage() {
         if (data.success) {
           setResult(data.result)
           setAnalysisId(data.analysis_id || '')
+          
+          if ((window as any)._currentCacheKey) {
+            saveToCache((window as any)._currentCacheKey, data.result, analysisMode);
+          }
+
           const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5')
           setModelInfo(modelUsed)
           

@@ -21,12 +21,19 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   const [showPatientSelector, setShowPatientSelector] = useState(false)
   const [patients, setPatients] = useState<Patient[]>([])
   const [saving, setSaving] = useState(false)
+  const [sessionId, setSessionId] = useState('')
 
   useEffect(() => {
     if (showPatientSelector) {
       loadPatients()
     }
   }, [showPatientSelector])
+
+  useEffect(() => {
+    if (result && !sessionId) {
+      setSessionId(Math.random().toString(36).substring(7).toUpperCase())
+    }
+  }, [result])
 
   const loadPatients = async () => {
     try {
@@ -574,6 +581,19 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           >
             {result}
           </ReactMarkdown>
+        </div>
+      </div>
+
+      <div className="mt-8 pt-4 border-t border-gray-100">
+        <div className="flex flex-col md:flex-row justify-between gap-4 text-[10px] text-gray-400">
+          <div className="space-y-1 max-w-2xl">
+            <p><strong>⚠️ Внимание:</strong> Данный анализ выполнен искусственным интеллектом и носит справочный характер. Он не является медицинским заключением. Окончательное решение принимает лечащий врач.</p>
+            <p><strong>ℹ️ О тарификации:</strong> Повторные запросы к тем же данным тарифицируются заново, если они не были сохранены в кэше системы (кэш активен 24 часа). Расчет единиц является оценочным и может незначительно отличаться от финального списания.</p>
+          </div>
+          <div className="text-right">
+            <p>ID сессии: {sessionId || 'N/A'}</p>
+            <p>Версия ядра: 3.39.0-optima</p>
+          </div>
         </div>
       </div>
     </div>

@@ -5,7 +5,7 @@
  */
 
 import { calculateCost, formatCostLog } from './cost-calculator';
-import { type ImageType } from './prompts';
+import { type ImageType, type Specialty } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -77,6 +77,7 @@ interface VisionRequestOptions {
   useStreaming?: boolean;
   clinicalContext?: string;
   imageType?: ImageType;
+  specialty?: Specialty;
 }
 
 interface StreamingOptions {
@@ -151,8 +152,9 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   
   // Получаем специализированный промпт
   const imageType = options.imageType || 'universal';
+  const specialty = options.specialty;
   const { getDirectivePrompt } = await import('./prompts');
-  const directiveCriteria = getDirectivePrompt(imageType as any, prompt);
+  const directiveCriteria = getDirectivePrompt(imageType as any, prompt, specialty);
   
   // Добавляем клинический контекст в промпт, если он есть
   let fullPrompt = directiveCriteria;
@@ -280,6 +282,7 @@ export async function analyzeImageFast(options: {
   prompt: string; 
   imageBase64: string;
   imageType?: ImageType;
+  specialty?: Specialty;
   clinicalContext?: string;
 }): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -289,6 +292,7 @@ export async function analyzeImageFast(options: {
   }
 
   const imageType = options.imageType || 'universal';
+  const specialty = options.specialty;
   
   try {
     console.log('🚀 [FAST] Шаг 1: Извлечение JSON через Gemini 3.0...');
@@ -299,7 +303,7 @@ export async function analyzeImageFast(options: {
     
     // Получаем специализированный промпт для Профессора
     const { getDirectivePrompt } = await import('./prompts');
-    const directivePrompt = getDirectivePrompt(imageType, options.prompt);
+    const directivePrompt = getDirectivePrompt(imageType, options.prompt, specialty);
 
     const textModel = MODELS.GEMINI_3_FLASH;
     
@@ -359,6 +363,7 @@ export async function analyzeImageOpusTwoStage(options: {
   prompt: string; 
   imageBase64: string;
   imageType?: ImageType;
+  specialty?: Specialty;
   clinicalContext?: string;
   targetModel?: string; // Добавляем возможность выбора модели (Sonnet или Opus)
 }): Promise<string> {
@@ -370,6 +375,7 @@ export async function analyzeImageOpusTwoStage(options: {
 
   const prompt = options.prompt || 'Проанализируйте медицинское изображение.';
   const imageType = options.imageType || 'universal';
+  const specialty = options.specialty;
   
   try {
     console.log(`🚀 [TWO-STAGE] Шаг 1: Извлечение JSON через Gemini Flash...`);
@@ -385,7 +391,7 @@ export async function analyzeImageOpusTwoStage(options: {
     // Получаем специализированные промпты
     const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
     const descriptionCriteria = getDescriptionPrompt(imageType);
-    const directiveCriteria = getDirectivePrompt(imageType, prompt);
+    const directiveCriteria = getDirectivePrompt(imageType, prompt, specialty);
     
     // Шаг 2: Целевая модель анализирует JSON (БЕЗ ИЗОБРАЖЕНИЯ для экономии токенов)
     // Используем SONNET по умолчанию вместо OPUS для экономии 80% стоимости при том же качестве
@@ -820,7 +826,8 @@ export async function analyzeMultipleImages(options: {
 export async function sendTextRequest(
   prompt: string, 
   history: Array<{role: string, content: string}> = [],
-  model: string = MODELS.OPUS
+  model: string = MODELS.OPUS,
+  specialty?: Specialty
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   
@@ -830,11 +837,17 @@ export async function sendTextRequest(
   }
 
   const selectedModel = model;
+  const { TITAN_CONTEXTS } = await import('./prompts');
+  
+  let systemPrompt = SYSTEM_PROMPT;
+  if (specialty && TITAN_CONTEXTS[specialty]) {
+    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+  }
   
   const messages = [
     {
       role: 'system' as const,
-      content: SYSTEM_PROMPT
+      content: systemPrompt
     },
     ...history.map(msg => ({
       role: msg.role as 'user' | 'assistant',

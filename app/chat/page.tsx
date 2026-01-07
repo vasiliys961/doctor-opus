@@ -6,6 +6,8 @@ import FileUpload from '@/components/FileUpload'
 import AnalysisTips from '@/components/AnalysisTips'
 import ReactMarkdown from 'react-markdown'
 import { logUsage } from '@/lib/simple-logger'
+import { ChatSpecialistSelector } from '@/components/ChatSpecialistSelector'
+import { Specialty } from '@/lib/prompts'
 
 type ModelType = 'opus' | 'sonnet'
 
@@ -17,7 +19,8 @@ export default function ChatPage() {
   const [showFileUpload, setShowFileUpload] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
-    const [model, setModel] = useState<'opus' | 'sonnet' | 'gemini'>('opus')
+  const [model, setModel] = useState<'opus' | 'sonnet' | 'gemini'>('opus')
+  const [specialty, setSpecialty] = useState<Specialty>('universal')
 
   const handleSend = async () => {
     if (!message.trim() && selectedFiles.length === 0) return
@@ -40,7 +43,7 @@ export default function ChatPage() {
     setLoading(true)
 
     // Добавляем пустое сообщение ассистента для streaming
-    const assistantMessageIndex = messages.length
+    const assistantMessageIndex = messages.length + 1 // +1 т.к. только что добавили userMessage
     if (useStreaming) {
       setMessages(prev => [...prev, { role: 'assistant', content: '' }])
     }
@@ -59,6 +62,7 @@ export default function ChatPage() {
         formData.append('history', JSON.stringify(messages))
         formData.append('useStreaming', useStreaming.toString())
         formData.append('model', modelName)
+        formData.append('specialty', specialty)
         selectedFiles.forEach(file => {
           formData.append('files', file)
         })
@@ -136,7 +140,7 @@ export default function ChatPage() {
             console.log('✅ [STREAMING WITH FILES] Итого получено:', accumulatedText.length, 'символов')
           }
         } else {
-          // Обычный режим с файлами
+          // Ообычный режим с файлами
           const response = await fetch('/api/chat', {
             method: 'POST',
             body: formData,
@@ -170,6 +174,7 @@ export default function ChatPage() {
               history: messages,
               useStreaming: true,
               model: modelName,
+              specialty: specialty,
             }),
           })
 
@@ -213,7 +218,6 @@ export default function ChatPage() {
                     const content = json.choices?.[0]?.delta?.content || ''
                     if (content) {
                       accumulatedText += content
-                      console.log('📡 [STREAMING] Получен фрагмент:', content.length, 'символов, всего:', accumulatedText.length)
                       
                       // Обновляем последнее сообщение ассистента
                       setMessages(prev => {
@@ -237,9 +241,6 @@ export default function ChatPage() {
                     // Логируем ошибки парсинга для отладки
                     console.warn('⚠️ [STREAMING] Ошибка парсинга SSE:', e, 'data:', data.substring(0, 100))
                   }
-                } else if (line.trim() && !line.startsWith(':')) {
-                  // Логируем другие строки для отладки
-                  console.debug('📡 [STREAMING] Другая строка:', line.substring(0, 100))
                 }
               }
             }
@@ -258,6 +259,7 @@ export default function ChatPage() {
               history: messages,
               useStreaming: false,
               model: modelName,
+              specialty: specialty,
             }),
           })
 
@@ -294,26 +296,31 @@ export default function ChatPage() {
     }
   }
 
+  const clearChat = () => {
+    if (confirm('Вы уверены, что хотите очистить историю чата?')) {
+      setMessages([])
+    }
+  }
+
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-6xl">
-      <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 mb-4 sm:mb-6">🤖 ИИ-Консультант</h1>
+      <div className="flex justify-between items-center mb-4 sm:mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-primary-900">🤖 ИИ-Консультант</h1>
+        <button
+          onClick={clearChat}
+          className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-red-200 shadow-sm"
+          title="Очистить историю диалога"
+        >
+          🗑️ Очистить чат
+        </button>
+      </div>
       
-      <AnalysisTips 
-        title="Как пользоваться ИИ-Консультантом"
-        content={{
-          fast: "используйте Gemini 3.0 Flash для мгновенных ответов на общие медицинские вопросы или быстрой навигации по документам.",
-          optimized: "выбирайте Sonnet 4.5 или Opus 4.5 для глубокого клинического разбора сложных случаев, когда важна точность каждой детали.",
-          extra: [
-            "⭐ Рекомендуемая модель: Claude Sonnet 4.5 — лучший баланс интеллекта и скорости для ежедневных задач.",
-            "🎤 Вы можете надиктовать вопрос голосом — система автоматически переведет его в текст.",
-            "📎 Прикрепляйте любые файлы: анализы, выписки, изображения для контекста обсуждения.",
-            "🔄 Streaming‑режим позволяет видеть, как ИИ формирует ответ в реальном времени.",
-            "💾 История диалога сохраняется в рамках текущей сессии для последовательного разбора."
-          ]
-        }}
+      <ChatSpecialistSelector 
+        selectedSpecialty={specialty} 
+        onSelect={setSpecialty} 
       />
       
-      <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6 mb-4 sm:mb-6 h-[60vh] sm:h-[600px] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6 mb-4 sm:mb-6 h-[70vh] sm:h-[700px] overflow-y-auto">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-10 sm:mt-20 text-sm sm:text-base">
             Начните диалог с ИИ-консультантом
