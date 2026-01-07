@@ -1,14 +1,26 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Не инициализируем сразу, чтобы не ломать сборку на Vercel
+let resendInstance: Resend | null = null;
+
+function getResend() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return null;
+  if (!resendInstance) {
+    resendInstance = new Resend(apiKey);
+  }
+  return resendInstance;
+}
 
 /**
  * Отправка приветственного письма врачу
  */
 export async function sendWelcomeEmail(email: string, name: string = 'коллега') {
   try {
-    if (!process.env.RESEND_API_KEY) {
-      console.warn('⚠️ [EMAIL] RESEND_API_KEY не настроен. Письмо не отправлено.');
+    const resend = getResend();
+    
+    if (!resend) {
+      console.warn('⚠️ [EMAIL] RESEND_API_KEY не настроен или пуст. Письмо не отправлено.');
       return { success: false, error: 'API Key missing' };
     }
 
