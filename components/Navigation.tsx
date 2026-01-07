@@ -15,6 +15,7 @@ export default function Navigation() {
     // { name: '💎 Пакеты единиц', href: '/subscription' },
     // { name: '💰 Мой баланс', href: '/balance' },
     { name: '🤖 ИИ-Консультант', href: '/chat' },
+    { name: '📚 Персональная библиотека', href: '/library' },
     { name: '📝 Протокол приёма', href: '/protocol' },
     { name: '🧮 Мед. калькуляторы', href: 'https://medcalculator.vercel.app', isExternal: true },
     { name: '📚 Клинические рекомендации', href: '/protocols' },

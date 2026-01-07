@@ -101,6 +101,12 @@ export default function HomePage() {
             📄 Сканирование
           </Link>
           <Link
+            href="/library"
+            className="bg-white hover:bg-green-50 active:bg-green-100 border-2 border-green-200 hover:border-green-400 text-green-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
+          >
+            📚 Библиотека
+          </Link>
+          <Link
             href="/video"
             className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
           >
@@ -145,6 +151,12 @@ export default function HomePage() {
             <h3 className="font-bold text-base sm:text-lg mb-2">🧬 Генетика & фармакогеномика</h3>
             <p className="text-xs sm:text-sm text-gray-600">
               Разбор VCF/PDF, заключение генетика и профессорский обзор.
+            </p>
+          </div>
+          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md border-2 border-green-100">
+            <h3 className="font-bold text-base sm:text-lg mb-2">📚 База знаний (RAG)</h3>
+            <p className="text-xs sm:text-sm text-gray-600">
+              Ваша персональная библиотека PDF-книг для уточнения диагнозов.
             </p>
           </div>
         </div>

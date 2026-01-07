@@ -3,3 +3,6 @@ pydicom==2.4.3
 numpy
 Pillow
 requests==2.32.4
+
+# For PDF text extraction (library feature)
+PyMuPDF==1.23.8

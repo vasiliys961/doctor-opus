@@ -8,9 +8,17 @@ interface AnalysisModeSelectorProps {
   value: AnalysisMode
   onChange: (mode: AnalysisMode) => void
   disabled?: boolean
+  useLibrary?: boolean
+  onLibraryToggle?: (val: boolean) => void
 }
 
-export default function AnalysisModeSelector({ value, onChange, disabled = false }: AnalysisModeSelectorProps) {
+export default function AnalysisModeSelector({ 
+  value, 
+  onChange, 
+  disabled = false,
+  useLibrary = false,
+  onLibraryToggle
+}: AnalysisModeSelectorProps) {
   const modes: Array<{ value: AnalysisMode; label: string; description: string; icon: string }> = [
     {
       value: 'fast',
@@ -37,7 +45,7 @@ export default function AnalysisModeSelector({ value, onChange, disabled = false
       <label className="block text-sm font-medium text-gray-700">
         Режим анализа:
       </label>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {modes.map((mode) => (
           <button
             key={mode.value}
@@ -61,6 +69,37 @@ export default function AnalysisModeSelector({ value, onChange, disabled = false
           </button>
         ))}
       </div>
+
+      {onLibraryToggle && (
+        <div className={`
+          flex items-center space-x-3 p-4 rounded-lg border-2 transition-all
+          ${useLibrary 
+            ? 'border-green-500 bg-green-50' 
+            : 'border-gray-200 bg-white hover:border-green-300'
+          }
+          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+        `}
+        onClick={() => !disabled && onLibraryToggle(!useLibrary)}
+        >
+          <div className="flex-shrink-0">
+            <input 
+              type="checkbox" 
+              checked={useLibrary}
+              onChange={() => {}} // Обработка в onClick родителя
+              disabled={disabled}
+              className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
+            />
+          </div>
+          <div>
+            <div className="font-semibold text-gray-900">
+              📚 Использовать персональную библиотеку
+            </div>
+            <div className="text-xs text-gray-600">
+              RAG-поиск по вашим загруженным PDF-файлам для уточнения анализа
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

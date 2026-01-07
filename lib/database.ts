@@ -90,6 +90,25 @@ export const SQL_SCHEMAS = {
       PRIMARY KEY (identifier, token)
     )
   `,
+  library_documents: `
+    CREATE TABLE IF NOT EXISTS library_documents (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      size INTEGER,
+      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `,
+  library_chunks: `
+    CREATE TABLE IF NOT EXISTS library_chunks (
+      id SERIAL PRIMARY KEY,
+      document_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      metadata_json TEXT,
+      FOREIGN KEY (document_id) REFERENCES library_documents(id) ON DELETE CASCADE
+    )
+  `,
 }
 
 // Функции для работы с БД будут вызывать Python API или использовать прямые SQL запросы

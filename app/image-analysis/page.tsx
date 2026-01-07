@@ -39,6 +39,7 @@ export default function ImageAnalysisPage() {
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [lastAnalysisData, setLastAnalysisData] = useState<any>(null)
   const [currentCost, setCurrentCost] = useState<number>(0)
+  const [useLibrary, setUseLibrary] = useState(false)
 
   const handleLabsFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -101,16 +102,36 @@ export default function ImageAnalysisPage() {
         formData.append('file', file)
       }
 
-      // Объединяем клинический контекст и анализы
-      const combinedContext = labsContext 
+      // Если включена библиотека, ищем контекст в IndexedDB
+      let libraryContext = ''
+      if (useLibrary) {
+        try {
+          const { searchLibrary } = await import('@/lib/library-service')
+          const chunks = await searchLibrary(clinicalContext || imageType)
+          if (chunks.length > 0) {
+            const { formatLibraryContext } = await import('@/lib/library-service')
+            libraryContext = formatLibraryContext(chunks)
+          }
+        } catch (libErr) {
+          console.error('Ошибка поиска в библиотеке:', libErr)
+        }
+      }
+
+      // Объединяем клинический контекст, анализы и библиотеку
+      let combinedContext = labsContext 
         ? `${clinicalContext}\n\n=== ДАННЫЕ ЛАБОРАТОРНЫХ АНАЛИЗОВ ===\n${labsContext}`
         : clinicalContext
+
+      if (libraryContext) {
+        combinedContext = `${combinedContext}\n\n${libraryContext}`
+      }
 
       formData.append('prompt', prompt)
       formData.append('clinicalContext', combinedContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', imageType)
       formData.append('useStreaming', useStream.toString())
+      formData.append('useLibrary', useLibrary.toString())
 
       if (useStream) {
         console.log('📡 [CLIENT] Запуск streaming режима для режима:', analysisMode)
@@ -377,6 +398,8 @@ export default function ImageAnalysisPage() {
                   value={mode}
                   onChange={setMode}
                   disabled={loading}
+                  useLibrary={useLibrary}
+                  onLibraryToggle={setUseLibrary}
                 />
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input

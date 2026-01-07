@@ -17,6 +17,7 @@ import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
 import { extractDicomMetadata, formatDicomMetadataForAI } from '@/lib/dicom-service';
 import { processDicomJs } from "@/lib/dicom-processor";
+import { searchLibrary, formatLibraryContext } from '@/lib/library-service';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
     const imageType = (formData.get('imageType') as string) || 'universal';
     const customModel = formData.get('model') as string | null;
     const useStreaming = formData.get('useStreaming') === 'true';
+    const useLibrary = formData.get('useLibrary') === 'true';
     
     // Сбор всех изображений
     const additionalImages: File[] = [];
@@ -169,8 +171,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Добавляем данные DICOM к клиническому контексту
-    const finalClinicalContext = dicomContext ? `${clinicalContext}\n\n${dicomContext}` : clinicalContext;
+    // Добавляем данные DICOM к клиническому контексту (данные библиотеки приходят от клиента)
+    const finalClinicalContext = [
+      clinicalContext,
+      dicomContext,
+    ].filter(Boolean).join('\n\n');
 
     // Определяем модель в зависимости от режима
     let modelToUse = customModel;
