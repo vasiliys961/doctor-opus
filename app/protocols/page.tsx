@@ -5,6 +5,8 @@ import ReactMarkdown from 'react-markdown'
 import { logUsage } from '@/lib/simple-logger'
 import { deductBalance } from '@/lib/subscription-manager'
 
+import { handleSSEStream } from '@/lib/streaming-utils'
+
 export default function ClinicalProtocolsPage() {
   const [query, setQuery] = useState('')
   const [specialty, setSpecialty] = useState('')
@@ -12,6 +14,7 @@ export default function ClinicalProtocolsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>('')
   const [tokensUsed, setTokensUsed] = useState<number>(0)
+  const [currentCost, setCurrentCost] = useState<number>(0)
   const [model, setModel] = useState<string>('')
   const [modelMode, setModelMode] = useState<'standard' | 'detailed' | 'online'>('standard')
 
@@ -41,6 +44,7 @@ export default function ClinicalProtocolsPage() {
     setError('')
     setResult('')
     setTokensUsed(0)
+    setCurrentCost(0)
 
     try {
       const response = await fetch('/api/protocols/search', {
@@ -68,69 +72,46 @@ export default function ClinicalProtocolsPage() {
                           modelMode === 'detailed' ? 'Claude Sonnet 4.5' : 
                           'Claude Haiku 4.5';
 
-      if (reader) {
-        let buffer = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value, { stream: true });
-          buffer += chunk;
+      await handleSSEStream(response, {
+        onChunk: (content, accumulatedText) => {
+          setResult(accumulatedText);
+        },
+        onUsage: (usage) => {
+          console.log('📊 [CLINICAL RECS] Получена точная стоимость:', usage.total_cost);
+          setCurrentCost(usage.total_cost);
+          setTokensUsed(usage.completion_tokens);
           
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6).trim();
-              if (data === '[DONE]') break;
-
-              try {
-                const json = JSON.parse(data);
-                const content = json.choices?.[0]?.delta?.content || '';
-                if (content) {
-                  accumulatedText += content;
-                  setResult(accumulatedText);
-                  
-                  // Пробуем извлечь название модели, если оно пришло
-                  if (json.model && !model) {
-                    setModel(json.model);
-                  }
-                }
-              } catch (e) {
-                // Игнорируем ошибки парсинга чанков
-              }
-            }
+          if (usage.model) {
+            setModel(usage.model);
           }
+
+          // 1. Записываем в общую статистику по разделам
+          logUsage({
+            section: 'protocols',
+            model: usage.model || (modelMode === 'online' ? 'perplexity/sonar' : modelMode === 'detailed' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-haiku-4.5'),
+            inputTokens: usage.prompt_tokens,
+            outputTokens: usage.completion_tokens,
+          });
+
+          // 2. Списываем с баланса подписки (если есть)
+          deductBalance({
+            section: 'protocols',
+            sectionName: 'Клинические рекомендации',
+            model: usage.model || (modelMode === 'online' ? 'perplexity/sonar' : modelMode === 'detailed' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-haiku-4.5'),
+            inputTokens: usage.prompt_tokens,
+            outputTokens: usage.completion_tokens,
+            operation: `Поиск: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`
+          });
+        },
+        onComplete: (finalText) => {
+          console.log('✅ [CLINICAL RECS] Поиск завершен');
+          if (!model) setModel(detectedModel);
+        },
+        onError: (err) => {
+          console.error('❌ [CLINICAL RECS] Ошибка стриминга:', err);
+          setError(`Ошибка стриминга: ${err.message}`);
         }
-        
-        setModel(detectedModel);
-        const finalTokens = Math.ceil(accumulatedText.split(/\s+/).length * 1.4);
-        setTokensUsed(finalTokens);
-
-        // Логирование и списание баланса
-        const modelId = modelMode === 'online' ? 'perplexity/sonar' : 
-                        modelMode === 'detailed' ? 'anthropic/claude-sonnet-4.5' : 
-                        'anthropic/claude-haiku-4.5';
-        
-        // 1. Записываем в общую статистику по разделам
-        logUsage({
-          section: 'protocols',
-          model: modelId,
-          inputTokens: Math.ceil(query.length / 4) + 1000, // примерный промпт
-          outputTokens: finalTokens,
-        });
-
-        // 2. Списываем с баланса подписки (если есть)
-        deductBalance({
-          section: 'protocols',
-          sectionName: 'Клинические рекомендации',
-          model: modelId,
-          inputTokens: Math.ceil(query.length / 4) + 1000,
-          outputTokens: finalTokens,
-          operation: `Поиск: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`
-        });
-      }
+      });
     } catch (err: any) {
       setError(`Ошибка: ${err.message}`)
     } finally {
@@ -288,6 +269,11 @@ export default function ClinicalProtocolsPage() {
               📋 Найденные протоколы
             </h2>
             <div className="flex flex-col sm:flex-row gap-2 text-xs sm:text-sm text-gray-600">
+              {currentCost > 0 && (
+                <span className="bg-teal-50 text-teal-700 px-2 py-1 rounded font-bold border border-teal-100">
+                  💰 Стоимость: {currentCost.toFixed(2)} ед.
+                </span>
+              )}
               {tokensUsed > 0 && (
                 <span className="bg-gray-100 px-2 py-1 rounded">
                   📊 Токенов: {tokensUsed.toLocaleString()}

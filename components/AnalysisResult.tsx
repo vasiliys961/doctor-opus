@@ -12,9 +12,10 @@ interface AnalysisResultProps {
   model?: string
   mode?: string
   imageType?: string
+  cost?: number
 }
 
-export default function AnalysisResult({ result, loading = false, model, mode, imageType }: AnalysisResultProps) {
+export default function AnalysisResult({ result, loading = false, model, mode, imageType, cost }: AnalysisResultProps) {
   const [copied, setCopied] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [showPatientSelector, setShowPatientSelector] = useState(false)
@@ -444,10 +445,17 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             </div>
           )}
           {model && (
-            <p className="text-sm text-gray-600 mt-1">
-              Использована модель: <span className="font-semibold">{getModelDisplayName(model)}</span>
-              {mode && <span className="ml-2">({mode === 'fast' ? 'быстрый' : mode === 'optimized' ? 'оптимизированный' : 'с валидацией'})</span>}
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <p className="text-sm text-gray-600">
+                Использована модель: <span className="font-semibold">{getModelDisplayName(model)}</span>
+                {mode && <span className="ml-2">({mode === 'fast' ? 'быстрый' : mode === 'optimized' ? 'оптимизированный' : 'с валидацией'})</span>}
+              </p>
+              {cost !== undefined && cost > 0 && !loading && (
+                <div className="bg-teal-50 text-teal-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-teal-200 shadow-sm">
+                  💰 Стоимость: {cost.toFixed(2)} ед.
+                </div>
+              )}
+            </div>
           )}
           <a 
             href="https://medcalculator.vercel.app" 

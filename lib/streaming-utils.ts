@@ -4,6 +4,7 @@
 
 export interface StreamingHandler {
   onChunk: (content: string, accumulatedText: string) => void
+  onUsage?: (usage: { total_cost: number; prompt_tokens: number; completion_tokens: number; model?: string }) => void
   onError?: (error: Error) => void
   onComplete?: (finalText: string) => void
 }
@@ -128,6 +129,21 @@ function processSSELine(
       const json = JSON.parse(data)
       let content = ''
       
+      // Проверяем наличие статистики использования (usage)
+      if (json.usage && handler.onUsage) {
+        // Мы вызываем onUsage только если есть total_cost или это одиночный запрос (не последовательный)
+        // Чтобы не сбивать счетчик промежуточными данными
+        if (json.usage.total_cost !== undefined || json.usage.total_tokens !== undefined) {
+          console.log('📊 [STREAMING UTILS] Получена статистика использования:', json.usage)
+          handler.onUsage({
+            total_cost: json.usage.total_cost || 0,
+            prompt_tokens: json.usage.prompt_tokens || 0,
+            completion_tokens: json.usage.completion_tokens || 0,
+            model: json.model
+          })
+        }
+      }
+
       // Проверяем разные возможные форматы от OpenRouter
       if (json.choices && json.choices[0]) {
         if (json.choices[0].delta && json.choices[0].delta.content) {

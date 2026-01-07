@@ -10,6 +10,7 @@ import AnalysisTips from '@/components/AnalysisTips'
 import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
 import FeedbackForm from '@/components/FeedbackForm'
 import { logUsage } from '@/lib/simple-logger'
+import { calculateCost } from '@/lib/cost-calculator'
 
 export default function UltrasoundPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -20,6 +21,7 @@ export default function UltrasoundPage() {
   const [mode, setMode] = useState<AnalysisMode>('optimized')
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
+  const [currentCost, setCurrentCost] = useState<number>(0)
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -30,6 +32,7 @@ export default function UltrasoundPage() {
     setResult('')
     setError(null)
     setLoading(true)
+    setCurrentCost(0)
 
     try {
       const formData = new FormData()
@@ -55,12 +58,24 @@ export default function UltrasoundPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
+        const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
+                        analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
-            console.log('📡 [ULTRASOUND] Получен чанк:', content.length, 'символов, всего:', accumulatedText.length)
-            // Используем flushSync для немедленного обновления UI
             flushSync(() => {
               setResult(accumulatedText)
+            })
+          },
+          onUsage: (usage) => {
+            console.log('📊 [ULTRASOUND STREAMING] Получена точная стоимость:', usage.total_cost)
+            setCurrentCost(usage.total_cost)
+            
+            logUsage({
+              section: 'ultrasound',
+              model: usage.model || modelUsed,
+              inputTokens: usage.prompt_tokens,
+              outputTokens: usage.completion_tokens,
             })
           },
           onError: (error) => {
@@ -68,10 +83,7 @@ export default function UltrasoundPage() {
             setError(`Ошибка streaming: ${error.message}`)
           },
           onComplete: (finalText) => {
-            console.log('✅ [ULTRASOUND STREAMING] Streaming завершён успешно, итого:', finalText.length, 'символов')
-            flushSync(() => {
-              setResult(finalText)
-            })
+            console.log('✅ [ULTRASOUND STREAMING] Анализ завершен')
           }
         })
       } else {
@@ -85,11 +97,18 @@ export default function UltrasoundPage() {
 
         if (data.success) {
           setResult(data.result)
+          
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5');
+          const inputTokens = 2000;
+          const outputTokens = Math.ceil(data.result.length / 4);
+          const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
+          setCurrentCost(costInfo.totalCostUnits);
+
           logUsage({
             section: 'ultrasound',
-            model: data.model || 'anthropic/claude-opus-4.5',
-            inputTokens: 2000,
-            outputTokens: 1500,
+            model: modelUsed,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
           })
         } else {
           setError(data.error || 'Ошибка при анализе')
@@ -227,7 +246,7 @@ export default function UltrasoundPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} mode={mode} imageType="ultrasound" />
+      <AnalysisResult result={result} loading={loading} mode={mode} imageType="ultrasound" cost={currentCost} />
 
       {result && !loading && (
         <FeedbackForm 

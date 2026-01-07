@@ -1,8 +1,10 @@
 import Link from 'next/link'
+import SpendingSummary from '@/components/SpendingSummary'
 
 export default function HomePage() {
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-7xl">
+      <SpendingSummary />
       {/* HERO-блок */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-8 sm:mb-12">
         <div className="lg:col-span-2">

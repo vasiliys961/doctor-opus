@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
+import BalanceWidget from './BalanceWidget'
 
 export default function Navigation() {
   const pathname = usePathname()
@@ -32,7 +33,7 @@ export default function Navigation() {
     { name: '🧬 Генетический анализ', href: '/genetic' },
     { name: '🧪 Лаборатория (USB)', href: '/devices' },
     { name: '👤 База данных пациентов', href: '/patients' },
-    { name: '📊 Статистика', href: '/statistics' },
+    { name: '📊 Расход единиц', href: '/statistics' },
   ]
 
   const toggleMenu = () => setIsOpen(!isOpen)
@@ -84,6 +85,9 @@ export default function Navigation() {
         `}
       >
         <div className="px-4 py-4 mt-16 lg:mt-0">
+          <div className="mb-6">
+            <BalanceWidget />
+          </div>
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold">🧠 Меню</h1>
           </div>

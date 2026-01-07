@@ -10,6 +10,7 @@ import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
 import { logUsage } from '@/lib/simple-logger'
+import { calculateCost } from '@/lib/cost-calculator'
 
 export default function XRayPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -20,6 +21,7 @@ export default function XRayPage() {
   const [mode, setMode] = useState<AnalysisMode>('optimized')
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
+  const [currentCost, setCurrentCost] = useState<number>(0)
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -60,14 +62,24 @@ export default function XRayPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        console.log('📡 [XRAY] Начинаем обработку SSE потока...')
-        
+        const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
+                        analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
-            console.log('📡 [XRAY] Получен чанк:', content.length, 'символов, всего:', accumulatedText.length)
-            // Используем flushSync для немедленного обновления UI
             flushSync(() => {
               setResult(accumulatedText)
+            })
+          },
+          onUsage: (usage) => {
+            console.log('📊 [XRAY STREAMING] Получена точная стоимость:', usage.total_cost)
+            setCurrentCost(usage.total_cost)
+            
+            logUsage({
+              section: 'xray',
+              model: usage.model || modelUsed,
+              inputTokens: usage.prompt_tokens,
+              outputTokens: usage.completion_tokens,
             })
           },
           onError: (error) => {
@@ -75,10 +87,7 @@ export default function XRayPage() {
             setError(`Ошибка streaming: ${error.message}`)
           },
           onComplete: (finalText) => {
-            console.log('✅ [XRAY STREAMING] Streaming завершён успешно, итого:', finalText.length, 'символов')
-            flushSync(() => {
-              setResult(finalText)
-            })
+            console.log('✅ [XRAY STREAMING] Анализ завершен')
           }
         })
         
@@ -130,10 +139,10 @@ export default function XRayPage() {
       <AnalysisTips 
         content={{
           fast: "двухэтапный скрининг рентгена (сначала структурированное описание снимка, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс точности и цены для анализа рентгенограмм.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс точности и качества для анализа рентгенограмм.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев.",
           extra: [
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для анализа рентгенограмм.",
+            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества для анализа рентгенограмм.",
             "📸 Вы можете загрузить файл рентгена, сделать фото с камеры или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
             "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
@@ -236,7 +245,7 @@ export default function XRayPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} mode={mode} imageType="xray" />
+      <AnalysisResult result={result} loading={loading} mode={mode} imageType="xray" cost={currentCost} />
 
       {result && !loading && (
         <FeedbackForm 

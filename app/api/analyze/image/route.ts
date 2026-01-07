@@ -50,35 +50,7 @@ export async function POST(request: NextRequest) {
 
   // Вспомогательная функция для стриминга (должна быть объявлена ДО использования)
   const handleStreamingResponse = async (stream: ReadableStream, modelName: string) => {
-    const decoder = new TextDecoder();
-    const transformStream = new TransformStream({
-      transform(chunk, controller) {
-        controller.enqueue(chunk);
-        const text = decoder.decode(chunk, { stream: true });
-        if (text.includes('"usage":')) {
-          const lines = text.split('\n');
-          for (const line of lines) {
-            if (line.includes('"usage":')) {
-              try {
-                const jsonStr = line.startsWith('data: ') ? line.slice(6).trim() : line.trim();
-                if (jsonStr === '[DONE]') continue;
-                const data = JSON.parse(jsonStr);
-                if (data.usage) {
-                  console.log(formatCostLog(
-                    modelName,
-                    data.usage.prompt_tokens,
-                    data.usage.completion_tokens,
-                    data.usage.total_tokens
-                  ));
-                }
-              } catch (e) {}
-            }
-          }
-        }
-      }
-    });
-
-    return new Response(stream.pipeThrough(transformStream), {
+    return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',

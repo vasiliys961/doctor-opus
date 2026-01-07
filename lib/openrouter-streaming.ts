@@ -61,17 +61,21 @@ async function createSequentialStream(
   imagesBase64: string[],
   model: string,
   apiKey: string,
-  mimeTypes: string[] = []
+  mimeTypes: string[] = [],
+  initialUsage?: { prompt_tokens: number, completion_tokens: number }
 ): Promise<ReadableStream<Uint8Array>> {
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
+  const decoderForAccumulation = new TextDecoder();
 
   // Запускаем процесс асинхронно
   (async () => {
     try {
       let accumulatedFirstPart = '';
+      let totalUsage = initialUsage 
+        ? { prompt_tokens: initialUsage.prompt_tokens, completion_tokens: initialUsage.completion_tokens }
+        : { prompt_tokens: 0, completion_tokens: 0 };
 
       // --- ЧАСТЬ 1: Описание ---
       console.log(`📡 [SEQUENTIAL] Запуск Части 1 (Описание)...`);
@@ -100,7 +104,8 @@ async function createSequentialStream(
           ],
           max_tokens: 3000,
           temperature: 0.2,
-          stream: true
+          stream: true,
+          stream_options: { include_usage: true }
         })
       });
 
@@ -109,26 +114,42 @@ async function createSequentialStream(
       const reader1 = response1.body!.getReader();
       writer.write(encoder.encode('data: {"choices": [{"delta": {"content": "## 🔍 ОБЪЕКТИВНЫЙ СТАТУС (ОПИСАНИЕ)\\n\\n"}}]}\n\n'));
 
+      let partialLine1 = '';
       while (true) {
         const { done, value } = await reader1.read();
         if (done) break;
         
-        const chunk = decoder.decode(value, { stream: true });
-        writer.write(value);
+        const chunk = decoderForAccumulation.decode(value, { stream: true });
+        const lines = (partialLine1 + chunk).split('\n');
+        partialLine1 = lines.pop() || '';
 
-        const lines = chunk.split('\n');
+        let filteredValue = '';
         for (const line of lines) {
-          if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+          // Пропускаем сигнал завершения первой части, чтобы не закрыть общий поток
+          if (line.trim() === 'data: [DONE]') continue;
+          
+          if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
-              accumulatedFirstPart += data.choices[0]?.delta?.content || '';
+              if (data.usage) {
+                totalUsage.prompt_tokens += data.usage.prompt_tokens;
+                totalUsage.completion_tokens += data.usage.completion_tokens;
+                continue; // Не прокидываем промежуточный usage
+              }
+              const content = data.choices?.[0]?.delta?.content || '';
+              if (content) accumulatedFirstPart += content;
             } catch (e) {}
           }
+          filteredValue += line + '\n';
+        }
+
+        if (filteredValue) {
+          writer.write(encoder.encode(filteredValue));
         }
       }
 
-      // Пингуем канал, чтобы не закрылся
-      writer.write(encoder.encode(': keep-alive\\n\\n'));
+      // Пингуем канал
+      writer.write(encoder.encode(': keep-alive\n\n'));
 
       // --- ЧАСТЬ 2: Клиника ---
       console.log(`📡 [SEQUENTIAL] Запуск Части 2 (Директива)...`);
@@ -151,7 +172,8 @@ async function createSequentialStream(
           ],
           max_tokens: 5000,
           temperature: 0.2,
-          stream: true
+          stream: true,
+          stream_options: { include_usage: true }
         })
       });
 
@@ -161,16 +183,54 @@ async function createSequentialStream(
       }
 
       const reader2 = response2.body!.getReader();
-      // Выводим разделитель перед второй частью
-      writer.write(encoder.encode('\n\ndata: {"choices": [{"delta": {"content": "\\n\\n---\\n\\n## 🩺 КЛИНИЧЕСКАЯ ДИРЕКТИВА\\n\\n"}}]}\n\n'));
+      writer.write(encoder.encode('data: {"choices": [{"delta": {"content": "\\n\\n---\\n\\n## 🩺 КЛИНИЧЕСКАЯ ДИРЕКТИВА\\n\\n"}}]}\n\n'));
 
+      let partialLine2 = '';
       while (true) {
         const { done, value } = await reader2.read();
         if (done) break;
-        writer.write(value); // Стримим вторую часть
+        
+        const chunk = decoderForAccumulation.decode(value, { stream: true });
+        const lines = (partialLine2 + chunk).split('\n');
+        partialLine2 = lines.pop() || '';
+
+        let filteredValue = '';
+        for (const line of lines) {
+          // Пропускаем сигнал завершения второй части
+          if (line.trim() === 'data: [DONE]') continue;
+
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.usage) {
+                totalUsage.prompt_tokens += data.usage.prompt_tokens;
+                totalUsage.completion_tokens += data.usage.completion_tokens;
+                continue; // Не прокидываем промежуточный usage
+              }
+            } catch (e) {}
+          }
+          filteredValue += line + '\n';
+        }
+
+        if (filteredValue) {
+          writer.write(encoder.encode(filteredValue));
+        }
       }
 
-      // Явно сигнализируем о завершении
+      // Финальный чек
+      const { calculateCost } = await import('./cost-calculator');
+      const costInfo = calculateCost(totalUsage.prompt_tokens, totalUsage.completion_tokens, model);
+      const usageChunk = {
+        usage: {
+          prompt_tokens: totalUsage.prompt_tokens,
+          completion_tokens: totalUsage.completion_tokens,
+          total_tokens: totalUsage.prompt_tokens + totalUsage.completion_tokens,
+          total_cost: costInfo.totalCostUnits
+        },
+        model: model
+      };
+      
+      writer.write(encoder.encode(`data: ${JSON.stringify(usageChunk)}\n\n`));
       writer.write(encoder.encode('data: [DONE]\n\n'));
     } catch (error: any) {
       console.error('Sequential Stream Error:', error);
@@ -196,10 +256,12 @@ export async function analyzeImageFastStreaming(
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const { extractImageJSON } = await import('./openrouter');
-  const jsonExtraction = await extractImageJSON({
+  const extractionResult = await extractImageJSON({
     imageBase64,
     modality: imageType || 'unknown'
   });
+  const jsonExtraction = extractionResult.data;
+  const initialUsage = extractionResult.usage;
 
   const { getDirectivePrompt } = await import('./prompts');
   const directivePrompt = getDirectivePrompt(imageType as any, prompt);
@@ -221,7 +283,8 @@ ${directivePrompt}`;
     [imageBase64],
     MODELS.GEMINI_3_FLASH,
     apiKey,
-    ['image/png']
+    ['image/png'],
+    initialUsage
   );
 }
 
@@ -241,10 +304,12 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
   try {
     console.log(`🚀 [MULTI-OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
     const { extractImageJSON } = await import('./openrouter');
-    const jsonExtraction = await extractImageJSON({
+    const extractionResult = await extractImageJSON({
       imagesBase64,
       modality: imageType || 'unknown'
     });
+    const jsonExtraction = extractionResult.data;
+    const initialUsage = extractionResult.usage;
     
     const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
     const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
@@ -253,7 +318,7 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.SONNET, apiKey, mimeTypes);
+    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.SONNET, apiKey, mimeTypes, initialUsage);
   } catch (error: any) {
     throw error;
   }
@@ -274,7 +339,9 @@ export async function analyzeMultipleImagesWithJSONStreaming(
 
   try {
     const { extractImageJSON } = await import('./openrouter');
-    const jsonExtraction = await extractImageJSON({ imagesBase64, modality: imageType || 'unknown' });
+    const extractionResult = await extractImageJSON({ imagesBase64, modality: imageType || 'unknown' });
+    const jsonExtraction = extractionResult.data;
+    const initialUsage = extractionResult.usage;
     
     const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
     const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
@@ -283,10 +350,55 @@ export async function analyzeMultipleImagesWithJSONStreaming(
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes);
+    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes, initialUsage);
   } catch (error: any) {
     throw error;
   }
+}
+
+/**
+ * Вспомогательная функция для преобразования потока с добавлением расчета стоимости
+ */
+function createTransformWithUsage(stream: ReadableStream, model: string): ReadableStream<Uint8Array> {
+  const reader = stream.getReader();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          let modifiedChunk = chunk;
+
+          for (const line of lines) {
+            if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.usage) {
+                  const { calculateCost } = await import('./cost-calculator');
+                  const costInfo = calculateCost(data.usage.prompt_tokens, data.usage.completion_tokens, model);
+                  data.usage.total_cost = costInfo.totalCostUnits;
+                  data.model = model;
+                  modifiedChunk = modifiedChunk.replace(line, `data: ${JSON.stringify(data)}`);
+                }
+              } catch (e) {}
+            }
+          }
+          controller.enqueue(encoder.encode(modifiedChunk));
+        }
+      } catch (error) {
+        controller.error(error);
+      } finally {
+        controller.close();
+        reader.releaseLock();
+      }
+    }
+  });
 }
 
 /**
@@ -325,7 +437,7 @@ export async function sendTextRequestStreaming(
   });
 
   if (!response.ok) throw new Error(`API error: ${response.status}`);
-  return response.body!;
+  return createTransformWithUsage(response.body!, model);
 }
 
 /**
@@ -374,7 +486,7 @@ export async function analyzeImageStreaming(
   });
 
   if (!response.ok) throw new Error(`API error: ${response.status}`);
-  return response.body!;
+  return createTransformWithUsage(response.body!, model);
 }
 
 /**
@@ -391,7 +503,9 @@ export async function analyzeImageOpusTwoStageStreaming(
 
   try {
     const { extractImageJSON } = await import('./openrouter');
-    const jsonExtraction = await extractImageJSON({ imageBase64, modality: imageType || 'unknown' });
+    const extractionResult = await extractImageJSON({ imageBase64, modality: imageType || 'unknown' });
+    const jsonExtraction = extractionResult.data;
+    const initialUsage = extractionResult.usage;
     
     const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
     const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
@@ -400,7 +514,7 @@ export async function analyzeImageOpusTwoStageStreaming(
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.SONNET, apiKey, ['image/png']);
+    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.SONNET, apiKey, ['image/png'], initialUsage);
   } catch (error: any) {
     throw error;
   }
@@ -410,7 +524,7 @@ export async function analyzeImageOpusTwoStageStreaming(
  * Streaming анализ изображения через Opus с использованием JSON от Gemini
  */
 export async function analyzeImageWithJSONStreaming(
-  jsonExtraction: any,
+  jsonExtractionWrapper: any,
   imageBase64: string,
   prompt: string = 'Проанализируйте медицинское изображение.',
   mimeType: string = 'image/png',
@@ -420,6 +534,9 @@ export async function analyzeImageWithJSONStreaming(
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
+  const jsonExtraction = jsonExtractionWrapper.data || jsonExtractionWrapper;
+  const initialUsage = jsonExtractionWrapper.usage;
+
   const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
   const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
   const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
@@ -427,7 +544,7 @@ export async function analyzeImageWithJSONStreaming(
   const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
   const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType]);
+    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType], initialUsage);
 }
 
 /**
@@ -518,5 +635,5 @@ export async function analyzeMultipleImagesStreaming(
   });
 
   if (!response.ok) throw new Error(`API error: ${response.status}`);
-  return response.body!;
+  return createTransformWithUsage(response.body!, model);
 }

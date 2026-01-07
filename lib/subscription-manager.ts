@@ -5,8 +5,9 @@
 
 import { calculateCost } from './cost-calculator';
 
-// Глобальный флаг включения системы (ОТКЛЮЧЕНО ПО УМОЛЧАНИЮ)
-const SUBSCRIPTION_ENABLED = process.env.NEXT_PUBLIC_SUBSCRIPTION_ENABLED === 'true';
+// Глобальный флаг включения системы (Всегда включено для учета, блокировка зависит от env)
+const SUBSCRIPTION_ENABLED = true;
+const SUBSCRIPTION_STRICT_MODE = process.env.NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE === 'true';
 
 // Курс конвертации USD -> единицы (настраивается через .env)
 const USD_TO_CREDITS_RATE = parseInt(process.env.NEXT_PUBLIC_USD_TO_CREDITS || '100');
@@ -169,8 +170,8 @@ export function deductBalance(params: {
     const costInfo = calculateCost(params.inputTokens, params.outputTokens, params.model);
     const costCredits = Math.ceil(costInfo.totalCostUsd * USD_TO_CREDITS_RATE);
 
-    // Проверка достаточности средств
-    if (balance.currentCredits < costCredits) {
+    // Проверка достаточности средств (только если строгий режим включен)
+    if (SUBSCRIPTION_STRICT_MODE && balance.currentCredits < costCredits) {
       console.warn(`⚠️ [SUBSCRIPTION] Недостаточно единиц: нужно ${costCredits}, доступно ${balance.currentCredits}`);
       return { 
         success: false, 
@@ -179,7 +180,7 @@ export function deductBalance(params: {
       };
     }
 
-    // Списание
+    // Списание (происходит всегда, даже если уходим в минус в не-строгом режиме)
     balance.currentCredits -= costCredits;
     balance.totalSpent += costCredits;
     localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));

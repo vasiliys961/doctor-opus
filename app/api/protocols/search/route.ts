@@ -112,7 +112,8 @@ ${specialty ? `Специальность: ${specialty}` : ''}
       ],
       max_tokens: MAX_TOKENS,
       temperature: 0.3, // Низкая температура для более точных и структурированных ответов
-      stream: useStreaming // Включаем streaming
+      stream: useStreaming, // Включаем streaming
+      stream_options: { include_usage: true }
     };
 
     const response = await fetch(OPENROUTER_API_URL, {
@@ -189,36 +190,39 @@ ${specialty ? `Специальность: ${specialty}` : ''}
                 if (line.trim() === '') continue;
                 
                 if (line.startsWith('data: ')) {
-                  const data = line.slice(6);
+                  const dataStr = line.slice(6).trim();
                   
-                  if (data === '[DONE]') {
+                  if (dataStr === '[DONE]') {
                     console.log('');
                     console.log(`✅ [${modelMode.toUpperCase()}] ========== STREAMING ЗАВЕРШЕН ==========`);
-                    
-                    // Вывод красивого отчета в терминал ПЕРЕД закрытием
-                    const approxInputTokens = Math.ceil(searchPrompt.length / 4);
-                    const approxOutputTokens = Math.ceil(totalContentLength / 4);
-                    console.log(formatCostLog(MODEL, approxInputTokens, approxOutputTokens, approxInputTokens + approxOutputTokens));
-                    console.log('');
-
                     controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                     controller.close();
                     return;
                   }
                   
                   try {
-                    const json = JSON.parse(data);
-                    const content = json.choices?.[0]?.delta?.content || '';
+                    const json = JSON.parse(dataStr);
                     
+                    // Если пришел чанк с использованием, добавляем стоимость и прокидываем дальше
+                    if (json.usage) {
+                      const { calculateCost } = await import('@/lib/cost-calculator');
+                      const costInfo = calculateCost(json.usage.prompt_tokens, json.usage.completion_tokens, MODEL);
+                      json.usage.total_cost = costInfo.totalCostUnits;
+                      json.model = MODEL;
+                      
+                      console.log(formatCostLog(MODEL, json.usage.prompt_tokens, json.usage.completion_tokens, json.usage.total_tokens));
+                      
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify(json)}\n\n`));
+                      continue;
+                    }
+
+                    const content = json.choices?.[0]?.delta?.content || '';
                     if (content) {
                       chunkCount++;
                       totalContentLength += content.length;
-                      // Отправляем в формате, который ожидает handleSSEStream
-                      // Формат OpenRouter: { choices: [{ delta: { content: "..." } }] }
-                      controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                      controller.enqueue(encoder.encode(`data: ${dataStr}\n\n`));
                     }
                   } catch (e) {
-                    // Игнорируем ошибки парсинга отдельных чанков
                     console.debug('⚠️ [AI] Ошибка парсинга SSE чанка:', e);
                   }
                 }

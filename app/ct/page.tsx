@@ -10,6 +10,7 @@ import AnalysisTips from '@/components/AnalysisTips'
 import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
 import FeedbackForm from '@/components/FeedbackForm'
 import { logUsage } from '@/lib/simple-logger'
+import { calculateCost } from '@/lib/cost-calculator'
 
 export default function CTPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -20,6 +21,7 @@ export default function CTPage() {
   const [mode, setMode] = useState<AnalysisMode>('optimized')
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
+  const [currentCost, setCurrentCost] = useState<number>(0)
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -55,12 +57,24 @@ export default function CTPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
+        const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
+                        analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
-            console.log('📡 [CT] Получен чанк:', content.length, 'символов, всего:', accumulatedText.length)
-            // Используем flushSync для немедленного обновления UI
             flushSync(() => {
               setResult(accumulatedText)
+            })
+          },
+          onUsage: (usage) => {
+            console.log('📊 [CT STREAMING] Получена точная стоимость:', usage.total_cost)
+            setCurrentCost(usage.total_cost)
+            
+            logUsage({
+              section: 'ct',
+              model: usage.model || modelUsed,
+              inputTokens: usage.prompt_tokens,
+              outputTokens: usage.completion_tokens,
             })
           },
           onError: (error) => {
@@ -68,10 +82,7 @@ export default function CTPage() {
             setError(`Ошибка streaming: ${error.message}`)
           },
           onComplete: (finalText) => {
-            console.log('✅ [CT STREAMING] Streaming завершён успешно, итого:', finalText.length, 'символов')
-            flushSync(() => {
-              setResult(finalText)
-            })
+            console.log('✅ [CT STREAMING] Анализ завершен')
           }
         })
       } else {
@@ -121,10 +132,10 @@ export default function CTPage() {
       <AnalysisTips 
         content={{
           fast: "двухэтапный скрининг (сначала структурированное описание плотности HU и структур, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс точности и цены для КТ‑исследований.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс точности и качества для КТ‑исследований.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев.",
           extra: [
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для КТ‑исследований.",
+            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества для КТ‑исследований.",
             "📸 Вы можете загрузить снимки КТ, сделать фото или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
             "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
@@ -227,7 +238,7 @@ export default function CTPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} mode={mode} imageType="ct" />
+      <AnalysisResult result={result} loading={loading} mode={mode} imageType="ct" cost={currentCost} />
 
       {result && !loading && (
         <FeedbackForm 

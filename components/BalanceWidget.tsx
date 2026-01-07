@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { getBalance, getUsagePercentage, isSubscriptionEnabled } from '@/lib/subscription-manager'
+import { getUsageBySections } from '@/lib/simple-logger'
 import type { SubscriptionBalance } from '@/lib/subscription-manager'
 import Link from 'next/link'
 
@@ -29,16 +30,39 @@ export default function BalanceWidget() {
       const bal = getBalance()
       setBalance(bal)
       setUsagePercent(getUsagePercentage())
-      setIsVisible(bal !== null) // Показываем только если есть баланс
+      setIsVisible(true) // Всегда показываем виджет, если система включена
     } catch (error) {
       console.error('Error loading balance widget:', error)
       setIsVisible(false)
     }
   }
 
-  // Не показываем виджет если система отключена или баланса нет
-  if (!isVisible || !balance) {
+  // Не показываем виджет только если система полностью отключена
+  if (!isVisible) {
     return null
+  }
+
+  // Если баланса нет (пакет не куплен), показываем базовую информацию о тратах
+  if (!balance) {
+    const usageData = getUsageBySections();
+    let totalSpentUnits = 0;
+    Object.values(usageData).forEach(s => totalSpentUnits += s.costUnits);
+
+    return (
+      <Link href="/subscription">
+        <div className="bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-lg p-4 shadow-lg hover:shadow-xl transition-all cursor-pointer border border-gray-600">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs opacity-90">Расход за месяц</p>
+            <span className="bg-white/20 text-[10px] px-2 py-0.5 rounded uppercase tracking-wider">Demo</span>
+          </div>
+          <p className="text-2xl font-bold mb-1">{totalSpentUnits.toFixed(2)} ед.</p>
+          <p className="text-[10px] opacity-70 mb-3 uppercase tracking-tighter">Накоплено трат без подписки</p>
+          <div className="text-center bg-white/10 rounded py-1.5 text-[10px] font-bold hover:bg-white/20 transition-colors uppercase tracking-widest">
+            Активировать пакет →
+          </div>
+        </div>
+      </Link>
+    )
   }
 
   const isLowBalance = balance.currentCredits < (balance.initialCredits * 0.2)
@@ -101,6 +125,7 @@ export default function BalanceWidget() {
     </Link>
   )
 }
+
 
 
 

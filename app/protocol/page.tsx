@@ -11,6 +11,8 @@ import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } fro
 import { saveAs } from 'file-saver'
 import { DEFAULT_TEMPLATES, ProtocolTemplate } from '@/lib/protocol-templates'
 import { handleSSEStream } from '@/lib/streaming-utils'
+import { logUsage } from '@/lib/simple-logger'
+import { calculateCost } from '@/lib/cost-calculator'
 
 export default function ProtocolPage() {
   const [rawText, setRawText] = useState('')
@@ -19,6 +21,7 @@ export default function ProtocolPage() {
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
   const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini'>('sonnet')
+  const [currentCost, setCurrentCost] = useState<number>(0)
   
   // Состояния для специалистов и шаблонов
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATES[0].id)
@@ -31,6 +34,7 @@ export default function ProtocolPage() {
 
     setLoading(true)
     setProtocol('')
+    setCurrentCost(0)
 
     try {
       const payload = {
@@ -41,6 +45,9 @@ export default function ProtocolPage() {
         customTemplate: customTemplate,
         specialistName: specialistName
       };
+
+      const modelUsed = model === 'opus' ? 'anthropic/claude-opus-4.5' : 
+                      model === 'gemini' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-sonnet-4.5';
 
       if (useStreaming) {
         const response = await fetch('/api/protocol', {
@@ -54,6 +61,20 @@ export default function ProtocolPage() {
         await handleSSEStream(response, {
           onChunk: (text) => {
             setProtocol(prev => prev + text)
+          },
+          onUsage: (usage) => {
+            console.log('📊 [PROTOCOL STREAMING] Получена точная стоимость:', usage.total_cost)
+            setCurrentCost(usage.total_cost)
+            
+            logUsage({
+              section: 'protocols',
+              model: usage.model || modelUsed,
+              inputTokens: usage.prompt_tokens,
+              outputTokens: usage.completion_tokens,
+            });
+          },
+          onComplete: (finalText) => {
+            console.log('✅ [PROTOCOL STREAMING] Протокол готов')
           }
         })
       } else {
@@ -63,7 +84,20 @@ export default function ProtocolPage() {
           body: JSON.stringify(payload),
         })
         const data = await response.json()
-        if (data.success) setProtocol(data.protocol)
+        if (data.success) {
+          setProtocol(data.protocol)
+          const inputTokens = Math.ceil(rawText.length / 4) + 1000;
+          const outputTokens = Math.ceil(data.protocol.length / 4);
+          const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
+          setCurrentCost(costInfo.totalCostUnits);
+
+          logUsage({
+            section: 'protocols',
+            model: modelUsed,
+            inputTokens,
+            outputTokens
+          });
+        }
         else setProtocol(`Ошибка: ${data.error}`)
       }
     } catch (err: any) {
@@ -236,7 +270,14 @@ export default function ProtocolPage() {
 
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Сгенерированный протокол</h2>
+            <div>
+              <h2 className="text-xl font-semibold">Сгенерированный протокол</h2>
+              {currentCost > 0 && (
+                <div className="mt-1 bg-teal-50 text-teal-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-teal-200 inline-block shadow-sm">
+                  💰 Списано: {currentCost.toFixed(2)} ед.
+                </div>
+              )}
+            </div>
             {protocol && (
               <div className="flex gap-2">
                 <button onClick={() => { navigator.clipboard.writeText(protocol); alert('Скопировано'); }} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm">📋</button>

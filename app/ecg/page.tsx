@@ -10,6 +10,8 @@ import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
 import { logUsage } from '@/lib/simple-logger'
+import { calculateCost } from '@/lib/cost-calculator'
+import { handleSSEStream } from '@/lib/streaming-utils'
 
 export default function ECGPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -22,7 +24,8 @@ export default function ECGPage() {
   const [analysisId, setAnalysisId] = useState<string>('')
   const [mode, setMode] = useState<AnalysisMode>('optimized')
   const [clinicalContext, setClinicalContext] = useState('')
-  const [useStreaming, setUseStreaming] = useState(true) // Включаем стриминг по умолчанию для точного анализа
+  const [useStreaming, setUseStreaming] = useState(true)
+  const [currentCost, setCurrentCost] = useState<number>(0) // Включаем стриминг по умолчанию для точного анализа
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -53,6 +56,7 @@ export default function ECGPage() {
         console.log('📡 [ECG CLIENT] Запуск streaming режима для режима:', analysisMode)
         setResult('') // Очищаем предыдущий результат для стриминга
         setLoading(true)
+        setCurrentCost(0)
         
         try {
           const response = await fetch('/api/analyze/image', {
@@ -60,136 +64,45 @@ export default function ECGPage() {
             body: formData,
           })
 
-          const headerId = response.headers.get('X-Analysis-Id')
-          if (headerId) setAnalysisId(headerId)
-
           if (!response.ok) {
             const errorText = await response.text()
             console.error('❌ [ECG CLIENT] Streaming ошибка:', response.status, errorText)
-            throw new Error(`HTTP error! status: ${response.status}`)
+            throw new Error(`Ошибка API: ${response.status} - ${errorText}`)
           }
 
-          const contentType = response.headers.get('Content-Type')
-          console.log('✅ [ECG CLIENT] Streaming ответ получен, Content-Type:', contentType)
-          
-          if (!contentType || !contentType.includes('text/event-stream')) {
-            console.warn('⚠️ [ECG CLIENT] Неожиданный Content-Type:', contentType)
-          }
+          const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
+                          analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+          setModelInfo(modelUsed)
 
-          const reader = response.body?.getReader()
-          const decoder = new TextDecoder()
-          let accumulatedText = ''
-
-          if (!reader) {
-            setError('Не удалось создать reader для streaming потока')
-            setLoading(false)
-            return
-          }
-
-          console.log('📡 [ECG STREAMING] Начало чтения потока')
-          let buffer = ''
-          let chunkCount = 0
-          let lastUpdateTime = Date.now()
-          let firstChunkReceived = false
-          
-          try {
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) {
-                console.log('📡 [ECG STREAMING] Поток завершён, всего чанков:', chunkCount)
-                break
-              }
-
-              chunkCount++
-              const chunk = decoder.decode(value, { stream: true })
-              
-              if (!firstChunkReceived) {
-                console.log('📡 [ECG STREAMING] Первый чанк получен:', chunk.substring(0, 500))
-                firstChunkReceived = true
-              }
-              
-              buffer += chunk
-              
-              // Обрабатываем полные строки (SSE формат использует \n или \r\n)
-              const lines = buffer.split(/\r?\n/)
-              buffer = lines.pop() || ''
-
-              for (const line of lines) {
-                // Пропускаем пустые строки и комментарии
-                if (!line || line.trim() === '' || line.startsWith(':')) {
-                  continue
-                }
-                
-                if (line.startsWith('data: ')) {
-                  const data = line.slice(6).trim()
-                  if (data === '[DONE]') {
-                    console.log('📡 [ECG STREAMING] Получен сигнал завершения')
-                    break
-                  }
-
-                  try {
-                    const json = JSON.parse(data)
-                    console.log('📡 [ECG STREAMING] JSON получен:', JSON.stringify(json).substring(0, 200))
-                    
-                    // Проверяем разные возможные форматы от OpenRouter
-                    let content = ''
-                    if (json.choices && json.choices[0]) {
-                      if (json.choices[0].delta && json.choices[0].delta.content) {
-                        content = json.choices[0].delta.content
-                      } else if (json.choices[0].message && json.choices[0].message.content) {
-                        content = json.choices[0].message.content
-                      }
-                    }
-                    
-                    if (content) {
-                      accumulatedText += content
-                      // Используем flushSync для немедленного обновления UI
-                      flushSync(() => {
-                        setResult(accumulatedText)
-                      })
-                      
-                      // Логируем каждые 50 символов или каждую секунду
-                      const now = Date.now()
-                      if (accumulatedText.length % 50 === 0 || now - lastUpdateTime > 1000) {
-                        console.log('📡 [ECG STREAMING] Получен фрагмент:', content.length, 'символов, всего:', accumulatedText.length)
-                        lastUpdateTime = now
-                      }
-                    } else {
-                      console.debug('📡 [ECG STREAMING] Пустой content в JSON:', JSON.stringify(json).substring(0, 200))
-                    }
-                  } catch (e) {
-                    if (data && data.length > 0 && !data.includes('[DONE]')) {
-                      console.warn('⚠️ [ECG STREAMING] Ошибка парсинга:', e, 'data:', data.substring(0, 300))
-                    }
-                  }
-                } else if (line.trim() && !line.startsWith(':')) {
-                  console.log('📡 [ECG STREAMING] Другая строка (не data:):', line.substring(0, 200))
-                }
-              }
-            }
-            
-            console.log('✅ [ECG STREAMING] Итого получено:', accumulatedText.length, 'символов, чанков:', chunkCount)
-            const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5'
-            setModelInfo(modelUsed)
-            
-            // Убеждаемся, что финальный результат установлен
-            if (accumulatedText.length > 0) {
+          await handleSSEStream(response, {
+            onChunk: (content, accumulatedText) => {
               flushSync(() => {
                 setResult(accumulatedText)
               })
-            } else {
-              setError('Не удалось получить данные через streaming. Попробуйте отключить streaming режим.')
+            },
+            onUsage: (usage) => {
+              console.log('📊 [ECG STREAMING] Получена точная стоимость:', usage.total_cost)
+              setCurrentCost(usage.total_cost)
+              
+              logUsage({
+                section: 'ecg',
+                model: usage.model || modelUsed,
+                inputTokens: usage.prompt_tokens,
+                outputTokens: usage.completion_tokens,
+              })
+            },
+            onComplete: (finalText) => {
+              console.log('✅ [ECG STREAMING] Анализ завершен')
+            },
+            onError: (err) => {
+              console.error('❌ [ECG STREAMING] Ошибка:', err)
+              setError(`Ошибка стриминга: ${err.message}`)
             }
-          } catch (streamError: any) {
-            console.error('❌ [ECG STREAMING] Ошибка чтения потока:', streamError)
-            setError(`Ошибка streaming: ${streamError.message}`)
-          } finally {
-            reader.releaseLock()
-            setLoading(false)
-          }
-        } catch (fetchError: any) {
-          console.error('❌ [ECG CLIENT] Ошибка fetch:', fetchError)
-          setError(`Ошибка запроса: ${fetchError.message}`)
+          })
+        } catch (err: any) {
+          console.error('❌ [ECG CLIENT] Ошибка:', err)
+          setError(err.message)
+        } finally {
           setLoading(false)
         }
       } else {
@@ -204,16 +117,21 @@ export default function ECGPage() {
         if (data.success) {
           setResult(data.result)
           setAnalysisId(data.analysis_id || '')
-          setModelInfo(data.model || 'anthropic/claude-opus-4.5')
-          console.log('✅ [ECG CLIENT] Анализ ЭКГ завершён')
-          console.log('📊 [ECG CLIENT] Использованная модель:', data.model || 'Opus 4.5 (по умолчанию)')
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5')
+          setModelInfo(modelUsed)
           
+          const inputTokens = 2500;
+          const outputTokens = Math.ceil(data.result.length / 4);
+          
+          const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
+          setCurrentCost(costInfo.totalCostUnits);
+
           // Логирование использования
           logUsage({
             section: 'ecg',
-            model: data.model || 'anthropic/claude-opus-4.5',
-            inputTokens: 2000, // примерное значение для ЭКГ
-            outputTokens: 1500,
+            model: modelUsed,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
           })
         } else {
           setError(data.error || 'Ошибка при анализе')
@@ -248,10 +166,10 @@ export default function ECGPage() {
       <AnalysisTips 
         content={{
           fast: "двухэтапный скрининг ЭКГ (сначала детализированное, но компактное описание кривой, затем текстовый разбор), даёт краткое заключение и оценку риска, удобно для быстрого первичного просмотра.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс цены и качества для анализа кривых ЭКГ.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс глубины и качества для анализа кривых ЭКГ.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев.",
           extra: [
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для анализа кривых ЭКГ.",
+            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества для анализа кривых ЭКГ.",
             "📸 Вы можете загрузить файл с ЭКГ, сделать фото с камеры или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
             "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
@@ -374,6 +292,7 @@ export default function ECGPage() {
         model={modelInfo} 
         mode={mode}
         imageType="ecg"
+        cost={currentCost}
       />
 
       {result && !loading && (

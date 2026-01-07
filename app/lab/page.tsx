@@ -10,6 +10,7 @@ import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import Script from 'next/script'
 import { logUsage } from '@/lib/simple-logger'
+import { calculateCost } from '@/lib/cost-calculator'
 import { handleSSEStream } from '@/lib/streaming-utils'
 
 // Расширяем Window для PDF.js
@@ -30,6 +31,7 @@ export default function LabPage() {
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
+  const [currentCost, setCurrentCost] = useState<number>(0)
 
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
     if (!window.pdfjsLib) {
@@ -113,6 +115,7 @@ export default function LabPage() {
     setResult('')
     setError(null)
     setLoading(true)
+    setCurrentCost(0)
 
     try {
       // Если это PDF - конвертируем в изображения на клиенте
@@ -150,19 +153,23 @@ export default function LabPage() {
                 setResult(accumulatedText)
               })
             },
+            onUsage: (usage) => {
+              console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
+              setCurrentCost(usage.total_cost)
+              
+              logUsage({
+                section: 'lab',
+                model: usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5'),
+                inputTokens: usage.prompt_tokens,
+                outputTokens: usage.completion_tokens,
+              })
+            },
             onError: (err) => {
               console.error('❌ [STREAMING] Ошибка:', err)
               setError(`Ошибка стриминга: ${err.message}`)
             },
             onComplete: (finalText) => {
-              const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                              mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
-              logUsage({
-                section: 'lab',
-                model: modelUsed,
-                inputTokens: pdfImages.length * 2000,
-                outputTokens: 1000,
-              })
+              console.log('✅ [LAB STREAMING] Анализ завершен')
             }
           })
         } else {
@@ -171,11 +178,18 @@ export default function LabPage() {
             setResult(data.result)
             const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
                             mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+            
+            const inputTokens = pdfImages.length * 2000;
+            const outputTokens = Math.ceil(data.result.length / 4);
+            
+            const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
+            setCurrentCost(costInfo.totalCostUnits);
+
             logUsage({
               section: 'lab',
               model: modelUsed,
-              inputTokens: pdfImages.length * 2000,
-              outputTokens: 1000,
+              inputTokens: inputTokens,
+              outputTokens: outputTokens,
             })
           } else {
             setError(data.error || 'Ошибка при анализе')
@@ -202,19 +216,23 @@ export default function LabPage() {
                 setResult(accumulatedText)
               })
             },
+            onUsage: (usage) => {
+              console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
+              setCurrentCost(usage.total_cost)
+              
+              logUsage({
+                section: 'lab',
+                model: usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5'),
+                inputTokens: usage.prompt_tokens,
+                outputTokens: usage.completion_tokens,
+              })
+            },
             onError: (err) => {
               console.error('❌ [STREAMING] Ошибка:', err)
               setError(`Ошибка стриминга: ${err.message}`)
             },
             onComplete: (finalText) => {
-              const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                              mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
-              logUsage({
-                section: 'lab',
-                model: modelUsed,
-                inputTokens: 1500,
-                outputTokens: 800,
-              })
+              console.log('✅ [LAB STREAMING] Анализ завершен')
             }
           })
         } else {
@@ -223,11 +241,18 @@ export default function LabPage() {
             setResult(data.result)
             const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
                             mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+            
+            const inputTokens = 1500;
+            const outputTokens = Math.ceil(data.result.length / 4);
+            
+            const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
+            setCurrentCost(costInfo.totalCostUnits);
+
             logUsage({
               section: 'lab',
               model: modelUsed,
-              inputTokens: 1500,
-              outputTokens: 800,
+              inputTokens: inputTokens,
+              outputTokens: outputTokens,
             })
           } else {
             setError(data.error || 'Ошибка при анализе')
@@ -269,9 +294,9 @@ export default function LabPage() {
         <AnalysisTips 
           content={{
             fast: "анализ лабораторных бланков (выделение показателей, их значений и референсов), структурирование данных для удобного просмотра.",
-            validated: "самый точный клинический разбор (Gemini JSON + Opus 4.5) — детальная оценка отклонений от нормы; самый дорогой режим.",
+            validated: "самый точный клинический разбор (Gemini JSON + Opus 4.5) — детальная оценка отклонений от нормы.",
             extra: [
-              "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности извлечения данных и цены.",
+              "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности извлечения данных и глубины анализа.",
               "📄 Вы можете загрузить PDF, Excel (XLSX/XLS), CSV или просто фото бланка.",
               "🔍 Система автоматически распознает таблицы и переводит их в цифровой формат.",
               "💾 Результаты можно сохранить и использовать для сравнительного анализа в будущем."
@@ -374,7 +399,7 @@ export default function LabPage() {
           </div>
         )}
 
-        <AnalysisResult result={result} loading={loading} />
+        <AnalysisResult result={result} loading={loading} cost={currentCost} />
 
         {result && !loading && (
           <FeedbackForm 

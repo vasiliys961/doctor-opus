@@ -506,31 +506,7 @@ export async function extractImageJSON(options: {
 
   // Получаем детальные инструкции специалиста для этого типа исследования
   const { getDescriptionPrompt } = await import('./prompts');
-  const specialistInstructions = getDescriptionPrompt(modality as any);
-
-  const jsonPrompt = `Ты — эксперт-медик (роль: Специалист). Твоя задача: проанализировать ${allImages.length > 1 ? 'предоставленные изображения' : 'изображение'} и извлечь МАКСИМАЛЬНО ДЕТАЛЬНУЮ техническую информацию в формате JSON.
-
-### ТВОИ ИНСТРУКЦИИ КАК СПЕЦИАЛИСТА:
-${specialistInstructions}
-
-### ТРЕБОВАНИЕ К JSON:
-Верни результат СТРОГО в формате JSON со следующей структурой:
-{
-    "modality": "${modality}",
-    "technical_measurements": {
-        "description": "детальные замеры (мм, мс, HU, углы и т.д.)",
-        "values": {}
-    },
-    "findings_observed": [
-        {"finding": "находка", "location": "локализация", "severity": "mild|moderate|severe", "details": "подробности"}
-    ],
-    "emergency_status": "норма|внимание|ЭКСТРЕННО (укажи если есть признаки из ШАГа 0)",
-    "image_quality": "excellent|good|fair|poor",
-    "confidence": 0.0-1.0,
-    "recommendations": ["технические рекомендации"]
-}
-
-ВАЖНО: Твой ответ должен быть СТРОГО валидным JSON. Используй свои глубокие медицинские знания для точного извлечения параметров.`;
+  const jsonPrompt = getDescriptionPrompt(modality as any);
 
   const content: any[] = [
     {
@@ -591,7 +567,17 @@ ${specialistInstructions}
           if (tokensUsed > 0) {
             console.log(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
           }
-          return jsonExtraction;
+          
+          // Возвращаем и данные, и usage для корректного учета стоимости
+          return {
+            data: jsonExtraction,
+            usage: {
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: tokensUsed,
+              model: model
+            }
+          };
         } catch (e) {
           console.warn(`⚠️ [GEMINI JSON] Ошибка парсинга JSON от ${model}, пробую следующую модель...`);
           continue;

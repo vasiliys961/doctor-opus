@@ -17,6 +17,7 @@ const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false
 
 import { validateMedicalImage, ImageValidationResult } from '@/lib/image-validator'
 import { logUsage } from '@/lib/simple-logger'
+import { calculateCost } from '@/lib/cost-calculator'
 
 export default function ImageAnalysisPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -37,6 +38,7 @@ export default function ImageAnalysisPage() {
   const [useStreaming, setUseStreaming] = useState(true)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [lastAnalysisData, setLastAnalysisData] = useState<any>(null)
+  const [currentCost, setCurrentCost] = useState<number>(0)
 
   const handleLabsFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -83,6 +85,7 @@ export default function ImageAnalysisPage() {
     setFlashResult('')
     setError(null)
     setLoading(true)
+    setCurrentCost(0)
 
     try {
       const prompt = 'Проанализируйте медицинское изображение. Опишите все патологические изменения, локализацию, размеры, плотность, контуры.'
@@ -137,16 +140,30 @@ export default function ImageAnalysisPage() {
                 setResult(accumulatedText)
               })
             },
+            onUsage: (usage) => {
+              console.log('📊 [IMAGE-ANALYSIS STREAMING] Получена точная стоимость:', usage.total_cost)
+              
+              flushSync(() => {
+                setCurrentCost(usage.total_cost)
+                const modelUsed = usage.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5')
+                
+                setModelInfo({ model: modelUsed, mode: analysisMode })
+                setLastAnalysisData({ model: modelUsed, mode: analysisMode })
+
+                logUsage({
+                  section: 'image-analysis',
+                  model: modelUsed,
+                  inputTokens: usage.prompt_tokens,
+                  outputTokens: usage.completion_tokens,
+                })
+              })
+            },
             onError: (error) => {
               console.error('❌ [STREAMING] Ошибка:', error)
               setError(`Ошибка streaming: ${error.message}`)
             },
             onComplete: (finalText) => {
-              flushSync(() => {
-                setResult(finalText)
-                setModelInfo({ model: modelUsed, mode: analysisMode })
-                setLastAnalysisData({ model: modelUsed, mode: analysisMode })
-              })
+              console.log('✅ [IMAGE-ANALYSIS STREAMING] Анализ завершен')
             }
           })
         } catch (fetchError: any) {
@@ -455,6 +472,7 @@ export default function ImageAnalysisPage() {
         model={lastAnalysisData?.model || modelInfo.model} 
         mode={lastAnalysisData?.mode || modelInfo.mode || mode} 
         imageType={imageType}
+        cost={currentCost}
       />
 
       {result && !loading && (
