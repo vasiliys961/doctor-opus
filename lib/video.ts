@@ -8,7 +8,7 @@
  * но адаптирована под формат OpenRouter Chat Completions и под TypeScript.
  */
 
-import { getDescriptionPrompt, getDirectivePrompt, ImageType } from './prompts';
+import { getObjectiveDescriptionPrompt, getDirectivePrompt, ImageType } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -52,7 +52,7 @@ export async function analyzeVideoTwoStage(
 
   // === ЭТАП 1. Gemini 3.0 Flash — описание видео ===
   // Используем специализированный промпт для описания
-  const descPrompt = getDescriptionPrompt(imageType) + 
+  const descPrompt = getObjectiveDescriptionPrompt(imageType) + 
     (options.prompt ? `\n\nДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ: ${options.prompt}` : '') +
     (options.metadata ? `\n\nМЕТАДАННЫЕ: ${JSON.stringify(options.metadata)}` : '');
 

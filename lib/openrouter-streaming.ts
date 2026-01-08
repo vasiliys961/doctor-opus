@@ -62,7 +62,8 @@ async function createSequentialStream(
   model: string,
   apiKey: string,
   mimeTypes: string[] = [],
-  initialUsage?: { prompt_tokens: number, completion_tokens: number }
+  initialUsage?: { prompt_tokens: number, completion_tokens: number },
+  hiddenContext?: string
 ): Promise<ReadableStream<Uint8Array>> {
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -167,7 +168,7 @@ async function createSequentialStream(
             { role: 'system', content: SYSTEM_PROMPT },
             { 
               role: 'user', 
-              content: `ИНСТРУКЦИЯ: ${secondPartPrompt}\n\nОПИСАНИЕ СНИМКОВ:\n${accumulatedFirstPart}\n\nСФОРМУЛИРУЙ ТОЛЬКО ДИАГНОЗЫ, ПЛАН ЛЕЧЕНИЯ И ССЫЛКИ.` 
+              content: `ИНСТРУКЦИЯ: ${secondPartPrompt}\n\n${hiddenContext ? `ТЕХНИЧЕСКИЕ ДАННЫЕ (JSON) ДЛЯ АНАЛИЗА:\n${hiddenContext}\n\n` : ''}ОПИСАНИЕ СНИМКОВ:\n${accumulatedFirstPart}\n\nСФОРМУЛИРУЙ ТОЛЬКО ДИАГНОЗЫ, ПЛАН ЛЕЧЕНИЯ И ССЫЛКИ.` 
             }
           ],
           max_tokens: 5000,
@@ -312,14 +313,14 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
     const jsonExtraction = extractionResult.data;
     const initialUsage = extractionResult.usage;
     
-    const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
+    const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
+    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal');
     const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
 
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.SONNET, apiKey, mimeTypes, initialUsage);
+    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.SONNET, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2));
   } catch (error: any) {
     throw error;
   }
@@ -344,14 +345,14 @@ export async function analyzeMultipleImagesWithJSONStreaming(
     const jsonExtraction = extractionResult.data;
     const initialUsage = extractionResult.usage;
     
-    const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
+    const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
+    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal');
     const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
 
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes, initialUsage);
+    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2));
   } catch (error: any) {
     throw error;
   }
@@ -517,14 +518,14 @@ export async function analyzeImageOpusTwoStageStreaming(
     const jsonExtraction = extractionResult.data;
     const initialUsage = extractionResult.usage;
     
-    const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
+    const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
+    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal');
     const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.SONNET, apiKey, ['image/png'], initialUsage);
+    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.SONNET, apiKey, ['image/png'], initialUsage, JSON.stringify(jsonExtraction, null, 2));
   } catch (error: any) {
     throw error;
   }
@@ -547,14 +548,14 @@ export async function analyzeImageWithJSONStreaming(
   const jsonExtraction = jsonExtractionWrapper.data || jsonExtractionWrapper;
   const initialUsage = jsonExtractionWrapper.usage;
 
-  const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-  const descriptionPromptCriteria = getDescriptionPrompt(imageType || 'universal');
+  const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
+  const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal');
   const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
 
   const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
   const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType], initialUsage);
+    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType], initialUsage, JSON.stringify(jsonExtraction, null, 2));
 }
 
 /**
@@ -570,8 +571,8 @@ export async function analyzeMultipleImagesDescriptionStreaming(
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
-  const { getDescriptionPrompt } = await import('./prompts');
-  const descriptionPrompt = getDescriptionPrompt(imageType as any);
+  const { getObjectiveDescriptionPrompt } = await import('./prompts');
+  const descriptionPrompt = getObjectiveDescriptionPrompt(imageType as any);
 
   const fullPrompt = `${descriptionPrompt}\n\n${prompt}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
 

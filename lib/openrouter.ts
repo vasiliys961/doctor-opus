@@ -389,8 +389,8 @@ export async function analyzeImageOpusTwoStage(options: {
     console.log('✅ [TWO-STAGE] JSON извлечен');
     
     // Получаем специализированные промпты
-    const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionCriteria = getDescriptionPrompt(imageType);
+    const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
+    const descriptionCriteria = getObjectiveDescriptionPrompt(imageType);
     const directiveCriteria = getDirectivePrompt(imageType, prompt, specialty);
     
     // Шаг 2: Целевая модель анализирует JSON (БЕЗ ИЗОБРАЖЕНИЯ для экономии токенов)
@@ -631,8 +631,8 @@ export async function analyzeMultipleImagesTwoStage(options: {
       modality: imageType
     });
     
-    const { getDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionCriteria = getDescriptionPrompt(imageType);
+    const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
+    const descriptionCriteria = getObjectiveDescriptionPrompt(imageType);
     const directiveCriteria = getDirectivePrompt(imageType, options.prompt);
     
     const textModel = options.targetModel || MODELS.SONNET;
