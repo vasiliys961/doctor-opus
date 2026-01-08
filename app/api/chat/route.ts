@@ -64,11 +64,13 @@ export async function POST(request: NextRequest) {
       specialty = body.specialty;
     }
 
-    const selectedModel = (model === 'sonnet' || model === MODELS.SONNET) 
-      ? MODELS.SONNET 
-      : (model && (model === 'gemini' || model.includes('gemini')))
-        ? MODELS.GEMINI_3_FLASH
-        : MODELS.OPUS;
+    const selectedModel = (model === 'gpt52' || model === MODELS.GPT_5_2)
+      ? MODELS.GPT_5_2
+      : (model === 'sonnet' || model === MODELS.SONNET) 
+        ? MODELS.SONNET 
+        : (model && (model === 'gemini' || model.includes('gemini')))
+          ? MODELS.GEMINI_3_FLASH
+          : MODELS.OPUS;
 
     if (!message && files.length === 0) {
       return NextResponse.json(

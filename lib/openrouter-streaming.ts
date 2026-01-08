@@ -46,10 +46,11 @@ const SYSTEM_PROMPT = `Роль: ### ROLE
 const MODELS = {
   OPUS: 'anthropic/claude-opus-4.5',
   SONNET: 'anthropic/claude-sonnet-4.5',
+  GPT_5_2: 'openai/gpt-5.2-chat',
   HAIKU: 'anthropic/claude-haiku-4.5',
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',
   GEMINI_3_FLASH: 'google/gemini-3-flash-preview',
-  GEMINI_3_PRO: 'google/gemini-3-flash-preview',
+  GEMINI_3_PRO: 'google/gemini-3-pro-preview',
 };
 
 /**
@@ -63,7 +64,8 @@ async function createSequentialStream(
   apiKey: string,
   mimeTypes: string[] = [],
   initialUsage?: { prompt_tokens: number, completion_tokens: number },
-  hiddenContext?: string
+  hiddenContext?: string,
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -78,16 +80,23 @@ async function createSequentialStream(
         ? { prompt_tokens: initialUsage.prompt_tokens, completion_tokens: initialUsage.completion_tokens }
         : { prompt_tokens: 0, completion_tokens: 0 };
 
+      // Подготовка системного промпта для Части 2 с учетом специальности
+      const { TITAN_CONTEXTS } = await import('./prompts');
+      let systemPromptPart2 = SYSTEM_PROMPT;
+      if (specialty && TITAN_CONTEXTS[specialty]) {
+        systemPromptPart2 = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+      }
+
       // --- ЧАСТЬ 1: Описание ---
-      console.log(`📡 [SEQUENTIAL] Запуск Части 1 (Описание)...`);
+      console.log(`📡 [SEQUENTIAL] Запуск Части 1 (Описание) через ${model}...`);
       const response1 = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.vercel.app',
-          'X-Title': 'Doctor Opus'
-        },
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
+      },
         body: JSON.stringify({
           model,
           messages: [
@@ -153,19 +162,19 @@ async function createSequentialStream(
       writer.write(encoder.encode(': keep-alive\n\n'));
 
       // --- ЧАСТЬ 2: Клиника ---
-      console.log(`📡 [SEQUENTIAL] Запуск Части 2 (Директива)...`);
+      console.log(`📡 [SEQUENTIAL] Запуск Части 2 (Директива) через ${model}...`);
       const response2 = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.vercel.app',
-          'X-Title': 'Doctor Opus'
-        },
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
+      },
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: systemPromptPart2 },
             { 
               role: 'user', 
               content: `ИНСТРУКЦИЯ: ${secondPartPrompt}\n\n${hiddenContext ? `ТЕХНИЧЕСКИЕ ДАННЫЕ (JSON) ДЛЯ АНАЛИЗА:\n${hiddenContext}\n\n` : ''}ОПИСАНИЕ СНИМКОВ:\n${accumulatedFirstPart}\n\nСФОРМУЛИРУЙ ТОЛЬКО ДИАГНОЗЫ, ПЛАН ЛЕЧЕНИЯ И ССЫЛКИ.` 
@@ -218,7 +227,13 @@ async function createSequentialStream(
         }
       }
 
-      // Финальный чек
+      // Финальный отчет в терминал
+      const { formatCostLog } = await import('./cost-calculator');
+      const costLog = formatCostLog(model, totalUsage.prompt_tokens, totalUsage.completion_tokens, totalUsage.prompt_tokens + totalUsage.completion_tokens);
+      console.log(`✅ [SEQUENTIAL] Анализ завершен успешно`);
+      console.log(`   📊 ${costLog}`);
+
+      // Финальный чек для фронтенда
       const { calculateCost } = await import('./cost-calculator');
       const costInfo = calculateCost(totalUsage.prompt_tokens, totalUsage.completion_tokens, model);
       const usageChunk = {
@@ -260,7 +275,8 @@ export async function analyzeImageFastStreaming(
   const { extractImageJSON } = await import('./openrouter');
   const extractionResult = await extractImageJSON({
     imageBase64,
-    modality: imageType || 'unknown'
+    modality: imageType || 'unknown',
+    specialty: specialty
   });
   const jsonExtraction = extractionResult.data;
   const initialUsage = extractionResult.usage;
@@ -286,7 +302,9 @@ ${directivePrompt}`;
     MODELS.GEMINI_3_FLASH,
     apiKey,
     ['image/png'],
-    initialUsage
+    initialUsage,
+    undefined,
+    specialty
   );
 }
 
@@ -298,7 +316,9 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
   imagesBase64: string[],
   imageType?: ImageType,
   clinicalContext?: string,
-  mimeTypes: string[] = []
+  mimeTypes: string[] = [],
+  model: string = MODELS.SONNET,
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
@@ -308,19 +328,20 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
     const { extractImageJSON } = await import('./openrouter');
     const extractionResult = await extractImageJSON({
       imagesBase64,
-      modality: imageType || 'unknown'
+      modality: imageType || 'unknown',
+      specialty: specialty
     });
     const jsonExtraction = extractionResult.data;
     const initialUsage = extractionResult.usage;
     
     const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal');
-    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
+    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal', specialty);
+    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.SONNET, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2));
+    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, model, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
   } catch (error: any) {
     throw error;
   }
@@ -334,25 +355,26 @@ export async function analyzeMultipleImagesWithJSONStreaming(
   imagesBase64: string[],
   imageType?: ImageType,
   clinicalContext?: string,
-  mimeTypes: string[] = []
+  mimeTypes: string[] = [],
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   try {
     const { extractImageJSON } = await import('./openrouter');
-    const extractionResult = await extractImageJSON({ imagesBase64, modality: imageType || 'unknown' });
+    const extractionResult = await extractImageJSON({ imagesBase64, modality: imageType || 'unknown', specialty });
     const jsonExtraction = extractionResult.data;
     const initialUsage = extractionResult.usage;
     
     const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal');
-    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
+    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal', specialty);
+    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2));
+    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
   } catch (error: any) {
     throw error;
   }
@@ -431,11 +453,11 @@ export async function sendTextRequestStreaming(
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://doctor-opus.vercel.app',
-      'X-Title': 'Doctor Opus'
-    },
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
+      },
     body: JSON.stringify({
       model,
       messages,
@@ -458,10 +480,18 @@ export async function analyzeImageStreaming(
   imageBase64: string,
   model: string = MODELS.OPUS,
   mimeType: string = 'image/png',
-  clinicalContext?: string
+  clinicalContext?: string,
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const { TITAN_CONTEXTS } = await import('./prompts');
+  
+  let systemPrompt = SYSTEM_PROMPT;
+  if (specialty && TITAN_CONTEXTS[specialty]) {
+    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+  }
 
   let fullPrompt = prompt;
   if (clinicalContext) {
@@ -471,15 +501,15 @@ export async function analyzeImageStreaming(
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://doctor-opus.vercel.app',
-      'X-Title': 'Doctor Opus'
-    },
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
+      },
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { 
           role: 'user', 
           content: [
@@ -507,25 +537,26 @@ export async function analyzeImageOpusTwoStageStreaming(
   imageBase64: string,
   imageType?: ImageType,
   clinicalContext?: string,
-  specialty?: Specialty
+  specialty?: Specialty,
+  model: string = MODELS.SONNET
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   try {
     const { extractImageJSON } = await import('./openrouter');
-    const extractionResult = await extractImageJSON({ imageBase64, modality: imageType || 'unknown' });
+    const extractionResult = await extractImageJSON({ imageBase64, modality: imageType || 'unknown', specialty });
     const jsonExtraction = extractionResult.data;
     const initialUsage = extractionResult.usage;
     
     const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal');
+    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal', specialty);
     const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.SONNET, apiKey, ['image/png'], initialUsage, JSON.stringify(jsonExtraction, null, 2));
+    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], model, apiKey, ['image/png'], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
   } catch (error: any) {
     throw error;
   }
@@ -540,7 +571,8 @@ export async function analyzeImageWithJSONStreaming(
   prompt: string = 'Проанализируйте медицинское изображение.',
   mimeType: string = 'image/png',
   imageType?: ImageType,
-  clinicalContext?: string
+  clinicalContext?: string,
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
@@ -549,13 +581,13 @@ export async function analyzeImageWithJSONStreaming(
   const initialUsage = jsonExtractionWrapper.usage;
 
   const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-  const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal');
-  const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt);
+  const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal', specialty);
+  const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
   const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
   const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType], initialUsage, JSON.stringify(jsonExtraction, null, 2));
+    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
 }
 
 /**
@@ -566,17 +598,18 @@ export async function analyzeMultipleImagesDescriptionStreaming(
   imagesBase64: string[],
   imageType: string = 'universal',
   clinicalContext?: string,
-  mimeTypes: string[] = []
+  mimeTypes: string[] = [],
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const { getObjectiveDescriptionPrompt } = await import('./prompts');
-  const descriptionPrompt = getObjectiveDescriptionPrompt(imageType as any);
+  const descriptionPrompt = getObjectiveDescriptionPrompt(imageType as any, specialty);
 
   const fullPrompt = `${descriptionPrompt}\n\n${prompt}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
 
-  return analyzeMultipleImagesStreaming(fullPrompt, imagesBase64, mimeTypes, MODELS.SONNET, '');
+  return analyzeMultipleImagesStreaming(fullPrompt, imagesBase64, mimeTypes, MODELS.SONNET, '', specialty);
 }
 
 /**
@@ -587,18 +620,19 @@ export async function analyzeMultipleImagesDirectiveStreaming(
   description: string,
   imagesBase64: string[],
   clinicalContext?: string,
-  mimeTypes: string[] = []
+  mimeTypes: string[] = [],
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const { getDirectivePrompt } = await import('./prompts');
-  const directivePrompt = getDirectivePrompt('universal', prompt);
+  const directivePrompt = getDirectivePrompt('universal', prompt, specialty);
 
   const fullPrompt = `${directivePrompt}\n\nОПИСАНИЕ ИССЛЕДОВАНИЯ:\n${description}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
 
   // Для директивы используем Opus или Sonnet
-  return analyzeMultipleImagesStreaming(fullPrompt, imagesBase64, mimeTypes, MODELS.SONNET, '');
+  return analyzeMultipleImagesStreaming(fullPrompt, imagesBase64, mimeTypes, MODELS.SONNET, '', specialty);
 }
 
 /**
@@ -609,10 +643,18 @@ export async function analyzeMultipleImagesStreaming(
   imagesBase64: string[],
   mimeTypes: string[] = [],
   model: string = MODELS.OPUS,
-  clinicalContext?: string
+  clinicalContext?: string,
+  specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const { TITAN_CONTEXTS } = await import('./prompts');
+  
+  let systemPrompt = SYSTEM_PROMPT;
+  if (specialty && TITAN_CONTEXTS[specialty]) {
+    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+  }
 
   let fullPrompt = prompt;
   if (clinicalContext) {
@@ -627,15 +669,15 @@ export async function analyzeMultipleImagesStreaming(
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://doctor-opus.vercel.app',
-      'X-Title': 'Doctor Opus'
-    },
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
+      },
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: contentItems }
       ],
       max_tokens: 8000,

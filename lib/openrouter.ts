@@ -51,6 +51,7 @@ export const SYSTEM_PROMPT = `Роль: ### ROLE
 export const MODELS = {
   OPUS: 'anthropic/claude-opus-4.5',                       // Claude Opus 4.5
   SONNET: 'anthropic/claude-sonnet-4.5',                 // Claude Sonnet 4.5
+  GPT_5_2: 'openai/gpt-5.2-chat',                        // GPT-5.2 (как замена Sonnet 4.5 для тестов)
   HAIKU: 'anthropic/claude-haiku-4.5',                     // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
   GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
@@ -60,12 +61,13 @@ export const MODELS = {
 const MODELS_LIST = [
   MODELS.OPUS,
   MODELS.SONNET,
+  MODELS.GPT_5_2,
   MODELS.HAIKU,
   MODELS.LLAMA
 ];
 
 export type AnalysisMode = 'fast' | 'optimized' | 'validated';
-export type ModelType = 'opus' | 'gemini' | 'sonnet' | 'haiku';
+export type ModelType = 'opus' | 'gemini' | 'sonnet' | 'gpt52' | 'haiku';
 
 interface VisionRequestOptions {
   prompt: string;
@@ -327,8 +329,8 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-        'X-Title': 'Medical AI Assistant'
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify({
         model: textModel,
@@ -383,7 +385,8 @@ export async function analyzeImageOpusTwoStage(options: {
     // Шаг 1: Извлекаем JSON через Gemini
     const jsonExtraction = await extractImageJSON({
       imageBase64: options.imageBase64,
-      modality: imageType
+      modality: imageType,
+      specialty: specialty
     });
     
     console.log('✅ [TWO-STAGE] JSON извлечен');
@@ -394,7 +397,7 @@ export async function analyzeImageOpusTwoStage(options: {
     const directiveCriteria = getDirectivePrompt(imageType, prompt, specialty);
     
     // Шаг 2: Целевая модель анализирует JSON (БЕЗ ИЗОБРАЖЕНИЯ для экономии токенов)
-    // Используем SONNET по умолчанию вместо OPUS для экономии 80% стоимости при том же качестве
+    // Используем Sonnet 4.5 по умолчанию для оптимизированного режима
     const textModel = options.targetModel || MODELS.SONNET;
     
     const contextPrompt = `Ты — Профессор медицины. Проведи глубокую клиническую интерпретацию данных, полученных от узкого специалиста (Vision-модель Gemini). 
@@ -436,8 +439,8 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-        'X-Title': 'Medical AI Assistant'
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify(textPayload)
     });
@@ -487,7 +490,8 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
 export async function extractImageJSON(options: { 
   imageBase64?: string; 
   imagesBase64?: string[]; 
-  modality?: string 
+  modality?: string;
+  specialty?: Specialty;
 }): Promise<any> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -497,6 +501,7 @@ export async function extractImageJSON(options: {
   }
 
   const modality = options.modality || 'unknown';
+  const specialty = options.specialty;
   const allImages = options.imagesBase64 || (options.imageBase64 ? [options.imageBase64] : []);
   
   if (allImages.length === 0) {
@@ -512,7 +517,7 @@ export async function extractImageJSON(options: {
 
   // Получаем детальные инструкции специалиста для этого типа исследования
   const { getDescriptionPrompt } = await import('./prompts');
-  const jsonPrompt = getDescriptionPrompt(modality as any);
+  const jsonPrompt = getDescriptionPrompt(modality as any, specialty);
 
   const content: any[] = [
     {
@@ -616,6 +621,7 @@ export async function analyzeMultipleImagesTwoStage(options: {
   prompt: string; 
   imagesBase64: string[];
   imageType?: ImageType;
+  specialty?: Specialty;
   clinicalContext?: string;
   targetModel?: string;
 }): Promise<string> {
@@ -623,17 +629,19 @@ export async function analyzeMultipleImagesTwoStage(options: {
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const imageType = options.imageType || 'universal';
+  const specialty = options.specialty;
   
   try {
     console.log(`🚀 [MULTI-TWO-STAGE] Шаг 1: Извлечение JSON...`);
     const jsonExtraction = await extractImageJSON({
       imagesBase64: options.imagesBase64,
-      modality: imageType
+      modality: imageType,
+      specialty: specialty
     });
     
     const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionCriteria = getObjectiveDescriptionPrompt(imageType);
-    const directiveCriteria = getDirectivePrompt(imageType, options.prompt);
+    const descriptionCriteria = getObjectiveDescriptionPrompt(imageType, specialty);
+    const directiveCriteria = getDirectivePrompt(imageType, options.prompt, specialty);
     
     const textModel = options.targetModel || MODELS.SONNET;
     
@@ -667,8 +675,8 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-        'X-Title': 'Medical AI Assistant'
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify(textPayload)
     });
@@ -693,6 +701,7 @@ export async function analyzeMultipleImages(options: {
   maxTokens?: number;
   clinicalContext?: string;
   imageType?: ImageType;
+  specialty?: Specialty;
 }): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   
@@ -707,10 +716,11 @@ export async function analyzeMultipleImages(options: {
 
   const model = options.model || MODELS.OPUS; // Используем Opus для точного сравнительного анализа
   const imageType = options.imageType || 'universal';
+  const specialty = options.specialty;
   
   // Получаем специализированный промпт
   const { getDirectivePrompt } = await import('./prompts');
-  const directiveCriteria = getDirectivePrompt(imageType as any, options.prompt);
+  const directiveCriteria = getDirectivePrompt(imageType as any, options.prompt, specialty);
   
   // Добавляем клинический контекст в промпт, если он есть
   let fullPrompt = directiveCriteria;
@@ -769,8 +779,8 @@ export async function analyzeMultipleImages(options: {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-        'X-Title': 'Medical AI Assistant'
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify(payload)
     }, 180000); // Увеличенный таймаут для множественных изображений: 180 сек
@@ -879,8 +889,8 @@ export async function sendTextRequest(
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-        'X-Title': 'Medical AI Assistant'
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify(payload)
     });

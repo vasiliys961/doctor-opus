@@ -80,6 +80,15 @@ export async function POST(request: NextRequest) {
     const useStreaming = formData.get('useStreaming') === 'true';
     const useLibrary = formData.get('useLibrary') === 'true';
     
+    // Получаем специализацию из сессии или из formData
+    let specialty = formData.get('specialty') as any;
+    if (!specialty) {
+      const session = await getServerSession(authOptions);
+      if (session?.user?.specialty) {
+        specialty = session.user.specialty;
+      }
+    }
+    
     // Сбор всех изображений
     const additionalImages: File[] = [];
     let fileIndex = 0;
@@ -193,14 +202,15 @@ export async function POST(request: NextRequest) {
     if (mode === 'fast') {
       if (useStreaming) {
         // Для быстрого стриминга используем Gemini (JSON) -> Gemini (Описание)
-        const stream = await analyzeImageFastStreaming(prompt, imagesBase64[0], imageType, finalClinicalContext);
+        const stream = await analyzeImageFastStreaming(prompt, imagesBase64[0], imageType, finalClinicalContext, specialty);
         return handleStreamingResponse(stream, MODELS.GEMINI_3_FLASH);
       } else {
         const result = await analyzeImageFast({
           prompt,
           imageBase64: imagesBase64[0],
           imageType: imageType as any,
-          clinicalContext: finalClinicalContext
+          clinicalContext: finalClinicalContext,
+          specialty
         });
         return NextResponse.json({ success: true, result, model: modelToUse, mode, analysis_id: analysisId });
       }
@@ -210,10 +220,10 @@ export async function POST(request: NextRequest) {
     if (useStreaming && (stage === 'description' || stage === 'directive')) {
       let stream: ReadableStream;
       if (stage === 'description') {
-        stream = await analyzeMultipleImagesDescriptionStreaming(prompt, imagesBase64, imageType, finalClinicalContext, mimeTypes);
+        stream = await analyzeMultipleImagesDescriptionStreaming(prompt, imagesBase64, imageType, finalClinicalContext, mimeTypes, specialty);
       } else {
         const description = formData.get('description') as string || '';
-        stream = await analyzeMultipleImagesDirectiveStreaming(prompt, description, imagesBase64, finalClinicalContext, mimeTypes);
+        stream = await analyzeMultipleImagesDirectiveStreaming(prompt, description, imagesBase64, finalClinicalContext, mimeTypes, specialty);
       }
       return handleStreamingResponse(stream, stage === 'description' ? MODELS.SONNET : MODELS.OPUS);
     }
@@ -222,9 +232,9 @@ export async function POST(request: NextRequest) {
     if (allImages.length > 1) {
       if (useStreaming) {
         let stream: ReadableStream;
-        if (mode === 'optimized') stream = await analyzeMultipleImagesOpusTwoStageStreaming(prompt, imagesBase64, imageType as any, finalClinicalContext, mimeTypes);
-        else if (mode === 'validated') stream = await analyzeMultipleImagesWithJSONStreaming(prompt, imagesBase64, imageType as any, finalClinicalContext, mimeTypes);
-        else stream = await analyzeMultipleImagesStreaming(prompt, imagesBase64, mimeTypes, modelToUse, finalClinicalContext);
+        if (mode === 'optimized') stream = await analyzeMultipleImagesOpusTwoStageStreaming(prompt, imagesBase64, imageType as any, finalClinicalContext, mimeTypes, modelToUse, specialty);
+        else if (mode === 'validated') stream = await analyzeMultipleImagesWithJSONStreaming(prompt, imagesBase64, imageType as any, finalClinicalContext, mimeTypes, specialty);
+        else stream = await analyzeMultipleImagesStreaming(prompt, imagesBase64, mimeTypes, modelToUse, finalClinicalContext, specialty);
         return handleStreamingResponse(stream, modelToUse);
       } else {
         // Двухэтапный анализ для нескольких изображений
@@ -234,26 +244,27 @@ export async function POST(request: NextRequest) {
             imagesBase64,
             imageType: imageType as any,
             clinicalContext: finalClinicalContext,
-            targetModel: modelToUse
+            targetModel: modelToUse,
+            specialty
           });
           return NextResponse.json({ success: true, result, model: modelToUse, mode, analysis_id: analysisId });
         }
-        const result = await analyzeMultipleImages({ prompt, imagesBase64, mimeTypes, model: modelToUse, clinicalContext: finalClinicalContext, imageType: imageType as any });
+        const result = await analyzeMultipleImages({ prompt, imagesBase64, mimeTypes, model: modelToUse, clinicalContext: finalClinicalContext, imageType: imageType as any, specialty });
         return NextResponse.json({ success: true, result, model: modelToUse, mode, analysis_id: analysisId });
       }
     } else {
       const base64Image = imagesBase64[0];
       if (mode === 'optimized' && useStreaming) {
-        const stream = await analyzeImageOpusTwoStageStreaming(prompt, base64Image, imageType as any, finalClinicalContext);
-        return handleStreamingResponse(stream, MODELS.SONNET);
+        const stream = await analyzeImageOpusTwoStageStreaming(prompt, base64Image, imageType as any, finalClinicalContext, specialty, modelToUse);
+        return handleStreamingResponse(stream, modelToUse);
       }
       if (mode === 'validated' && useStreaming) {
-        const jsonExtraction = await extractImageJSON({ imageBase64: base64Image, modality: imageType });
-        const stream = await analyzeImageWithJSONStreaming(jsonExtraction, base64Image, prompt, mimeTypes[0], imageType as any, finalClinicalContext);
+        const jsonExtraction = await extractImageJSON({ imageBase64: base64Image, modality: imageType, specialty });
+        const stream = await analyzeImageWithJSONStreaming(jsonExtraction, base64Image, prompt, mimeTypes[0], imageType as any, finalClinicalContext, specialty);
         return handleStreamingResponse(stream, MODELS.OPUS);
       }
       if (useStreaming) {
-        const stream = await analyzeImageStreaming(prompt, base64Image, modelToUse, mimeTypes[0], finalClinicalContext);
+        const stream = await analyzeImageStreaming(prompt, base64Image, modelToUse, mimeTypes[0], finalClinicalContext, specialty);
         return handleStreamingResponse(stream, modelToUse);
       }
       
@@ -264,12 +275,13 @@ export async function POST(request: NextRequest) {
           imageBase64: base64Image,
           imageType: imageType as any,
           clinicalContext: finalClinicalContext,
-          targetModel: modelToUse
+          targetModel: modelToUse,
+          specialty
         });
         return NextResponse.json({ success: true, result, model: modelToUse, mode, analysis_id: analysisId });
       }
 
-      const result = await analyzeImage({ prompt, imageBase64: base64Image, mimeType: mimeTypes[0], model: modelToUse, clinicalContext: finalClinicalContext, imageType: imageType as any });
+      const result = await analyzeImage({ prompt, imageBase64: base64Image, mimeType: mimeTypes[0], model: modelToUse, clinicalContext: finalClinicalContext, imageType: imageType as any, specialty });
       return NextResponse.json({ success: true, result, model: modelToUse, mode, analysis_id: analysisId });
     }
 

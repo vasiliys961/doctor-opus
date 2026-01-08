@@ -4,16 +4,16 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import BalanceWidget from './BalanceWidget'
+import { useSession, signOut } from 'next-auth/react'
 
 export default function Navigation() {
   const pathname = usePathname()
+  const { data: session, status } = useSession()
   const [isOpen, setIsOpen] = useState(false)
 
   const pages = [
     { name: '🏠 Главная', href: '/' },
     { name: '📘 Инструкция для врача', href: '/manual' },
-    // { name: '💎 Пакеты единиц', href: '/subscription' },
-    // { name: '💰 Мой баланс', href: '/balance' },
     { name: '🤖 ИИ-Консультант', href: '/chat' },
     { name: '📚 Персональная библиотека', href: '/library' },
     { name: '📝 Протокол приёма', href: '/protocol' },
@@ -46,23 +46,33 @@ export default function Navigation() {
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-primary-900 to-primary-800 text-white shadow-lg">
         <div className="flex items-center justify-between px-4 py-3">
           <Link href="/" className="text-xl font-bold" onClick={closeMenu}>
-            🏥 Медицинский ИИ
+            🏥 Doctor Opus
           </Link>
-          <button
-            onClick={toggleMenu}
-            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors touch-manipulation"
-            aria-label="Toggle menu"
-          >
-            {isOpen ? (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
+          <div className="flex items-center gap-3">
+            {!session && status !== 'loading' && (
+              <Link 
+                href="/auth/signin" 
+                className="text-xs bg-white text-primary-900 px-3 py-1.5 rounded-full font-bold shadow-sm"
+              >
+                Войти
+              </Link>
             )}
-          </button>
+            <button
+              onClick={toggleMenu}
+              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors touch-manipulation"
+              aria-label="Toggle menu"
+            >
+              {isOpen ? (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -91,7 +101,29 @@ export default function Navigation() {
           </div>
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold">🧠 Меню</h1>
+            {status === 'authenticated' ? (
+              <button
+                onClick={() => signOut({ callbackUrl: '/auth/signin' })}
+                className="text-[10px] bg-red-500/20 hover:bg-red-500/40 text-red-200 px-2 py-1 rounded transition-colors"
+              >
+                Выйти
+              </button>
+            ) : (
+              <Link
+                href="/auth/signin"
+                className="text-[10px] bg-teal-500/20 hover:bg-teal-500/40 text-teal-200 px-2 py-1 rounded transition-colors"
+              >
+                Войти
+              </Link>
+            )}
           </div>
+          {session?.user && (
+            <div className="mb-4 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
+              <p className="text-[10px] text-primary-300 uppercase font-bold tracking-tighter">Пользователь</p>
+              <p className="text-xs truncate font-medium text-white">{session.user.email}</p>
+              <p className="text-[9px] text-teal-400">{(session.user as any).specialty || 'Общий профиль'}</p>
+            </div>
+          )}
           <div className="space-y-2">
             {pages.map((page) => {
               const isActive = pathname === page.href
@@ -149,4 +181,3 @@ export default function Navigation() {
     </>
   )
 }
-

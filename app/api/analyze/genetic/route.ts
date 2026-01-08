@@ -131,8 +131,8 @@ APOE;rs429358;CC;высокий риск болезни Альцгеймера`;
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-            'X-Title': 'Genetic Data Extraction from PDF',
+            'HTTP-Referer': 'https://doctor-opus.ru',
+            'X-Title': 'Doctor Opus',
           },
           body: JSON.stringify(extractionPayload),
         });
@@ -234,8 +234,8 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-          'X-Title': 'Genetic Data Extraction',
+          'HTTP-Referer': 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus',
         },
         body: JSON.stringify(extractionPayload),
       });

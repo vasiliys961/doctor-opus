@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
-import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
+import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
@@ -24,6 +24,7 @@ export default function ECGPage() {
   const [modelInfo, setModelInfo] = useState<string>('')
   const [analysisId, setAnalysisId] = useState<string>('')
   const [mode, setMode] = useState<AnalysisMode>('optimized')
+  const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>('sonnet')
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0) // Включаем стриминг по умолчанию для точного анализа
@@ -52,7 +53,7 @@ export default function ECGPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo(analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5');
+                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.5');
           return;
         }
         // Сохраняем ключ для записи после завершения
@@ -68,6 +69,16 @@ export default function ECGPage() {
       formData.append('mode', analysisMode) // validated, optimized, или fast
       formData.append('imageType', 'ecg') // Указываем тип изображения для использования специфичных промптов
       formData.append('useStreaming', useStream.toString())
+
+      // Добавляем конкретную модель для оптимизированного режима
+      if (analysisMode === 'optimized') {
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
+        formData.append('model', targetModelId);
+      } else if (analysisMode === 'validated') {
+        formData.append('model', 'anthropic/claude-opus-4.5');
+      } else if (analysisMode === 'fast') {
+        formData.append('model', 'google/gemini-3-flash-preview');
+      }
 
       if (useStream) {
         // Streaming режим
@@ -243,6 +254,8 @@ export default function ECGPage() {
               <AnalysisModeSelector
                 value={mode}
                 onChange={setMode}
+                optimizedModel={optimizedModel}
+                onOptimizedModelChange={setOptimizedModel}
                 disabled={loading}
               />
               <label className="flex items-center space-x-2 cursor-pointer">

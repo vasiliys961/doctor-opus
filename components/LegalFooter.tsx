@@ -54,7 +54,30 @@ export default function LegalFooter() {
             </div>
             
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-gray-400">
-              <p>© {mounted ? new Date().getFullYear() : '2026'} Doctor Opus. Все права защищены.</p>
+              <div className="flex flex-col items-center sm:items-start gap-1">
+                <p>© {mounted ? new Date().getFullYear() : '2026'} Doctor Opus. Все права защищены.</p>
+                <p className="text-[10px] opacity-70 italic">Самозанятый Селиванов В.Ф., ИНН 920455053236</p>
+              </div>
+              
+              <div className="flex items-center gap-4 opacity-60">
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="text-lg">💳</span>
+                  <span className="text-[7px] font-bold uppercase">МИР</span>
+                </div>
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="text-lg">🟡</span>
+                  <span className="text-[7px] font-bold uppercase">T-Pay</span>
+                </div>
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="text-lg">📲</span>
+                  <span className="text-[7px] font-bold uppercase">СБП</span>
+                </div>
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="text-lg">💳</span>
+                  <span className="text-[7px] font-bold uppercase">Mir Pay</span>
+                </div>
+              </div>
+              
               <p>Разработано для профессионального медицинского использования</p>
             </div>
           </div>

@@ -1,9 +1,29 @@
 import Link from 'next/link'
 import SpendingSummary from '@/components/SpendingSummary'
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await getServerSession(authOptions)
+
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-7xl">
+      <div className="flex justify-end mb-4">
+        {!session ? (
+          <Link
+            href="/auth/signin"
+            className="bg-white border border-teal-600 text-teal-600 hover:bg-teal-50 px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-2"
+          >
+            🔑 Войти / Регистрация
+          </Link>
+        ) : (
+          <div className="flex items-center gap-3 bg-teal-50 px-4 py-2 rounded-xl border border-teal-100">
+            <span className="text-xs text-teal-700">Вы вошли как: <strong>{session.user?.email}</strong></span>
+            <Link href="/chat" className="text-xs bg-teal-600 text-white px-2 py-1 rounded-md font-bold">В чат</Link>
+          </div>
+        )}
+      </div>
+      
       <SpendingSummary />
       {/* HERO-блок */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-8 sm:mb-12">
@@ -135,38 +155,96 @@ export default function HomePage() {
       <div className="mb-8 sm:mb-12">
         <h2 className="text-xl sm:text-2xl font-bold text-primary-900 mb-4 sm:mb-6">Ключевые модули</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md">
+          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
             <h3 className="font-bold text-base sm:text-lg mb-2">📈 ЭКГ & ритмы</h3>
             <p className="text-xs sm:text-sm text-gray-600">
               Анализ 12‑канальной ЭКГ, аритмии, блокады, клиническая директива.
             </p>
           </div>
-          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md">
+          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
             <h3 className="font-bold text-base sm:text-lg mb-2">🩻 Визуальная диагностика</h3>
             <p className="text-xs sm:text-sm text-gray-600">
               Рентген, КТ, МРТ, УЗИ — структурированный отчёт и оценка динамики.
             </p>
           </div>
-          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md">
+          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
             <h3 className="font-bold text-base sm:text-lg mb-2">🔬 Лабораторные данные</h3>
             <p className="text-xs sm:text-sm text-gray-600">
               Сканирование бланков, структурирование анализов, без лишних интерпретаций.
             </p>
           </div>
-          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md">
+          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
             <h3 className="font-bold text-base sm:text-lg mb-2">🧬 Генетика & фармакогеномика</h3>
             <p className="text-xs sm:text-sm text-gray-600">
               Разбор VCF/PDF, заключение генетика и профессорский обзор.
             </p>
           </div>
-          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md border-2 border-green-100">
-            <h3 className="font-bold text-base sm:text-lg mb-2">📚 База знаний (RAG)</h3>
-            <p className="text-xs sm:text-sm text-gray-600">
-              Ваша персональная библиотека PDF-книг для уточнения диагнозов.
-            </p>
-          </div>
         </div>
       </div>
+
+      <footer className="mt-12 sm:mt-16 pt-8 border-t border-slate-200">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="md:col-span-2 lg:col-span-1">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Doctor Opus</h3>
+            <p className="text-sm text-slate-500 max-w-xs">
+              Профессиональный инструмент поддержки принятия клинических решений на базе искусственного интеллекта.
+            </p>
+          </div>
+          
+          <div>
+            <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Правовая информация</h4>
+            <ul className="space-y-2">
+              <li><Link href="/docs/offer" className="text-sm text-slate-600 hover:text-teal-600 transition-colors">Договор оферты</Link></li>
+              <li><Link href="/docs/privacy" className="text-sm text-slate-600 hover:text-teal-600 transition-colors">Политика конфиденциальности</Link></li>
+              <li><Link href="/docs/terms" className="text-sm text-slate-600 hover:text-teal-600 transition-colors">Условия использования</Link></li>
+              <li><Link href="/docs/consent" className="text-sm text-slate-600 hover:text-teal-600 transition-colors">Согласие на обработку</Link></li>
+            </ul>
+          </div>
+
+          <div className="md:col-span-2 lg:col-span-2">
+            <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Реквизиты</h4>
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Исполнитель: Самозанятый <strong>Селиванов Василий Федорович</strong><br />
+                ИНН: 920455053236<br />
+                Email: vasily61@gmail.com, vasiliys@mail.ru<br />
+                Сайт является информационным сервисом и не заменяет консультацию врача.
+              </p>
+            </div>
+            <div className="mt-4 grid grid-cols-3 sm:grid-cols-6 gap-2 opacity-70 hover:opacity-100 transition-all">
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xl">💳</span>
+                <span className="text-[8px] font-bold uppercase">МИР</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xl">🟡</span>
+                <span className="text-[8px] font-bold uppercase">T-Pay</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xl">🟢</span>
+                <span className="text-[8px] font-bold uppercase">SberPay</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xl">🔵</span>
+                <span className="text-[8px] font-bold uppercase">Mir Pay</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xl">📲</span>
+                <span className="text-[8px] font-bold uppercase">СБП</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xl">💳</span>
+                <span className="text-[8px] font-bold uppercase">Visa/MC</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-8 pt-8 border-t border-slate-100 text-center pb-8">
+          <p className="text-[10px] text-slate-400">
+            © 2026 Doctor Opus. Все права защищены. Разработано для медицинских специалистов.
+          </p>
+        </div>
+      </footer>
     </div>
   )
 }

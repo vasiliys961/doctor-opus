@@ -126,3 +126,4 @@ export async function searchLibraryLocal(query: string, limit: number = 3): Prom
   });
 }
 
+

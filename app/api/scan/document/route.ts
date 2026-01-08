@@ -91,8 +91,8 @@ ${prompt}`;
           headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-            'X-Title': 'Medical AI Assistant'
+            'HTTP-Referer': 'https://doctor-opus.ru',
+            'X-Title': 'Doctor Opus'
           },
           body: JSON.stringify(payload)
         });

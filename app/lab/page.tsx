@@ -5,7 +5,7 @@ import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisResult from '@/components/AnalysisResult'
-import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
+import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import Script from 'next/script'
@@ -26,6 +26,7 @@ export default function LabPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<AnalysisMode>('optimized')
+  const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>('sonnet')
   const [convertingPDF, setConvertingPDF] = useState(false)
   const [conversionProgress, setConversionProgress] = useState<{ current: number; total: number } | null>(null)
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
@@ -140,6 +141,7 @@ export default function LabPage() {
           body: JSON.stringify({
             images: pdfImages,
             mode: mode,
+            model: mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : (mode === 'validated' ? 'anthropic/claude-opus-4.5' : 'google/gemini-3-flash-preview'),
             useStreaming: useStreaming,
             prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
             clinicalContext: clinicalContext
@@ -200,6 +202,8 @@ export default function LabPage() {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('mode', mode)
+        const targetModelId = mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : (mode === 'validated' ? 'anthropic/claude-opus-4.5' : 'google/gemini-3-flash-preview');
+        formData.append('model', targetModelId)
         formData.append('useStreaming', useStreaming.toString())
         formData.append('prompt', 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.')
         formData.append('clinicalContext', clinicalContext)
@@ -332,6 +336,8 @@ export default function LabPage() {
             <AnalysisModeSelector
               value={mode}
               onChange={setMode}
+              optimizedModel={optimizedModel}
+              onOptimizedModelChange={setOptimizedModel}
               disabled={loading}
             />
           </div>

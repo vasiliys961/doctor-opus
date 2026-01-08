@@ -86,7 +86,7 @@ export async function analyzeVideoTwoStage(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://doctor-opus.vercel.app',
+      'HTTP-Referer': 'https://doctor-opus.ru',
       'X-Title': 'Doctor Opus',
     },
     body: JSON.stringify(descriptionPayload),
@@ -125,7 +125,7 @@ export async function analyzeVideoTwoStage(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://doctor-opus.vercel.app',
+      'HTTP-Referer': 'https://doctor-opus.ru',
       'X-Title': 'Doctor Opus',
     },
     body: JSON.stringify(analysisPayload),

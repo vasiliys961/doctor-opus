@@ -77,3 +77,4 @@ export async function validateMedicalImage(file: File): Promise<ImageValidationR
 
 
 
+

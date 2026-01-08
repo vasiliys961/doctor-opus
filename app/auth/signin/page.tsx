@@ -2,40 +2,79 @@
 
 import { signIn } from 'next-auth/react';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+const SPECIALTIES = [
+  { id: 'universal', name: 'Терапевт / Врач общей практики' },
+  { id: 'cardiology', name: 'Кардиолог' },
+  { id: 'neurology', name: 'Невролог' },
+  { id: 'endocrinology', name: 'Эндокринолог' },
+  { id: 'radiology', name: 'Рентгенолог / Радиолог' },
+  { id: 'oncology', name: 'Онколог' },
+  { id: 'traumatology', name: 'Травматолог-ортопед' },
+  { id: 'rheumatology', name: 'Ревматолог' },
+  { id: 'dermatology', name: 'Дерматовенеролог' },
+  { id: 'gastroenterology', name: 'Гастроэнтеролог' },
+  { id: 'pediatrics', name: 'Педиатр' },
+  { id: 'gynecology', name: 'Гинеколог' },
+  { id: 'hematology', name: 'Гематолог' },
+  { id: 'universal', name: 'Прочий специалист / Не врач' },
+];
 
 export default function SignIn() {
   const [email, setEmail] = useState('');
+  const [specialtyId, setSpecialtyId] = useState(SPECIALTIES[0].id);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus('loading');
 
-    const result = await signIn('credentials', {
-      email,
-      password: 'any_password', // Пароль не проверяется в тестовом режиме
-      callbackUrl: '/chat',
-      redirect: true,
-    });
+    try {
+      const result = await signIn('credentials', {
+        email,
+        specialty: specialtyId,
+        password: 'any_password',
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setStatus('error');
+      } else {
+        setStatus('success');
+        router.push('/chat');
+        router.refresh();
+      }
+    } catch (error) {
+      setStatus('error');
+    }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-teal-50 px-4 py-12 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-2xl shadow-xl border border-teal-100/50">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
-            Вход в Medical AI Assistant
+          <div className="flex justify-center">
+            <div className="h-12 w-12 rounded-xl bg-teal-600 flex items-center justify-center shadow-lg shadow-teal-200">
+              <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+              </svg>
+            </div>
+          </div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold tracking-tight text-slate-900">
+            Doctor Opus
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Введите ваш Email для входа в систему (Тестовый режим)
+          <p className="mt-2 text-center text-sm text-slate-500">
+            Интеллектуальный помощник врача
           </p>
         </div>
         
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="-space-y-px rounded-md shadow-sm">
+        <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
+          <div className="space-y-4 rounded-md">
             <div>
-              <label htmlFor="email-address" className="sr-only">
-                Email address
+              <label htmlFor="email-address" className="block text-sm font-medium text-slate-700 mb-1">
+                Рабочий Email
               </label>
               <input
                 id="email-address"
@@ -43,29 +82,73 @@ export default function SignIn() {
                 type="email"
                 autoComplete="email"
                 required
-                className="relative block w-full rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-teal-600 sm:text-sm sm:leading-6"
+                className="block w-full rounded-xl border-slate-200 py-3 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-teal-600 sm:text-sm transition-all"
                 placeholder="doctor@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
+
+            <div>
+              <label htmlFor="specialty" className="block text-sm font-medium text-slate-700 mb-1">
+                Ваша специальность
+              </label>
+              <select
+                id="specialty"
+                name="specialty"
+                className="block w-full rounded-xl border-slate-200 py-3 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-teal-600 sm:text-sm transition-all"
+                value={specialtyId}
+                onChange={(e) => setSpecialtyId(e.target.value)}
+              >
+                {SPECIALTIES.map((spec) => (
+                  <option key={spec.id} value={spec.id}>
+                    {spec.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div>
+          <div className="pt-2">
             <button
               type="submit"
               disabled={status === 'loading'}
-              className="group relative flex w-full justify-center rounded-md bg-teal-600 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 disabled:opacity-50"
+              className="group relative flex w-full justify-center rounded-xl bg-teal-600 px-3 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-200 hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 disabled:opacity-50 transition-all active:scale-[0.98]"
             >
-              {status === 'loading' ? 'Вход...' : 'Войти в систему'}
+              {status === 'loading' ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Загрузка...
+                </span>
+              ) : 'Начать работу'}
             </button>
           </div>
 
+          <div className="text-center">
+            <p className="text-[10px] text-slate-400 leading-relaxed px-4">
+              Нажимая кнопку «Начать работу», вы принимаете условия{' '}
+              <a href="/docs/offer" className="text-teal-600 hover:underline">Публичной оферты</a> и{' '}
+              <a href="/docs/privacy" className="text-teal-600 hover:underline">Политики конфиденциальности</a>
+            </p>
+          </div>
+
           {status === 'error' && (
-            <div className="rounded-md bg-red-50 p-4">
-              <p className="text-sm font-medium text-red-800">
-                Произошла ошибка при входе. Проверьте настройки сервера.
-              </p>
+            <div className="rounded-xl bg-red-50 p-4 border border-red-100">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-red-800">
+                    Ошибка авторизации. Попробуйте еще раз.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </form>

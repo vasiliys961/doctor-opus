@@ -141,7 +141,7 @@ export async function sendTextRequestWithFiles(
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.vercel.app',
+        'HTTP-Referer': 'https://doctor-opus.ru',
         'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify(payload)
@@ -224,14 +224,14 @@ export async function sendTextRequestStreamingWithFiles(
     stream: true
   };
 
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/vasiliys961/medical-assistant1',
-      'X-Title': 'Medical AI Assistant'
-    },
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
+      },
     body: JSON.stringify(payload)
   });
 

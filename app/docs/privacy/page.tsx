@@ -2,10 +2,11 @@ import LegalPageLayout from '@/components/LegalPageLayout'
 
 export default function PrivacyPage() {
   return (
-    <LegalPageLayout title="Политика обработки персональных данных" lastUpdated="07.01.2026">
+    <LegalPageLayout title="Политика обработки персональных данных" lastUpdated="08.01.2026">
       <section>
-        <h2 className="text-xl font-bold text-gray-900 mb-3">1. Сбор данных</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">1. Общие положения</h2>
         <p>
+          Оператор персональных данных: <strong>Селиванов Василий Федорович</strong> (ИНН 920455053236). 
           Мы ответственно относимся к конфиденциальности ваших данных и данных ваших пациентов. 
           Сервис "Doctor Opus" придерживается принципов анонимизации (обезличивания) медицинских изображений перед их обработкой.
         </p>
@@ -14,7 +15,7 @@ export default function PrivacyPage() {
       <section>
         <h2 className="text-xl font-bold text-gray-900 mb-3">2. Цели обработки</h2>
         <p>
-          Данные обрабатываются исключительно для предоставления результатов интеллектуального анализа и улучшения работы алгоритмов.
+          Данные обрабатываются исключительно для предоставления результатов интеллектуального анализа, улучшения работы алгоритмов и связи с пользователем.
         </p>
       </section>
 
@@ -28,7 +29,7 @@ export default function PrivacyPage() {
       <section className="bg-blue-50 p-6 rounded-xl border border-blue-100">
         <p className="text-blue-900 font-medium">
           <strong>Важно:</strong> Мы не храним персональную информацию пациентов (ФИО, адреса, номера телефонов) в открытом виде. 
-          Рекомендуется удалять персональные данные со снимков перед загрузкой.
+          Рекомендуется удалять любые идентифицирующие данные со снимков перед их загрузкой в систему.
         </p>
       </section>
     </LegalPageLayout>

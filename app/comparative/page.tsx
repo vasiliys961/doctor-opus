@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
-import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
+import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
@@ -23,6 +23,7 @@ export default function ComparativeAnalysisPage() {
   const [images, setImages] = useState<ImageWithPreview[]>([])
   const [comparisonMode, setComparisonMode] = useState<ComparisonMode>('general')
   const [mode, setMode] = useState<AnalysisMode>('optimized')
+  const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>('sonnet')
   const [additionalContext, setAdditionalContext] = useState<string>('')
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
@@ -85,7 +86,7 @@ export default function ComparativeAnalysisPage() {
       const modelToUse = mode === 'fast' 
         ? 'google/gemini-3-flash-preview' 
         : mode === 'optimized' 
-          ? 'anthropic/claude-sonnet-4.5' 
+          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') 
           : 'anthropic/claude-opus-4.5'
       
       const formData = new FormData()
@@ -96,6 +97,7 @@ export default function ComparativeAnalysisPage() {
       
       formData.append('prompt', comparisonPrompt)
       formData.append('mode', mode)
+      formData.append('model', modelToUse)
       formData.append('stage', targetStage)
       formData.append('useStreaming', 'true')
       
@@ -231,7 +233,13 @@ export default function ComparativeAnalysisPage() {
         </div>
 
         <div className="mb-6 p-4 bg-primary-50 rounded-lg border border-primary-200">
-          <AnalysisModeSelector value={mode} onChange={setMode} disabled={loading} />
+          <AnalysisModeSelector 
+            value={mode} 
+            onChange={setMode} 
+            optimizedModel={optimizedModel}
+            onOptimizedModelChange={setOptimizedModel}
+            disabled={loading} 
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

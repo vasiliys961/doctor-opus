@@ -5,7 +5,7 @@ import { flushSync } from 'react-dom'
 import dynamic from 'next/dynamic'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
-import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
+import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import PatientSelector from '@/components/PatientSelector'
 import DeviceSync from '@/components/DeviceSync'
@@ -31,6 +31,7 @@ export default function ImageAnalysisPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<AnalysisMode>('optimized')
+  const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>('sonnet')
   const [imageType, setImageType] = useState<ImageModality>('universal')
   const [clinicalContext, setClinicalContext] = useState('')
   const [labsContext, setLabsContext] = useState('')
@@ -110,7 +111,7 @@ export default function ImageAnalysisPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo({ 
-            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5', 
+            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.5', 
             mode: analysisMode + ' (из кэша)' 
           });
           return;
@@ -160,6 +161,16 @@ export default function ImageAnalysisPage() {
       formData.append('imageType', imageType)
       formData.append('useStreaming', useStream.toString())
       formData.append('useLibrary', useLibrary.toString())
+
+      // Добавляем конкретную модель для оптимизированного режима
+      if (analysisMode === 'optimized') {
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
+        formData.append('model', targetModelId);
+      } else if (analysisMode === 'validated') {
+        formData.append('model', 'anthropic/claude-opus-4.5');
+      } else if (analysisMode === 'fast') {
+        formData.append('model', 'google/gemini-3-flash-preview');
+      }
 
       if (useStream) {
         console.log('📡 [CLIENT] Запуск streaming режима для режима:', analysisMode)
@@ -432,6 +443,8 @@ export default function ImageAnalysisPage() {
                 <AnalysisModeSelector
                   value={mode}
                   onChange={setMode}
+                  optimizedModel={optimizedModel}
+                  onOptimizedModelChange={setOptimizedModel}
                   disabled={loading}
                   useLibrary={useLibrary}
                   onLibraryToggle={setUseLibrary}

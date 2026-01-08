@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSession, signOut } from 'next-auth/react'
 import AudioUpload from '@/components/AudioUpload'
 import FileUpload from '@/components/FileUpload'
 import AnalysisTips from '@/components/AnalysisTips'
@@ -11,7 +12,22 @@ import { Specialty } from '@/lib/prompts'
 
 type ModelType = 'opus' | 'sonnet'
 
+const specialtyMap: Record<string, Specialty> = {
+  'Кардиолог': 'cardiology',
+  'Эндокринолог': 'endocrinology',
+  'Рентгенолог / Радиолог': 'radiology',
+  'Дерматовенеролог': 'dermatology',
+  'Невролог': 'neurology',
+  'Гастроэнтеролог': 'gastroenterology',
+  'Педиатр': 'pediatrics',
+  'Онколог': 'oncology',
+  'Гематолог': 'hematology',
+  'Гинеколог': 'gynecology',
+  'Ревматолог': 'rheumatology',
+};
+
 export default function ChatPage() {
+  const { data: session } = useSession()
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; files?: Array<{ name: string; size: number; type: string }> }>>([])
   const [loading, setLoading] = useState(false)
@@ -19,8 +35,19 @@ export default function ChatPage() {
   const [showFileUpload, setShowFileUpload] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
-  const [model, setModel] = useState<'opus' | 'sonnet' | 'gemini'>('opus')
+  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('opus')
   const [specialty, setSpecialty] = useState<Specialty>('universal')
+
+  // Автоматическая установка специальности при входе
+  useEffect(() => {
+    if (session?.user && (session.user as any).specialty) {
+      const userSpecialty = (session.user as any).specialty;
+      const mappedSpecialty = specialtyMap[userSpecialty];
+      if (mappedSpecialty) {
+        setSpecialty(mappedSpecialty);
+      }
+    }
+  }, [session]);
 
   const handleSend = async () => {
     if (!message.trim() && selectedFiles.length === 0) return
@@ -53,7 +80,9 @@ export default function ChatPage() {
         ? 'anthropic/claude-opus-4.5' 
         : model === 'sonnet'
           ? 'anthropic/claude-sonnet-4.5'
-          : 'google/gemini-3-flash-preview'
+          : model === 'gpt52'
+            ? 'openai/gpt-5.2-chat'
+            : 'google/gemini-3-flash-preview'
 
       if (selectedFiles.length > 0) {
         // Отправка с файлами через FormData
@@ -304,21 +333,43 @@ export default function ChatPage() {
 
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-6xl">
-      <div className="flex justify-between items-center mb-4 sm:mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-primary-900">🤖 ИИ-Консультант</h1>
-        <button
-          onClick={clearChat}
-          className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 border border-red-200 shadow-sm"
-          title="Очистить историю диалога"
-        >
-          🗑️ Очистить чат
-        </button>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-2">
+            <span className="bg-teal-600 text-white p-1.5 rounded-lg shadow-sm">🤖</span>
+            ИИ-Консультант
+          </h1>
+          {session?.user && (
+            <p className="text-xs text-slate-500 mt-1">
+              Сессия: <strong>{(session.user as any).specialty || 'Общий профиль'}</strong> • {session.user.email}
+            </p>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={clearChat}
+            className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 border border-slate-200 shadow-sm"
+            title="Очистить историю диалога"
+          >
+            🗑️ Очистить
+          </button>
+          
+          <button
+            onClick={() => signOut({ callbackUrl: '/auth/signin' })}
+            className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 border border-slate-200 shadow-sm"
+          >
+            🚪 Выйти
+          </button>
+        </div>
       </div>
       
-      <ChatSpecialistSelector 
-        selectedSpecialty={specialty} 
-        onSelect={setSpecialty} 
-      />
+      <div className="bg-white/50 backdrop-blur-sm p-1 rounded-2xl mb-6 border border-teal-100/50">
+        <ChatSpecialistSelector 
+          selectedSpecialty={specialty} 
+          onSelect={setSpecialty} 
+        />
+      </div>
       
       <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6 mb-4 sm:mb-6 h-[70vh] sm:h-[700px] overflow-y-auto">
         {messages.length === 0 ? (
@@ -475,6 +526,7 @@ export default function ChatPage() {
               disabled={loading}
             >
               <option value="opus">🧠 Opus 4.5 (точный)</option>
+              <option value="gpt52">🚀 GPT-5.2 (тест-драйв)</option>
               <option value="sonnet">🤖 Sonnet 4.5 (быстрый)</option>
               <option value="gemini">⚡ Gemini 3.0 Flash (мгновенный)</option>
             </select>

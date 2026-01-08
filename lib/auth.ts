@@ -12,11 +12,12 @@ export const authOptions: NextAuthOptions = {
       name: "Вход для врача",
       credentials: {
         email: { label: "Email", type: "email", placeholder: "doctor@example.com" },
-        password: { label: "Пароль", type: "password" }
+        password: { label: "Пароль", type: "password" },
+        specialty: { label: "Специальность", type: "text" }
       },
       async authorize(credentials) {
         // В режиме разработки/тестирования разрешаем вход с любыми данными
-        console.log("Авторизация в процессе для:", credentials?.email);
+        console.log("Авторизация в процессе для:", credentials?.email, "Специальность:", credentials?.specialty);
         
         // Отправляем приветственное письмо асинхронно
         if (credentials?.email && credentials.email.includes('@')) {
@@ -25,7 +26,12 @@ export const authOptions: NextAuthOptions = {
           });
         }
 
-        return { id: "1", name: "Врач-эксперт", email: credentials?.email || "doctor@example.com" };
+        return { 
+          id: "1", 
+          name: credentials?.specialty ? `Врач (${credentials.specialty})` : "Врач-эксперт", 
+          email: credentials?.email || "doctor@example.com",
+          specialty: credentials?.specialty || "Общий профиль"
+        };
       }
     }),
   ],
@@ -33,9 +39,16 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
   },
   callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.specialty = (user as any).specialty;
+      }
+      return token;
+    },
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).id = token.sub;
+        (session.user as any).specialty = token.specialty;
       }
       return session;
     },

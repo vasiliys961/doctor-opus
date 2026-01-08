@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
-import AnalysisModeSelector, { AnalysisMode } from '@/components/AnalysisModeSelector'
+import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
@@ -18,6 +18,7 @@ export default function DermatoscopyPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<AnalysisMode>('optimized')
+  const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>('sonnet')
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
@@ -41,6 +42,16 @@ export default function DermatoscopyPage() {
       formData.append('mode', analysisMode)
       formData.append('imageType', 'dermatoscopy') // Указываем тип изображения
       formData.append('useStreaming', useStream.toString())
+
+      // Добавляем конкретную модель для оптимизированного режима
+      if (analysisMode === 'optimized') {
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
+        formData.append('model', targetModelId);
+      } else if (analysisMode === 'validated') {
+        formData.append('model', 'anthropic/claude-opus-4.5');
+      } else if (analysisMode === 'fast') {
+        formData.append('model', 'google/gemini-3-flash-preview');
+      }
 
       if (useStream && (analysisMode === 'validated' || analysisMode === 'optimized' || analysisMode === 'fast')) {
         // Streaming режим
@@ -191,6 +202,8 @@ export default function DermatoscopyPage() {
             <AnalysisModeSelector
               value={mode}
               onChange={setMode}
+              optimizedModel={optimizedModel}
+              onOptimizedModelChange={setOptimizedModel}
               disabled={loading}
             />
             <label className="flex items-center space-x-2 cursor-pointer">
