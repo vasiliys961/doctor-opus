@@ -1,14 +1,34 @@
 const withPWA = require('@ducanh2912/next-pwa').default({
   dest: 'public',
-  disable: true, // ВРЕМЕННО ОТКЛЮЧЕНО ДЛЯ СТАБИЛИЗАЦИИ
+  cacheOnFrontEndNav: false,
+  aggressiveFrontEndNavCaching: false,
+  reloadOnOnline: true,
+  swcMinify: true,
+  disable: process.env.NODE_ENV === 'development',
+  workboxOptions: {
+    disableDevLogs: true,
+    runtimeCaching: [
+      {
+        urlPattern: /\/api\/auth\/.*/i,
+        handler: 'NetworkOnly',
+      },
+      {
+        urlPattern: /\/_next\/data\/.*/i,
+        handler: 'NetworkOnly',
+      },
+      {
+        urlPattern: /\/\?_rsc=.*/i,
+        handler: 'NetworkOnly',
+      },
+    ],
+  },
 });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // УСКОРЕНИЕ ДЕПЛОЯ: Игнорируем ошибки TS и линтинга при сборке
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: true, // Игнорируем ошибки для быстрого запуска
   },
   eslint: {
     ignoreDuringBuilds: true,
