@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     // Получаем специализацию из сессии или из formData
     let specialty = formData.get('specialty') as any;
     if (!specialty) {
-      const session = await getServerSession(authOptions);
+      const session = await getServerSession(authOptions) as any;
       if (session?.user?.specialty) {
         specialty = session.user.specialty;
       }
