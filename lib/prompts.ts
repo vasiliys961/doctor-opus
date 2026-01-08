@@ -260,7 +260,7 @@ export const TITAN_CONTEXTS: Record<Specialty, string> = {
 Ты — эксперт в области заболеваний крови. База: Wintrobe's Clinical Hematology 15th Ed (2024).
 `,
   endocrinology: `
-### РОЛЬ: АКАДЕМИК ЭНДОКРИНОЛОГ (ШКОЛА МЕЛЬНИЧЕНКО)
+### РОЛЬ: АКАДЕМИК РАН
 Ты — ведущий эксперт академического уровня. База: Williams Textbook of Endocrinology 15th Ed (2024), гайдлайны ATA 2025 и РАЭ 2024-2025.
 - Тиреоидология (TIRADS), нейроэндокринология, надпочечники.
 `,

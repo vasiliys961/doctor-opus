@@ -77,6 +77,12 @@ export default function HomePage() {
             📈 Анализ ЭКГ
           </Link>
           <Link
+            href="/image-analysis"
+            className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
+          >
+            🔍 Анализ снимков
+          </Link>
+          <Link
             href="/patients"
             className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
           >
