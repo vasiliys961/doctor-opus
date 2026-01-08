@@ -36,6 +36,7 @@ export default function ChatPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
   const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('opus')
+  const [specialty, setSpecialty] = useState<Specialty>('universal')
 
   const handleSend = async () => {
     if (!message.trim() && selectedFiles.length === 0) return
@@ -79,6 +80,7 @@ export default function ChatPage() {
         formData.append('history', JSON.stringify(messages))
         formData.append('useStreaming', useStreaming.toString())
         formData.append('model', modelName)
+        formData.append('specialty', specialty)
         selectedFiles.forEach(file => {
           formData.append('files', file)
         })
@@ -190,6 +192,7 @@ export default function ChatPage() {
               history: messages,
               useStreaming: true,
               model: modelName,
+              specialty: specialty,
             }),
           })
 
@@ -274,6 +277,7 @@ export default function ChatPage() {
               history: messages,
               useStreaming: false,
               model: modelName,
+              specialty: specialty,
             }),
           })
 
@@ -485,6 +489,13 @@ export default function ChatPage() {
 
       <div className="bg-white rounded-lg shadow-lg p-3 sm:p-4 mb-3 sm:mb-4">
         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4 items-start sm:items-center">
+          <ChatSpecialistSelector 
+            selectedSpecialty={specialty}
+            onSelect={setSpecialty}
+          />
+          
+          <div className="h-px sm:h-8 w-full sm:w-px bg-slate-200" />
+
           <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
             <input
               type="checkbox"
@@ -492,7 +503,7 @@ export default function ChatPage() {
               onChange={(e) => setUseStreaming(e.target.checked)}
               className="w-5 h-5 sm:w-4 sm:h-4 text-primary-600"
             />
-            <span className="text-xs sm:text-sm">Streaming (постепенный ответ)</span>
+            <span className="text-xs sm:text-sm">Streaming</span>
           </label>
           
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -503,10 +514,10 @@ export default function ChatPage() {
               className="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
               disabled={loading}
             >
-              <option value="opus">🧠 Opus 4.5 (точный)</option>
-              <option value="gpt52">🚀 GPT-5.2 (тест-драйв)</option>
-              <option value="sonnet">🤖 Sonnet 4.5 (быстрый)</option>
-              <option value="gemini">⚡ Gemini 3.0 Flash (мгновенный)</option>
+              <option value="opus">🧠 Opus 4.5</option>
+              <option value="gpt52">🚀 GPT-5.2</option>
+              <option value="sonnet">🤖 Sonnet 4.5</option>
+              <option value="gemini">⚡ Gemini 3.0</option>
             </select>
           </div>
         </div>

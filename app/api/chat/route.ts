@@ -34,11 +34,13 @@ export async function POST(request: NextRequest) {
     let useStreaming = false;
     let model: string | undefined;
     let files: File[] = [];
+    let specialty: string | undefined;
 
     // Проверяем, является ли запрос FormData (с файлами) или JSON
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
       message = anonymizeText((formData.get('message') as string) || '');
+      specialty = formData.get('specialty') as string | undefined;
       const historyStr = formData.get('history') as string;
       if (historyStr) {
         try {
@@ -59,6 +61,7 @@ export async function POST(request: NextRequest) {
       history = anonymizeObject(body.history || []);
       useStreaming = body.useStreaming || false;
       model = body.model;
+      specialty = body.specialty;
     }
 
     const selectedModel = (model === 'gpt52' || model === MODELS.GPT_5_2)
@@ -131,10 +134,10 @@ export async function POST(request: NextRequest) {
     // Если есть файлы, используем функции с поддержкой файлов
     if (files.length > 0) {
       if (useStreaming) {
-        const stream = await sendTextRequestStreamingWithFiles(message, formattedHistory, files, selectedModel);
+        const stream = await sendTextRequestStreamingWithFiles(message, formattedHistory, files, selectedModel, specialty as any);
         return handleStreaming(stream);
       } else {
-        const result = await sendTextRequestWithFiles(message, formattedHistory, files, selectedModel);
+        const result = await sendTextRequestWithFiles(message, formattedHistory, files, selectedModel, specialty as any);
         return NextResponse.json({
           success: true,
           result: result,
@@ -144,12 +147,12 @@ export async function POST(request: NextRequest) {
 
     // Если запрошен streaming без файлов, возвращаем поток
     if (useStreaming) {
-      const stream = await sendTextRequestStreaming(message, formattedHistory, selectedModel);
+      const stream = await sendTextRequestStreaming(message, formattedHistory, selectedModel, specialty as any);
       return handleStreaming(stream);
     }
 
     // Обычный режим - полный ответ
-    const result = await sendTextRequest(message, formattedHistory, selectedModel);
+    const result = await sendTextRequest(message, formattedHistory, selectedModel, specialty as any);
 
     return NextResponse.json({
       success: true,
