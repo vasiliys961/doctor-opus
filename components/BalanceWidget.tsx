@@ -29,9 +29,15 @@ export default function BalanceWidget() {
 
     loadBalance()
     
-    // Обновлять каждые 10 секунд
+    // Слушаем событие обновления баланса
+    window.addEventListener('balanceUpdated', loadBalance)
+    
+    // Обновлять каждые 10 секунд (на всякий случай)
     const interval = setInterval(loadBalance, 10000)
-    return () => clearInterval(interval)
+    return () => {
+      window.removeEventListener('balanceUpdated', loadBalance)
+      clearInterval(interval)
+    }
   }, [session])
 
   const loadBalance = () => {
@@ -93,7 +99,7 @@ export default function BalanceWidget() {
           <div>
             <p className="text-[10px] uppercase tracking-wider opacity-80 mb-1">Доступный остаток</p>
             <p className="text-3xl font-bold flex items-baseline">
-              {balance.currentCredits.toLocaleString('ru-RU')}
+              {balance.currentCredits.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               <span className="text-sm ml-1 opacity-80 font-normal">ед.</span>
             </p>
             <p className="text-[10px] opacity-70 mt-1">
@@ -122,7 +128,7 @@ export default function BalanceWidget() {
         </div>
 
         <div className="flex items-center justify-between text-[10px] font-medium opacity-90">
-          <span>Потрачено: {balance.totalSpent.toLocaleString('ru-RU')} ед.</span>
+          <span>Потрачено: {balance.totalSpent.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ед.</span>
           <span>{Math.max(0, Math.round((balance.currentCredits / balance.initialCredits) * 100))}%</span>
         </div>
 

@@ -107,6 +107,7 @@ export default function CTPage() {
 
         if (data.success) {
           setResult(data.result)
+          setCurrentCost(data.cost || 1.5)
           logUsage({
             section: 'ct',
             model: data.model || 'anthropic/claude-opus-4.5',

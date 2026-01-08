@@ -244,6 +244,8 @@ export default function ImageAnalysisPage() {
 
         if (data.success) {
           setResult(data.result)
+          const cost = data.cost || 1.0; // Fallback если API не вернул
+          setCurrentCost(cost)
           setModelInfo({ model: data.model, mode: data.mode })
           setLastAnalysisData(data)
           

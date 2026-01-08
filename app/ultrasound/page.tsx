@@ -110,10 +110,7 @@ export default function UltrasoundPage() {
           setResult(data.result)
           
           const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5');
-          const inputTokens = 2000;
-          const outputTokens = Math.ceil(data.result.length / 4);
-          const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
-          setCurrentCost(costInfo.totalCostUnits);
+          setCurrentCost(data.cost || 1.0);
 
           logUsage({
             section: 'ultrasound',

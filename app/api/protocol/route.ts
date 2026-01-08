@@ -46,7 +46,9 @@ ${customTemplate}
 
 Стиль: строго профессиональный, клинически и технически точный. Язык: русский.`;
 
-    const MODEL = model === 'opus' ? MODELS.OPUS : (model === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
+    const MODEL = model === 'opus' ? MODELS.OPUS : 
+                 model === 'gpt52' ? MODELS.GPT_5_2 : 
+                 (model === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
     
     if (useStreaming) {
       const stream = await sendTextRequestStreaming(prompt, [], MODEL);

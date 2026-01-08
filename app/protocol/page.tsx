@@ -20,7 +20,7 @@ export default function ProtocolPage() {
   const [protocol, setProtocol] = useState('')
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
-  const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini'>('sonnet')
+  const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini' | 'gpt52'>('sonnet')
   const [currentCost, setCurrentCost] = useState<number>(0)
   
   // Состояния для специалистов и шаблонов
@@ -47,6 +47,7 @@ export default function ProtocolPage() {
       };
 
       const modelUsed = model === 'opus' ? 'anthropic/claude-opus-4.5' : 
+                      model === 'gpt52' ? 'openai/gpt-5.2-chat' :
                       model === 'gemini' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-sonnet-4.5';
 
       if (useStreaming) {
@@ -258,6 +259,7 @@ export default function ProtocolPage() {
             </label>
             <select value={model} onChange={(e) => setModel(e.target.value as any)} className="px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
               <option value="sonnet">🤖 Sonnet 4.5</option>
+              <option value="gpt52">🚀 GPT-5.2</option>
               <option value="opus">🧠 Opus 4.5</option>
               <option value="gemini">⚡ Gemini 3.0</option>
             </select>

@@ -107,6 +107,7 @@ export default function MRIPage() {
 
         if (data.success) {
           setResult(data.result)
+          setCurrentCost(data.cost || 1.5)
           logUsage({
             section: 'mri',
             model: data.model || 'anthropic/claude-opus-4.5',

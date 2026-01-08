@@ -114,6 +114,7 @@ export default function XRayPage() {
 
         if (data.success) {
           setResult(data.result)
+          setCurrentCost(data.cost || 1.0)
           logUsage({
             section: 'xray',
             model: data.model || 'anthropic/claude-opus-4.5',

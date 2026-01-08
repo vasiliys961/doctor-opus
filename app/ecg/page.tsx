@@ -157,11 +157,8 @@ export default function ECGPage() {
           const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5')
           setModelInfo(modelUsed)
           
-          const inputTokens = 2500;
-          const outputTokens = Math.ceil(data.result.length / 4);
-          
-          const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
-          setCurrentCost(costInfo.totalCostUnits);
+          const cost = data.cost || 1.0;
+          setCurrentCost(cost);
 
           // Логирование использования
           logUsage({

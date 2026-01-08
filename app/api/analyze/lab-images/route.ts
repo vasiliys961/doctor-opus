@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       result: finalResult,
+      cost: images.length * (mode === 'fast' ? 0.3 : (mode === 'optimized' ? 0.6 : 1.2))
     });
   } catch (error: any) {
     console.error('❌ [LAB IMAGES] Общая ошибка:', error);

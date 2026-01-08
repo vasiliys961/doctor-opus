@@ -88,6 +88,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: true,
           result: result,
+          cost: mode === 'fast' ? 0.5 : (mode === 'optimized' ? 1.0 : 2.0)
         });
       } catch (imageError: any) {
         console.error('❌ [LAB] Ошибка обработки изображения:', imageError);

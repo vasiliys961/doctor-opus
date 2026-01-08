@@ -138,9 +138,14 @@ export async function POST(request: NextRequest) {
         return handleStreaming(stream);
       } else {
         const result = await sendTextRequestWithFiles(message, formattedHistory, files, selectedModel, specialty as any);
+        const { calculateCost } = await import('@/lib/cost-calculator');
+        const costInfo = calculateCost(2000, 1500, selectedModel); // Оценочно для non-streaming
+        
         return NextResponse.json({
           success: true,
           result: result,
+          cost: costInfo.totalCostUnits,
+          model: selectedModel
         });
       }
     }
@@ -153,10 +158,14 @@ export async function POST(request: NextRequest) {
 
     // Обычный режим - полный ответ
     const result = await sendTextRequest(message, formattedHistory, selectedModel, specialty as any);
+    const { calculateCost } = await import('@/lib/cost-calculator');
+    const costInfo = calculateCost(1000, 1000, selectedModel); // Оценочно для non-streaming
 
     return NextResponse.json({
       success: true,
       result: result,
+      cost: costInfo.totalCostUnits,
+      model: selectedModel
     });
   } catch (error: any) {
     console.error('Error in chat:', error);

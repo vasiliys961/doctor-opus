@@ -129,6 +129,12 @@ export function upgradeBalanceToRegistered(): void {
       
       balance.packageName = 'Стартовый (Зарегистрирован)';
       localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
+      
+      // Вызываем событие обновления баланса для UI
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('balanceUpdated'));
+      }
+      
       console.log(`🎁 [SUBSCRIPTION] Баланс обновлен до стартового: ${targetTotal} ед.`);
     }
   } catch (error) {
@@ -218,14 +224,14 @@ export function deductBalance(params: {
 
     // Расчет стоимости
     const costInfo = calculateCost(params.inputTokens, params.outputTokens, params.model);
-    const costCredits = Math.ceil(costInfo.totalCostUsd * USD_TO_CREDITS_RATE);
+    const costCredits = costInfo.totalCostUnits; // Используем float для точности
 
     // Проверка достаточности средств с учетом "мягкого лимита"
     if (SUBSCRIPTION_STRICT_MODE && (balance.currentCredits - costCredits) < SOFT_LIMIT) {
-      console.warn(`⚠️ [SUBSCRIPTION] Превышен лимит: нужно ${costCredits}, доступно ${balance.currentCredits}, лимит ${SOFT_LIMIT}`);
+      console.warn(`⚠️ [SUBSCRIPTION] Превышен лимит: нужно ${costCredits.toFixed(2)}, доступно ${balance.currentCredits.toFixed(2)}, лимит ${SOFT_LIMIT}`);
       return { 
         success: false, 
-        message: `Недостаточно единиц. Баланс: ${balance.currentCredits}, требуется: ${costCredits}. Пожалуйста, пополните пакет.`,
+        message: `Недостаточно единиц. Баланс: ${balance.currentCredits.toFixed(2)}, требуется: ${costCredits.toFixed(2)}. Пожалуйста, пополните пакет.`,
         cost: costCredits
       };
     }
@@ -234,6 +240,11 @@ export function deductBalance(params: {
     balance.currentCredits -= costCredits;
     balance.totalSpent += costCredits;
     localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
+
+    // Вызываем событие обновления баланса для UI
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('balanceUpdated'));
+    }
 
     // Транзакция
     const transaction: Transaction = {
@@ -253,7 +264,7 @@ export function deductBalance(params: {
     transactions.push(transaction);
     localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
 
-    console.log(`💰 [SUBSCRIPTION] Списано ${costCredits} ед. Остаток: ${balance.currentCredits} ед.`);
+    console.log(`💰 [SUBSCRIPTION] Списано ${costCredits.toFixed(2)} ед. Остаток: ${balance.currentCredits.toFixed(2)} ед.`);
     
     return { success: true, cost: costCredits };
   } catch (error) {

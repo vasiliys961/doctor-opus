@@ -404,10 +404,15 @@ function createTransformWithUsage(stream: ReadableStream, model: string): Readab
               try {
                 const data = JSON.parse(line.slice(6));
                 if (data.usage) {
-                  const { calculateCost } = await import('./cost-calculator');
+                  const { calculateCost, formatCostLog } = await import('./cost-calculator');
                   const costInfo = calculateCost(data.usage.prompt_tokens, data.usage.completion_tokens, model);
                   data.usage.total_cost = costInfo.totalCostUnits;
                   data.model = model;
+                  
+                  // Логирование в терминал для всех стримов
+                  console.log(`✅ [STREAMING] Запрос завершен (${model})`);
+                  console.log(`   📊 ${formatCostLog(model, data.usage.prompt_tokens, data.usage.completion_tokens, data.usage.total_tokens)}`);
+                  
                   modifiedChunk = modifiedChunk.replace(line, `data: ${JSON.stringify(data)}`);
                 }
               } catch (e) {}

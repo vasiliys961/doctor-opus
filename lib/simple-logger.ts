@@ -3,6 +3,7 @@
  */
 
 import { calculateCost } from './cost-calculator';
+import { deductBalance } from './subscription-manager';
 
 // Маппинг URL разделов на русские названия
 const SECTION_NAMES: Record<string, string> = {
@@ -71,6 +72,16 @@ export function logUsage(params: {
     // Обновить данные
     data[params.section].calls += 1;
     data[params.section].costUnits += costInfo.totalCostUnits;
+    
+    // Списать с баланса пользователя
+    deductBalance({
+      section: params.section,
+      sectionName: sectionName,
+      model: params.model,
+      inputTokens: params.inputTokens,
+      outputTokens: params.outputTokens,
+      operation: 'AI Analysis'
+    });
     
     // Учесть модель
     if (!data[params.section].models[params.model]) {

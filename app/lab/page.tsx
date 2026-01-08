@@ -181,11 +181,7 @@ export default function LabPage() {
             const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
                             mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
             
-            const inputTokens = pdfImages.length * 2000;
-            const outputTokens = Math.ceil(data.result.length / 4);
-            
-            const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
-            setCurrentCost(costInfo.totalCostUnits);
+            setCurrentCost(data.cost || 1.0);
 
             logUsage({
               section: 'lab',
@@ -246,11 +242,7 @@ export default function LabPage() {
             const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
                             mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
             
-            const inputTokens = 1500;
-            const outputTokens = Math.ceil(data.result.length / 4);
-            
-            const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
-            setCurrentCost(costInfo.totalCostUnits);
+            setCurrentCost(data.cost || 1.0);
 
             logUsage({
               section: 'lab',

@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         return handleStreamingResponse(stream, MODELS.GEMINI_3_FLASH);
       }
       const result = await analyzeImageFast({ prompt, imageBase64: imagesBase64[0], imageType: imageType as any, clinicalContext: finalClinicalContext });
-      return NextResponse.json({ success: true, result, model: modelToUse, mode });
+      return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: 0.5 });
     }
 
     if (allImages.length > 1) {
@@ -116,14 +116,14 @@ export async function POST(request: NextRequest) {
         return handleStreamingResponse(stream, modelToUse);
       }
       const result = await analyzeMultipleImagesTwoStage({ prompt, imagesBase64, imageType: imageType as any, clinicalContext: finalClinicalContext, targetModel: modelToUse });
-      return NextResponse.json({ success: true, result, model: modelToUse, mode });
+      return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: 2.0 });
     } else {
       if (useStreaming) {
         const stream = await analyzeImageOpusTwoStageStreaming(prompt, imagesBase64[0], imageType as any, finalClinicalContext, undefined, modelToUse);
         return handleStreamingResponse(stream, modelToUse);
       }
       const result = await analyzeImageOpusTwoStage({ prompt, imageBase64: imagesBase64[0], imageType: imageType as any, clinicalContext: finalClinicalContext, targetModel: modelToUse });
-      return NextResponse.json({ success: true, result, model: modelToUse, mode });
+      return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: 1.5 });
     }
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

@@ -24,12 +24,20 @@ const specialtyMap: Record<string, Specialty> = {
   'Гематолог': 'hematology',
   'Гинеколог': 'gynecology',
   'Ревматолог': 'rheumatology',
+  'Исследователь': 'openevidence',
+  'ИИ-Эксперт': 'ai_consultant',
 };
 
 export default function ChatPage() {
   const { data: session } = useSession()
   const [message, setMessage] = useState('')
-  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; files?: Array<{ name: string; size: number; type: string }> }>>([])
+  const [messages, setMessages] = useState<Array<{ 
+    role: 'user' | 'assistant'; 
+    content: string; 
+    files?: Array<{ name: string; size: number; type: string }>;
+    cost?: number;
+    model?: string;
+  }>>([])
   const [loading, setLoading] = useState(false)
   const [showAudioUpload, setShowAudioUpload] = useState(false)
   const [showFileUpload, setShowFileUpload] = useState(false)
@@ -128,6 +136,30 @@ export default function ChatPage() {
 
                   try {
                     const json = JSON.parse(data)
+                    
+                    // Обработка статистики использования
+                    if (json.usage && json.usage.total_cost) {
+                      setMessages(prev => {
+                        const newMessages = [...prev]
+                        if (newMessages[assistantMessageIndex]) {
+                          newMessages[assistantMessageIndex] = {
+                            ...newMessages[assistantMessageIndex],
+                            cost: json.usage.total_cost,
+                            model: json.model || modelName
+                          }
+                        }
+                        return newMessages
+                      })
+                      
+                      logUsage({
+                        section: 'chat',
+                        model: json.model || modelName,
+                        inputTokens: json.usage.prompt_tokens,
+                        outputTokens: json.usage.completion_tokens,
+                      })
+                      continue; // Переходим к следующей строке, контента здесь нет
+                    }
+
                     const content = json.choices?.[0]?.delta?.content || ''
                     if (content) {
                       accumulatedText += content
@@ -167,7 +199,12 @@ export default function ChatPage() {
           const data = await response.json()
 
           if (data.success) {
-            setMessages(prev => [...prev, { role: 'assistant', content: data.result }])
+            setMessages(prev => [...prev, { 
+              role: 'assistant', 
+              content: data.result,
+              cost: data.cost,
+              model: data.model || modelName
+            }])
             logUsage({
               section: 'chat',
               model: modelName,
@@ -232,6 +269,30 @@ export default function ChatPage() {
 
                   try {
                     const json = JSON.parse(data)
+
+                    // Обработка статистики использования
+                    if (json.usage && json.usage.total_cost) {
+                      setMessages(prev => {
+                        const newMessages = [...prev]
+                        if (newMessages[assistantMessageIndex]) {
+                          newMessages[assistantMessageIndex] = {
+                            ...newMessages[assistantMessageIndex],
+                            cost: json.usage.total_cost,
+                            model: json.model || modelName
+                          }
+                        }
+                        return newMessages
+                      })
+                      
+                      logUsage({
+                        section: 'chat',
+                        model: json.model || modelName,
+                        inputTokens: json.usage.prompt_tokens,
+                        outputTokens: json.usage.completion_tokens,
+                      })
+                      continue;
+                    }
+
                     // OpenRouter формат: json.choices[0].delta.content
                     const content = json.choices?.[0]?.delta?.content || ''
                     if (content) {
@@ -284,7 +345,12 @@ export default function ChatPage() {
           const data = await response.json()
 
           if (data.success) {
-            setMessages(prev => [...prev, { role: 'assistant', content: data.result }])
+            setMessages(prev => [...prev, { 
+              role: 'assistant', 
+              content: data.result, 
+              cost: data.cost,
+              model: data.model || modelName
+            }])
             logUsage({
               section: 'chat',
               model: modelName,
@@ -369,8 +435,13 @@ export default function ChatPage() {
                     : 'bg-gray-100 sm:mr-12'
                 }`}
               >
-                <div className="font-semibold mb-2 text-sm sm:text-base">
-                  {msg.role === 'user' ? 'Вы' : 'ИИ-Консультант'}
+                <div className="font-semibold mb-2 text-sm sm:text-base flex items-center justify-between">
+                  <span>{msg.role === 'user' ? 'Вы' : 'ИИ-Консультант'}</span>
+                  {msg.role === 'assistant' && msg.cost !== undefined && (
+                    <span className="text-[10px] bg-teal-50 text-teal-700 px-2 py-0.5 rounded border border-teal-100 font-bold">
+                      💰 {msg.cost.toFixed(2)} ед.
+                    </span>
+                  )}
                 </div>
                 {msg.files && msg.files.length > 0 && (
                   <div className="mb-2 flex flex-wrap gap-1 sm:gap-2">
