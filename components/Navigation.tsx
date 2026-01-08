@@ -121,7 +121,6 @@ export default function Navigation() {
             <div className="mb-4 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
               <p className="text-[10px] text-primary-300 uppercase font-bold tracking-tighter">Пользователь</p>
               <p className="text-xs truncate font-medium text-white">{session.user.email}</p>
-              <p className="text-[9px] text-teal-400">{(session.user as any).specialty || 'Общий профиль'}</p>
             </div>
           )}
           <div className="space-y-2">

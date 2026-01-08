@@ -36,18 +36,6 @@ export default function ChatPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
   const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('opus')
-  const [specialty, setSpecialty] = useState<Specialty>('universal')
-
-  // Автоматическая установка специальности при входе
-  useEffect(() => {
-    if (session?.user && (session.user as any).specialty) {
-      const userSpecialty = (session.user as any).specialty;
-      const mappedSpecialty = specialtyMap[userSpecialty];
-      if (mappedSpecialty) {
-        setSpecialty(mappedSpecialty);
-      }
-    }
-  }, [session]);
 
   const handleSend = async () => {
     if (!message.trim() && selectedFiles.length === 0) return
@@ -91,7 +79,6 @@ export default function ChatPage() {
         formData.append('history', JSON.stringify(messages))
         formData.append('useStreaming', useStreaming.toString())
         formData.append('model', modelName)
-        formData.append('specialty', specialty)
         selectedFiles.forEach(file => {
           formData.append('files', file)
         })
@@ -203,7 +190,6 @@ export default function ChatPage() {
               history: messages,
               useStreaming: true,
               model: modelName,
-              specialty: specialty,
             }),
           })
 
@@ -288,7 +274,6 @@ export default function ChatPage() {
               history: messages,
               useStreaming: false,
               model: modelName,
-              specialty: specialty,
             }),
           })
 
@@ -341,7 +326,7 @@ export default function ChatPage() {
           </h1>
           {session?.user && (
             <p className="text-xs text-slate-500 mt-1">
-              Сессия: <strong>{(session.user as any).specialty || 'Общий профиль'}</strong> • {session.user.email}
+              Сессия: {session.user.email}
             </p>
           )}
         </div>
@@ -362,13 +347,6 @@ export default function ChatPage() {
             🚪 Выйти
           </button>
         </div>
-      </div>
-      
-      <div className="bg-white/50 backdrop-blur-sm p-1 rounded-2xl mb-6 border border-teal-100/50">
-        <ChatSpecialistSelector 
-          selectedSpecialty={specialty} 
-          onSelect={setSpecialty} 
-        />
       </div>
       
       <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6 mb-4 sm:mb-6 h-[70vh] sm:h-[700px] overflow-y-auto">

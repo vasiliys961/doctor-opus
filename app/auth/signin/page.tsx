@@ -23,7 +23,6 @@ const SPECIALTIES = [
 
 export default function SignIn() {
   const [email, setEmail] = useState('');
-  const [specialtyId, setSpecialtyId] = useState(SPECIALTIES[0].id);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const router = useRouter();
 
@@ -34,7 +33,6 @@ export default function SignIn() {
     try {
       const result = await signIn('credentials', {
         email,
-        specialty: specialtyId,
         password: 'any_password',
         redirect: false,
       });
@@ -87,25 +85,6 @@ export default function SignIn() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
-            </div>
-
-            <div>
-              <label htmlFor="specialty" className="block text-sm font-medium text-slate-700 mb-1">
-                Ваша специальность
-              </label>
-              <select
-                id="specialty"
-                name="specialty"
-                className="block w-full rounded-xl border-slate-200 py-3 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-teal-600 sm:text-sm transition-all"
-                value={specialtyId}
-                onChange={(e) => setSpecialtyId(e.target.value)}
-              >
-                {SPECIALTIES.map((spec) => (
-                  <option key={spec.id} value={spec.id}>
-                    {spec.name}
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
 

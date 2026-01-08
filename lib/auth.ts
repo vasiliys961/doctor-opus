@@ -17,7 +17,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         // В режиме разработки/тестирования разрешаем вход с любыми данными
-        console.log("Авторизация в процессе для:", credentials?.email, "Специальность:", credentials?.specialty);
+        console.log("Авторизация в процессе для:", credentials?.email);
         
         // Отправляем приветственное письмо асинхронно
         if (credentials?.email && credentials.email.includes('@')) {
@@ -28,9 +28,8 @@ export const authOptions: NextAuthOptions = {
 
         return { 
           id: "1", 
-          name: credentials?.specialty ? `Врач (${credentials.specialty})` : "Врач-эксперт", 
-          email: credentials?.email || "doctor@example.com",
-          specialty: credentials?.specialty || "Общий профиль"
+          name: "Врач-эксперт", 
+          email: credentials?.email || "doctor@example.com"
         };
       }
     }),
@@ -39,16 +38,12 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
   },
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.specialty = (user as any).specialty;
-      }
+    async jwt({ token }) {
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).id = token.sub;
-        (session.user as any).specialty = token.specialty;
       }
       return session;
     },
