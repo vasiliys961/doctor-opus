@@ -12,8 +12,7 @@ export const authOptions: NextAuthOptions = {
       name: "Вход для врача",
       credentials: {
         email: { label: "Email", type: "email", placeholder: "doctor@example.com" },
-        password: { label: "Пароль", type: "password" },
-        specialty: { label: "Специальность", type: "text" }
+        password: { label: "Пароль", type: "password" }
       },
       async authorize(credentials) {
         // В режиме разработки/тестирования разрешаем вход с любыми данными

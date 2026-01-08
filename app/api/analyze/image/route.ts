@@ -11,13 +11,9 @@ import {
   analyzeMultipleImagesDescriptionStreaming,
   analyzeMultipleImagesDirectiveStreaming
 } from '@/lib/openrouter-streaming';
-import { formatCostLog } from '@/lib/cost-calculator';
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
 import { extractDicomMetadata, formatDicomMetadataForAI } from '@/lib/dicom-service';
 import { processDicomJs } from "@/lib/dicom-processor";
-import { searchLibrary, formatLibraryContext } from '@/lib/library-service';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
@@ -36,19 +32,6 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   
-  // Проверка авторизации ПОЛНОСТЬЮ ОТКЛЮЧЕНА
-  /*
-  if (process.env.NEXT_PUBLIC_AUTH_DISABLED !== 'true') {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
-        { status: 401 }
-      );
-    }
-  }
-  */
-
   // Вспомогательная функция для стриминга (должна быть объявлена ДО использования)
   const handleStreamingResponse = async (stream: ReadableStream, modelName: string) => {
     return new Response(stream, {
@@ -78,9 +61,8 @@ export async function POST(request: NextRequest) {
     const imageType = (formData.get('imageType') as string) || 'universal';
     const customModel = formData.get('model') as string | null;
     const useStreaming = formData.get('useStreaming') === 'true';
-    const useLibrary = formData.get('useLibrary') === 'true';
     
-    // Специальности удалены для стабильности
+    // Специальности удалены для стабильности сборки
     const specialty = undefined;
     
     // Сбор всех изображений
@@ -106,37 +88,29 @@ export async function POST(request: NextRequest) {
       const isDicom = img.name.toLowerCase().endsWith('.dcm') || 
                       img.name.toLowerCase().endsWith('.dicom') || 
                       img.type === 'application/dicom' ||
-                      img.type === ''; // Некоторые браузеры не определяют тип для .dcm
+                      img.type === ''; 
 
       if (isDicom) {
-        console.log(`📦 [DICOM] Обнаружен DICOM файл: ${img.name}`);
         const arrayBuffer = await img.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // 1. Нативное извлечение метаданных через JS (Безопасно и быстро)
         const nativeMeta = extractDicomMetadata(buffer);
         if (nativeMeta.modality) {
-          console.log(`✅ [DICOM JS] Метаданные извлечены нативно: ${nativeMeta.modality}`);
           dicomContext += formatDicomMetadataForAI(nativeMeta);
         }
 
-        // 2. Нативная конвертация изображения через JS (БЫСТРО)
         const jsProcessResult = await processDicomJs(buffer);
         
         if (jsProcessResult.success && jsProcessResult.image) {
-          console.log(`✅ [DICOM JS] Изображение успешно обработано нативно`);
           imagesBase64.push(jsProcessResult.image);
           mimeTypes.push('image/png');
         } else {
-          // 3. Fallback: Конвертация изображения через Python (если JS не справился)
-          console.log(`⚠️ [DICOM JS] Нативная обработка не удалась, переход на Python...`);
           const tempDir = os.tmpdir();
           const tempPath = path.join(tempDir, `dicom_${Date.now()}_${img.name.replace(/\s+/g, '_')}`);
           await fs.writeFile(tempPath, buffer);
           
           try {
             const scriptPath = path.join(process.cwd(), 'scripts/process_dicom.py');
-            // Используем python3 или python в зависимости от окружения
             const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
             const { stdout } = await execPromise(`${pythonCmd} "${scriptPath}" "${tempPath}"`);
             const result = JSON.parse(stdout);
@@ -144,22 +118,15 @@ export async function POST(request: NextRequest) {
             if (result.success) {
               imagesBase64.push(result.image);
               mimeTypes.push('image/png');
-              
-              // Если Python нашел дополнительные метаданные, которых нет в JS, добавляем их
               if (!nativeMeta.modality && result.metadata) {
                 const m = result.metadata;
                 dicomContext += `\n[Данные из Python]: ${m.modality} ${m.body_part}\n`;
               }
-              
-              console.log(`✅ [DICOM Python] Изображение успешно конвертировано`);
             } else {
-              console.error(`❌ [DICOM ERROR]: ${result.error}`);
-              // Резервный вариант: отправляем как есть (некоторые ИИ могут пробовать читать raw)
               imagesBase64.push(buffer.toString('base64'));
               mimeTypes.push(img.type || 'application/dicom');
             }
           } catch (e: any) {
-            console.error(`❌ [DICOM EXEC ERROR]:`, e);
             imagesBase64.push(buffer.toString('base64'));
             mimeTypes.push(img.type || 'application/dicom');
           } finally {
@@ -174,28 +141,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Добавляем данные DICOM к клиническому контексту (данные библиотеки приходят от клиента)
-    const finalClinicalContext = [
-      clinicalContext,
-      dicomContext,
-    ].filter(Boolean).join('\n\n');
+    const finalClinicalContext = [clinicalContext, dicomContext].filter(Boolean).join('\n\n');
 
-    // Определяем модель в зависимости от режима
     let modelToUse = customModel;
     if (!modelToUse) {
       if (mode === 'fast') {
         modelToUse = MODELS.GEMINI_3_FLASH;
       } else {
-        // По умолчанию для всех серьезных анализов используем SONNET 4.5.
-        // Это в 5 раз дешевле OPUS при сопоставимом качестве.
         modelToUse = MODELS.SONNET;
       }
     }
 
-    // --- БЫСТРЫЙ РЕЖИМ (Fast) ---
+    // --- РЕЖИМЫ ---
     if (mode === 'fast') {
       if (useStreaming) {
-        // Для быстрого стриминга используем Gemini (JSON) -> Gemini (Описание)
         const stream = await analyzeImageFastStreaming(prompt, imagesBase64[0], imageType, finalClinicalContext);
         return handleStreamingResponse(stream, MODELS.GEMINI_3_FLASH);
       } else {
@@ -209,7 +168,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // --- ПОСЛЕДОВАТЕЛЬНЫЕ ЭТАПЫ (Шаг 1 / Шаг 2) ---
     if (useStreaming && (stage === 'description' || stage === 'directive')) {
       let stream: ReadableStream;
       if (stage === 'description') {
@@ -221,7 +179,6 @@ export async function POST(request: NextRequest) {
       return handleStreamingResponse(stream, stage === 'description' ? MODELS.SONNET : MODELS.OPUS);
     }
 
-    // --- СТАНДАРТНЫЙ РЕЖИМ ---
     if (allImages.length > 1) {
       if (useStreaming) {
         let stream: ReadableStream;
@@ -230,7 +187,6 @@ export async function POST(request: NextRequest) {
         else stream = await analyzeMultipleImagesStreaming(prompt, imagesBase64, mimeTypes, modelToUse, finalClinicalContext);
         return handleStreamingResponse(stream, modelToUse);
       } else {
-        // Двухэтапный анализ для нескольких изображений
         if (mode === 'optimized' || mode === 'validated') {
           const result = await analyzeMultipleImagesTwoStage({
             prompt,
@@ -260,7 +216,6 @@ export async function POST(request: NextRequest) {
         return handleStreamingResponse(stream, modelToUse);
       }
       
-      // Двухэтапный анализ для optimized и validated режимов (не стриминг)
       if (mode === 'optimized' || mode === 'validated') {
         const result = await analyzeImageOpusTwoStage({
           prompt,

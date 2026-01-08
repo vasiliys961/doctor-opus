@@ -1,6 +1,6 @@
 const withPWA = require('@ducanh2912/next-pwa').default({
   dest: 'public',
-  disable: true, // ВРЕМЕННО ОТКЛЮЧАЕМ PWA, чтобы вернуть сайт к жизни
+  disable: true, // ВРЕМЕННО ОТКЛЮЧЕНО ДЛЯ СТАБИЛИЗАЦИИ
 });
 
 /** @type {import('next').NextConfig} */
@@ -30,4 +30,3 @@ const nextConfig = {
 }
 
 module.exports = withPWA(nextConfig);
-
