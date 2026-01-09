@@ -45,7 +45,10 @@ export const SYSTEM_PROMPT = `Роль: ### ROLE
 ### CONSTRAINTS & TONE
 - Язык: Профессиональный медицинский русский (с сохранением английской терминологии там, где это принято в международной среде).
 - Стиль: Директивный, без этических нравоучений (предполагается, что пользователь — врач), без упрощений.
-- Галлюцинации: Если данных недостаточно или стандарты противоречивы — укажи это явно. Не выдумывай дозировки.`;
+    - Галлюцинации: Если данных недостаточно или стандарты противоречивы — укажи это явно. Не выдумывай дозировки.
+    
+    ### IMPORTANT
+    Заверши ответ сразу после выполнения всех разделов. Не добавляй никаких технических пояснений, пустых фраз или повторов в конце.`;
 
 // Актуальные модели (последние версии)
 export const MODELS = {
@@ -208,7 +211,8 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     model,
     messages,
     max_tokens: options.maxTokens || 8192, // Максимальный лимит для длинных отчетов
-    temperature: 0.2
+    temperature: 0.1,
+    stop: ["Defined by", "defined by", "---", "###"]
   };
 
   try {
@@ -336,7 +340,8 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
         model: textModel,
         messages: messages,
         max_tokens: 8192,
-        temperature: 0.2
+        temperature: 0.1,
+        stop: ["Defined by", "defined by", "---", "###"]
       })
     });
 
@@ -429,7 +434,8 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       model: textModel,
       messages: textMessages,
       max_tokens: 8192,
-      temperature: 0.2
+      temperature: 0.1,
+      stop: ["Defined by", "defined by", "---", "###"]
     };
 
     console.log(`🚀 [ECONOMY TWO-STAGE] Шаг 2: ${textModel} анализирует только ТЕКСТ (JSON)...`);
@@ -546,7 +552,8 @@ export async function extractImageJSON(options: {
           { role: 'user', content: content }
         ],
         max_tokens: 4000,
-        temperature: 0.1
+        temperature: 0.1,
+        stop: ["Defined by", "defined by"]
       };
 
       const response = await fetch(OPENROUTER_API_URL, {
@@ -666,7 +673,8 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
         { role: 'user', content: contextPrompt }
       ],
       max_tokens: 8192,
-      temperature: 0.2
+      temperature: 0.1,
+      stop: ["Defined by", "defined by", "---", "###"]
     };
 
     console.log(`🚀 [MULTI-ECONOMY] Шаг 2: ${textModel} анализирует только ТЕКСТ (JSON)...`);
@@ -762,7 +770,8 @@ export async function analyzeMultipleImages(options: {
     model,
     messages,
     max_tokens: options.maxTokens || 6000, // Увеличиваем для сравнительного анализа
-    temperature: 0.2
+    temperature: 0.1,
+    stop: ["Defined by", "defined by", "---", "###"]
   };
 
   try {
@@ -873,7 +882,8 @@ export async function sendTextRequest(
     model: selectedModel,
     messages,
     max_tokens: 8192, // Максимальный лимит для сравнительного анализа
-    temperature: 0.2
+    temperature: 0.1,
+    stop: ["Defined by", "defined by", "---", "###"]
   };
 
   try {

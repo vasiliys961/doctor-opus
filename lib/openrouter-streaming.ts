@@ -41,7 +41,10 @@ const SYSTEM_PROMPT = `Роль: ### ROLE
 ### CONSTRAINTS & TONE
 - Язык: Профессиональный медицинский русский (с сохранением английской терминологии там, где это принято в международной среде).
 - Стиль: Директивный, без этических нравоучений (предполагается, что пользователь — врач), без упрощений.
-- Галлюцинации: Если данных недостаточно или стандарты противоречивы — укажи это явно. Не выдумывай дозировки.`;
+    - Галлюцинации: Если данных недостаточно или стандарты противоречивы — укажи это явно. Не выдумывай дозировки.
+    
+    ### IMPORTANT
+    Заверши ответ сразу после выполнения всех разделов. Не добавляй никаких технических пояснений, пустых фраз или повторов в конце.`;
 
 const MODELS = {
   OPUS: 'anthropic/claude-opus-4.5',
@@ -113,7 +116,8 @@ async function createSequentialStream(
             }
           ],
           max_tokens: 3000,
-          temperature: 0.2,
+          temperature: 0.1,
+          stop: ["Defined by", "defined by", "---", "###"],
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -181,7 +185,8 @@ async function createSequentialStream(
             }
           ],
           max_tokens: 5000,
-          temperature: 0.2,
+          temperature: 0.1,
+          stop: ["Defined by", "defined by", "---", "###"],
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -467,7 +472,8 @@ export async function sendTextRequestStreaming(
       model,
       messages,
       max_tokens: 8192,
-      temperature: 0.2,
+      temperature: 0.1,
+      stop: ["Defined by", "defined by", "---", "###"],
       stream: true,
       stream_options: { include_usage: true }
     })
@@ -524,7 +530,8 @@ export async function analyzeImageStreaming(
         }
       ],
       max_tokens: 8192,
-      temperature: 0.2,
+      temperature: 0.1,
+      stop: ["Defined by", "defined by", "---", "###"],
       stream: true,
       stream_options: { include_usage: true }
     })
@@ -686,7 +693,8 @@ export async function analyzeMultipleImagesStreaming(
         { role: 'user', content: contentItems }
       ],
       max_tokens: 8000,
-      temperature: 0.2,
+      temperature: 0.1,
+      stop: ["Defined by", "defined by", "---", "###"],
       stream: true,
       stream_options: { include_usage: true }
     })

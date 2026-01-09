@@ -125,7 +125,8 @@ export async function sendTextRequestWithFiles(
     model,
     messages,
     max_tokens: 8000,
-    temperature: 0.2
+    temperature: 0.1,
+    stop: ["Defined by", "defined by", "---", "###"]
   };
 
   try {
@@ -220,8 +221,10 @@ export async function sendTextRequestStreamingWithFiles(
     model,
     messages,
     max_tokens: 8000,
-    temperature: 0.2,
-    stream: true
+    temperature: 0.1,
+    stop: ["Defined by", "defined by", "---", "###"],
+    stream: true,
+    stream_options: { include_usage: true }
   };
 
     const response = await fetch(OPENROUTER_API_URL, {
