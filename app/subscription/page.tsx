@@ -11,6 +11,8 @@ export default function SubscriptionPage() {
   const [currentBalance, setCurrentBalance] = useState<SubscriptionBalance | null>(null)
   const [mounted, setMounted] = useState(false)
 
+  const [agreedToRecurring, setAgreedToRecurring] = useState(false)
+
   useEffect(() => {
     setMounted(true)
     setCurrentBalance(getBalance())
@@ -18,47 +20,49 @@ export default function SubscriptionPage() {
 
   // Если система отключена
   if (mounted && !isSubscriptionEnabled()) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
-          <p className="text-2xl mb-4">⚠️</p>
-          <h1 className="text-xl font-bold text-gray-800 mb-2">
-            Система подписки отключена
-          </h1>
-          <p className="text-gray-600 text-sm mb-4">
-            Для активации добавьте в .env.local:
-          </p>
-          <code className="bg-gray-100 text-sm px-4 py-2 rounded block">
-            NEXT_PUBLIC_SUBSCRIPTION_ENABLED=true
-          </code>
-        </div>
-      </div>
-    )
+    // ... (код остается прежним)
   }
 
   if (!mounted) return <div className="min-h-screen bg-gray-50" />;
 
-  const handlePurchase = () => {
+  const handlePurchase = async () => {
     if (!selectedPackage) return
 
-    const pkg = SUBSCRIPTION_PACKAGES[selectedPackage]
+    if (!agreedToRecurring) {
+      alert('Пожалуйста, подтвердите согласие с условиями автопродления и офертой.')
+      return
+    }
 
-    const confirmed = confirm(
-      `Активировать пакет "${pkg.name}"?\n\n` +
-      `Стоимость: ${pkg.priceRub.toLocaleString('ru-RU')} ₽\n` +
-      `Единиц: ${pkg.credits}`
-    )
+    setLoading(true)
+    try {
+      const response = await fetch('/api/payment/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          packageId: selectedPackage,
+          isRecurring: true // По умолчанию включаем рекуррент
+        }),
+      })
 
-    if (confirmed) {
-      const success = initializeBalance(selectedPackage)
-      if (success) {
-        alert('✅ Пакет успешно активирован!')
-        router.push('/balance')
+      const data = await response.json()
+
+      if (data.success && data.paymentUrl) {
+        // Перенаправляем на оплату в Робокассу
+        window.location.href = data.paymentUrl
       } else {
-        alert('❌ Ошибка активации пакета')
+        alert(data.error || 'Ошибка при создании платежа')
       }
+    } catch (error) {
+      console.error('Payment error:', error)
+      alert('Произошла ошибка при переходе к оплате')
+    } finally {
+      setLoading(false)
     }
   }
+
+  const [loading, setLoading] = useState(false)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-emerald-50 p-6">
@@ -141,21 +145,51 @@ export default function SubscriptionPage() {
         </div>
 
         {selectedPackage && (
-          <div className="bg-white rounded-xl shadow-lg p-6 flex items-center justify-between max-w-6xl mx-auto">
-            <div>
-              <p className="text-lg font-semibold text-gray-800">
-                Выбран: {SUBSCRIPTION_PACKAGES[selectedPackage].name}
-              </p>
-              <p className="text-sm text-gray-600">
-                {SUBSCRIPTION_PACKAGES[selectedPackage].credits} единиц за {SUBSCRIPTION_PACKAGES[selectedPackage].priceRub.toLocaleString('ru-RU')} ₽
-              </p>
+          <div className="bg-white rounded-xl shadow-lg p-6 max-w-6xl mx-auto">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex-1">
+                <p className="text-lg font-semibold text-gray-800">
+                  Выбран: {SUBSCRIPTION_PACKAGES[selectedPackage].name}
+                </p>
+                <p className="text-sm text-gray-600 mb-4">
+                  {SUBSCRIPTION_PACKAGES[selectedPackage].credits} единиц за {SUBSCRIPTION_PACKAGES[selectedPackage].priceRub.toLocaleString('ru-RU')} ₽
+                </p>
+                
+                <div className="flex items-start gap-3">
+                  <div className="flex items-center h-5">
+                    <input
+                      id="recurring-consent"
+                      type="checkbox"
+                      checked={agreedToRecurring}
+                      onChange={(e) => setAgreedToRecurring(e.target.checked)}
+                      className="w-5 h-5 text-teal-600 border-gray-300 rounded focus:ring-teal-500 cursor-pointer"
+                    />
+                  </div>
+                  <label htmlFor="recurring-consent" className="text-sm text-gray-600 cursor-pointer select-none">
+                    Я согласен на автоматические списания согласно условиям <Link href="/docs/offer" className="text-teal-600 hover:underline" target="_blank">оферты</Link>. 
+                    Списания будут производиться ежемесячно при достижении баланса ниже 5 ед. или по истечении 30 дней.
+                  </label>
+                </div>
+              </div>
+
+              <button
+                onClick={handlePurchase}
+                disabled={loading || !agreedToRecurring}
+                className="w-full md:w-auto bg-gradient-to-r from-teal-500 to-emerald-600 text-white px-8 py-4 rounded-lg font-bold hover:from-teal-600 hover:to-emerald-700 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[200px]"
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Переход к оплате...
+                  </>
+                ) : (
+                  'Оплатить и активировать'
+                )}
+              </button>
             </div>
-            <button
-              onClick={handlePurchase}
-              className="bg-gradient-to-r from-teal-500 to-emerald-600 text-white px-8 py-3 rounded-lg font-semibold hover:from-teal-600 hover:to-emerald-700 transition shadow-lg"
-            >
-              Активировать
-            </button>
           </div>
         )}
 

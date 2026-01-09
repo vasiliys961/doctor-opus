@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   try {
     // ... (auth check remains commented out)
     const body = await request.json();
-    const { images, prompt, clinicalContext, mode, useStreaming } = body;
+    const { images, prompt, clinicalContext, mode, useStreaming, model } = body;
 
     if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
@@ -54,10 +54,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Определение модели на основе режима
-    let modelToUse = MODELS.GEMINI_3_FLASH;
-    if (mode === 'optimized') modelToUse = MODELS.SONNET;
-    else if (mode === 'validated') modelToUse = MODELS.OPUS;
+    // Определение модели на основе режима или прямого указания
+    let modelToUse = model || MODELS.GEMINI_3_FLASH;
+    if (!model) {
+      if (mode === 'optimized') modelToUse = MODELS.SONNET;
+      else if (mode === 'validated') modelToUse = MODELS.OPUS;
+    }
 
     console.log(`🔬 [LAB IMAGES] Получено ${images.length} изображений для анализа, режим: ${mode}, модель: ${modelToUse}, streaming: ${useStreaming}`);
 
@@ -67,9 +69,9 @@ export async function POST(request: NextRequest) {
       let stream: ReadableStream;
       
       if (mode === 'optimized') {
-        stream = await analyzeMultipleImagesOpusTwoStageStreaming(prompt, images, 'universal', clinicalContext);
+        stream = await analyzeMultipleImagesOpusTwoStageStreaming(prompt, images, 'universal', clinicalContext, images.map(() => 'image/png'), modelToUse);
       } else if (mode === 'validated') {
-        stream = await analyzeMultipleImagesWithJSONStreaming(prompt, images, 'universal', clinicalContext);
+        stream = await analyzeMultipleImagesWithJSONStreaming(prompt, images, 'universal', clinicalContext, images.map(() => 'image/png'), undefined);
       } else {
         stream = await analyzeMultipleImagesStreaming(prompt, images, images.map(() => 'image/png'), modelToUse, clinicalContext);
       }

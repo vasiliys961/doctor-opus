@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
     const prompt = formData.get('prompt') as string || 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.';
     const clinicalContext = formData.get('clinicalContext') as string || '';
     const mode = formData.get('mode') as string || 'fast';
+    const model = formData.get('model') as string;
     const useStreaming = formData.get('useStreaming') === 'true';
 
     if (!file) {
@@ -54,10 +55,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Определение модели на основе режима
-    let modelToUse = MODELS.GEMINI_3_FLASH;
-    if (mode === 'optimized') modelToUse = MODELS.SONNET;
-    else if (mode === 'validated') modelToUse = MODELS.OPUS;
+    // Определение модели на основе режима или прямого указания
+    let modelToUse = model || MODELS.GEMINI_3_FLASH;
+    if (!model) {
+      if (mode === 'optimized') modelToUse = MODELS.SONNET;
+      else if (mode === 'validated') modelToUse = MODELS.OPUS;
+    }
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);

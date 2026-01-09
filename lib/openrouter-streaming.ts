@@ -90,84 +90,9 @@ async function createSequentialStream(
         systemPromptPart2 = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
       }
 
-      // --- ЧАСТЬ 1: Описание ---
-      console.log(`📡 [SEQUENTIAL] Запуск Части 1 (Описание) через ${model}...`);
+      // --- ЧАСТЬ 1: Директива (Профессор) ---
+      console.log(`📡 [SEQUENTIAL] Запуск Части 1 (Директива) через ${model}...`);
       const response1 = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus'
-      },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: 'Ты — эксперт-диагност. Дай максимально краткое, но емкое описание патологий. Фокусируйся на фактах для врача. Не пиши вступлений.' },
-            { 
-              role: 'user', 
-              content: [
-                { type: 'text', text: firstPartPrompt },
-                ...imagesBase64.map((img, i) => ({
-                  type: 'image_url',
-                  image_url: { url: `data:${mimeTypes[i] || 'image/png'};base64,${img}` }
-                }))
-              ]
-            }
-          ],
-          max_tokens: 3000,
-          temperature: 0.1,
-          stop: ["Defined by", "defined by", "---", "###"],
-          stream: true,
-          stream_options: { include_usage: true }
-        })
-      });
-
-      if (!response1.ok) throw new Error(`Step 1 failed: ${response1.status}`);
-      
-      const reader1 = response1.body!.getReader();
-      writer.write(encoder.encode('data: {"choices": [{"delta": {"content": "## 🔍 ОБЪЕКТИВНЫЙ СТАТУС (ОПИСАНИЕ)\\n\\n"}}]}\n\n'));
-
-      let partialLine1 = '';
-      while (true) {
-        const { done, value } = await reader1.read();
-        if (done) break;
-        
-        const chunk = decoderForAccumulation.decode(value, { stream: true });
-        const lines = (partialLine1 + chunk).split('\n');
-        partialLine1 = lines.pop() || '';
-
-        let filteredValue = '';
-        for (const line of lines) {
-          // Пропускаем сигнал завершения первой части, чтобы не закрыть общий поток
-          if (line.trim() === 'data: [DONE]') continue;
-          
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.usage) {
-                totalUsage.prompt_tokens += data.usage.prompt_tokens;
-                totalUsage.completion_tokens += data.usage.completion_tokens;
-                continue; // Не прокидываем промежуточный usage
-              }
-              const content = data.choices?.[0]?.delta?.content || '';
-              if (content) accumulatedFirstPart += content;
-            } catch (e) {}
-          }
-          filteredValue += line + '\n';
-        }
-
-        if (filteredValue) {
-          writer.write(encoder.encode(filteredValue));
-        }
-      }
-
-      // Пингуем канал
-      writer.write(encoder.encode(': keep-alive\n\n'));
-
-      // --- ЧАСТЬ 2: Клиника ---
-      console.log(`📡 [SEQUENTIAL] Запуск Части 2 (Директива) через ${model}...`);
-      const response2 = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -181,12 +106,97 @@ async function createSequentialStream(
             { role: 'system', content: systemPromptPart2 },
             { 
               role: 'user', 
-              content: `ИНСТРУКЦИЯ: ${secondPartPrompt}\n\n${hiddenContext ? `ТЕХНИЧЕСКИЕ ДАННЫЕ (JSON) ДЛЯ АНАЛИЗА:\n${hiddenContext}\n\n` : ''}ОПИСАНИЕ СНИМКОВ:\n${accumulatedFirstPart}\n\nСФОРМУЛИРУЙ ТОЛЬКО ДИАГНОЗЫ, ПЛАН ЛЕЧЕНИЯ И ССЫЛКИ.` 
+              content: [
+                { type: 'text', text: firstPartPrompt + "\n\nВАЖНО: Начни сразу с контента, не дублируй заголовок 'Клиническая директива'." },
+                ...imagesBase64.map((img, i) => ({
+                  type: 'image_url',
+                  image_url: { url: `data:${mimeTypes[i] || 'image/png'};base64,${img}` }
+                }))
+              ]
             }
           ],
-          max_tokens: 5000,
+          max_tokens: 8192,
           temperature: 0.1,
-          stop: ["Defined by", "defined by", "---", "###"],
+          stop: ["Defined by", "defined by"],
+          stream: true,
+          stream_options: { include_usage: true }
+        })
+      });
+
+      if (!response1.ok) throw new Error(`Step 1 failed: ${response1.status}`);
+      
+      const reader1 = response1.body!.getReader();
+      writer.write(encoder.encode('data: {"choices": [{"delta": {"content": "## 🩺 КЛИНИЧЕСКАЯ ДИРЕКТИВА\\n\\n"}}]}\n\n'));
+
+      let partialLine1 = '';
+      while (true) {
+        const { done, value } = await reader1.read();
+        
+        const chunk = decoderForAccumulation.decode(value || new Uint8Array(), { stream: !done });
+        const lines = (partialLine1 + chunk).split('\n');
+        partialLine1 = lines.pop() || '';
+
+        let filteredValue = '';
+        for (const line of lines) {
+          if (line.trim() === 'data: [DONE]') continue;
+          
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.usage) {
+                totalUsage.prompt_tokens += data.usage.prompt_tokens;
+                totalUsage.completion_tokens += data.usage.completion_tokens;
+                continue;
+              }
+              const content = data.choices?.[0]?.delta?.content || '';
+              if (content) accumulatedFirstPart += content;
+            } catch (e) {}
+          }
+          filteredValue += line + '\n';
+        }
+
+        if (filteredValue) {
+          writer.write(encoder.encode(filteredValue));
+        }
+
+        if (done) break;
+      }
+
+      // Обработка последнего остатка в partialLine1 если он есть
+      if (partialLine1.trim() && partialLine1.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(partialLine1.slice(6));
+          const content = data.choices?.[0]?.delta?.content || '';
+          if (content) accumulatedFirstPart += content;
+          writer.write(encoder.encode(partialLine1 + '\n'));
+        } catch (e) {}
+      }
+
+      // Пингуем канал
+      writer.write(encoder.encode(': keep-alive\n\n'));
+
+      // --- ЧАСТЬ 2: Описание (Специалист) ---
+      console.log(`📡 [SEQUENTIAL] Запуск Части 2 (Описание) через ${model}...`);
+      const response2 = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
+      },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'Ты — эксперт-диагност. Дай максимально краткое, но емкое описание патологий. Фокусируйся на фактах для врача. Не пиши вступлений.' },
+            { 
+              role: 'user', 
+              content: `ИНСТРУКЦИЯ: ${secondPartPrompt}\n\n${hiddenContext ? `ТЕХНИЧЕСКИЕ ДАННЫЕ (JSON) ДЛЯ АНАЛИЗА:\n${hiddenContext}\n\n` : ''}${accumulatedFirstPart ? `УЖЕ СФОРМИРОВАННОЕ ЗАКЛЮЧЕНИЕ (ДЛЯ КОНТЕКСТА):\n${accumulatedFirstPart}\n\n` : ''}СФОРМУЛИРУЙ ПОДРОБНОЕ ОБЪЕКТИВНОЕ ОПИСАНИЕ ИССЛЕДОВАНИЯ.` 
+            }
+          ],
+          max_tokens: 8192,
+          temperature: 0.1,
+          stop: ["Defined by", "defined by"],
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -198,14 +208,13 @@ async function createSequentialStream(
       }
 
       const reader2 = response2.body!.getReader();
-      writer.write(encoder.encode('data: {"choices": [{"delta": {"content": "\\n\\n---\\n\\n## 🩺 КЛИНИЧЕСКАЯ ДИРЕКТИВА\\n\\n"}}]}\n\n'));
+      writer.write(encoder.encode('data: {"choices": [{"delta": {"content": "\\n\\n---\\n\\n## 🔍 ОБЪЕКТИВНЫЙ СТАТУС (ОПИСАНИЕ)\\n\\n"}}]}\n\n'));
 
       let partialLine2 = '';
       while (true) {
         const { done, value } = await reader2.read();
-        if (done) break;
         
-        const chunk = decoderForAccumulation.decode(value, { stream: true });
+        const chunk = decoderForAccumulation.decode(value || new Uint8Array(), { stream: !done });
         const lines = (partialLine2 + chunk).split('\n');
         partialLine2 = lines.pop() || '';
 
@@ -230,6 +239,13 @@ async function createSequentialStream(
         if (filteredValue) {
           writer.write(encoder.encode(filteredValue));
         }
+
+        if (done) break;
+      }
+
+      // Обработка последнего остатка в partialLine2
+      if (partialLine2.trim() && partialLine2.startsWith('data: ')) {
+        writer.write(encoder.encode(partialLine2 + '\n'));
       }
 
       // Финальный отчет в терминал
@@ -301,8 +317,8 @@ ${clinicalContext || 'Нет'}
 ${directivePrompt}`;
 
   return createSequentialStream(
-    "Выполни краткий обзор находок.",
     contextPrompt,
+    "Выполни краткий обзор находок.",
     [imageBase64],
     MODELS.GEMINI_3_FLASH,
     apiKey,
@@ -346,7 +362,7 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, model, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
+    return createSequentialStream(step2Prompt, step1Prompt, imagesBase64, model, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
   } catch (error: any) {
     throw error;
   }
@@ -379,7 +395,7 @@ export async function analyzeMultipleImagesWithJSONStreaming(
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
+    return createSequentialStream(step2Prompt, step1Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
   } catch (error: any) {
     throw error;
   }
@@ -473,7 +489,7 @@ export async function sendTextRequestStreaming(
       messages,
       max_tokens: 8192,
       temperature: 0.1,
-      stop: ["Defined by", "defined by", "---", "###"],
+      stop: ["Defined by", "defined by"],
       stream: true,
       stream_options: { include_usage: true }
     })
@@ -531,7 +547,7 @@ export async function analyzeImageStreaming(
       ],
       max_tokens: 8192,
       temperature: 0.1,
-      stop: ["Defined by", "defined by", "---", "###"],
+      stop: ["Defined by", "defined by"],
       stream: true,
       stream_options: { include_usage: true }
     })
@@ -568,7 +584,7 @@ export async function analyzeImageOpusTwoStageStreaming(
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], model, apiKey, ['image/png'], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
+    return createSequentialStream(step2Prompt, step1Prompt, [imageBase64], model, apiKey, ['image/png'], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
   } catch (error: any) {
     throw error;
   }
@@ -599,7 +615,7 @@ export async function analyzeImageWithJSONStreaming(
   const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
   const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
+    return createSequentialStream(step2Prompt, step1Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
 }
 
 /**
@@ -694,7 +710,7 @@ export async function analyzeMultipleImagesStreaming(
       ],
       max_tokens: 8000,
       temperature: 0.1,
-      stop: ["Defined by", "defined by", "---", "###"],
+      stop: ["Defined by", "defined by"],
       stream: true,
       stream_options: { include_usage: true }
     })

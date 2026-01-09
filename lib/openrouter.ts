@@ -212,7 +212,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     messages,
     max_tokens: options.maxTokens || 8192, // Максимальный лимит для длинных отчетов
     temperature: 0.1,
-    stop: ["Defined by", "defined by", "---", "###"]
+    stop: ["Defined by", "defined by"]
   };
 
   try {
@@ -341,7 +341,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
         messages: messages,
         max_tokens: 8192,
         temperature: 0.1,
-        stop: ["Defined by", "defined by", "---", "###"]
+        stop: ["Defined by", "defined by"]
       })
     });
 
@@ -435,7 +435,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       messages: textMessages,
       max_tokens: 8192,
       temperature: 0.1,
-      stop: ["Defined by", "defined by", "---", "###"]
+      stop: ["Defined by", "defined by"]
     };
 
     console.log(`🚀 [ECONOMY TWO-STAGE] Шаг 2: ${textModel} анализирует только ТЕКСТ (JSON)...`);
@@ -674,7 +674,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       ],
       max_tokens: 8192,
       temperature: 0.1,
-      stop: ["Defined by", "defined by", "---", "###"]
+      stop: ["Defined by", "defined by"]
     };
 
     console.log(`🚀 [MULTI-ECONOMY] Шаг 2: ${textModel} анализирует только ТЕКСТ (JSON)...`);
@@ -771,7 +771,7 @@ export async function analyzeMultipleImages(options: {
     messages,
     max_tokens: options.maxTokens || 6000, // Увеличиваем для сравнительного анализа
     temperature: 0.1,
-    stop: ["Defined by", "defined by", "---", "###"]
+    stop: ["Defined by", "defined by"]
   };
 
   try {
@@ -883,7 +883,7 @@ export async function sendTextRequest(
     messages,
     max_tokens: 8192, // Максимальный лимит для сравнительного анализа
     temperature: 0.1,
-    stop: ["Defined by", "defined by", "---", "###"]
+    stop: ["Defined by", "defined by"]
   };
 
   try {
