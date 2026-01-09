@@ -156,7 +156,7 @@ export default function GeneticPage() {
         console.log(`📄 [PDF] Обработка страницы ${pageNum}/${maxPages}...`)
         
         const page = await pdf.getPage(pageNum)
-        const viewport = page.getViewport({ scale: 2.0 }) // Увеличиваем масштаб для лучшего качества
+        const viewport = page.getViewport({ scale: 1.5 }) // Оптимизировано: 1.5 вместо 2.0 для экономии места
 
         const canvas = document.createElement('canvas')
         const context = canvas.getContext('2d')
@@ -173,7 +173,8 @@ export default function GeneticPage() {
           viewport: viewport,
         }).promise
 
-        const base64 = canvas.toDataURL('image/png').split(',')[1]
+        // Используем jpeg с качеством 0.8 вместо png - это уменьшит размер в 5-10 раз
+        const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1]
         
         if (!base64 || base64.length === 0) {
           console.warn(`⚠️ [PDF] Страница ${pageNum} не была конвертирована (пустое изображение)`)

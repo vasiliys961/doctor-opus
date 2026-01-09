@@ -122,7 +122,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
               {
                 type: 'image_url',
                 image_url: {
-                  url: `data:image/png;base64,${images[i]}`,
+                  url: `data:image/jpeg;base64,${images[i]}`,
                 },
               },
             ],
@@ -153,6 +153,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
           });
 
           if (!extractionResponse.ok) {
+            // ... (rest of the error handling remains the same)
             const errorText = await extractionResponse.text();
             let errorData;
             try {
@@ -184,6 +185,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
               if (retries === 3 && extractionModel === 'google/gemini-3-flash-preview') {
                 console.log(`🔄 [GENETIC IMAGES] Пробуем альтернативную модель для страницы ${pageNumber}...`);
                 extractionPayload.model = 'google/gemini-1.5-flash';
+                continue; // Повторяем с новой моделью
               }
             }
             
@@ -206,6 +208,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
           pageExtractedData = extractionData.choices?.[0]?.message?.content || '';
           pageTokens = extractionData.usage?.total_tokens || 0;
           
+          console.log(`📊 [GENETIC IMAGES] Страница ${pageNumber} RAW RESPONSE: "${pageExtractedData.substring(0, 100)}..."`);
           console.log(`📊 [GENETIC IMAGES] Страница ${pageNumber}: получено ${pageExtractedData.length} символов, токенов: ${pageTokens}`);
           
           if (pageExtractedData.trim()) {
