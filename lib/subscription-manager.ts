@@ -14,6 +14,19 @@ export const ANONYMOUS_BALANCE = 10; // 10 ед. анонимно
 export const REGISTERED_BONUS = 20;  // +20 ед. за регистрацию
 export const SOFT_LIMIT = -5;        // Разрешаем уходить в минус до -5 ед.
 
+// VIP пользователи с бесконечным балансом
+export const VIP_EMAILS = [
+  'vasiliys@mail.ru',
+  'vasily61@gmail.com',
+  'admin@doctor-opus.ru'
+];
+
+export function isVIP(email?: string | null): boolean {
+  if (!email) return false;
+  const emailLower = email.toLowerCase();
+  return VIP_EMAILS.some(v => v.toLowerCase() === emailLower);
+}
+
 // Курс конвертации USD -> единицы (настраивается через .env)
 const USD_TO_CREDITS_RATE = parseInt(process.env.NEXT_PUBLIC_USD_TO_CREDITS || '100');
 
@@ -48,6 +61,7 @@ export interface SubscriptionBalance {
   packagePriceRub: number;
   purchaseDate: string;
   expiryDate: string | null;
+  isUnlimited?: boolean;
 }
 
 export interface Transaction {
@@ -82,9 +96,11 @@ export function getBalance(): SubscriptionBalance | null {
     if (!window.localStorage) return null;
     
     const data = localStorage.getItem(BALANCE_KEY);
+    let balance: SubscriptionBalance;
+
     if (!data) {
       // Инициализируем анонимный баланс
-      const initialBalance: SubscriptionBalance = {
+      balance = {
         initialCredits: ANONYMOUS_BALANCE,
         currentCredits: ANONYMOUS_BALANCE,
         totalSpent: 0,
@@ -93,11 +109,18 @@ export function getBalance(): SubscriptionBalance | null {
         purchaseDate: new Date().toISOString(),
         expiryDate: null,
       };
-      localStorage.setItem(BALANCE_KEY, JSON.stringify(initialBalance));
-      return initialBalance;
-    };
+      localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
+    } else {
+      balance = JSON.parse(data);
+    }
+
+    // Если баланс ушел в минус и это VIP пользователь (через сохраненный пакет или флаг), исправляем
+    if (balance.isUnlimited && balance.currentCredits < 100000) {
+      balance.currentCredits = 999999;
+      localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
+    }
     
-    return JSON.parse(data);
+    return balance;
   } catch (error) {
     console.error('⚠️ [SUBSCRIPTION] Error loading balance:', error);
     return null;
@@ -105,12 +128,28 @@ export function getBalance(): SubscriptionBalance | null {
 }
 
 /**
- * Апгрейд баланса после регистрации (+20 ед)
+ * Апгрейд баланса после регистрации (+20 ед) или установка безлимита для админов
  */
-export function upgradeBalanceToRegistered(): void {
+export function upgradeBalanceToRegistered(email?: string | null): void {
   try {
     const balance = getBalance();
     if (!balance) return;
+
+    // Проверка на админский/VIP доступ
+    if (isVIP(email)) {
+      // Всегда форсируем безлимит для VIP, даже если уже есть баланс
+      balance.currentCredits = 999999;
+      balance.initialCredits = 999999;
+      balance.packageName = 'Владелец (Безлимит)';
+      balance.isUnlimited = true;
+      localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
+      
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('balanceUpdated'));
+      }
+      console.log(`👑 [SUBSCRIPTION] Форсирован безлимитный доступ для ${email}`);
+      return;
+    }
 
     const targetTotal = ANONYMOUS_BALANCE + REGISTERED_BONUS;
 
@@ -220,6 +259,12 @@ export function deductBalance(params: {
     if (!balance) {
       console.log('ℹ️ [SUBSCRIPTION] Баланс не активирован, операция выполняется без списания');
       return { success: true };
+    }
+
+    // Если безлимитный доступ - не списываем
+    if (balance.isUnlimited) {
+      console.log('👑 [SUBSCRIPTION] Безлимитный доступ: списание пропущено');
+      return { success: true, cost: 0 };
     }
 
     // Расчет стоимости
