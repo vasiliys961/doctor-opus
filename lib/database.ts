@@ -1,28 +1,8 @@
+import { sql } from '@vercel/postgres';
+
 /**
- * Обертка для работы с базой данных
- * Поддерживает SQLite (локально) и PostgreSQL (Vercel Postgres)
+ * SQL схемы для миграции
  */
-
-interface DatabaseConfig {
-  type: 'sqlite' | 'postgres'
-  connectionString?: string
-}
-
-// Для Vercel Postgres используем переменные окружения
-const getDatabaseConfig = (): DatabaseConfig => {
-  if (process.env.POSTGRES_URL) {
-    return {
-      type: 'postgres',
-      connectionString: process.env.POSTGRES_URL,
-    }
-  }
-  // Fallback на SQLite для локальной разработки
-  return {
-    type: 'sqlite',
-  }
-}
-
-// SQL схемы для миграции
 export const SQL_SCHEMAS = {
   patient_notes: `
     CREATE TABLE IF NOT EXISTS patient_notes (
@@ -60,6 +40,7 @@ export const SQL_SCHEMAS = {
       correctness TEXT,
       consent INTEGER DEFAULT 0,
       input_case TEXT,
+      is_training_ready BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `,
@@ -71,42 +52,6 @@ export const SQL_SCHEMAS = {
       email_verified TIMESTAMP,
       image TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `,
-  sessions: `
-    CREATE TABLE IF NOT EXISTS sessions (
-      id SERIAL PRIMARY KEY,
-      session_token TEXT UNIQUE NOT NULL,
-      user_id INTEGER NOT NULL,
-      expires TIMESTAMP NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `,
-  verification_tokens: `
-    CREATE TABLE IF NOT EXISTS verification_tokens (
-      identifier TEXT NOT NULL,
-      token TEXT UNIQUE NOT NULL,
-      expires TIMESTAMP NOT NULL,
-      PRIMARY KEY (identifier, token)
-    )
-  `,
-  library_documents: `
-    CREATE TABLE IF NOT EXISTS library_documents (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER,
-      name TEXT NOT NULL,
-      size INTEGER,
-      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `,
-  library_chunks: `
-    CREATE TABLE IF NOT EXISTS library_chunks (
-      id SERIAL PRIMARY KEY,
-      document_id INTEGER NOT NULL,
-      content TEXT NOT NULL,
-      metadata_json TEXT,
-      FOREIGN KEY (document_id) REFERENCES library_documents(id) ON DELETE CASCADE
     )
   `,
   payment_consents: `
@@ -121,33 +66,72 @@ export const SQL_SCHEMAS = {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `,
-}
+};
 
-// Функции для работы с БД будут вызывать Python API или использовать прямые SQL запросы
-// Для продакшена лучше использовать Vercel Postgres через @vercel/postgres
-
+/**
+ * Инициализация всех таблиц базы данных
+ */
 export async function initDatabase() {
-  // Инициализация будет через Python API или напрямую через SQL
-  // В продакшене используем Vercel Postgres
-  return true
+  try {
+    console.log('🔄 [DB] Начинаем инициализацию таблиц...');
+    
+    // Выполняем создание таблиц по очереди
+    for (const [name, schema] of Object.entries(SQL_SCHEMAS)) {
+      await sql.query(schema);
+      console.log(`✅ [DB] Таблица ${name} проверена/создана`);
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('❌ [DB] Ошибка инициализации базы данных:', error);
+    return { success: false, error };
+  }
 }
 
-export async function saveMedicalNote(data: {
-  patient_id?: number
-  raw_text: string
-  structured_note: string
-  gdoc_url?: string
-  diagnosis?: string
+/**
+ * Сохранение отзыва врача в базу данных
+ */
+export async function saveAnalysisFeedback(data: {
+  analysis_type: string
+  analysis_id?: string
+  ai_response: string
+  feedback_type: string
+  doctor_comment?: string
+  correct_diagnosis?: string
+  specialty?: string
+  correctness: string
+  consent: boolean
+  input_case?: string
 }) {
-  // Реализация через API endpoint
-  const response = await fetch('/api/database/notes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
-  return response.json()
+  try {
+    // Определяем готовность для обучения
+    // Готов, если: есть корректный диагноз ИЛИ тип отзыва "correct", и есть согласие
+    const isTrainingReady = data.consent && (data.feedback_type === 'correct' || !!data.correct_diagnosis);
+
+    const result = await sql`
+      INSERT INTO analysis_feedback (
+        analysis_type, analysis_id, ai_response, feedback_type, 
+        doctor_comment, correct_diagnosis, specialty, correctness, 
+        consent, input_case, is_training_ready
+      ) VALUES (
+        ${data.analysis_type}, ${data.analysis_id}, ${data.ai_response}, ${data.feedback_type},
+        ${data.doctor_comment}, ${data.correct_diagnosis}, ${data.specialty}, ${data.correctness},
+        ${data.consent ? 1 : 0}, ${data.input_case}, ${isTrainingReady}
+      )
+      RETURNING id;
+    `;
+
+    console.log('✅ [DB] Отзыв сохранен, ID:', result.rows[0].id);
+    return { success: true, id: result.rows[0].id };
+  } catch (error) {
+    console.error('❌ [DB] Ошибка при сохранении отзыва:', error);
+    return { success: false, error };
+  }
 }
 
+/**
+ * Сохранение согласия на оплату
+ */
 export async function savePaymentConsent(data: {
   email: string
   package_id: string
@@ -155,9 +139,92 @@ export async function savePaymentConsent(data: {
   ip_address?: string
   user_agent?: string
 }) {
-  // В Optima Edition мы пока логируем это на сервере, так как нет прямой связи с БД
-  // В будущем это будет SQL INSERT
-  console.log('📄 [CONSENT LOG]:', data);
-  return { success: true };
+  try {
+    const result = await sql`
+      INSERT INTO payment_consents (
+        email, package_id, consent_type, ip_address, user_agent
+      ) VALUES (
+        ${data.email}, ${data.package_id}, ${data.consent_type}, ${data.ip_address}, ${data.user_agent}
+      )
+      RETURNING id;
+    `;
+    console.log('✅ [DB] Согласие на оплату сохранено, ID:', result.rows[0].id);
+    return { success: true, id: result.rows[0].id };
+  } catch (error) {
+    console.error('❌ [DB] Ошибка при сохранении согласия:', error);
+    return { success: false, error };
+  }
 }
 
+/**
+ * Получить статистику готовности датасета для Fine-tuning
+ */
+export async function getFineTuningStats() {
+  try {
+    const result = await sql`
+      SELECT 
+        COUNT(*) as total_count,
+        SUM(CASE WHEN is_training_ready = TRUE THEN 1 ELSE 0 END) as ready_count,
+        specialty,
+        feedback_type
+      FROM analysis_feedback
+      GROUP BY specialty, feedback_type;
+    `;
+    return { success: true, stats: result.rows };
+  } catch (error) {
+    console.error('❌ [DB] Ошибка при получении статистики обучения:', error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Сохранение медицинской заметки
+ */
+export async function savePatientNote(data: {
+  patient_id: number
+  raw_text: string
+  structured_note?: string
+  gdoc_url?: string
+  diagnosis?: string
+}) {
+  try {
+    const result = await sql`
+      INSERT INTO patient_notes (
+        patient_id, raw_text, structured_note, gdoc_url, diagnosis
+      ) VALUES (
+        ${data.patient_id}, ${data.raw_text}, ${data.structured_note}, ${data.gdoc_url}, ${data.diagnosis}
+      )
+      RETURNING *;
+    `;
+    console.log('✅ [DB] Заметка сохранена, ID:', result.rows[0].id);
+    return { success: true, data: result.rows[0] };
+  } catch (error) {
+    console.error('❌ [DB] Ошибка при сохранении заметки:', error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Получение заметок пациента
+ */
+export async function getPatientNotes(patientId?: string) {
+  try {
+    let result;
+    if (patientId && patientId !== 'null' && patientId !== 'undefined') {
+      result = await sql`
+        SELECT * FROM patient_notes 
+        WHERE patient_id = ${parseInt(patientId)}
+        ORDER BY created_at DESC;
+      `;
+    } else {
+      result = await sql`
+        SELECT * FROM patient_notes 
+        ORDER BY created_at DESC;
+      `;
+    }
+    return { success: true, data: result.rows };
+  } catch (error) {
+    console.error('❌ [DB] Ошибка при получении заметок:', error);
+    return { success: false, error };
+  }
+}

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { robokassa } from "@/lib/robokassa";
 import { SUBSCRIPTION_PACKAGES } from "@/lib/subscription-manager";
-import { savePaymentConsent } from "@/lib/database";
+import { savePaymentConsent, initDatabase } from "@/lib/database";
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,16 +26,24 @@ export async function POST(request: NextRequest) {
 
     const pkg = SUBSCRIPTION_PACKAGES[packageId as keyof typeof SUBSCRIPTION_PACKAGES];
     
-    // Логируем согласие пользователя (требование эквайринга)
-    if (isRecurring) {
-      await savePaymentConsent({
-        email: session.user.email || 'unknown',
-        package_id: packageId,
-        consent_type: 'recurring_agreement',
-        ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-        user_agent: request.headers.get('user-agent') || 'unknown'
-      });
-    }
+        // Логируем согласие пользователя (требование эквайринга)
+        if (isRecurring) {
+          try {
+            // Инициализация БД
+            await initDatabase();
+            
+            await savePaymentConsent({
+              email: session.user.email || 'unknown',
+              package_id: packageId,
+              consent_type: 'recurring_agreement',
+              ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+              user_agent: request.headers.get('user-agent') || 'unknown'
+            });
+          } catch (dbError) {
+            console.error('⚠️ [PAYMENT] Ошибка сохранения согласия в БД:', dbError);
+            // Не прерываем платеж из-за ошибки лога
+          }
+        }
 
     // Генерируем уникальный ID инвойса (можно сохранять в БД, если она есть)
     // В данном случае используем timestamp для уникальности

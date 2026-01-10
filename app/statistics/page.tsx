@@ -39,11 +39,25 @@ export default function StatisticsPage() {
   const [sectionStats, setSectionStats] = useState<Record<string, SectionStats>>({})
   const [monthTotalCost, setMonthTotalCost] = useState(0)
   const [monthTotalCalls, setMonthTotalCalls] = useState(0)
+  const [trainingStats, setTrainingStats] = useState<{ totalReady: number, totalCount: number, threshold: number } | null>(null)
 
   useEffect(() => {
     loadStatistics()
     loadSectionStatistics()
+    loadTrainingStats()
   }, [])
+
+  const loadTrainingStats = async () => {
+    try {
+      const response = await fetch('/api/statistics/training')
+      const data = await response.json()
+      if (data.success) {
+        setTrainingStats(data)
+      }
+    } catch (error) {
+      console.error('Error loading training stats:', error)
+    }
+  }
 
   const loadStatistics = () => {
     try {
@@ -157,7 +171,7 @@ export default function StatisticsPage() {
     )
   }
 
-  if (stats.length === 0 && Object.keys(sectionStats).length === 0) {
+  if (stats.length === 0 && Object.keys(sectionStats).length === 0 && !trainingStats) {
     return (
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 Статистика использования</h1>
@@ -178,38 +192,79 @@ export default function StatisticsPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-primary-900">📊 Статистика использования</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={clearMonthStatistics}
-            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            🗓️ Очистить месяц
-          </button>
-          <button
-            onClick={clearStatistics}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            🔄 Очистить всё
-          </button>
-        </div>
+        {(stats.length > 0 || Object.keys(sectionStats).length > 0) && (
+          <div className="flex gap-2">
+            <button
+              onClick={clearMonthStatistics}
+              className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              🗓️ Очистить месяц
+            </button>
+            <button
+              onClick={clearStatistics}
+              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              🔄 Очистить всё
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Статистика за текущий месяц */}
-      <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg shadow-lg p-6 mb-6">
-        <div className="text-center">
-          <p className="text-lg opacity-90 mb-2">📅 {getCurrentMonthName()}</p>
-          <div className="grid grid-cols-2 gap-4 mt-4">
-            <div>
-              <p className="text-sm opacity-80">Потрачено</p>
-              <p className="text-3xl font-bold">{monthTotalCost.toFixed(2)} у.е.</p>
-            </div>
-            <div>
-              <p className="text-sm opacity-80">Запросов</p>
-              <p className="text-3xl font-bold">{monthTotalCalls}</p>
+      {(monthTotalCalls > 0) && (
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg shadow-lg p-6 mb-6">
+          <div className="text-center">
+            <p className="text-lg opacity-90 mb-2">📅 {getCurrentMonthName()}</p>
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div>
+                <p className="text-sm opacity-80">Потрачено</p>
+                <p className="text-3xl font-bold">{monthTotalCost.toFixed(2)} у.е.</p>
+              </div>
+              <div>
+                <p className="text-sm opacity-80">Запросов</p>
+                <p className="text-3xl font-bold">{monthTotalCalls}</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Готовность к обучению (Fine-tuning) */}
+      {trainingStats && (
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6 border-l-4 border-green-500">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              🧠 Готовность к дообучению (Fine-tuning)
+            </h2>
+            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+              trainingStats.totalReady >= trainingStats.threshold 
+                ? 'bg-green-100 text-green-700' 
+                : 'bg-blue-100 text-blue-700'
+            }`}>
+              {trainingStats.totalReady >= trainingStats.threshold ? 'Рекомендуется запуск' : 'Сбор данных'}
+            </span>
+          </div>
+          
+          <div className="mb-2 flex justify-between text-sm text-gray-600">
+            <span>Прогресс накопления "Золотых данных"</span>
+            <span className="font-bold">{trainingStats.totalReady} / {trainingStats.threshold} кейсов</span>
+          </div>
+          
+          <div className="w-full bg-gray-100 rounded-full h-4 mb-4 overflow-hidden">
+            <div 
+              className={`h-full transition-all duration-1000 ${
+                trainingStats.totalReady >= trainingStats.threshold ? 'bg-green-500' : 'bg-blue-500'
+              }`}
+              style={{ width: `${Math.min(100, (trainingStats.totalReady / trainingStats.threshold) * 100)}%` }}
+            ></div>
+          </div>
+          
+          <p className="text-sm text-gray-500 italic">
+            * Учитываются только отзывы с исправленным диагнозом и согласием на использование. 
+            Минимальный порог для эффективного Fine-tuning — {trainingStats.threshold} кейсов.
+          </p>
+        </div>
+      )}
 
       {/* Статистика по разделам */}
       {Object.keys(sectionStats).length > 0 && (

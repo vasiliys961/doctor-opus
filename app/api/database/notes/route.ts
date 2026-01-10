@@ -1,45 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { savePatientNote, getPatientNotes, initDatabase } from "@/lib/database";
 
 /**
  * API endpoint для работы с медицинскими записями
- * Использует Python для работы с БД (SQLite или PostgreSQL)
  */
 export async function POST(request: NextRequest) {
   try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
-        { status: 401 }
-      );
-    }
-    */
-
     const body = await request.json();
 
-    // Вызов Python serverless function для работы с БД
-    const pythonResponse = await fetch(`${process.env.PYTHON_API_URL || 'http://localhost:3000'}/api/python/database/notes`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!pythonResponse.ok) {
-      throw new Error('Database API error');
+    if (!body.patient_id) {
+      return NextResponse.json(
+        { success: false, error: 'patient_id is required' },
+        { status: 400 }
+      );
     }
 
-    const result = await pythonResponse.json();
+    // Инициализация БД
+    await initDatabase();
 
-    return NextResponse.json({
-      success: true,
-      data: result,
+    const result = await savePatientNote({
+      patient_id: parseInt(body.patient_id),
+      raw_text: body.raw_text,
+      structured_note: body.structured_note,
+      gdoc_url: body.gdoc_url,
+      diagnosis: body.diagnosis
     });
+
+    if (!result.success) {
+      throw new Error(result.error as any);
+    }
+
+    return NextResponse.json(result);
   } catch (error: any) {
     console.error('Error saving note:', error);
     return NextResponse.json(
@@ -51,35 +44,19 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
-        { status: 401 }
-      );
-    }
-    */
-
     const { searchParams } = new URL(request.url);
     const patientId = searchParams.get('patient_id');
 
-    // Вызов Python serverless function
-    const pythonResponse = await fetch(`${process.env.PYTHON_API_URL || 'http://localhost:3000'}/api/python/database/notes?patient_id=${patientId || ''}`, {
-      method: 'GET',
-    });
+    // Инициализация БД
+    await initDatabase();
 
-    if (!pythonResponse.ok) {
-      throw new Error('Database API error');
+    const result = await getPatientNotes(patientId || undefined);
+
+    if (!result.success) {
+      throw new Error(result.error as any);
     }
 
-    const result = await pythonResponse.json();
-
-    return NextResponse.json({
-      success: true,
-      data: result,
-    });
+    return NextResponse.json(result);
   } catch (error: any) {
     console.error('Error fetching notes:', error);
     return NextResponse.json(
