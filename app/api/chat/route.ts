@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendTextRequest, MODELS } from '@/lib/openrouter';
-import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
+import { sendTextRequestStreaming, sendAcademicSearchStreaming } from '@/lib/openrouter-streaming';
 import { sendTextRequestWithFiles, sendTextRequestStreamingWithFiles } from '@/lib/openrouter-files';
 import { formatCostLog } from '@/lib/cost-calculator';
 import { getServerSession } from "next-auth/next";

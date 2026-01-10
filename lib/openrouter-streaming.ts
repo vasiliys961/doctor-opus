@@ -68,7 +68,8 @@ async function createSequentialStream(
   mimeTypes: string[] = [],
   initialUsage?: { prompt_tokens: number, completion_tokens: number },
   hiddenContext?: string,
-  specialty?: Specialty
+  specialty?: Specialty,
+  secondModel?: string
 ): Promise<ReadableStream<Uint8Array>> {
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -83,6 +84,8 @@ async function createSequentialStream(
         ? { prompt_tokens: initialUsage.prompt_tokens, completion_tokens: initialUsage.completion_tokens }
         : { prompt_tokens: 0, completion_tokens: 0 };
 
+      const model2 = secondModel || model;
+
       // Подготовка системного промпта для Части 2 с учетом специальности
       const { TITAN_CONTEXTS } = await import('./prompts');
       let systemPromptPart2 = SYSTEM_PROMPT;
@@ -90,8 +93,8 @@ async function createSequentialStream(
         systemPromptPart2 = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
       }
 
-      // --- ЧАСТЬ 1: Директива (Профессор) ---
-      console.log(`📡 [SEQUENTIAL] Запуск Части 1 (Директива) через ${model}...`);
+      // --- ЧАСТЬ 1: Директива (Профессор) или Поиск ---
+      console.log(`📡 [SEQUENTIAL] Запуск Части 1 через ${model}...`);
       const response1 = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
@@ -106,18 +109,18 @@ async function createSequentialStream(
             { role: 'system', content: systemPromptPart2 },
             { 
               role: 'user', 
-              content: [
-                { type: 'text', text: firstPartPrompt + "\n\nВАЖНО: Начни сразу с контента, не дублируй заголовок 'Клиническая директива'." },
+              content: imagesBase64.length > 0 ? [
+                { type: 'text', text: firstPartPrompt },
                 ...imagesBase64.map((img, i) => ({
                   type: 'image_url',
                   image_url: { url: `data:${mimeTypes[i] || 'image/png'};base64,${img}` }
                 }))
-              ]
+              ] : firstPartPrompt
             }
           ],
-          max_tokens: 8192,
+          max_tokens: 4000,
           temperature: 0.1,
-          stop: ["Defined by", "defined by"],
+          stop: ["###", "---", "Defined by", "defined by"],
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -126,7 +129,8 @@ async function createSequentialStream(
       if (!response1.ok) throw new Error(`Step 1 failed: ${response1.status}`);
       
       const reader1 = response1.body!.getReader();
-      writer.write(encoder.encode('data: {"choices": [{"delta": {"content": "## 🩺 КЛИНИЧЕСКАЯ ДИРЕКТИВА\\n\\n"}}]}\n\n'));
+      const part1Header = "## 🩺 КЛИНИЧЕСКАЯ ДИРЕКТИВА\\n\\n";
+      writer.write(encoder.encode(`data: {"choices": [{"delta": {"content": "${part1Header}"}}]}\n\n`));
 
       let partialLine1 = '';
       while (true) {
@@ -170,13 +174,15 @@ async function createSequentialStream(
           if (content) accumulatedFirstPart += content;
           writer.write(encoder.encode(partialLine1 + '\n'));
         } catch (e) {}
+      } else if (partialLine1.trim()) {
+        writer.write(encoder.encode('data: ' + JSON.stringify({ choices: [{ delta: { content: partialLine1 } }] }) + '\n\n'));
       }
 
       // Пингуем канал
       writer.write(encoder.encode(': keep-alive\n\n'));
 
-      // --- ЧАСТЬ 2: Описание (Специалист) ---
-      console.log(`📡 [SEQUENTIAL] Запуск Части 2 (Описание) через ${model}...`);
+      // --- ЧАСТЬ 2: Описание (Специалист) или Синтез ---
+      console.log(`📡 [SEQUENTIAL] Запуск Части 2 через ${model2}...`);
       const response2 = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
@@ -186,7 +192,7 @@ async function createSequentialStream(
         'X-Title': 'Doctor Opus'
       },
         body: JSON.stringify({
-          model,
+          model: model2,
           messages: [
             { role: 'system', content: 'Ты — эксперт-диагност. Дай максимально краткое, но емкое описание патологий. Фокусируйся на фактах для врача. Не пиши вступлений.' },
             { 
@@ -194,9 +200,9 @@ async function createSequentialStream(
               content: `ИНСТРУКЦИЯ: ${secondPartPrompt}\n\n${hiddenContext ? `ТЕХНИЧЕСКИЕ ДАННЫЕ (JSON) ДЛЯ АНАЛИЗА:\n${hiddenContext}\n\n` : ''}${accumulatedFirstPart ? `УЖЕ СФОРМИРОВАННОЕ ЗАКЛЮЧЕНИЕ (ДЛЯ КОНТЕКСТА):\n${accumulatedFirstPart}\n\n` : ''}СФОРМУЛИРУЙ ПОДРОБНОЕ ОБЪЕКТИВНОЕ ОПИСАНИЕ ИССЛЕДОВАНИЯ.` 
             }
           ],
-          max_tokens: 8192,
+          max_tokens: 4000,
           temperature: 0.1,
-          stop: ["Defined by", "defined by"],
+          stop: ["###", "---", "Defined by", "defined by"],
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -208,7 +214,8 @@ async function createSequentialStream(
       }
 
       const reader2 = response2.body!.getReader();
-      writer.write(encoder.encode('data: {"choices": [{"delta": {"content": "\\n\\n---\\n\\n## 🔍 ОБЪЕКТИВНЫЙ СТАТУС (ОПИСАНИЕ)\\n\\n"}}]}\n\n'));
+      const part2Header = "\\n\\n---\\n\\n## 🔍 ОБЪЕКТИВНЫЙ СТАТУС (ОПИСАНИЕ)\\n\\n";
+      writer.write(encoder.encode(`data: {"choices": [{"delta": {"content": "${part2Header}"}}]}\n\n`));
 
       let partialLine2 = '';
       while (true) {
@@ -246,17 +253,19 @@ async function createSequentialStream(
       // Обработка последнего остатка в partialLine2
       if (partialLine2.trim() && partialLine2.startsWith('data: ')) {
         writer.write(encoder.encode(partialLine2 + '\n'));
+      } else if (partialLine2.trim()) {
+        writer.write(encoder.encode('data: ' + JSON.stringify({ choices: [{ delta: { content: partialLine2 } }] }) + '\n\n'));
       }
 
       // Финальный отчет в терминал
       const { formatCostLog } = await import('./cost-calculator');
-      const costLog = formatCostLog(model, totalUsage.prompt_tokens, totalUsage.completion_tokens, totalUsage.prompt_tokens + totalUsage.completion_tokens);
+      const costLog = formatCostLog(model2, totalUsage.prompt_tokens, totalUsage.completion_tokens, totalUsage.prompt_tokens + totalUsage.completion_tokens);
       console.log(`✅ [SEQUENTIAL] Анализ завершен успешно`);
       console.log(`   📊 ${costLog}`);
 
       // Финальный чек для фронтенда
       const { calculateCost } = await import('./cost-calculator');
-      const costInfo = calculateCost(totalUsage.prompt_tokens, totalUsage.completion_tokens, model);
+      const costInfo = calculateCost(totalUsage.prompt_tokens, totalUsage.completion_tokens, model2);
       const usageChunk = {
         usage: {
           prompt_tokens: totalUsage.prompt_tokens,
@@ -264,7 +273,7 @@ async function createSequentialStream(
           total_tokens: totalUsage.prompt_tokens + totalUsage.completion_tokens,
           total_cost: costInfo.totalCostUnits
         },
-        model: model
+        model: model2
       };
       
       writer.write(encoder.encode(`data: ${JSON.stringify(usageChunk)}\n\n`));
@@ -317,8 +326,8 @@ ${clinicalContext || 'Нет'}
 ${directivePrompt}`;
 
   return createSequentialStream(
-    contextPrompt,
     "Выполни краткий обзор находок.",
+    contextPrompt,
     [imageBase64],
     MODELS.GEMINI_3_FLASH,
     apiKey,
@@ -362,7 +371,7 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step2Prompt, step1Prompt, imagesBase64, model, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
+    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, model, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
   } catch (error: any) {
     throw error;
   }
@@ -395,7 +404,7 @@ export async function analyzeMultipleImagesWithJSONStreaming(
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step2Prompt, step1Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
+    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
   } catch (error: any) {
     throw error;
   }
@@ -487,9 +496,9 @@ export async function sendTextRequestStreaming(
     body: JSON.stringify({
       model,
       messages,
-      max_tokens: 8192,
+      max_tokens: 4000,
       temperature: 0.1,
-      stop: ["Defined by", "defined by"],
+      stop: ["###", "---", "Defined by", "defined by"],
       stream: true,
       stream_options: { include_usage: true }
     })
@@ -545,9 +554,9 @@ export async function analyzeImageStreaming(
           ] 
         }
       ],
-      max_tokens: 8192,
+      max_tokens: 4000,
       temperature: 0.1,
-      stop: ["Defined by", "defined by"],
+      stop: ["###", "---", "Defined by", "defined by"],
       stream: true,
       stream_options: { include_usage: true }
     })
@@ -584,7 +593,7 @@ export async function analyzeImageOpusTwoStageStreaming(
     const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
     const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step2Prompt, step1Prompt, [imageBase64], model, apiKey, ['image/png'], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
+    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], model, apiKey, ['image/png'], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
   } catch (error: any) {
     throw error;
   }
@@ -615,7 +624,7 @@ export async function analyzeImageWithJSONStreaming(
   const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
   const step2Prompt = clinicalPromptCriteria;
 
-    return createSequentialStream(step2Prompt, step1Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
+    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
 }
 
 /**
@@ -708,9 +717,9 @@ export async function analyzeMultipleImagesStreaming(
         { role: 'system', content: systemPrompt },
         { role: 'user', content: contentItems }
       ],
-      max_tokens: 8000,
+      max_tokens: 4000,
       temperature: 0.1,
-      stop: ["Defined by", "defined by"],
+      stop: ["###", "---", "Defined by", "defined by"],
       stream: true,
       stream_options: { include_usage: true }
     })

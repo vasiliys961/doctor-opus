@@ -58,7 +58,7 @@ export const MODELS = {
   HAIKU: 'anthropic/claude-haiku-4.5',                     // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
   GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
-  GEMINI_3_PRO: 'google/gemini-3-pro-preview'            // Gemini 3 Pro Preview
+  GEMINI_3_PRO: 'google/gemini-3-pro-preview',            // Gemini 3 Pro Preview
 };
 
 const MODELS_LIST = [
@@ -66,7 +66,7 @@ const MODELS_LIST = [
   MODELS.SONNET,
   MODELS.GPT_5_2,
   MODELS.HAIKU,
-  MODELS.LLAMA
+  MODELS.LLAMA,
 ];
 
 export type AnalysisMode = 'fast' | 'optimized' | 'validated';
@@ -139,7 +139,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
                             options.prompt?.toLowerCase().includes('извлеките текст') ||
                             options.prompt?.toLowerCase().includes('ocr');
       if (isDocumentScan) {
-        model = MODELS.HAIKU; // Haiku 4.5 для сканирования документов
+        model = MODELS.GEMINI_3_FLASH; // Gemini 3 Flash — дешевле и лучше для сканирования
       } else {
         model = MODELS.OPUS; // Opus 4.5 для точного анализа
       }
@@ -210,9 +210,9 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   const payload = {
     model,
     messages,
-    max_tokens: options.maxTokens || 8192, // Максимальный лимит для длинных отчетов
+    max_tokens: options.maxTokens || 4000, // Максимальный лимит для длинных отчетов
     temperature: 0.1,
-    stop: ["Defined by", "defined by"]
+    stop: ["###", "---", "Defined by", "defined by"]
   };
 
   try {
@@ -339,9 +339,9 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       body: JSON.stringify({
         model: textModel,
         messages: messages,
-        max_tokens: 8192,
+        max_tokens: 4000,
         temperature: 0.1,
-        stop: ["Defined by", "defined by"]
+        stop: ["###", "---", "Defined by", "defined by"]
       })
     });
 
@@ -433,9 +433,9 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
     const textPayload = {
       model: textModel,
       messages: textMessages,
-      max_tokens: 8192,
+      max_tokens: 4000,
       temperature: 0.1,
-      stop: ["Defined by", "defined by"]
+      stop: ["###", "---", "Defined by", "defined by"]
     };
 
     console.log(`🚀 [ECONOMY TWO-STAGE] Шаг 2: ${textModel} анализирует только ТЕКСТ (JSON)...`);
@@ -672,9 +672,9 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: contextPrompt }
       ],
-      max_tokens: 8192,
+      max_tokens: 4000,
       temperature: 0.1,
-      stop: ["Defined by", "defined by"]
+      stop: ["###", "---", "Defined by", "defined by"]
     };
 
     console.log(`🚀 [MULTI-ECONOMY] Шаг 2: ${textModel} анализирует только ТЕКСТ (JSON)...`);
@@ -769,9 +769,9 @@ export async function analyzeMultipleImages(options: {
   const payload = {
     model,
     messages,
-    max_tokens: options.maxTokens || 6000, // Увеличиваем для сравнительного анализа
+    max_tokens: options.maxTokens || 4000, // Увеличиваем для сравнительного анализа
     temperature: 0.1,
-    stop: ["Defined by", "defined by"]
+    stop: ["###", "---", "Defined by", "defined by"]
   };
 
   try {
@@ -881,9 +881,9 @@ export async function sendTextRequest(
   const payload = {
     model: selectedModel,
     messages,
-    max_tokens: 8192, // Максимальный лимит для сравнительного анализа
+    max_tokens: 4000, // Максимальный лимит для сравнительного анализа
     temperature: 0.1,
-    stop: ["Defined by", "defined by"]
+    stop: ["###", "---", "Defined by", "defined by"]
   };
 
   try {

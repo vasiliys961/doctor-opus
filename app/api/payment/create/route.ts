@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { robokassa } from "@/lib/robokassa";
 import { SUBSCRIPTION_PACKAGES } from "@/lib/subscription-manager";
+import { savePaymentConsent } from "@/lib/database";
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,6 +26,17 @@ export async function POST(request: NextRequest) {
 
     const pkg = SUBSCRIPTION_PACKAGES[packageId as keyof typeof SUBSCRIPTION_PACKAGES];
     
+    // Логируем согласие пользователя (требование эквайринга)
+    if (isRecurring) {
+      await savePaymentConsent({
+        email: session.user.email || 'unknown',
+        package_id: packageId,
+        consent_type: 'recurring_agreement',
+        ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+        user_agent: request.headers.get('user-agent') || 'unknown'
+      });
+    }
+
     // Генерируем уникальный ID инвойса (можно сохранять в БД, если она есть)
     // В данном случае используем timestamp для уникальности
     const invId = Math.floor(Date.now() / 1000);

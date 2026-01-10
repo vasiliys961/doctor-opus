@@ -24,7 +24,7 @@ const specialtyMap: Record<string, Specialty> = {
   'Гематолог': 'hematology',
   'Гинеколог': 'gynecology',
   'Ревматолог': 'rheumatology',
-  'Исследователь': 'openevidence',
+  'Академический поиск': 'openevidence',
   'ИИ-Эксперт': 'ai_consultant',
 };
 
@@ -43,8 +43,15 @@ export default function ChatPage() {
   const [showFileUpload, setShowFileUpload] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
-  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('opus')
+  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('gpt52')
   const [specialty, setSpecialty] = useState<Specialty>('universal')
+
+  useEffect(() => {
+    // Автоматически выбираем подходящую модель при смене специальности
+    if (specialty === 'openevidence') {
+      // Для академического поиска модель выбирается на сервере (Perplexity -> Sonnet)
+    }
+  }, [specialty])
 
   const handleSend = async () => {
     if (!message.trim() && selectedFiles.length === 0) return
@@ -111,10 +118,11 @@ export default function ChatPage() {
           if (reader) {
             console.log('📡 [STREAMING WITH FILES] Начало чтения потока')
             let buffer = ''
+            let streamError = false
             
             while (true) {
               const { done, value } = await reader.read()
-              if (done) {
+              if (done || streamError) {
                 console.log('📡 [STREAMING WITH FILES] Поток завершён')
                 break
               }
@@ -122,21 +130,35 @@ export default function ChatPage() {
               const chunk = decoder.decode(value, { stream: true })
               buffer += chunk
               
-              // Обрабатываем полные строки
               const lines = buffer.split('\n')
-              buffer = lines.pop() || '' // Оставляем неполную строку в буфере
+              buffer = lines.pop() || ''
 
               for (const line of lines) {
                 if (line.startsWith('data: ')) {
                   const data = line.slice(6).trim()
                   if (data === '[DONE]') {
-                    console.log('📡 [STREAMING WITH FILES] Получен сигнал завершения')
+                    streamError = true // Прерываем внешний цикл
                     break
                   }
 
                   try {
                     const json = JSON.parse(data)
                     
+                    if (json.error) {
+                      setMessages(prev => {
+                        const newMessages = [...prev]
+                        if (newMessages[assistantMessageIndex]) {
+                          newMessages[assistantMessageIndex] = {
+                            role: 'assistant',
+                            content: `❌ Ошибка: ${json.error}`
+                          }
+                        }
+                        return newMessages
+                      })
+                      streamError = true // Прерываем внешний цикл
+                      break
+                    }
+
                     // Обработка статистики использования
                     if (json.usage && json.usage.total_cost) {
                       setMessages(prev => {
@@ -244,10 +266,11 @@ export default function ChatPage() {
           if (reader) {
             console.log('📡 [STREAMING] Начало чтения потока')
             let buffer = ''
+            let streamError = false
             
             while (true) {
               const { done, value } = await reader.read()
-              if (done) {
+              if (done || streamError) {
                 console.log('📡 [STREAMING] Поток завершён')
                 break
               }
@@ -255,20 +278,34 @@ export default function ChatPage() {
               const chunk = decoder.decode(value, { stream: true })
               buffer += chunk
               
-              // Обрабатываем полные строки
               const lines = buffer.split('\n')
-              buffer = lines.pop() || '' // Оставляем неполную строку в буфере
+              buffer = lines.pop() || ''
 
               for (const line of lines) {
                 if (line.startsWith('data: ')) {
                   const data = line.slice(6).trim()
                   if (data === '[DONE]') {
-                    console.log('📡 [STREAMING] Получен сигнал завершения')
+                    streamError = true
                     break
                   }
 
                   try {
                     const json = JSON.parse(data)
+
+                    if (json.error) {
+                      setMessages(prev => {
+                        const newMessages = [...prev]
+                        if (newMessages[assistantMessageIndex]) {
+                          newMessages[assistantMessageIndex] = {
+                            role: 'assistant',
+                            content: `❌ Ошибка: ${json.error}`
+                          }
+                        }
+                        return newMessages
+                      })
+                      streamError = true
+                      break
+                    }
 
                     // Обработка статистики использования
                     if (json.usage && json.usage.total_cost) {
@@ -585,8 +622,8 @@ export default function ChatPage() {
               className="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
               disabled={loading}
             >
-              <option value="opus">🧠 Opus 4.5</option>
               <option value="gpt52">🚀 GPT-5.2</option>
+              <option value="opus">🧠 Opus 4.5</option>
               <option value="sonnet">🤖 Sonnet 4.5</option>
               <option value="gemini">⚡ Gemini 3.0</option>
             </select>

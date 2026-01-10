@@ -109,6 +109,18 @@ export const SQL_SCHEMAS = {
       FOREIGN KEY (document_id) REFERENCES library_documents(id) ON DELETE CASCADE
     )
   `,
+  payment_consents: `
+    CREATE TABLE IF NOT EXISTS payment_consents (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      email TEXT NOT NULL,
+      package_id TEXT NOT NULL,
+      consent_type TEXT DEFAULT 'recurring_agreement',
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `,
 }
 
 // Функции для работы с БД будут вызывать Python API или использовать прямые SQL запросы
@@ -134,5 +146,18 @@ export async function saveMedicalNote(data: {
     body: JSON.stringify(data),
   })
   return response.json()
+}
+
+export async function savePaymentConsent(data: {
+  email: string
+  package_id: string
+  consent_type: string
+  ip_address?: string
+  user_agent?: string
+}) {
+  // В Optima Edition мы пока логируем это на сервере, так как нет прямой связи с БД
+  // В будущем это будет SQL INSERT
+  console.log('📄 [CONSENT LOG]:', data);
+  return { success: true };
 }
 
