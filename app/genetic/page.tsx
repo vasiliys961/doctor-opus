@@ -8,6 +8,7 @@ import FeedbackForm from '@/components/FeedbackForm'
 import ReactMarkdown from 'react-markdown'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
+import { calculateCost } from '@/lib/cost-calculator'
 
 declare global {
   interface Window {
@@ -26,11 +27,19 @@ export default function GeneticPage() {
   const [pdfjsReady, setPdfjsReady] = useState(false)
   const [clinicalContext, setClinicalContext] = useState<string>('')
   const [question, setQuestion] = useState<string>('')
-  const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string; files?: Array<{ name: string; type: string; base64: string }> }>>([])
+  const [chatHistory, setChatHistory] = useState<Array<{ 
+    role: 'user' | 'assistant'; 
+    content: string; 
+    files?: Array<{ name: string; type: string; base64: string }>;
+    cost?: number;
+  }>>([])
   const [chatMessage, setChatMessage] = useState<string>('')
   const [chatLoading, setChatLoading] = useState(false)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [chatFiles, setChatFiles] = useState<File[]>([])
+  const [modelType, setModelType] = useState<'sonnet' | 'gpt52'>('gpt52') // GPT-5.2 по умолчанию, так как мощнее и дешевле
+  const [totalCost, setTotalCost] = useState<number>(0)
+  const [lastModelUsed, setLastModelUsed] = useState<string>('')
 
   // Конвертация файлов в base64
   const convertFilesToBase64 = async (files: File[]): Promise<Array<{ name: string; type: string; base64: string }>> => {
@@ -271,6 +280,20 @@ export default function GeneticPage() {
           }
 
           console.log('✅ [GENETIC PAGE] Данные извлечены, длина:', extractionData.extractedData?.length)
+          
+          // Логирование использования для PDF/OCR
+          const ocrModel = extractionData.ocrModel || 'google/gemini-3-flash-preview';
+          const ocrCost = extractionData.ocrApproxCostUnits || 0;
+          
+          logUsage({
+            section: 'genetic',
+            model: ocrModel,
+            inputTokens: Math.round((extractionData.ocrTokensUsed || 1000) * 0.7),
+            outputTokens: Math.round((extractionData.ocrTokensUsed || 1000) * 0.3),
+          })
+
+          setTotalCost(prev => prev + ocrCost)
+          setLastModelUsed(ocrModel)
           setExtractedData(extractionData.extractedData || '')
           setConvertingPDF(false)
           setLoading(false)
@@ -356,6 +379,7 @@ export default function GeneticPage() {
           clinicalContext: clinicalContext.trim(),
           question: question.trim() || 'Проанализируйте генетические данные. Извлеките варианты, их значение, клиническую значимость, рекомендации по фармакогеномике.',
           mode: 'professor',
+          model: modelType, // Отправляем выбранную модель
           useStreaming: useStreaming,
           files: filesBase64,
         }),
@@ -374,6 +398,30 @@ export default function GeneticPage() {
           onChunk: (content: string, accumulatedText: string) => {
             // Обновляем результат по мере получения данных
             setResult(accumulatedText)
+          },
+          onUsage: (usage) => {
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-sonnet-4.5');
+            logUsage({
+              section: 'genetic',
+              model: model,
+              inputTokens: usage.prompt_tokens,
+              outputTokens: usage.completion_tokens,
+            })
+            
+            // Расчет стоимости для UI
+            const costInfo = calculateCost(usage.prompt_tokens, usage.completion_tokens, model);
+            setTotalCost(prev => prev + costInfo.totalCostUnits);
+            setLastModelUsed(model);
+
+            // Сохраняем стоимость в первое сообщение истории
+            setChatHistory(prev => {
+              if (prev.length > 0 && prev[0].role === 'assistant') {
+                const newHistory = [...prev]
+                newHistory[0] = { ...newHistory[0], cost: costInfo.totalCostUnits }
+                return newHistory
+              }
+              return prev
+            })
           },
           onError: (error: Error) => {
             console.error('❌ [GENETIC PAGE] Ошибка streaming:', error)
@@ -472,6 +520,7 @@ export default function GeneticPage() {
           clinicalContext: clinicalContext.trim(),
           question: userQuestion || 'Проанализируйте прикрепленные файлы в контексте генетического анализа.',
           mode: 'professor',
+          model: modelType, // Используем ту же модель что и для основного анализа
           useStreaming: useStreaming,
           history: chatHistory.slice(0, -1), // Вся история кроме последнего пустого сообщения
           isFollowUp: true,
@@ -495,6 +544,33 @@ export default function GeneticPage() {
                 newHistory[assistantMessageIndex] = {
                   role: 'assistant',
                   content: accumulatedText
+                }
+              }
+              return newHistory
+            })
+          },
+          onUsage: (usage) => {
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-sonnet-4.5');
+            logUsage({
+              section: 'chat',
+              model: model,
+              inputTokens: usage.prompt_tokens,
+              outputTokens: usage.completion_tokens,
+            })
+
+            // Расчет стоимости для UI (опционально для чата, но полезно)
+            const costInfo = calculateCost(usage.prompt_tokens, usage.completion_tokens, model);
+            // Для чата мы можем не суммировать в общую стоимость анализа, 
+            // либо суммировать если хотим показать "Итого за сессию"
+            setTotalCost(prev => prev + costInfo.totalCostUnits);
+
+            // Сохраняем стоимость в конкретное сообщение чата
+            setChatHistory(prev => {
+              const newHistory = [...prev]
+              if (newHistory[assistantMessageIndex]) {
+                newHistory[assistantMessageIndex] = {
+                  ...newHistory[assistantMessageIndex],
+                  cost: costInfo.totalCostUnits
                 }
               }
               return newHistory
@@ -678,6 +754,41 @@ export default function GeneticPage() {
             </div>
           </div>
 
+          {/* Выбор модели */}
+          <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+            <label className="block text-sm font-semibold text-blue-900 mb-3">
+              👨‍⚕️ Выберите эксперта для анализа:
+            </label>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setModelType('gpt52')}
+                className={`flex-1 min-w-[200px] px-4 py-3 rounded-lg text-sm font-medium transition-all border-2 ${
+                  modelType === 'gpt52' 
+                    ? 'bg-white border-blue-500 text-blue-700 shadow-md' 
+                    : 'bg-transparent border-gray-200 text-gray-500 hover:border-blue-300'
+                }`}
+              >
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-base">🚀 GPT-5.2</span>
+                  <span className="text-[10px] uppercase opacity-60 font-bold">Самый мощный и выгодный</span>
+                </div>
+              </button>
+              <button
+                onClick={() => setModelType('sonnet')}
+                className={`flex-1 min-w-[200px] px-4 py-3 rounded-lg text-sm font-medium transition-all border-2 ${
+                  modelType === 'sonnet' 
+                    ? 'bg-white border-blue-500 text-blue-700 shadow-md' 
+                    : 'bg-transparent border-gray-200 text-gray-500 hover:border-blue-300'
+                }`}
+              >
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-base">🧠 Sonnet 4.5</span>
+                  <span className="text-[10px] uppercase opacity-60 font-bold">Классика антропик</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
           <button
             onClick={handleSendToGeneticist}
             disabled={loading}
@@ -691,6 +802,8 @@ export default function GeneticPage() {
       <AnalysisResult 
         result={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
         loading={loading && !extractedData} 
+        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-sonnet-4.5')}
+        cost={totalCost}
       />
 
       {result && !loading && (
@@ -720,8 +833,13 @@ export default function GeneticPage() {
                       : 'bg-gray-100 text-gray-900'
                   }`}
                 >
-                  <div className="text-xs font-semibold mb-1 opacity-70">
-                    {msg.role === 'user' ? '👤 Вы' : '🧬 Генетик'}
+                  <div className="text-xs font-semibold mb-1 opacity-70 flex justify-between items-center">
+                    <span>{msg.role === 'user' ? '👤 Вы' : '🧬 Генетик'}</span>
+                    {msg.role === 'assistant' && msg.cost !== undefined && (
+                      <span className="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded border border-teal-100 font-bold">
+                        💰 {msg.cost.toFixed(2)} ед.
+                      </span>
+                    )}
                   </div>
                   {msg.files && msg.files.length > 0 && (
                     <div className="mb-2 space-y-1">

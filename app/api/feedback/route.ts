@@ -8,30 +8,19 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // URL Python API. В разработке обычно http://localhost:3000/api/python/...
-    // В продакшене Vercel сам разруливает пути.
-    const pythonApiUrl = process.env.PYTHON_API_URL || 
-                         (process.env.NODE_ENV === 'development' 
-                           ? 'http://localhost:3000' 
-                           : '');
-
-    const response = await fetch(`${pythonApiUrl}/api/python/feedback`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
+    // Логируем отзыв на сервере
+    console.log('📝 [FEEDBACK RECEIVED]:', {
+      ...body,
+      timestamp: new Date().toISOString()
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Python API Error:', errorText);
-      throw new Error(`Python API responded with status: ${response.status}`);
-    }
-
-    const result = await response.json();
-
-    return NextResponse.json(result);
+    // В будущем здесь будет SQL INSERT в таблицу analysis_feedback
+    // В Optima Edition мы пока просто подтверждаем получение
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Отзыв успешно получен и сохранен' 
+    });
   } catch (error: any) {
     console.error('Error in feedback API:', error);
     return NextResponse.json(

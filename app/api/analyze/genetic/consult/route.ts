@@ -46,10 +46,11 @@ export async function POST(request: NextRequest) {
       clinicalContext = '',
       question = '',
       mode = 'professor',
-      useStreaming = mode === 'professor', // по умолчанию стриминг для «профессора»
-      history = [], // История диалога для продолжения разговора
-      isFollowUp = false, // Флаг что это продолжение диалога
-      files = [], // Дополнительные файлы (base64)
+      model = 'sonnet', // Добавляем поддержку выбора модели
+      useStreaming = true,
+      history = [],
+      isFollowUp = false,
+      files = [],
     } = body || {};
 
     if (!analysis || typeof analysis !== 'string' || analysis.trim().length === 0) {
@@ -203,6 +204,7 @@ export async function POST(request: NextRequest) {
     }
 
     const consultModel =
+      model === 'gpt52' ? 'openai/gpt-5.2-chat' : 
       mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-sonnet-4.5';
 
     const payload: any = {
@@ -211,6 +213,7 @@ export async function POST(request: NextRequest) {
       max_tokens: 6000,
       temperature: 0.25,
       stream: useStreaming,
+      stream_options: useStreaming ? { include_usage: true } : undefined,
     };
 
     const response = await fetch(OPENROUTER_API_URL, {
