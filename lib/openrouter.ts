@@ -213,7 +213,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     messages,
     max_tokens: options.maxTokens || 4000, // Максимальный лимит для длинных отчетов
     temperature: 0.1,
-    stop: ["###", "---", "Defined by", "defined by"]
+    stop: ["Defined by", "defined by"]
   };
 
   try {
@@ -343,7 +343,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
         messages: messages,
         max_tokens: 4000,
         temperature: 0.1,
-        stop: ["###", "---", "Defined by", "defined by"]
+        stop: ["Defined by", "defined by"]
       })
     });
 
@@ -774,7 +774,7 @@ export async function analyzeMultipleImages(options: {
     messages,
     max_tokens: options.maxTokens || 4000, // Увеличиваем для сравнительного анализа
     temperature: 0.1,
-    stop: ["###", "---", "Defined by", "defined by"]
+    stop: ["Defined by", "defined by"]
   };
 
   try {
@@ -887,7 +887,7 @@ export async function sendTextRequest(
     messages,
     max_tokens: 4000, // Максимальный лимит для сравнительного анализа
     temperature: 0.1,
-    stop: ["###", "---", "Defined by", "defined by"]
+    stop: ["Defined by", "defined by"]
   };
 
   try {

@@ -127,7 +127,7 @@ export async function sendTextRequestWithFiles(
     messages,
     max_tokens: 8000,
     temperature: 0.1,
-    stop: ["Defined by", "defined by", "---", "###"]
+    stop: ["Defined by", "defined by"]
   };
 
   try {

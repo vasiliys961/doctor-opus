@@ -120,7 +120,7 @@ async function createSequentialStream(
           ],
           max_tokens: 4000,
           temperature: 0.1,
-          stop: ["###", "---", "Defined by", "defined by"],
+          stop: ["Defined by", "defined by"],
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -205,7 +205,7 @@ async function createSequentialStream(
           ],
           max_tokens: 4000,
           temperature: 0.1,
-          stop: ["###", "---", "Defined by", "defined by"],
+          stop: ["Defined by", "defined by"],
           stream: true,
           stream_options: { include_usage: true }
         })
