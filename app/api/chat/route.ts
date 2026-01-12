@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sendTextRequest, MODELS } from '@/lib/openrouter';
 import { sendTextRequestStreaming, sendAcademicSearchStreaming } from '@/lib/openrouter-streaming';
 import { sendTextRequestWithFiles, sendTextRequestStreamingWithFiles } from '@/lib/openrouter-files';
-import { formatCostLog } from '@/lib/cost-calculator';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText, anonymizeObject } from '@/lib/anonymization';
@@ -88,6 +87,7 @@ export async function POST(request: NextRequest) {
     // Обработка стриминга с логированием
     const handleStreaming = async (stream: ReadableStream) => {
       const decoder = new TextDecoder();
+      const { formatCostLog } = await import('@/lib/cost-calculator');
       
       const transformStream = new TransformStream({
         transform(chunk, controller) {
@@ -157,9 +157,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Обычный режим - полный ответ
+    console.log('🚀 [CHAT API] Начало запроса к OpenRouter...');
     const result = await sendTextRequest(message, formattedHistory, selectedModel, specialty as any);
+    console.log('✅ [CHAT API] Ответ от OpenRouter получен успешно.');
+    
     const { calculateCost } = await import('@/lib/cost-calculator');
-    const costInfo = calculateCost(1000, 1000, selectedModel); // Оценочно для non-streaming
+    const costInfo = calculateCost(1000, 1000, selectedModel);
 
     return NextResponse.json({
       success: true,
@@ -168,7 +171,9 @@ export async function POST(request: NextRequest) {
       model: selectedModel
     });
   } catch (error: any) {
-    console.error('Error in chat:', error);
+    console.error('🔴 [CHAT API ERROR]:', error);
+    // Выводим стек ошибки для точного понимания места падения
+    console.error('🔴 [STACK]:', error.stack);
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
       { status: 500 }

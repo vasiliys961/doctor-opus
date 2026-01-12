@@ -90,7 +90,8 @@ export async function sendTextRequestWithFiles(
   model: string = MODELS.OPUS,
   specialty?: Specialty
 ): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.replace(/[\n\r\t]/g, '').trim();
 
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY не настроен');
@@ -186,7 +187,8 @@ export async function sendTextRequestStreamingWithFiles(
   model: string = MODELS.OPUS,
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.replace(/[\n\r\t]/g, '').trim();
 
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY не настроен');
@@ -222,7 +224,7 @@ export async function sendTextRequestStreamingWithFiles(
     messages,
     max_tokens: 8000,
     temperature: 0.1,
-    stop: ["Defined by", "defined by", "---", "###"],
+    stop: ["Defined by", "defined by"],
     stream: true,
     stream_options: { include_usage: true }
   };

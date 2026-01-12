@@ -47,13 +47,13 @@ const SYSTEM_PROMPT = `Роль: ### ROLE
     Заверши ответ сразу после выполнения всех разделов. Не добавляй никаких технических пояснений, пустых фраз или повторов в конце.`;
 
 const MODELS = {
-  OPUS: 'anthropic/claude-opus-4.5',
-  SONNET: 'anthropic/claude-sonnet-4.5',
-  GPT_5_2: 'openai/gpt-5.2-chat',
-  HAIKU: 'anthropic/claude-haiku-4.5',
-  LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',
-  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',
-  GEMINI_3_PRO: 'google/gemini-3-pro-preview',
+  OPUS: 'anthropic/claude-opus-4.5',                       // Claude Opus 4.5
+  SONNET: 'anthropic/claude-sonnet-4.5',                 // Claude Sonnet 4.5
+  GPT_5_2: 'openai/gpt-5.2-chat',                        // GPT-5.2
+  HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
+  LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
+  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
+  GEMINI_3_PRO: 'google/gemini-3-pro-preview'            // Gemini 3 Pro Preview
 };
 
 /**
@@ -126,7 +126,10 @@ async function createSequentialStream(
         })
       });
 
-      if (!response1.ok) throw new Error(`Step 1 failed: ${response1.status}`);
+      if (!response1.ok) {
+        const errorText = await response1.text();
+        throw new Error(`Step 1 failed: ${response1.status} - ${errorText}`);
+      }
       
       const reader1 = response1.body!.getReader();
       const part1Header = "## 🩺 КЛИНИЧЕСКАЯ ДИРЕКТИВА\\n\\n";
@@ -299,7 +302,8 @@ export async function analyzeImageFastStreaming(
   clinicalContext?: string,
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const { extractImageJSON } = await import('./openrouter');
@@ -350,7 +354,8 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
   model: string = MODELS.SONNET,
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   try {
@@ -388,7 +393,8 @@ export async function analyzeMultipleImagesWithJSONStreaming(
   mimeTypes: string[] = [],
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   try {
@@ -469,7 +475,8 @@ export async function sendTextRequestStreaming(
   model: string = MODELS.OPUS,
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const { TITAN_CONTEXTS } = await import('./prompts');
@@ -490,21 +497,25 @@ export async function sendTextRequestStreaming(
     headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus'
+        'HTTP-Referer': 'https://openrouter.ai',
+        'X-Title': 'Medical AI'
       },
     body: JSON.stringify({
       model,
       messages,
       max_tokens: 4000,
       temperature: 0.1,
-      stop: ["###", "---", "Defined by", "defined by"],
+      stop: ["Defined by", "defined by"], // Убрал ### и --- так как они ломают структуру ответа
       stream: true,
       stream_options: { include_usage: true }
     })
   });
 
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ [OPENROUTER ERROR] Status: ${response.status}: ${errorText}`);
+      throw new Error(`API error: ${response.status} - ${errorText}`);
+    }
   return createTransformWithUsage(response.body!, model);
 }
 
@@ -519,7 +530,8 @@ export async function analyzeImageStreaming(
   clinicalContext?: string,
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const { TITAN_CONTEXTS } = await import('./prompts');
@@ -539,8 +551,8 @@ export async function analyzeImageStreaming(
     headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus'
+        'HTTP-Referer': 'https://openrouter.ai',
+        'X-Title': 'Medical AI'
       },
     body: JSON.stringify({
       model,
@@ -556,13 +568,17 @@ export async function analyzeImageStreaming(
       ],
       max_tokens: 4000,
       temperature: 0.1,
-      stop: ["###", "---", "Defined by", "defined by"],
+      stop: ["Defined by", "defined by"], // Убрал ### и --- так как они ломают структуру ответа
       stream: true,
       stream_options: { include_usage: true }
     })
   });
 
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ [OPENROUTER ERROR] Status: ${response.status}: ${errorText}`);
+      throw new Error(`API error: ${response.status} - ${errorText}`);
+    }
   return createTransformWithUsage(response.body!, model);
 }
 
@@ -577,7 +593,8 @@ export async function analyzeImageOpusTwoStageStreaming(
   specialty?: Specialty,
   model: string = MODELS.SONNET
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   try {
@@ -611,7 +628,8 @@ export async function analyzeImageWithJSONStreaming(
   clinicalContext?: string,
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const jsonExtraction = jsonExtractionWrapper.data || jsonExtractionWrapper;
@@ -638,7 +656,8 @@ export async function analyzeMultipleImagesDescriptionStreaming(
   mimeTypes: string[] = [],
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const { getObjectiveDescriptionPrompt } = await import('./prompts');
@@ -660,7 +679,8 @@ export async function analyzeMultipleImagesDirectiveStreaming(
   mimeTypes: string[] = [],
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const { getDirectivePrompt } = await import('./prompts');
@@ -683,7 +703,8 @@ export async function analyzeMultipleImagesStreaming(
   clinicalContext?: string,
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const { TITAN_CONTEXTS } = await import('./prompts');
@@ -708,8 +729,8 @@ export async function analyzeMultipleImagesStreaming(
     headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus'
+        'HTTP-Referer': 'https://openrouter.ai',
+        'X-Title': 'Medical AI'
       },
     body: JSON.stringify({
       model,
@@ -719,12 +740,16 @@ export async function analyzeMultipleImagesStreaming(
       ],
       max_tokens: 4000,
       temperature: 0.1,
-      stop: ["###", "---", "Defined by", "defined by"],
+      stop: ["Defined by", "defined by"], // Убрал ### и --- так как они ломают структуру ответа
       stream: true,
       stream_options: { include_usage: true }
     })
   });
 
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ [OPENROUTER ERROR] Status: ${response.status}: ${errorText}`);
+      throw new Error(`API error: ${response.status} - ${errorText}`);
+    }
   return createTransformWithUsage(response.body!, model);
 }

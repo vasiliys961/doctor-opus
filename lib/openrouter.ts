@@ -58,7 +58,7 @@ export const MODELS = {
   HAIKU: 'anthropic/claude-haiku-4.5',                     // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
   GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
-  GEMINI_3_PRO: 'google/gemini-3-pro-preview',            // Gemini 3 Pro Preview
+  GEMINI_3_PRO: 'google/gemini-3-pro-preview'            // Gemini 3 Pro Preview
 };
 
 const MODELS_LIST = [
@@ -120,7 +120,8 @@ async function fetchWithTimeout(url: string, options: any, timeout = 120000) {
  */
 export async function analyzeImage(options: VisionRequestOptions): Promise<string> {
   // В Next.js API routes переменные окружения доступны через process.env
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   
   if (!apiKey) {
     console.error('OPENROUTER_API_KEY не найден в переменных окружения');
@@ -291,7 +292,8 @@ export async function analyzeImageFast(options: {
   specialty?: Specialty;
   clinicalContext?: string;
 }): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY не настроен');
@@ -374,7 +376,8 @@ export async function analyzeImageOpusTwoStage(options: {
   clinicalContext?: string;
   targetModel?: string; // Добавляем возможность выбора модели (Sonnet или Opus)
 }): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY не настроен');
@@ -435,7 +438,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       messages: textMessages,
       max_tokens: 4000,
       temperature: 0.1,
-      stop: ["###", "---", "Defined by", "defined by"]
+      stop: ["Defined by", "defined by"]
     };
 
     console.log(`🚀 [ECONOMY TWO-STAGE] Шаг 2: ${textModel} анализирует только ТЕКСТ (JSON)...`);
@@ -632,7 +635,8 @@ export async function analyzeMultipleImagesTwoStage(options: {
   clinicalContext?: string;
   targetModel?: string;
 }): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
   const imageType = options.imageType || 'universal';
@@ -674,7 +678,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       ],
       max_tokens: 4000,
       temperature: 0.1,
-      stop: ["###", "---", "Defined by", "defined by"]
+      stop: ["Defined by", "defined by"]
     };
 
     console.log(`🚀 [MULTI-ECONOMY] Шаг 2: ${textModel} анализирует только ТЕКСТ (JSON)...`);
@@ -682,9 +686,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(textPayload)
     });
@@ -711,7 +713,8 @@ export async function analyzeMultipleImages(options: {
   imageType?: ImageType;
   specialty?: Specialty;
 }): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   
   if (!apiKey) {
     console.error('OPENROUTER_API_KEY не найден в переменных окружения');
@@ -848,7 +851,8 @@ export async function sendTextRequest(
   model: string = MODELS.OPUS,
   specialty?: Specialty
 ): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
   
   if (!apiKey) {
     console.error('OPENROUTER_API_KEY не найден в переменных окружения');
@@ -898,9 +902,7 @@ export async function sendTextRequest(
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     });
