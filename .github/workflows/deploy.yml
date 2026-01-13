@@ -1,0 +1,36 @@
+name: Deploy to Timeweb VPS
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        password: ${{ secrets.SERVER_PASSWORD }}        script: |
+          cd /home/doctor-opus
+          
+          echo "📥 Получение изменений с GitHub..."
+          git pull origin main
+          
+          echo "📦 Установка зависимостей..."
+          npm install
+          
+          echo "🔨 Сборка production билда..."
+          npm run build
+          
+          echo "🔄 Перезапуск приложения через PM2..."
+          pm2 restart doctor-opus
+          
+          echo "📊 Статус PM2:"
+          pm2 status
+          
+          echo "✅ Деплой завершен успешно!"
