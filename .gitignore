@@ -45,6 +45,14 @@ temp/
 *.swp
 *.swo
 
+# Build artifacts
+*.tsbuildinfo
+
+# PWA generated files
+public/sw.js
+public/workbox-*.js
+public/swe-worker-*.js
+
 # OS
 .DS_Store
 Thumbs.db
