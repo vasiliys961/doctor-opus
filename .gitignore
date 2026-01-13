@@ -58,3 +58,6 @@ public/swe-worker-*.js
 Thumbs.db
 .streamlit/secrets.toml
 .streamlit/secrets.toml
+
+# Nginx SSL
+nginx/ssl/
