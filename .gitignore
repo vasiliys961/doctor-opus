@@ -61,3 +61,6 @@ Thumbs.db
 
 # Nginx SSL
 nginx/ssl/
+
+# Documentation history and temporary files
+docs/history/
