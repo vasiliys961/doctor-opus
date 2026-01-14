@@ -15,6 +15,7 @@ export const REGISTERED_BONUS = 20;  // +20 ед. за регистрацию
 export const SOFT_LIMIT = -5;        // Разрешаем уходить в минус до -5 ед.
 
 // VIP пользователи с бесконечным балансом
+// VIP пользователи с бесконечным балансом
 export const VIP_EMAILS = [
   'vasiliys@mail.ru',
   'vasily61@gmail.com',
