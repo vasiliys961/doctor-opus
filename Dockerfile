@@ -36,7 +36,7 @@ WORKDIR /app
 # Установка системных зависимостей для Node.js, DICOM и обработки изображений
 RUN apt-get update && apt-get install -y \
     curl \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libcairo2 \
     libpango-1.0-0 \
@@ -65,7 +65,7 @@ COPY --from=node-builder /app/next.config.js ./next.config.js
 COPY scripts/ ./scripts/
 COPY lib/ ./lib/
 # Копируем корневые файлы проекта
-COPY *.ts *.js *.json ./
+COPY *.ts *.js *.json USER_MANUAL_FOR_DOCTORS.md ./
 
 # Настройка переменных окружения
 ENV NODE_ENV production
