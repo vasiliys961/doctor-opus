@@ -100,6 +100,7 @@ export default function OfferPage() {
               <p><strong>Телефон:</strong> +7 978 801-65-71</p>
               <p><strong>Email:</strong> vasiliys@mail.ru</p>
               <p><strong>Сайт:</strong> doctor-opus.ru</p>
+              <p><strong>Город:</strong> г. Севастополь</p>
             </div>
           </div>
         </div>
