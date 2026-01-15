@@ -17,6 +17,7 @@ export const SOFT_LIMIT = -5;        // Разрешаем уходить в м�
 // VIP пользователи с бесконечным балансом
 // VIP пользователи с бесконечным балансом
 export const VIP_EMAILS = [
+  'support@doctor-opus.ru',
   'vasiliys@mail.ru',
   'vasily61@gmail.com',
   'admin@doctor-opus.ru'

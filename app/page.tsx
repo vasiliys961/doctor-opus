@@ -207,7 +207,7 @@ export default async function HomePage() {
               <p className="text-xs text-slate-600 leading-relaxed">
                 Исполнитель: Самозанятый <strong>Селиванов Василий Федорович</strong><br />
                 ИНН: 920455053236<br />
-                Email: vasily61@inbox.ru<br />
+                Email: support@doctor-opus.ru<br />
                 Телефон: +7 979 037 05 96<br />
                 Сайт является информационным сервисом и не заменяет консультацию врача.
               </p>
