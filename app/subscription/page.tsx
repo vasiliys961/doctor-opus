@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { SUBSCRIPTION_PACKAGES, initializeBalance, getBalance, isSubscriptionEnabled } from '@/lib/subscription-manager'
 import type { SubscriptionBalance } from '@/lib/subscription-manager'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function SubscriptionPage() {
   const router = useRouter()

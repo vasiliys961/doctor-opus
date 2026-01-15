@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { robokassa } from "@/lib/robokassa";
+import { confirmPayment, initDatabase } from "@/lib/database";
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,17 +27,21 @@ export async function POST(request: NextRequest) {
 
     if (!isValid) {
       console.error('❌ [PAYMENT RESULT] Неверная подпись!');
-      return new Response('bad sign', { status: 200 }); // Робокасса ожидает текстовый ответ
+      return new Response('bad sign', { status: 200 });
     }
 
-    // ВАЖНО: Здесь должна быть логика начисления баланса в вашей БД
-    // Так как сейчас баланс хранится в localStorage (на клиенте), 
-    // серверный вебхук не может напрямую обновить его.
-    
-    // ПЛАН: В будущем здесь будет обновление БД. 
-    // Пока что мы вернем 'OK', а клиент будет проверять статус платежа самостоятельно или через SuccessURL.
-    
-    console.log(`✅ [PAYMENT RESULT] Платеж на сумму ${OutSum} для ${Email} подтвержден.`);
+    // Инициализация БД
+    await initDatabase();
+
+    // Подтверждаем платеж и начисляем баланс в БД
+    const confirmResult = await confirmPayment(parseInt(InvId), params.SignatureValue);
+
+    if (!confirmResult.success) {
+      console.error('❌ [PAYMENT RESULT] Ошибка подтверждения платежа в БД:', confirmResult.error);
+      return new Response('error updating db', { status: 200 }); // Все равно 200, чтобы Робокасса не слала повторы, но логируем
+    }
+
+    console.log(`✅ [PAYMENT RESULT] Платеж подтвержден, баланс пополнен для заказа #${InvId}.`);
 
     // Ответ для Робокассы об успешном получении уведомления
     return new Response(`OK${InvId}`, { status: 200 });
