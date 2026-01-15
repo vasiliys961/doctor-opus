@@ -124,6 +124,57 @@ export async function saveAnalysisFeedback(data: any) {
 }
 
 /**
+ * Сохранение заметки о пациенте
+ */
+export async function savePatientNote(data: {
+  patient_id: number;
+  raw_text: string;
+  structured_note?: any;
+  gdoc_url?: string;
+  diagnosis?: string;
+}) {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS patient_notes (
+        id SERIAL PRIMARY KEY,
+        patient_id INTEGER NOT NULL,
+        raw_text TEXT,
+        structured_note JSONB,
+        gdoc_url TEXT,
+        diagnosis TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    const result = await sql`
+      INSERT INTO patient_notes (patient_id, raw_text, structured_note, gdoc_url, diagnosis)
+      VALUES (${data.patient_id}, ${data.raw_text}, ${JSON.stringify(data.structured_note)}, ${data.gdoc_url}, ${data.diagnosis})
+      RETURNING id;
+    `;
+    return { success: true, id: result.rows[0].id };
+  } catch (error) {
+    console.error('❌ [DATABASE] Ошибка сохранения заметки:', error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Получение заметок о пациенте
+ */
+export async function getPatientNotes(patientId?: string) {
+  try {
+    const { rows } = patientId 
+      ? await sql`SELECT * FROM patient_notes WHERE patient_id = ${parseInt(patientId)} ORDER BY created_at DESC`
+      : await sql`SELECT * FROM patient_notes ORDER BY created_at DESC LIMIT 100`;
+    
+    return { success: true, notes: rows };
+  } catch (error) {
+    console.error('❌ [DATABASE] Ошибка получения заметок:', error);
+    return { success: false, error, notes: [] };
+  }
+}
+
+/**
  * Получение статистики для обучения (fine-tuning)
  */
 export async function getFineTuningStats() {
