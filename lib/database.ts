@@ -17,3 +17,15 @@ export async function savePaymentConsent(data: {
   // Здесь будет INSERT в таблицу consents
   return true;
 }
+
+export async function getFineTuningStats() {
+  // Заглушка: возвращаем пустые данные, пока не подключена реальная БД
+  return {
+    success: true,
+    stats: [
+      { specialty: 'ЭКГ', ready_count: 45, total_count: 100 },
+      { specialty: 'Дерматоскопия', ready_count: 12, total_count: 100 },
+      { specialty: 'УЗИ', ready_count: 5, total_count: 100 }
+    ]
+  };
+}

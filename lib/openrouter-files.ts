@@ -125,9 +125,8 @@ export async function sendTextRequestWithFiles(
   const payload = {
     model,
     messages,
-    max_tokens: 8000,
+    max_tokens: 16000,
     temperature: 0.1,
-    stop: ["Defined by", "defined by"]
   };
 
   try {
@@ -222,9 +221,8 @@ export async function sendTextRequestStreamingWithFiles(
   const payload = {
     model,
     messages,
-    max_tokens: 8000,
+    max_tokens: 16000,
     temperature: 0.1,
-    stop: ["Defined by", "defined by"],
     stream: true,
     stream_options: { include_usage: true }
   };

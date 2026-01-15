@@ -19,6 +19,9 @@ export default function VideoPage() {
   const [error, setError] = useState<string | null>(null)
   const [clinicalContext, setClinicalContext] = useState<string>('')
   const [imageType, setImageType] = useState<ImageModality>('universal')
+  const [currentCost, setCurrentCost] = useState<number>(0)
+  const [model, setModel] = useState<string>('')
+  const [mode, setMode] = useState<string>('')
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -44,6 +47,7 @@ export default function VideoPage() {
     setLoading(true)
     setError(null)
     setResult('')
+    setCurrentCost(0)
 
     try {
       const formData = new FormData()
@@ -75,13 +79,16 @@ export default function VideoPage() {
         }
         
         setResult(fullResult || data.result || 'Анализ выполнен')
+        setCurrentCost(data.cost || 0)
+        setModel(data.model || 'google/gemini-3-flash-preview')
+        setMode('fast') // Видео-анализ всегда идет в режиме fast (двухэтапный)
         
         // Логирование использования (двухэтапный анализ)
         logUsage({
           section: 'video',
-          model: 'google/gemini-3-flash-preview',
-          inputTokens: 5000, 
-          outputTokens: 4000,
+          model: data.model || 'google/gemini-3-flash-preview',
+          inputTokens: data.usage?.prompt_tokens || 5000, 
+          outputTokens: data.usage?.completion_tokens || 4000,
         })
       } else {
         setError(data.error || 'Ошибка при анализе видео')
@@ -200,7 +207,14 @@ export default function VideoPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} imageType={imageType} />
+      <AnalysisResult 
+        result={result} 
+        loading={loading} 
+        imageType={imageType} 
+        cost={currentCost} 
+        model={model}
+        mode={mode}
+      />
 
       {result && !loading && (
         <FeedbackForm 

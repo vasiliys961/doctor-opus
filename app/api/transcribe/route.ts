@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { transcribeAudio } from '@/lib/assemblyai';
+import { deductBalance } from '@/lib/subscription-manager';
+import { AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE } from '@/lib/cost-calculator';
 
 /**
  * API endpoint для транскрипции аудио через AssemblyAI
@@ -57,13 +59,29 @@ export async function POST(request: NextRequest) {
     console.log('🚀 Отправка в AssemblyAI с MIME:', mimeType)
 
     // Вызов AssemblyAI API
-    const transcript = await transcribeAudio(arrayBuffer, mimeType);
+    const { text, duration } = await transcribeAudio(arrayBuffer, mimeType);
 
-    console.log('✅ Транскрипция завершена успешно')
+    // Расчет стоимости
+    const durationMinutes = duration / 60;
+    const cost = Math.max(0.1, durationMinutes * AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE);
+
+    // Списание с баланса
+    deductBalance({
+      section: 'audio',
+      sectionName: 'Транскрипция аудио',
+      model: 'assemblyai-best',
+      inputTokens: Math.round(duration), // Используем секунды как "входные токены" для логов
+      outputTokens: 0,
+      operation: 'Audio Transcription'
+    });
+
+    console.log('✅ Транскрипция завершена успешно', { duration, cost })
 
     return NextResponse.json({
       success: true,
-      transcript: transcript,
+      transcript: text,
+      duration: duration,
+      cost: cost
     });
   } catch (error: any) {
     console.error('Error transcribing audio:', error);

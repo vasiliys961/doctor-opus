@@ -23,6 +23,9 @@ export default function DocumentPage() {
   const [convertingPDF, setConvertingPDF] = useState(false)
   const [conversionProgress, setConversionProgress] = useState<{ current: number; total: number } | null>(null)
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
+  const [currentCost, setCurrentCost] = useState<number>(0)
+  const [model, setModel] = useState<string>('')
+  const [mode, setMode] = useState<string>('')
 
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
     if (!window.pdfjsLib) {
@@ -96,6 +99,9 @@ export default function DocumentPage() {
     setResult('')
     setError(null)
     setLoading(true)
+    setCurrentCost(0)
+    setModel('')
+    setMode('')
 
     try {
       // Если это PDF - конвертируем в изображения на клиенте
@@ -127,11 +133,15 @@ export default function DocumentPage() {
 
         if (data.success) {
           setResult(data.result)
+          setCurrentCost(data.cost || 0)
+          setModel(data.model || 'google/gemini-3-flash-preview')
+          setMode('fast')
+          
           logUsage({
             section: 'document',
-            model: 'anthropic/claude-haiku-4.5',
-            inputTokens: pdfImages.length * 1500,
-            outputTokens: 1000,
+            model: data.model || 'google/gemini-3-flash-preview',
+            inputTokens: data.usage?.prompt_tokens || (pdfImages.length * 1500),
+            outputTokens: data.usage?.completion_tokens || 1000,
           })
         } else {
           setError(data.error || 'Ошибка при сканировании')
@@ -162,11 +172,15 @@ export default function DocumentPage() {
 
         if (data.success) {
           setResult(data.result)
+          setCurrentCost(data.cost || 0)
+          setModel(data.model || 'google/gemini-3-flash-preview')
+          setMode('fast')
+
           logUsage({
             section: 'document',
-            model: 'anthropic/claude-haiku-4.5',
-            inputTokens: 1500,
-            outputTokens: 800,
+            model: data.model || 'google/gemini-3-flash-preview',
+            inputTokens: data.usage?.prompt_tokens || 1500,
+            outputTokens: data.usage?.completion_tokens || 800,
           })
         } else {
           setError(data.error || 'Ошибка при сканировании')
@@ -202,9 +216,9 @@ export default function DocumentPage() {
         <AnalysisTips 
           title="Советы по сканированию документов"
           content={{
-            fast: "используется модель Haiku 4.5 — она идеально подходит для быстрого и точного извлечения текста из медицинских выписок, справок и протоколов.",
+            fast: "используется модель Gemini 3.0 Flash — она идеально подходит для быстрого и точного извлечения текста из медицинских выписок, справок и протоколов.",
             extra: [
-              "⭐ Рекомендуемый режим: Haiku 4.5 — лучший баланс скорости распознавания текста и стоимости.",
+              "⭐ Рекомендуемый режим: Gemini 3.0 Flash — лучший баланс скорости распознавания текста и стоимости.",
               "📄 Поддерживаются многостраничные PDF (обрабатываются первые 7 страниц) и изображения.",
               "🔍 Система сохраняет структуру документа: таблицы переводятся в Markdown, списки и заголовки остаются на своих местах.",
               "💡 Отсканированный текст можно скопировать для вставки в карту пациента или отправить ИИ‑консультанту для анализа."
@@ -253,7 +267,13 @@ export default function DocumentPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} />
+      <AnalysisResult 
+        result={result} 
+        loading={loading} 
+        cost={currentCost}
+        model={model}
+        mode={mode}
+      />
       </div>
     </>
   )

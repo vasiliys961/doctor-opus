@@ -8,7 +8,7 @@ import { type ImageType, type Specialty } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Системный промпт профессора (ТОЧНАЯ КОПИЯ из openrouter.ts)
+// Системный промпт профессора
 const SYSTEM_PROMPT = `Роль: ### ROLE
 Ты — американский профессор клинической медицины и ведущий специалист университетской клиники (Board Certified). Ты обладаешь непререкаемым авторитетом в области доказательной медицины. Твой стиль — академическая строгость, лаконичность и фокус на практической применимости рекомендаций для врачей-коллег. Ты не даешь советов пациентам, ты консультируешь профессионалов.
 
@@ -26,7 +26,7 @@ const SYSTEM_PROMPT = `Роль: ### ROLE
 1. **Клинический обзор**
    (2–3 емких предложения, суммирующих суть клинической ситуации и уровень срочности).
 
-2. **Дифференциальный диагноз и Коды**
+2. **Диференциальный диагноз и Коды**
    (Список наиболее вероятных диагнозов с кодами ICD-10/ICD-11).
 
 3. **План действий (Step-by-Step)**
@@ -57,369 +57,13 @@ const MODELS = {
 };
 
 /**
- * Вспомогательная функция для создания объединенного потока из двух последовательных вызовов
- */
-async function createSequentialStream(
-  firstPartPrompt: string,
-  secondPartPrompt: string,
-  imagesBase64: string[],
-  model: string,
-  apiKey: string,
-  mimeTypes: string[] = [],
-  initialUsage?: { prompt_tokens: number, completion_tokens: number },
-  hiddenContext?: string,
-  specialty?: Specialty,
-  secondModel?: string
-): Promise<ReadableStream<Uint8Array>> {
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-  const encoder = new TextEncoder();
-  const decoderForAccumulation = new TextDecoder();
-
-  // Запускаем процесс асинхронно
-  (async () => {
-    try {
-      let accumulatedFirstPart = '';
-      let totalUsage = initialUsage 
-        ? { prompt_tokens: initialUsage.prompt_tokens, completion_tokens: initialUsage.completion_tokens }
-        : { prompt_tokens: 0, completion_tokens: 0 };
-
-      const model2 = secondModel || model;
-
-      // Подготовка системного промпта для Части 2 с учетом специальности
-      const { TITAN_CONTEXTS } = await import('./prompts');
-      let systemPromptPart2 = SYSTEM_PROMPT;
-      if (specialty && TITAN_CONTEXTS[specialty]) {
-        systemPromptPart2 = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
-      }
-
-      // --- ЧАСТЬ 1: Директива (Профессор) или Поиск ---
-      console.log(`📡 [SEQUENTIAL] Запуск Части 1 через ${model}...`);
-      const response1 = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus'
-      },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: systemPromptPart2 },
-            { 
-              role: 'user', 
-              content: imagesBase64.length > 0 ? [
-                { type: 'text', text: firstPartPrompt },
-                ...imagesBase64.map((img, i) => ({
-                  type: 'image_url',
-                  image_url: { url: `data:${mimeTypes[i] || 'image/png'};base64,${img}` }
-                }))
-              ] : firstPartPrompt
-            }
-          ],
-          max_tokens: 4000,
-          temperature: 0.1,
-          stop: ["Defined by", "defined by"],
-          stream: true,
-          stream_options: { include_usage: true }
-        })
-      });
-
-      if (!response1.ok) {
-        const errorText = await response1.text();
-        throw new Error(`Step 1 failed: ${response1.status} - ${errorText}`);
-      }
-      
-      const reader1 = response1.body!.getReader();
-      const part1Header = "## 🩺 КЛИНИЧЕСКАЯ ДИРЕКТИВА\\n\\n";
-      writer.write(encoder.encode(`data: {"choices": [{"delta": {"content": "${part1Header}"}}]}\n\n`));
-
-      let partialLine1 = '';
-      while (true) {
-        const { done, value } = await reader1.read();
-        
-        const chunk = decoderForAccumulation.decode(value || new Uint8Array(), { stream: !done });
-        const lines = (partialLine1 + chunk).split('\n');
-        partialLine1 = lines.pop() || '';
-
-        let filteredValue = '';
-        for (const line of lines) {
-          if (line.trim() === 'data: [DONE]') continue;
-          
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.usage) {
-                totalUsage.prompt_tokens += data.usage.prompt_tokens;
-                totalUsage.completion_tokens += data.usage.completion_tokens;
-                continue;
-              }
-              const content = data.choices?.[0]?.delta?.content || '';
-              if (content) accumulatedFirstPart += content;
-            } catch (e) {}
-          }
-          filteredValue += line + '\n';
-        }
-
-        if (filteredValue) {
-          writer.write(encoder.encode(filteredValue));
-        }
-
-        if (done) break;
-      }
-
-      // Обработка последнего остатка в partialLine1 если он есть
-      if (partialLine1.trim() && partialLine1.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(partialLine1.slice(6));
-          const content = data.choices?.[0]?.delta?.content || '';
-          if (content) accumulatedFirstPart += content;
-          writer.write(encoder.encode(partialLine1 + '\n'));
-        } catch (e) {}
-      } else if (partialLine1.trim()) {
-        writer.write(encoder.encode('data: ' + JSON.stringify({ choices: [{ delta: { content: partialLine1 } }] }) + '\n\n'));
-      }
-
-      // Пингуем канал
-      writer.write(encoder.encode(': keep-alive\n\n'));
-
-      // --- ЧАСТЬ 2: Описание (Специалист) или Синтез ---
-      console.log(`📡 [SEQUENTIAL] Запуск Части 2 через ${model2}...`);
-      const response2 = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus'
-      },
-        body: JSON.stringify({
-          model: model2,
-          messages: [
-            { role: 'system', content: 'Ты — эксперт-диагност. Дай максимально краткое, но емкое описание патологий. Фокусируйся на фактах для врача. Не пиши вступлений.' },
-            { 
-              role: 'user', 
-              content: `ИНСТРУКЦИЯ: ${secondPartPrompt}\n\n${hiddenContext ? `ТЕХНИЧЕСКИЕ ДАННЫЕ (JSON) ДЛЯ АНАЛИЗА:\n${hiddenContext}\n\n` : ''}${accumulatedFirstPart ? `УЖЕ СФОРМИРОВАННОЕ ЗАКЛЮЧЕНИЕ (ДЛЯ КОНТЕКСТА):\n${accumulatedFirstPart}\n\n` : ''}СФОРМУЛИРУЙ ПОДРОБНОЕ ОБЪЕКТИВНОЕ ОПИСАНИЕ ИССЛЕДОВАНИЯ.` 
-            }
-          ],
-          max_tokens: 4000,
-          temperature: 0.1,
-          stop: ["Defined by", "defined by"],
-          stream: true,
-          stream_options: { include_usage: true }
-        })
-      });
-
-      if (!response2.ok) {
-        const errorText = await response2.text();
-        throw new Error(`Part 2 error: ${response2.status} - ${errorText}`);
-      }
-
-      const reader2 = response2.body!.getReader();
-      const part2Header = "\\n\\n---\\n\\n## 🔍 ОБЪЕКТИВНЫЙ СТАТУС (ОПИСАНИЕ)\\n\\n";
-      writer.write(encoder.encode(`data: {"choices": [{"delta": {"content": "${part2Header}"}}]}\n\n`));
-
-      let partialLine2 = '';
-      while (true) {
-        const { done, value } = await reader2.read();
-        
-        const chunk = decoderForAccumulation.decode(value || new Uint8Array(), { stream: !done });
-        const lines = (partialLine2 + chunk).split('\n');
-        partialLine2 = lines.pop() || '';
-
-        let filteredValue = '';
-        for (const line of lines) {
-          // Пропускаем сигнал завершения второй части
-          if (line.trim() === 'data: [DONE]') continue;
-
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.usage) {
-                totalUsage.prompt_tokens += data.usage.prompt_tokens;
-                totalUsage.completion_tokens += data.usage.completion_tokens;
-                continue; // Не прокидываем промежуточный usage
-              }
-            } catch (e) {}
-          }
-          filteredValue += line + '\n';
-        }
-
-        if (filteredValue) {
-          writer.write(encoder.encode(filteredValue));
-        }
-
-        if (done) break;
-      }
-
-      // Обработка последнего остатка в partialLine2
-      if (partialLine2.trim() && partialLine2.startsWith('data: ')) {
-        writer.write(encoder.encode(partialLine2 + '\n'));
-      } else if (partialLine2.trim()) {
-        writer.write(encoder.encode('data: ' + JSON.stringify({ choices: [{ delta: { content: partialLine2 } }] }) + '\n\n'));
-      }
-
-      // Финальный отчет в терминал
-      const { formatCostLog } = await import('./cost-calculator');
-      const costLog = formatCostLog(model2, totalUsage.prompt_tokens, totalUsage.completion_tokens, totalUsage.prompt_tokens + totalUsage.completion_tokens);
-      console.log(`✅ [SEQUENTIAL] Анализ завершен успешно`);
-      console.log(`   📊 ${costLog}`);
-
-      // Финальный чек для фронтенда
-      const { calculateCost } = await import('./cost-calculator');
-      const costInfo = calculateCost(totalUsage.prompt_tokens, totalUsage.completion_tokens, model2);
-      const usageChunk = {
-        usage: {
-          prompt_tokens: totalUsage.prompt_tokens,
-          completion_tokens: totalUsage.completion_tokens,
-          total_tokens: totalUsage.prompt_tokens + totalUsage.completion_tokens,
-          total_cost: costInfo.totalCostUnits
-        },
-        model: model2
-      };
-      
-      writer.write(encoder.encode(`data: ${JSON.stringify(usageChunk)}\n\n`));
-      writer.write(encoder.encode('data: [DONE]\n\n'));
-    } catch (error: any) {
-      console.error('Sequential Stream Error:', error);
-      writer.write(encoder.encode(`data: {"error": "${error.message.replace(/"/g, '\\"')}"}\n\n`));
-    } finally {
-      writer.close();
-    }
-  })();
-
-  return readable;
-}
-
-/**
- * Streaming быстрый анализ (Gemini 3.0 JSON -> Gemini 3.0 Professor Mode)
- */
-export async function analyzeImageFastStreaming(
-  prompt: string,
-  imageBase64: string,
-  imageType?: string,
-  clinicalContext?: string,
-  specialty?: Specialty
-): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
-
-  const { extractImageJSON } = await import('./openrouter');
-  const extractionResult = await extractImageJSON({
-    imageBase64,
-    modality: imageType || 'unknown',
-    specialty: specialty
-  });
-  const jsonExtraction = extractionResult.data;
-  const initialUsage = extractionResult.usage;
-
-  const { getDirectivePrompt } = await import('./prompts');
-  const directivePrompt = getDirectivePrompt(imageType as any, prompt, specialty);
-
-  const contextPrompt = `Ниже приведены данные из изображения. Как Профессор медицины, проанализируй их.
-    
-=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ ОТ GEMINI 3.0 ===
-${JSON.stringify(jsonExtraction, null, 2)}
-
-=== КОНТЕКСТ ===
-${clinicalContext || 'Нет'}
-
-=== ИНСТРУКЦИЯ ===
-${directivePrompt}`;
-
-  return createSequentialStream(
-    "Выполни краткий обзор находок.",
-    contextPrompt,
-    [imageBase64],
-    MODELS.GEMINI_3_FLASH,
-    apiKey,
-    ['image/png'],
-    initialUsage,
-    undefined,
-    specialty
-  );
-}
-
-/**
- * Streaming оптимизированный анализ для множественных изображений (Gemini JSON → Sonnet)
- */
-export async function analyzeMultipleImagesOpusTwoStageStreaming(
-  prompt: string,
-  imagesBase64: string[],
-  imageType?: ImageType,
-  clinicalContext?: string,
-  mimeTypes: string[] = [],
-  model: string = MODELS.SONNET,
-  specialty?: Specialty
-): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
-
-  try {
-    console.log(`🚀 [MULTI-OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
-    const { extractImageJSON } = await import('./openrouter');
-    const extractionResult = await extractImageJSON({
-      imagesBase64,
-      modality: imageType || 'unknown',
-      specialty: specialty
-    });
-    const jsonExtraction = extractionResult.data;
-    const initialUsage = extractionResult.usage;
-    
-    const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal', specialty);
-    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt, specialty);
-
-    const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
-    const step2Prompt = clinicalPromptCriteria;
-
-    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, model, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
-  } catch (error: any) {
-    throw error;
-  }
-}
-
-/**
- * Streaming анализ множественных изображений через Opus с использованием JSON от Gemini (Validated)
- */
-export async function analyzeMultipleImagesWithJSONStreaming(
-  prompt: string,
-  imagesBase64: string[],
-  imageType?: ImageType,
-  clinicalContext?: string,
-  mimeTypes: string[] = [],
-  specialty?: Specialty
-): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
-
-  try {
-    const { extractImageJSON } = await import('./openrouter');
-    const extractionResult = await extractImageJSON({ imagesBase64, modality: imageType || 'unknown', specialty });
-    const jsonExtraction = extractionResult.data;
-    const initialUsage = extractionResult.usage;
-    
-    const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal', specialty);
-    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt, specialty);
-
-    const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
-    const step2Prompt = clinicalPromptCriteria;
-
-    return createSequentialStream(step1Prompt, step2Prompt, imagesBase64, MODELS.OPUS, apiKey, mimeTypes, initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
-  } catch (error: any) {
-    throw error;
-  }
-}
-
-/**
  * Вспомогательная функция для преобразования потока с добавлением расчета стоимости
  */
-function createTransformWithUsage(stream: ReadableStream, model: string): ReadableStream<Uint8Array> {
+function createTransformWithUsage(
+  stream: ReadableStream, 
+  model: string, 
+  initialUsage?: { prompt_tokens: number, completion_tokens: number }
+): ReadableStream<Uint8Array> {
   const reader = stream.getReader();
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -441,13 +85,25 @@ function createTransformWithUsage(stream: ReadableStream, model: string): Readab
                 const data = JSON.parse(line.slice(6));
                 if (data.usage) {
                   const { calculateCost, formatCostLog } = await import('./cost-calculator');
-                  const costInfo = calculateCost(data.usage.prompt_tokens, data.usage.completion_tokens, model);
+                  
+                  // Суммируем токены (Gemini + Основная модель)
+                  const totalPrompt = (data.usage.prompt_tokens || 0) + (initialUsage?.prompt_tokens || 0);
+                  const totalCompletion = (data.usage.completion_tokens || 0) + (initialUsage?.completion_tokens || 0);
+                  const totalTokens = totalPrompt + totalCompletion;
+
+                  const costInfo = calculateCost(totalPrompt, totalCompletion, model);
+                  data.usage.prompt_tokens = totalPrompt;
+                  data.usage.completion_tokens = totalCompletion;
+                  data.usage.total_tokens = totalTokens;
                   data.usage.total_cost = costInfo.totalCostUnits;
                   data.model = model;
                   
                   // Логирование в терминал для всех стримов
-                  console.log(`✅ [STREAMING] Запрос завершен (${model})`);
-                  console.log(`   📊 ${formatCostLog(model, data.usage.prompt_tokens, data.usage.completion_tokens, data.usage.total_tokens)}`);
+                  console.log(`✅ [STREAMING] Анализ завершен успешно (${model})`);
+                  if (initialUsage) {
+                    console.log(`   🔸 Этап 0 (Gemini JSON): ${initialUsage.prompt_tokens + initialUsage.completion_tokens} токенов`);
+                  }
+                  console.log(`   📊 ИТОГО: ${formatCostLog(model, totalPrompt, totalCompletion, totalTokens)}`);
                   
                   modifiedChunk = modifiedChunk.replace(line, `data: ${JSON.stringify(data)}`);
                 }
@@ -464,6 +120,523 @@ function createTransformWithUsage(stream: ReadableStream, model: string): Readab
       }
     }
   });
+}
+
+/**
+ * Streaming быстрый анализ (Gemini 3.0 JSON -> Gemini 3.0 Professor Mode)
+ */
+export async function analyzeImageFastStreaming(
+  prompt: string,
+  imageBase64: string,
+  imageType?: string,
+  clinicalContext?: string,
+  specialty?: Specialty
+): Promise<ReadableStream<Uint8Array>> {
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+
+  (async () => {
+    try {
+      const { extractImageJSON } = await import('./openrouter');
+      const extractionResult = await extractImageJSON({
+        imageBase64,
+        modality: imageType || 'unknown',
+        specialty: specialty
+      });
+      const jsonExtraction = extractionResult.data;
+      const initialUsage = extractionResult.usage;
+
+      const { getDirectivePrompt } = await import('./prompts');
+      const directivePrompt = getDirectivePrompt(imageType as any, prompt, specialty);
+
+      const mainPrompt = `Ниже приведены данные из изображения. Как Профессор медицины, проанализируй их.
+    
+=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ ОТ GEMINI 3.0 ===
+${JSON.stringify(jsonExtraction, null, 2)}
+
+=== КОНТЕКСТ ===
+${clinicalContext || 'Нет'}
+
+=== ИНСТРУКЦИЯ ===
+${directivePrompt}`;
+
+      const model = MODELS.GEMINI_3_FLASH;
+
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: mainPrompt }
+          ],
+          max_tokens: 16000,
+          temperature: 0.1,
+          stream: true,
+          stream_options: { include_usage: true }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Fast analysis failed: ${response.status} - ${errorText}`);
+      }
+
+      const transformer = createTransformWithUsage(response.body!, model, initialUsage);
+      const reader = transformer.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+      }
+    } catch (error: any) {
+      console.error('Fast Stream Error:', error);
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+    } finally {
+      await writer.close();
+    }
+  })();
+
+  return readable;
+}
+
+/**
+ * Streaming оптимизированный анализ (Gemini JSON → Основная модель)
+ */
+export async function analyzeImageOpusTwoStageStreaming(
+  prompt: string,
+  imageBase64: string,
+  imageType?: ImageType,
+  clinicalContext?: string,
+  specialty?: Specialty,
+  model: string = MODELS.SONNET
+): Promise<ReadableStream<Uint8Array>> {
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+
+  // Запускаем процесс асинхронно
+  (async () => {
+    let heartbeat: any;
+    try {
+      // Padding для форсирования потока
+      const padding = ': ' + ' '.repeat(1024) + '\n\n';
+      await writer.write(encoder.encode(padding));
+
+      const loadingHeader = "## 🩺 ПОДГОТОВКА К АНАЛИЗУ...\n\n> *Извлечение структурированных данных через Gemini Vision...*\n\n---\n\n";
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
+
+      console.log(`🚀 [OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
+      const { extractImageJSON } = await import('./openrouter');
+      const extractionResult = await extractImageJSON({ imageBase64, modality: imageType || 'unknown', specialty });
+      const jsonExtraction = extractionResult.data;
+      const initialUsage = extractionResult.usage;
+      
+      const { getDirectivePrompt } = await import('./prompts');
+      const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
+
+      // Формируем единый контекст для основной модели
+      const mainPrompt = `ИНСТРУКЦИЯ: ${directivePrompt}
+
+### ТЕХНИЧЕСКИЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЯ (JSON):
+${JSON.stringify(jsonExtraction, null, 2)}
+
+${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ (ОПИСАНИЕ И ДИРЕКТИВУ).`;
+
+      // Настройка системного промпта
+      const { TITAN_CONTEXTS } = await import('./prompts');
+      let systemPrompt = SYSTEM_PROMPT;
+      if (specialty && TITAN_CONTEXTS[specialty]) {
+        systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+      }
+
+      console.log(`📡 [OPTIMIZED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
+      
+      // Запускаем Heartbeat
+      heartbeat = setInterval(() => {
+        try {
+          process.stdout.write('♥');
+          writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
+        } catch (e) {}
+      }, 15000);
+
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { 
+              role: 'user', 
+              content: [
+                { type: 'text', text: mainPrompt },
+                { type: 'image_url', image_url: { url: `data:image/png;base64,${imageBase64}` } }
+              ]
+            }
+          ],
+          max_tokens: 16000,
+          temperature: 0.1,
+          stream: true,
+          stream_options: { include_usage: true }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Main model failed: ${response.status} - ${errorText}`);
+      }
+
+      // Перенаправляем поток через наш трансформер с учетом начальных токенов Gemini
+      const transformer = createTransformWithUsage(response.body!, model, initialUsage);
+      const reader = transformer.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+        process.stdout.write('·');
+      }
+
+    } catch (error: any) {
+      console.error('Optimized Stream Error:', error);
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      await writer.close();
+    }
+  })();
+
+  return readable;
+}
+
+/**
+ * Streaming оптимизированный анализ для множественных изображений (Gemini JSON → Основная модель)
+ */
+export async function analyzeMultipleImagesOpusTwoStageStreaming(
+  prompt: string,
+  imagesBase64: string[],
+  imageType?: ImageType,
+  clinicalContext?: string,
+  mimeTypes: string[] = [],
+  model: string = MODELS.SONNET,
+  specialty?: Specialty
+): Promise<ReadableStream<Uint8Array>> {
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+
+  (async () => {
+    let heartbeat: any;
+    try {
+      // Padding для форсирования потока
+      const padding = ': ' + ' '.repeat(1024) + '\n\n';
+      await writer.write(encoder.encode(padding));
+
+      const loadingHeader = "## 🩺 ПОДГОТОВКА К АНАЛИЗУ...\n\n> *Сбор и анализ данных из нескольких изображений через Gemini Vision...*\n\n---\n\n";
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
+
+      console.log(`🚀 [MULTI-OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
+      const { extractImageJSON } = await import('./openrouter');
+      const extractionResult = await extractImageJSON({
+        imagesBase64,
+        modality: imageType || 'unknown',
+        specialty: specialty
+      });
+      const jsonExtraction = extractionResult.data;
+      const initialUsage = extractionResult.usage;
+      
+      const { getDirectivePrompt } = await import('./prompts');
+      const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
+
+      const mainPrompt = `ИНСТРУКЦИЯ: ${directivePrompt}
+
+### СРАВНИТЕЛЬНЫЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЙ (JSON):
+${JSON.stringify(jsonExtraction, null, 2)}
+
+${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.`;
+
+      // Настройка системного промпта
+      const { TITAN_CONTEXTS } = await import('./prompts');
+      let systemPrompt = SYSTEM_PROMPT;
+      if (specialty && TITAN_CONTEXTS[specialty]) {
+        systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+      }
+
+      console.log(`📡 [MULTI-OPTIMIZED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
+      
+      // Запускаем Heartbeat
+      heartbeat = setInterval(() => {
+        try {
+          process.stdout.write('♥');
+          writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
+        } catch (e) {}
+      }, 15000);
+
+      const contentItems: any[] = [
+        { type: 'text', text: mainPrompt },
+        ...imagesBase64.map((img, i) => ({
+          type: 'image_url',
+          image_url: { url: `data:${mimeTypes[i] || 'image/png'};base64,${img}` }
+        }))
+      ];
+
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: contentItems }
+          ],
+          max_tokens: 16000,
+          temperature: 0.1,
+          stream: true,
+          stream_options: { include_usage: true }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Main model failed: ${response.status} - ${errorText}`);
+      }
+
+      const transformer = createTransformWithUsage(response.body!, model, initialUsage);
+      const reader = transformer.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+        process.stdout.write('·');
+      }
+
+    } catch (error: any) {
+      console.error('Multi-Optimized Stream Error:', error);
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      await writer.close();
+    }
+  })();
+
+  return readable;
+}
+
+/**
+ * Streaming анализ множественных изображений через Основную модель с использованием JSON от Gemini (Validated)
+ */
+export async function analyzeMultipleImagesWithJSONStreaming(
+  prompt: string,
+  imagesBase64: string[],
+  imageType?: ImageType,
+  clinicalContext?: string,
+  mimeTypes: string[] = [],
+  specialty?: Specialty,
+  model: string = MODELS.OPUS
+): Promise<ReadableStream<Uint8Array>> {
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+
+  (async () => {
+    let heartbeat: any;
+    try {
+      // Padding для форсирования flush
+      const padding = ': ' + ' '.repeat(1024) + '\n\n';
+      await writer.write(encoder.encode(padding));
+
+      const loadingHeader = "## 🩺 ПОДГОТОВКА К ЭКСПЕРТНОМУ АНАЛИЗУ...\n\n> *Сбор данных через Gemini Vision...*\n\n---\n\n";
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
+
+      const { extractImageJSON } = await import('./openrouter');
+      const extractionResult = await extractImageJSON({ imagesBase64, modality: imageType || 'unknown', specialty });
+      const jsonExtraction = extractionResult.data;
+      const initialUsage = extractionResult.usage;
+      
+      const { getDirectivePrompt } = await import('./prompts');
+      const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
+
+      const mainPrompt = `ИНСТРУКЦИЯ: ${directivePrompt}
+
+### СТРУКТУРИРОВАННЫЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЙ (JSON):
+${JSON.stringify(jsonExtraction, null, 2)}
+
+${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ЭКСПЕРТНЫЙ ОТЧЕТ.`;
+
+      const { TITAN_CONTEXTS } = await import('./prompts');
+      let systemPrompt = SYSTEM_PROMPT;
+      if (specialty && TITAN_CONTEXTS[specialty]) {
+        systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+      }
+
+      // Запускаем Heartbeat
+      heartbeat = setInterval(() => {
+        try {
+          process.stdout.write('♥');
+          writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
+        } catch (e) {}
+      }, 15000);
+
+      const contentItems: any[] = [
+        { type: 'text', text: mainPrompt },
+        ...imagesBase64.map((img, i) => ({
+          type: 'image_url',
+          image_url: { url: `data:${mimeTypes[i] || 'image/png'};base64,${img}` }
+        }))
+      ];
+
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: contentItems }
+          ],
+          max_tokens: 16000,
+          temperature: 0.1,
+          stream: true,
+          stream_options: { include_usage: true }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Main model failed: ${response.status} - ${errorText}`);
+      }
+
+      const transformer = createTransformWithUsage(response.body!, model, initialUsage);
+      const reader = transformer.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+        process.stdout.write('·');
+      }
+    } catch (error: any) {
+      console.error('Multi-Validated Stream Error:', error);
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      await writer.close();
+    }
+  })();
+
+  return readable;
+}
+
+/**
+ * Streaming анализ изображения через Основную модель с использованием JSON от Gemini
+ */
+export async function analyzeImageWithJSONStreaming(
+  jsonExtractionWrapper: any,
+  imageBase64: string,
+  prompt: string = 'Проанализируйте медицинское изображение.',
+  mimeType: string = 'image/png',
+  imageType?: ImageType,
+  clinicalContext?: string,
+  specialty?: Specialty,
+  model: string = MODELS.OPUS
+): Promise<ReadableStream<Uint8Array>> {
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.trim();
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const jsonExtraction = jsonExtractionWrapper.data || jsonExtractionWrapper;
+  const initialUsage = jsonExtractionWrapper.usage;
+
+  const { getDirectivePrompt } = await import('./prompts');
+  const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
+
+  const mainPrompt = `ИНСТРУКЦИЯ: ${directivePrompt}
+
+### ТЕХНИЧЕСКИЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЯ (JSON):
+${JSON.stringify(jsonExtraction, null, 2)}
+
+${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.`;
+
+  const { TITAN_CONTEXTS } = await import('./prompts');
+  let systemPrompt = SYSTEM_PROMPT;
+  if (specialty && TITAN_CONTEXTS[specialty]) {
+    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+  }
+
+  const response = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://doctor-opus.ru',
+      'X-Title': 'Doctor Opus'
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { 
+          role: 'user', 
+          content: [
+            { type: 'text', text: mainPrompt },
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }
+          ]
+        }
+      ],
+      max_tokens: 16000,
+      temperature: 0.1,
+      stream: true,
+      stream_options: { include_usage: true }
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Main model failed: ${response.status} - ${errorText}`);
+  }
+
+  return createTransformWithUsage(response.body!, model, initialUsage);
 }
 
 /**
@@ -503,9 +676,8 @@ export async function sendTextRequestStreaming(
     body: JSON.stringify({
       model,
       messages,
-      max_tokens: 4000,
+      max_tokens: 16000,
       temperature: 0.1,
-      stop: ["Defined by", "defined by"], // Убрал ### и --- так как они ломают структуру ответа
       stream: true,
       stream_options: { include_usage: true }
     })
@@ -566,9 +738,8 @@ export async function analyzeImageStreaming(
           ] 
         }
       ],
-      max_tokens: 4000,
+      max_tokens: 16000,
       temperature: 0.1,
-      stop: ["Defined by", "defined by"], // Убрал ### и --- так как они ломают структуру ответа
       stream: true,
       stream_options: { include_usage: true }
     })
@@ -580,116 +751,6 @@ export async function analyzeImageStreaming(
       throw new Error(`API error: ${response.status} - ${errorText}`);
     }
   return createTransformWithUsage(response.body!, model);
-}
-
-/**
- * Streaming оптимизированный анализ (Gemini JSON → Sonnet)
- */
-export async function analyzeImageOpusTwoStageStreaming(
-  prompt: string,
-  imageBase64: string,
-  imageType?: ImageType,
-  clinicalContext?: string,
-  specialty?: Specialty,
-  model: string = MODELS.SONNET
-): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
-
-  try {
-    const { extractImageJSON } = await import('./openrouter');
-    const extractionResult = await extractImageJSON({ imageBase64, modality: imageType || 'unknown', specialty });
-    const jsonExtraction = extractionResult.data;
-    const initialUsage = extractionResult.usage;
-    
-    const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal', specialty);
-    const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt, specialty);
-
-    const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
-    const step2Prompt = clinicalPromptCriteria;
-
-    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], model, apiKey, ['image/png'], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
-  } catch (error: any) {
-    throw error;
-  }
-}
-
-/**
- * Streaming анализ изображения через Opus с использованием JSON от Gemini
- */
-export async function analyzeImageWithJSONStreaming(
-  jsonExtractionWrapper: any,
-  imageBase64: string,
-  prompt: string = 'Проанализируйте медицинское изображение.',
-  mimeType: string = 'image/png',
-  imageType?: ImageType,
-  clinicalContext?: string,
-  specialty?: Specialty
-): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
-
-  const jsonExtraction = jsonExtractionWrapper.data || jsonExtractionWrapper;
-  const initialUsage = jsonExtractionWrapper.usage;
-
-  const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-  const descriptionPromptCriteria = getObjectiveDescriptionPrompt(imageType || 'universal', specialty);
-  const clinicalPromptCriteria = getDirectivePrompt(imageType || 'universal', prompt, specialty);
-
-  const step1Prompt = `${descriptionPromptCriteria}\n\n=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI JSON) ===\n${JSON.stringify(jsonExtraction, null, 2)}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
-  const step2Prompt = clinicalPromptCriteria;
-
-    return createSequentialStream(step1Prompt, step2Prompt, [imageBase64], MODELS.OPUS, apiKey, [mimeType], initialUsage, JSON.stringify(jsonExtraction, null, 2), specialty);
-}
-
-/**
- * Стриминг для получения ТОЛЬКО описания изображений (Шаг 1 в ручном режиме)
- */
-export async function analyzeMultipleImagesDescriptionStreaming(
-  prompt: string,
-  imagesBase64: string[],
-  imageType: string = 'universal',
-  clinicalContext?: string,
-  mimeTypes: string[] = [],
-  specialty?: Specialty
-): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
-
-  const { getObjectiveDescriptionPrompt } = await import('./prompts');
-  const descriptionPrompt = getObjectiveDescriptionPrompt(imageType as any, specialty);
-
-  const fullPrompt = `${descriptionPrompt}\n\n${prompt}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
-
-  return analyzeMultipleImagesStreaming(fullPrompt, imagesBase64, mimeTypes, MODELS.SONNET, '', specialty);
-}
-
-/**
- * Стриминг для получения ТОЛЬКО клинической директивы на основе описания (Шаг 2 в ручном режиме)
- */
-export async function analyzeMultipleImagesDirectiveStreaming(
-  prompt: string,
-  description: string,
-  imagesBase64: string[],
-  clinicalContext?: string,
-  mimeTypes: string[] = [],
-  specialty?: Specialty
-): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
-
-  const { getDirectivePrompt } = await import('./prompts');
-  const directivePrompt = getDirectivePrompt('universal', prompt, specialty);
-
-  const fullPrompt = `${directivePrompt}\n\nОПИСАНИЕ ИССЛЕДОВАНИЯ:\n${description}\n\n${clinicalContext ? `Контекст пациента: ${clinicalContext}` : ''}`;
-
-  // Для директивы используем Opus или Sonnet
-  return analyzeMultipleImagesStreaming(fullPrompt, imagesBase64, mimeTypes, MODELS.SONNET, '', specialty);
 }
 
 /**
@@ -738,9 +799,8 @@ export async function analyzeMultipleImagesStreaming(
         { role: 'system', content: systemPrompt },
         { role: 'user', content: contentItems }
       ],
-      max_tokens: 4000,
+      max_tokens: 16000,
       temperature: 0.1,
-      stop: ["Defined by", "defined by"], // Убрал ### и --- так как они ломают структуру ответа
       stream: true,
       stream_options: { include_usage: true }
     })

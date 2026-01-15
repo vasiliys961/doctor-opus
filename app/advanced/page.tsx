@@ -20,6 +20,7 @@ export default function AdvancedAnalysisPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [useStreaming, setUseStreaming] = useState(true)
+  const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [accumulatedDescription, setAccumulatedDescription] = useState('')
 
@@ -49,6 +50,7 @@ export default function AdvancedAnalysisPage() {
     if (targetStage === 'description') {
       setResult('')
       setAccumulatedDescription('')
+      setCurrentCost(0)
     }
     setError(null)
 
@@ -89,6 +91,17 @@ export default function AdvancedAnalysisPage() {
           } else {
             setResult(accumulatedDescription + "\n\n---\n\n" + accumulatedText)
           }
+        },
+        onUsage: (usage) => {
+          console.log('📊 [ADVANCED STREAMING] Получена точная стоимость:', usage.total_cost)
+          setCurrentCost(prev => prev + usage.total_cost)
+          
+          logUsage({
+            section: 'advanced',
+            model: usage.model || modelToUse,
+            inputTokens: usage.prompt_tokens,
+            outputTokens: usage.completion_tokens,
+          })
         },
         onComplete: (finalText) => {
           if (targetStage === 'description') {
@@ -176,7 +189,13 @@ export default function AdvancedAnalysisPage() {
 
       {error && <div className="bg-red-100 text-red-700 px-4 py-3 rounded mb-6">❌ {error}</div>}
 
-      <AnalysisResult result={result} loading={loading} model={modelInfo.model} mode={modelInfo.mode} />
+      <AnalysisResult 
+        result={result} 
+        loading={loading} 
+        model={modelInfo.model} 
+        mode={modelInfo.mode} 
+        cost={currentCost}
+      />
     </div>
   )
 }

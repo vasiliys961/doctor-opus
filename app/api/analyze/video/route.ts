@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeVideoTwoStage } from '@/lib/video';
+import { calculateCost } from '@/lib/cost-calculator';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
@@ -15,17 +16,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
-        { status: 401 }
-      );
-    }
-    */
-
+    // ... (код проверки API ключа и файла остается прежним)
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       console.error('OPENROUTER_API_KEY не найден в переменных окружения');
@@ -96,7 +87,7 @@ export async function POST(request: NextRequest) {
       imageType,
     });
 
-    const { description, analysis } = await analyzeVideoTwoStage({
+    const { description, analysis, usage } = await analyzeVideoTwoStage({
       prompt: prompt || undefined,
       videoBase64,
       mimeType,
@@ -104,10 +95,21 @@ export async function POST(request: NextRequest) {
       metadata: Object.keys(metadata).length ? metadata : undefined,
     });
 
+    // Рассчитываем стоимость
+    let cost = 0;
+    const model = 'google/gemini-3-flash-preview';
+    if (usage) {
+      const costInfo = calculateCost(usage.prompt_tokens, usage.completion_tokens, model);
+      cost = costInfo.totalCostUnits;
+    }
+
     return NextResponse.json({
       success: true,
       description,
       analysis,
+      cost,
+      usage,
+      model,
     });
   } catch (error: any) {
     console.error('❌ [VIDEO API] Ошибка анализа видео:', error);

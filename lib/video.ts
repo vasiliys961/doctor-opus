@@ -32,6 +32,11 @@ export interface AnalyzeVideoOptions {
 export interface AnalyzeVideoResult {
   description: string;
   analysis: string | null;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
 }
 
 /**
@@ -49,6 +54,9 @@ export async function analyzeVideoTwoStage(
 
   const mimeType = options.mimeType || 'video/mp4';
   const imageType = options.imageType || 'universal';
+
+  let totalPromptTokens = 0;
+  let totalCompletionTokens = 0;
 
   // === ЭТАП 1. Gemini 3.0 Flash — описание видео ===
   // Используем специализированный промпт для описания
@@ -77,7 +85,7 @@ export async function analyzeVideoTwoStage(
         content: descriptionContent,
       },
     ],
-    max_tokens: 4000,
+    max_tokens: 16000,
     temperature: 0.1,
   };
 
@@ -100,6 +108,12 @@ export async function analyzeVideoTwoStage(
   const descriptionData = await descriptionResponse.json();
   const description = descriptionData?.choices?.[0]?.message?.content || 'Не удалось получить описание.';
 
+  // Суммируем токены первого этапа
+  if (descriptionData?.usage) {
+    totalPromptTokens += descriptionData.usage.prompt_tokens || 0;
+    totalCompletionTokens += descriptionData.usage.completion_tokens || 0;
+  }
+
   // === ЭТАП 2. Gemini 3.0 Flash — клиническая директива ===
   // Используем личность Профессора
   const analysisPrompt = getDirectivePrompt(imageType, options.prompt);
@@ -116,7 +130,7 @@ export async function analyzeVideoTwoStage(
         content: `На основе этого детального описания видео-исследования подготовь финальное заключение:\n\n${description}\n\n${analysisPrompt}`
       },
     ],
-    max_tokens: 4000,
+    max_tokens: 16000,
     temperature: 0.2,
   };
 
@@ -139,9 +153,20 @@ export async function analyzeVideoTwoStage(
   const analysisData = await analysisResponse.json();
   const analysis = analysisData?.choices?.[0]?.message?.content || 'Не удалось получить заключение.';
 
+  // Суммируем токены второго этапа
+  if (analysisData?.usage) {
+    totalPromptTokens += analysisData.usage.prompt_tokens || 0;
+    totalCompletionTokens += analysisData.usage.completion_tokens || 0;
+  }
+
   return {
     description,
     analysis,
+    usage: {
+      prompt_tokens: totalPromptTokens,
+      completion_tokens: totalCompletionTokens,
+      total_tokens: totalPromptTokens + totalCompletionTokens
+    }
   };
 }
 

@@ -13,6 +13,10 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'perplexity/sonar': { input: 1.0, output: 1.0 },
 };
 
+// Цена за 1 минуту аудио транскрипции в условных единицах (у.е.)
+// 1 у.е. за минуту — это примерно $0.01 (при PRICE_MULTIPLIER = 100)
+export const AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE = 1.0;
+
 // Множитель для перевода в условные единицы (USD * 100)
 const PRICE_MULTIPLIER = 100;
 

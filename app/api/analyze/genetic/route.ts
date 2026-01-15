@@ -122,7 +122,7 @@ APOE;rs429358;CC;высокий риск болезни Альцгеймера`;
               ],
             },
           ],
-          max_tokens: 4000,
+          max_tokens: 16000,
           temperature: 0.1,
         };
 
@@ -225,7 +225,7 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
             ],
           },
         ],
-        max_tokens: 1500,
+        max_tokens: 15000,
         temperature: 0.1,
       };
 

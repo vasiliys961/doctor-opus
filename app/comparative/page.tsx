@@ -29,6 +29,7 @@ export default function ComparativeAnalysisPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [useStreaming, setUseStreaming] = useState(true)
+  const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [accumulatedDescription, setAccumulatedDescription] = useState('')
 
@@ -68,6 +69,7 @@ export default function ComparativeAnalysisPage() {
     if (targetStage === 'description') {
       setResult('')
       setAccumulatedDescription('')
+      setCurrentCost(0)
     }
     setError(null)
 
@@ -119,6 +121,17 @@ export default function ComparativeAnalysisPage() {
           } else {
             setResult(accumulatedDescription + "\n\n---\n\n" + accumulatedText)
           }
+        },
+        onUsage: (usage) => {
+          console.log('📊 [COMPARATIVE STREAMING] Получена точная стоимость:', usage.total_cost)
+          setCurrentCost(prev => prev + usage.total_cost)
+          
+          logUsage({
+            section: 'comparative',
+            model: usage.model || modelToUse,
+            inputTokens: usage.prompt_tokens,
+            outputTokens: usage.completion_tokens,
+          })
         },
         onComplete: (finalText) => {
           if (targetStage === 'description') {
@@ -268,6 +281,7 @@ export default function ComparativeAnalysisPage() {
         loading={loading} 
         model={modelInfo.model} 
         mode={modelInfo.mode || 'comparative'} 
+        cost={currentCost}
       />
     </div>
   )

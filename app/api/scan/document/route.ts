@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { calculateCost } from '@/lib/cost-calculator';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Модели для сканирования документов (Gemini Flash, Haiku или Llama)
 const DOCUMENT_SCAN_MODELS = [
+  'google/gemini-3-flash-preview',           // Gemini 3 Flash — дешево и качественно для OCR
   'anthropic/claude-haiku-4.5',              // Haiku 4.5 — быстрое сканирование документов
   'meta-llama/llama-3.2-90b-vision-instruct', // Llama 3.2 90B — резерв для документов
-  'google/gemini-3-flash-preview',           // Gemini 3 Flash — дешево и качественно для OCR
 ];
 
 /**
@@ -83,7 +84,7 @@ ${prompt}`;
               ]
             }
           ],
-          max_tokens: 8000,
+          max_tokens: 16000,
           temperature: 0.1 // Низкая температура для точного копирования текста
         };
 
@@ -101,11 +102,18 @@ ${prompt}`;
         if (response.ok) {
           const data = await response.json();
           const result = data.choices[0].message.content || '';
+          const usage = data.usage || { prompt_tokens: 0, completion_tokens: 0 };
+          
+          // Рассчитываем стоимость
+          const costInfo = calculateCost(usage.prompt_tokens, usage.completion_tokens, model);
+          
           console.log(`✅ [DOCUMENT SCAN] Успешно использована модель: ${model}`);
           return NextResponse.json({
             success: true,
             result: result,
-            model: model
+            model: model,
+            usage: usage,
+            cost: costInfo.totalCostUnits
           });
         } else if (response.status === 404) {
           console.warn(`⚠️ [DOCUMENT SCAN] Модель ${model} недоступна, пробую следующую...`);

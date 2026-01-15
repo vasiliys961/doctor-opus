@@ -803,6 +803,7 @@ export default function GeneticPage() {
         result={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
         loading={loading && !extractedData} 
         model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-sonnet-4.5')}
+        mode="genetic"
         cost={totalCost}
       />
 

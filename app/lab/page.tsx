@@ -33,6 +33,7 @@ export default function LabPage() {
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
+  const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
 
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
     if (!window.pdfjsLib) {
@@ -117,6 +118,7 @@ export default function LabPage() {
     setError(null)
     setLoading(true)
     setCurrentCost(0)
+    setModelInfo({ model: '', mode: '' })
 
     try {
       // Если это PDF - конвертируем в изображения на клиенте
@@ -159,9 +161,12 @@ export default function LabPage() {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5')
+              setModelInfo({ model: usedModel, mode: mode })
+              
               logUsage({
                 section: 'lab',
-                model: usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5'),
+                model: usedModel,
                 inputTokens: usage.prompt_tokens,
                 outputTokens: usage.completion_tokens,
               })
@@ -178,16 +183,15 @@ export default function LabPage() {
           const data = await response.json()
           if (data.success) {
             setResult(data.result)
-            const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                            mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
-            
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5');
             setCurrentCost(data.cost || 1.0);
+            setModelInfo({ model: usedModel, mode: mode });
 
             logUsage({
               section: 'lab',
-              model: modelUsed,
-              inputTokens: inputTokens,
-              outputTokens: outputTokens,
+              model: usedModel,
+              inputTokens: 2000,
+              outputTokens: 1000,
             })
           } else {
             setError(data.error || 'Ошибка при анализе')
@@ -220,9 +224,12 @@ export default function LabPage() {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5')
+              setModelInfo({ model: usedModel, mode: mode })
+              
               logUsage({
                 section: 'lab',
-                model: usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5'),
+                model: usedModel,
                 inputTokens: usage.prompt_tokens,
                 outputTokens: usage.completion_tokens,
               })
@@ -239,16 +246,15 @@ export default function LabPage() {
           const data = await response.json()
           if (data.success) {
             setResult(data.result)
-            const modelUsed = mode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                            mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
-            
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5');
             setCurrentCost(data.cost || 1.0);
+            setModelInfo({ model: usedModel, mode: mode });
 
             logUsage({
               section: 'lab',
-              model: modelUsed,
-              inputTokens: inputTokens,
-              outputTokens: outputTokens,
+              model: usedModel,
+              inputTokens: 2000,
+              outputTokens: 1000,
             })
           } else {
             setError(data.error || 'Ошибка при анализе')
@@ -397,7 +403,13 @@ export default function LabPage() {
           </div>
         )}
 
-        <AnalysisResult result={result} loading={loading} cost={currentCost} />
+        <AnalysisResult 
+          result={result} 
+          loading={loading} 
+          model={modelInfo.model}
+          mode={modelInfo.mode || mode}
+          cost={currentCost} 
+        />
 
         {result && !loading && (
           <FeedbackForm 

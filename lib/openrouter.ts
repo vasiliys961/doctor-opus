@@ -211,9 +211,8 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   const payload = {
     model,
     messages,
-    max_tokens: options.maxTokens || 4000, // Максимальный лимит для длинных отчетов
+    max_tokens: options.maxTokens || 16000, // Максимальный лимит для длинных отчетов
     temperature: 0.1,
-    stop: ["Defined by", "defined by"]
   };
 
   try {
@@ -341,9 +340,8 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       body: JSON.stringify({
         model: textModel,
         messages: messages,
-        max_tokens: 4000,
+        max_tokens: 16000,
         temperature: 0.1,
-        stop: ["Defined by", "defined by"]
       })
     });
 
@@ -362,11 +360,9 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
 }
 
 /**
- * Оптимизированный анализ (Gemini JSON → Sonnet)
+ * Оптимизированный анализ (Gemini JSON → Основная модель)
  * Этап 1: Gemini извлекает структурированные данные (JSON)
- * Этап 2: Sonnet формирует детальную клиническую директиву на основе JSON
- * 
- * Преимущество: Gemini лучше видит детали на снимках, Sonnet лучше интерпретирует
+ * Этап 2: Выбранная модель формирует детальную клиническую директиву на основе JSON
  */
 export async function analyzeImageOpusTwoStage(options: { 
   prompt: string; 
@@ -374,7 +370,7 @@ export async function analyzeImageOpusTwoStage(options: {
   imageType?: ImageType;
   specialty?: Specialty;
   clinicalContext?: string;
-  targetModel?: string; // Добавляем возможность выбора модели (Sonnet или Opus)
+  targetModel?: string; 
 }): Promise<string> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -391,57 +387,35 @@ export async function analyzeImageOpusTwoStage(options: {
     console.log(`🚀 [TWO-STAGE] Шаг 1: Извлечение JSON через Gemini Flash...`);
     
     // Шаг 1: Извлекаем JSON через Gemini
-    const jsonExtraction = await extractImageJSON({
+    const extractionResult = await extractImageJSON({
       imageBase64: options.imageBase64,
       modality: imageType,
       specialty: specialty
     });
+    const jsonExtraction = extractionResult.data;
+    const initialUsage = extractionResult.usage;
     
     console.log('✅ [TWO-STAGE] JSON извлечен');
     
-    // Получаем специализированные промпты
-    const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionCriteria = getObjectiveDescriptionPrompt(imageType);
+    const { getDirectivePrompt } = await import('./prompts');
     const directiveCriteria = getDirectivePrompt(imageType, prompt, specialty);
     
-    // Шаг 2: Целевая модель анализирует JSON (БЕЗ ИЗОБРАЖЕНИЯ для экономии токенов)
-    // Используем Sonnet 4.5 по умолчанию для оптимизированного режима
+    // Шаг 2: Целевая модель (Opus, Sonnet или GPT-5.2)
     const textModel = options.targetModel || MODELS.SONNET;
     
-    const contextPrompt = `Ты — Профессор медицины. Проведи глубокую клиническую интерпретацию данных, полученных от узкого специалиста (Vision-модель Gemini). 
+    const mainPrompt = `ИНСТРУКЦИЯ: ${directiveCriteria}
 
-### ДАННЫЕ ОТ СПЕЦИАЛИСТА (JSON):
+### ТЕХНИЧЕСКИЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЯ (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-### ТВОЯ ЗАДАЧА КАК ПРОФЕССОРА:
-1. Изучи технические параметры и находки в JSON.
-2. Сформируй клиническую директиву, опираясь на эти объективные данные.
-3. ${descriptionCriteria}
+${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ (ОПИСАНИЕ И ДИРЕКТИВУ).`;
 
-### ИНСТРУКЦИЯ К КЛИНИЧЕСКОЙ ДИРЕКТИВЕ:
-${directiveCriteria}
-${options.clinicalContext ? `\nКонтекст пациента: ${options.clinicalContext}` : ''}`;
-    
-    const textMessages = [
-      {
-        role: 'system' as const,
-        content: SYSTEM_PROMPT
-      },
-      {
-        role: 'user' as const,
-        content: contextPrompt
-      }
+    const messages = [
+      { role: 'system' as const, content: SYSTEM_PROMPT },
+      { role: 'user' as const, content: mainPrompt }
     ];
 
-    const textPayload = {
-      model: textModel,
-      messages: textMessages,
-      max_tokens: 4000,
-      temperature: 0.1,
-      stop: ["Defined by", "defined by"]
-    };
-
-    console.log(`🚀 [ECONOMY TWO-STAGE] Шаг 2: ${textModel} анализирует только ТЕКСТ (JSON)...`);
+    console.log(`🚀 [TWO-STAGE] Шаг 2: ${textModel} анализирует данные (JSON)...`);
     
     const textResponse = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
@@ -451,7 +425,12 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
         'HTTP-Referer': 'https://doctor-opus.ru',
         'X-Title': 'Doctor Opus'
       },
-      body: JSON.stringify(textPayload)
+      body: JSON.stringify({
+        model: textModel,
+        messages: messages,
+        max_tokens: 16000,
+        temperature: 0.1,
+      })
     });
 
     if (!textResponse.ok) {
@@ -462,33 +441,24 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
     const textData = await textResponse.json();
     const result = textData.choices[0].message.content || '';
     
-    // Логирование токенов и стоимости для шага 2
+    // Логирование токенов и стоимости (Gemini + Основная модель)
     const textTokensUsed = textData.usage?.total_tokens || 0;
-    const textInputTokens = textData.usage?.prompt_tokens || Math.floor(textTokensUsed / 2);
-    const textOutputTokens = textData.usage?.completion_tokens || Math.floor(textTokensUsed / 2);
+    const textInputTokens = textData.usage?.prompt_tokens || 0;
+    const textOutputTokens = textData.usage?.completion_tokens || 0;
+
+    const totalInput = textInputTokens + (initialUsage?.prompt_tokens || 0);
+    const totalOutput = textOutputTokens + (initialUsage?.completion_tokens || 0);
+    const totalTokens = textTokensUsed + (initialUsage?.total_tokens || 0);
     
-    console.log('✅ [OPTIMIZED] Шаг 2 завершен, длина результата:', result.length);
-    if (textTokensUsed > 0) {
-      console.log(`   📊 ${formatCostLog(textModel, textInputTokens, textOutputTokens, textTokensUsed)}`);
+    console.log('✅ [TWO-STAGE] Анализ завершен');
+    if (totalTokens > 0) {
+      console.log(`   📊 ИТОГО: ${formatCostLog(textModel, totalInput, totalOutput, totalTokens)}`);
     }
     
     return result;
   } catch (error: any) {
-    console.error('Error in analyzeImageOpusTwoStage:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack?.substring(0, 500)
-    });
-    
-    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      throw new Error('Превышено время ожидания ответа от OpenRouter API. Попробуйте позже.');
-    }
-    
-    if (error.message.includes('fetch failed') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
-      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки Vercel.');
-    }
-    
-    throw new Error(`Ошибка оптимизированного анализа: ${error.message}`);
+    console.error('Error in analyzeImageOpusTwoStage:', error);
+    throw new Error(`Ошибка анализа: ${error.message}`);
   }
 }
 
@@ -554,19 +524,18 @@ export async function extractImageJSON(options: {
         messages: [
           { role: 'user', content: content }
         ],
-        max_tokens: 4000,
+        max_tokens: 16000,
         temperature: 0.1,
-        stop: ["Defined by", "defined by"]
       };
 
-      const response = await fetch(OPENROUTER_API_URL, {
+      const response = await fetchWithTimeout(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
-      });
+      }, 60000); // Таймаут 60 сек на извлечение JSON
 
       if (response.ok) {
         const resultData = await response.json();
@@ -644,31 +613,28 @@ export async function analyzeMultipleImagesTwoStage(options: {
   
   try {
     console.log(`🚀 [MULTI-TWO-STAGE] Шаг 1: Извлечение JSON...`);
-    const jsonExtraction = await extractImageJSON({
+    const extractionResult = await extractImageJSON({
       imagesBase64: options.imagesBase64,
       modality: imageType,
       specialty: specialty
     });
+    const jsonExtraction = extractionResult.data;
+    const initialUsage = extractionResult.usage;
     
-    const { getObjectiveDescriptionPrompt, getDirectivePrompt } = await import('./prompts');
-    const descriptionCriteria = getObjectiveDescriptionPrompt(imageType, specialty);
+    const { getDirectivePrompt } = await import('./prompts');
     const directiveCriteria = getDirectivePrompt(imageType, options.prompt, specialty);
     
     const textModel = options.targetModel || MODELS.SONNET;
     
-    const contextPrompt = `Ты — Профессор медицины. Проведи сравнительную клиническую интерпретацию данных по НЕСКОЛЬКИМ изображениям, полученных от Vision-модели.
+    const contextPrompt = `Ты — Профессор медицины. Проведи сравнительную клиническую интерпретацию данных по НЕСКОЛЬКИМ изображениям, полученных от Специалиста.
 
 ### ДАННЫЕ ОТ СПЕЦИАЛИСТА (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-### ТВОЯ ЗАДАЧА КАК ПРОФЕССОРА:
-1. Проанализируй динамику или различия между изображениями на основе JSON.
-2. Сформируй итоговую клиническую директиву.
-3. ${descriptionCriteria}
+${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ (ОПИСАНИЕ И ДИРЕКТИВУ).
 
-### ИНСТРУКЦИЯ К КЛИНИЧЕСКОЙ ДИРЕКТИВЕ:
-${directiveCriteria}
-${options.clinicalContext ? `\nКонтекст пациента: ${options.clinicalContext}` : ''}`;
+ИНСТРУКЦИЯ К КЛИНИЧЕСКОЙ ДИРЕКТИВЕ:
+${directiveCriteria}`;
     
     const textPayload = {
       model: textModel,
@@ -676,27 +642,41 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: contextPrompt }
       ],
-      max_tokens: 4000,
+      max_tokens: 16000,
       temperature: 0.1,
-      stop: ["Defined by", "defined by"]
     };
 
-    console.log(`🚀 [MULTI-ECONOMY] Шаг 2: ${textModel} анализирует только ТЕКСТ (JSON)...`);
-    const response = await fetch(OPENROUTER_API_URL, {
+    console.log(`🚀 [MULTI-TWO-STAGE] Шаг 2: ${textModel} анализирует данные (JSON)...`);
+    const textResponse = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify(textPayload)
     });
 
-    if (!response.ok) throw new Error(`OpenRouter error: ${response.status}`);
-    const data = await response.json();
-    return data.choices[0].message.content || '';
+    if (!textResponse.ok) throw new Error(`OpenRouter error: ${textResponse.status}`);
+    const textData = await textResponse.json();
+    const result = textData.choices[0].message.content || '';
+
+    // Логирование токенов и стоимости
+    const totalInput = (textData.usage?.prompt_tokens || 0) + (initialUsage?.prompt_tokens || 0);
+    const totalOutput = (textData.usage?.completion_tokens || 0) + (initialUsage?.completion_tokens || 0);
+    const totalTokens = totalInput + totalOutput;
+
+    console.log('✅ [MULTI-TWO-STAGE] Анализ завершен');
+    if (totalTokens > 0) {
+      console.log(`   📊 ИТОГО: ${formatCostLog(textModel, totalInput, totalOutput, totalTokens)}`);
+    }
+
+    return result;
     
   } catch (error: any) {
-    throw new Error(`Ошибка многошагового анализа: ${error.message}`);
+    console.error('Error in analyzeMultipleImagesTwoStage:', error);
+    throw new Error(`Ошибка сравнительного анализа: ${error.message}`);
   }
 }
 
@@ -772,9 +752,8 @@ export async function analyzeMultipleImages(options: {
   const payload = {
     model,
     messages,
-    max_tokens: options.maxTokens || 4000, // Увеличиваем для сравнительного анализа
+    max_tokens: options.maxTokens || 16000, // Увеличиваем для сравнительного анализа
     temperature: 0.1,
-    stop: ["Defined by", "defined by"]
   };
 
   try {
@@ -885,9 +864,8 @@ export async function sendTextRequest(
   const payload = {
     model: selectedModel,
     messages,
-    max_tokens: 4000, // Максимальный лимит для сравнительного анализа
+    max_tokens: 16000, // Максимальный лимит для сравнительного анализа
     temperature: 0.1,
-    stop: ["Defined by", "defined by"]
   };
 
   try {

@@ -23,6 +23,7 @@ export default function MRIPage() {
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
+  const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -33,6 +34,8 @@ export default function MRIPage() {
     setResult('')
     setError(null)
     setLoading(true)
+    setCurrentCost(0)
+    setModelInfo({ model: '', mode: '' })
 
     try {
       const formData = new FormData()
@@ -81,9 +84,12 @@ export default function MRIPage() {
             console.log('📊 [MRI STREAMING] Получена точная стоимость:', usage.total_cost)
             setCurrentCost(usage.total_cost)
             
+            const usedModel = usage.model || modelUsed
+            setModelInfo({ model: usedModel, mode: analysisMode })
+            
             logUsage({
               section: 'mri',
-              model: usage.model || modelUsed,
+              model: usedModel,
               inputTokens: usage.prompt_tokens,
               outputTokens: usage.completion_tokens,
             })
@@ -107,10 +113,13 @@ export default function MRIPage() {
 
         if (data.success) {
           setResult(data.result)
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5');
           setCurrentCost(data.cost || 1.5)
+          setModelInfo({ model: modelUsed, mode: analysisMode });
+          
           logUsage({
             section: 'mri',
-            model: data.model || 'anthropic/claude-opus-4.5',
+            model: modelUsed,
             inputTokens: 2000,
             outputTokens: 1500,
           })
@@ -252,7 +261,14 @@ export default function MRIPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} mode={mode} imageType="mri" cost={currentCost} />
+      <AnalysisResult 
+        result={result} 
+        loading={loading} 
+        mode={modelInfo.mode || mode} 
+        model={modelInfo.model}
+        imageType="mri" 
+        cost={currentCost} 
+      />
 
       {result && !loading && (
         <FeedbackForm 

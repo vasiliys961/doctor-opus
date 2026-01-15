@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 
 interface AudioUploadProps {
-  onTranscribe: (transcript: string) => void
+  onTranscribe: (transcript: string, data?: { duration: number; cost: number }) => void
   accept?: string
   maxSize?: number // в MB
 }
@@ -14,6 +14,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
   const [transcribing, setTranscribing] = useState(false)
   const [recording, setRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
+  const [lastAnalysis, setLastAnalysis] = useState<{ duration: number; cost: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -71,7 +72,8 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
 
       if (data.success) {
         console.log('✅ Транскрипция успешна')
-        onTranscribe(data.transcript)
+        setLastAnalysis({ duration: data.duration, cost: data.cost })
+        onTranscribe(data.transcript, { duration: data.duration, cost: data.cost })
       } else {
         console.error('❌ Ошибка транскрипции:', data.error)
         setError(data.error || 'Ошибка транскрипции')
@@ -273,6 +275,21 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
       {error && (
         <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
           ❌ {error}
+        </div>
+      )}
+      
+      {lastAnalysis && !transcribing && !recording && (
+        <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg flex items-center justify-between text-sm">
+          <div className="flex items-center gap-4">
+            <span>⏱️ Длительность: <b>{formatTime(Math.round(lastAnalysis.duration))}</b></span>
+            <span>💰 Стоимость: <b>{lastAnalysis.cost.toFixed(2)} у.е.</b></span>
+          </div>
+          <button 
+            onClick={() => setLastAnalysis(null)}
+            className="text-indigo-400 hover:text-indigo-600"
+          >
+            ✕
+          </button>
         </div>
       )}
     </div>

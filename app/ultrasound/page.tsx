@@ -23,6 +23,7 @@ export default function UltrasoundPage() {
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
+  const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -34,6 +35,7 @@ export default function UltrasoundPage() {
     setError(null)
     setLoading(true)
     setCurrentCost(0)
+    setModelInfo({ model: '', mode: '' })
 
     try {
       const formData = new FormData()
@@ -82,9 +84,12 @@ export default function UltrasoundPage() {
             console.log('📊 [ULTRASOUND STREAMING] Получена точная стоимость:', usage.total_cost)
             setCurrentCost(usage.total_cost)
             
+            const usedModel = usage.model || modelUsed
+            setModelInfo({ model: usedModel, mode: analysisMode })
+            
             logUsage({
               section: 'ultrasound',
-              model: usage.model || modelUsed,
+              model: usedModel,
               inputTokens: usage.prompt_tokens,
               outputTokens: usage.completion_tokens,
             })
@@ -111,12 +116,13 @@ export default function UltrasoundPage() {
           
           const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5');
           setCurrentCost(data.cost || 1.0);
+          setModelInfo({ model: modelUsed, mode: analysisMode });
 
           logUsage({
             section: 'ultrasound',
             model: modelUsed,
-            inputTokens: inputTokens,
-            outputTokens: outputTokens,
+            inputTokens: 2000,
+            outputTokens: Math.ceil(data.result.length / 4),
           })
         } else {
           setError(data.error || 'Ошибка при анализе')
@@ -256,7 +262,14 @@ export default function UltrasoundPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} mode={mode} imageType="ultrasound" cost={currentCost} />
+      <AnalysisResult 
+        result={result} 
+        loading={loading} 
+        mode={modelInfo.mode || mode} 
+        model={modelInfo.model}
+        imageType="ultrasound" 
+        cost={currentCost} 
+      />
 
       {result && !loading && (
         <FeedbackForm 

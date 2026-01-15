@@ -18,7 +18,7 @@ interface TranscriptionConfig {
  * Транскрипция аудио через AssemblyAI
  * Использует ту же логику, что и Python assemblyai_transcriber.py
  */
-export async function transcribeAudio(audioData: ArrayBuffer, mimeType: string = 'audio/webm'): Promise<string> {
+export async function transcribeAudio(audioData: ArrayBuffer, mimeType: string = 'audio/webm'): Promise<{ text: string, duration: number }> {
   const apiKey = process.env.ASSEMBLYAI_API_KEY;
   
   if (!apiKey) {
@@ -127,15 +127,22 @@ export async function transcribeAudio(audioData: ArrayBuffer, mimeType: string =
     }
 
     const resultData = await resultResponse.json();
+    const durationInSeconds = resultData.audio_duration || 0;
     
     // Форматируем результат с разделением по говорящим (если есть)
+    let transcriptText = '';
     if (resultData.utterances && resultData.utterances.length > 0) {
-      return resultData.utterances
+      transcriptText = resultData.utterances
         .map((u: any) => `Говорящий ${u.speaker}: ${u.text}`)
         .join('\n\n');
+    } else {
+      transcriptText = resultData.text || '';
     }
 
-    return resultData.text || '';
+    return {
+      text: transcriptText,
+      duration: durationInSeconds
+    };
   } catch (error: any) {
     console.error('Error transcribing audio:', error);
     

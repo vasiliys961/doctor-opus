@@ -210,7 +210,7 @@ export async function POST(request: NextRequest) {
     const payload: any = {
       model: consultModel,
       messages: messages,
-      max_tokens: 6000,
+      max_tokens: 16000,
       temperature: 0.25,
       stream: useStreaming,
       stream_options: useStreaming ? { include_usage: true } : undefined,

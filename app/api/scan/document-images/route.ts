@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { calculateCost } from '@/lib/cost-calculator';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Модели для сканирования документов (Haiku или Llama)
+// Модели для сканирования документов (Gemini Flash, Haiku или Llama)
 const DOCUMENT_SCAN_MODELS = [
+  'google/gemini-3-flash-preview',           // Gemini 3 Flash — дешево и качественно для OCR
   'anthropic/claude-haiku-4.5',              // Haiku 4.5 — быстрое сканирование документов
   'meta-llama/llama-3.2-90b-vision-instruct', // Llama 3.2 90B — резерв для документов
 ];
@@ -35,6 +37,10 @@ export async function POST(request: NextRequest) {
     console.log(`📄 [DOC IMAGES] Получено ${images.length} изображений для сканирования`);
 
     const results: string[] = [];
+    let totalPromptTokens = 0;
+    let totalCompletionTokens = 0;
+    let totalCost = 0;
+    let lastModelUsed = '';
 
     // Сканируем каждое изображение (страницу PDF)
     for (let i = 0; i < images.length; i++) {
@@ -94,7 +100,7 @@ ${pagePrompt}`;
                 ]
               }
             ],
-            max_tokens: 8000,
+            max_tokens: 16000,
             temperature: 0.1 // Низкая температура для точного копирования текста
           };
 
@@ -113,6 +119,15 @@ ${pagePrompt}`;
             const data = await response.json();
             pageResult = data.choices[0].message.content || '';
             modelUsed = model;
+            lastModelUsed = model;
+            
+            if (data.usage) {
+              totalPromptTokens += data.usage.prompt_tokens || 0;
+              totalCompletionTokens += data.usage.completion_tokens || 0;
+              const costInfo = calculateCost(data.usage.prompt_tokens, data.usage.completion_tokens, model);
+              totalCost += costInfo.totalCostUnits;
+            }
+            
             console.log(`✅ [DOC IMAGES] Страница ${i + 1} отсканирована через ${model}`);
             break; // Успешно, выходим из цикла моделей
           } else if (response.status === 404) {
@@ -153,6 +168,13 @@ ${pagePrompt}`;
     return NextResponse.json({
       success: true,
       result: finalResult,
+      cost: totalCost,
+      usage: {
+        prompt_tokens: totalPromptTokens,
+        completion_tokens: totalCompletionTokens,
+        total_tokens: totalPromptTokens + totalCompletionTokens
+      },
+      model: lastModelUsed
     });
   } catch (error: any) {
     console.error('❌ [DOC IMAGES] Общая ошибка:', error);

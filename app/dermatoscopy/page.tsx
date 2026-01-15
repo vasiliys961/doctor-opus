@@ -22,6 +22,7 @@ export default function DermatoscopyPage() {
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
+  const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -33,6 +34,7 @@ export default function DermatoscopyPage() {
     setError(null)
     setLoading(true)
     setCurrentCost(0)
+    setModelInfo({ model: '', mode: '' })
 
     try {
       const formData = new FormData()
@@ -81,9 +83,12 @@ export default function DermatoscopyPage() {
             console.log('📊 [DERMATOSCOPY STREAMING] Получена точная стоимость:', usage.total_cost)
             setCurrentCost(usage.total_cost)
             
+            const usedModel = usage.model || modelUsed
+            setModelInfo({ model: usedModel, mode: analysisMode })
+            
             logUsage({
               section: 'dermatoscopy',
-              model: usage.model || modelUsed,
+              model: usedModel,
               inputTokens: usage.prompt_tokens,
               outputTokens: usage.completion_tokens,
             })
@@ -113,6 +118,7 @@ export default function DermatoscopyPage() {
           const outputTokens = Math.ceil(data.result.length / 4);
           const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
           setCurrentCost(costInfo.totalCostUnits);
+          setModelInfo({ model: modelUsed, mode: analysisMode });
 
           logUsage({
             section: 'dermatoscopy',
@@ -252,7 +258,14 @@ export default function DermatoscopyPage() {
         </div>
       )}
 
-      <AnalysisResult result={result} loading={loading} mode={mode} imageType="dermatoscopy" cost={currentCost} />
+      <AnalysisResult 
+        result={result} 
+        loading={loading} 
+        mode={modelInfo.mode || mode} 
+        model={modelInfo.model}
+        imageType="dermatoscopy" 
+        cost={currentCost} 
+      />
 
       {result && !loading && (
         <FeedbackForm 
