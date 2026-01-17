@@ -5,7 +5,7 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /**
  * API endpoint для поиска актуальных клинических рекомендаций
- * Использует Claude Haiku 4.5 через OpenRouter
+ * Использует Gemini 3.0 Flash через OpenRouter
  * Основан на международных и российских клинических рекомендациях
  */
 export async function POST(request: NextRequest) {
@@ -65,15 +65,15 @@ ${specialty ? `Специальность: ${specialty}` : ''}
 - Фокус на универсальных, объединенных рекомендациях
 - Минимум сравнений российских и международных стандартов`;
 
-    // Выбор модели в зависимости от режима: standard (Haiku), detailed (Sonnet) или online (Perplexity)
-    let MODEL = 'anthropic/claude-haiku-4.5';
+    // Выбор модели в зависимости от режима: standard (Gemini), detailed (GPT-5.2) или online (Perplexity)
+    let MODEL = 'google/gemini-3-flash-preview';
     let MAX_TOKENS = 16000;
 
     if (modelMode === 'online') {
       MODEL = 'perplexity/sonar';
       MAX_TOKENS = 4000;
     } else if (modelMode === 'detailed') {
-      MODEL = 'anthropic/claude-sonnet-4.5';
+      MODEL = 'openai/gpt-5.2-chat';
       MAX_TOKENS = 20000;
     }
     
@@ -287,8 +287,8 @@ ${specialty ? `Специальность: ${specialty}` : ''}
       content: content,
       tokensUsed: tokensUsed,
       model: modelMode === 'online' ? 'Perplexity Sonar (Online Search)' : 
-             modelMode === 'detailed' ? 'Claude Sonnet 4.5 (Detailed)' : 
-             'Claude Haiku 4.5 (Standard)'
+             modelMode === 'detailed' ? 'GPT-5.2 (Detailed)' : 
+             'Gemini 3.0 Flash (Standard)'
     });
 
   } catch (error: any) {
