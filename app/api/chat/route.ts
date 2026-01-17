@@ -34,12 +34,14 @@ export async function POST(request: NextRequest) {
     let model: string | undefined;
     let files: File[] = [];
     let specialty: string | undefined;
+    let systemPrompt: string | undefined;
 
     // Проверяем, является ли запрос FormData (с файлами) или JSON
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
       message = anonymizeText((formData.get('message') as string) || '');
       specialty = formData.get('specialty') as string | undefined;
+      systemPrompt = formData.get('systemPrompt') as string | undefined;
       const historyStr = formData.get('history') as string;
       if (historyStr) {
         try {
@@ -56,11 +58,12 @@ export async function POST(request: NextRequest) {
       files = fileEntries.filter(f => f instanceof File && f.size > 0);
     } else {
       const body = await request.json();
-      message = anonymizeText(body.message || '');
+      message = anonymizeText(body.message || body.prompt || '');
       history = anonymizeObject(body.history || []);
-      useStreaming = body.useStreaming || false;
+      useStreaming = body.useStreaming !== undefined ? body.useStreaming : true; // Default to true for chat
       model = body.model;
       specialty = body.specialty;
+      systemPrompt = body.systemPrompt;
     }
 
     const selectedModel = (model === 'gpt52' || model === MODELS.GPT_5_2)
@@ -152,7 +155,7 @@ export async function POST(request: NextRequest) {
 
     // Если запрошен streaming без файлов, возвращаем поток
     if (useStreaming) {
-      const stream = await sendTextRequestStreaming(message, formattedHistory, selectedModel, specialty as any);
+      const stream = await sendTextRequestStreaming(message, formattedHistory, selectedModel, specialty as any, systemPrompt);
       return handleStreaming(stream);
     }
 

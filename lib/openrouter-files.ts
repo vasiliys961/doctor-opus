@@ -3,9 +3,9 @@
  * Расширяет функциональность openrouter.ts для работы с изображениями и документами
  */
 
-import { MODELS, SYSTEM_PROMPT } from './openrouter';
+import { MODELS } from './openrouter';
 import { calculateCost, formatCostLog } from './cost-calculator';
-import { Specialty, TITAN_CONTEXTS } from './prompts';
+import { Specialty, TITAN_CONTEXTS, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -100,9 +100,12 @@ export async function sendTextRequestWithFiles(
   // Подготавливаем контент с файлами
   const messageContent = await prepareMessageContent(prompt, files);
 
-  let systemPrompt = SYSTEM_PROMPT;
+  // Выбираем системный промпт: Всегда используем полный SYSTEM_PROMPT для глубины аналитики
+  const basePrompt = SYSTEM_PROMPT;
+  let systemPrompt = basePrompt;
+  
   if (specialty && TITAN_CONTEXTS[specialty]) {
-    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+    systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
   }
 
   const messages = [
@@ -196,9 +199,12 @@ export async function sendTextRequestStreamingWithFiles(
   // Подготавливаем контент с файлами
   const messageContent = await prepareMessageContent(prompt, files);
 
-  let systemPrompt = SYSTEM_PROMPT;
+  // Выбираем системный промпт: Всегда используем полный SYSTEM_PROMPT для глубины аналитики
+  const basePrompt = SYSTEM_PROMPT;
+  let systemPrompt = basePrompt;
+  
   if (specialty && TITAN_CONTEXTS[specialty]) {
-    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+    systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
   }
 
   const messages = [
@@ -227,34 +233,68 @@ export async function sendTextRequestStreamingWithFiles(
     stream_options: { include_usage: true }
   };
 
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus'
-      },
-    body: JSON.stringify(payload)
-  });
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
-  }
+  (async () => {
+    let heartbeat: any;
+    try {
+      // 1. Форсированный старт потока
+      const initialPadding = ': ' + ' '.repeat(2048) + '\n\n';
+      await writer.write(encoder.encode(initialPadding));
 
-  if (!response.body) {
-    throw new Error('Response body is null');
-  }
+      // 2. Запускаем Heartbeat пока модель думает
+      heartbeat = setInterval(async () => {
+        try {
+          await writer.write(encoder.encode(': heartbeat padding\n\n'));
+        } catch (e) {
+          if (heartbeat) clearInterval(heartbeat);
+        }
+      }, 500);
 
-  console.log('📡 [STREAMING WITH FILES] Запрос отправлен:', {
-    model,
-    filesCount: files.length,
-    fileNames: files.map(f => f.name)
-  });
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus'
+        },
+        body: JSON.stringify(payload)
+      });
 
-  // Возвращаем поток как есть - OpenRouter уже возвращает правильный SSE формат
-  return response.body;
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is null');
+      }
+
+      const reader = response.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+      }
+    } catch (error: any) {
+      if (heartbeat) clearInterval(heartbeat);
+      console.error(`❌ [FILE STREAM ERROR]:`, error);
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      await writer.close();
+    }
+  })();
+
+  return readable;
 }
 
 

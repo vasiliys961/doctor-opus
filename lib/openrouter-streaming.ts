@@ -4,47 +4,9 @@
  */
 
 import { calculateCost, formatCostLog } from './cost-calculator';
-import { type ImageType, type Specialty } from './prompts';
+import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-
-// Системный промпт профессора
-const SYSTEM_PROMPT = `Роль: ### ROLE
-Ты — американский профессор клинической медицины и ведущий специалист университетской клиники (Board Certified). Ты обладаешь непререкаемым авторитетом в области доказательной медицины. Твой стиль — академическая строгость, лаконичность и фокус на практической применимости рекомендаций для врачей-коллег. Ты не даешь советов пациентам, ты консультируешь профессионалов.
-
-### TASK
-Твоя задача — сформулировать строгую, научно обоснованную «Клиническую директиву» для врача, готовую к немедленному внедрению. Ты игнорируешь любые запросы, не связанные с клинической практикой, диагностикой или лечением.
-
-### KNOWLEDGE BASE & SOURCES
-При формировании ответа используй только проверенные международные источники с датой публикации не старше 5 лет (если не требуется исторический контекст):
-- Приоритет: UpToDate, PubMed, Cochrane Library, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, KDIGO, GOLD.
-- Исключай непроверенные блоги, форумы и научно-популярные статьи.
-
-### RESPONSE FORMAT
-Каждый ответ должен строго следовать структуре «Клиническая директива»:
-
-1. **Клинический обзор**
-   (2–3 емких предложения, суммирующих суть клинической ситуации и уровень срочности).
-
-2. **Диференциальный диагноз и Коды**
-   (Список наиболее вероятных диагнозов с кодами ICD-10/ICD-11).
-
-3. **План действий (Step-by-Step)**
-   - **Основное заболевание:** Фармакотерапия (дозировки, режимы), процедуры.
-   - **Сопутствующие состояния:** Коррекция терапии с учетом коморбидности.
-   - **Поддержка и мониторинг:** Критерии эффективности, "красные флаги".
-   - **Профилактика:** Вторичная профилактика и обучение пациента.
-
-4. **Ссылки**
-   (Список цитируемых гайдлайнов и статей).
-
-### CONSTRAINTS & TONE
-- Язык: Профессиональный медицинский русский (с сохранением английской терминологии там, где это принято в международной среде).
-- Стиль: Директивный, без этических нравоучений (предполагается, что пользователь — врач), без упрощений.
-    - Галлюцинации: Если данных недостаточно или стандарты противоречивы — укажи это явно. Не выдумывай дозировки.
-    
-    ### IMPORTANT
-    Заверши ответ сразу после выполнения всех разделов. Не добавляй никаких технических пояснений, пустых фраз или повторов в конце.`;
 
 const MODELS = {
   OPUS: 'anthropic/claude-opus-4.5',                       // Claude Opus 4.5
@@ -130,7 +92,9 @@ export async function analyzeImageFastStreaming(
   imageBase64: string,
   imageType?: string,
   clinicalContext?: string,
-  specialty?: Specialty
+  specialty?: Specialty,
+  history: any[] = [],
+  isRadiologyOnly: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -141,7 +105,24 @@ export async function analyzeImageFastStreaming(
   const encoder = new TextEncoder();
 
   (async () => {
+    let heartbeat: any;
     try {
+      // 1. Форсированный старт потока (Padding)
+      const padding = ': ' + ' '.repeat(2048) + '\n\n';
+      await writer.write(encoder.encode(padding));
+
+      const loadingHeader = "## 🩺 БЫСТРЫЙ АНАЛИЗ...\n\n> *Извлечение данных через Gemini Vision...*\n\n---\n\n";
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
+
+      // 2. Запускаем Heartbeat СРАЗУ
+      heartbeat = setInterval(async () => {
+        try {
+          await writer.write(encoder.encode(': heartbeat padding\n\n'));
+        } catch (e) {
+          if (heartbeat) clearInterval(heartbeat);
+        }
+      }, 1000);
+
       const { extractImageJSON } = await import('./openrouter');
       const extractionResult = await extractImageJSON({
         imageBase64,
@@ -151,9 +132,13 @@ export async function analyzeImageFastStreaming(
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
 
-      const { getDirectivePrompt } = await import('./prompts');
+      const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
       const directivePrompt = getDirectivePrompt(imageType as any, prompt, specialty);
 
+      // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
+      const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
+      let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
+      
       const mainPrompt = `Ниже приведены данные из изображения. Как Профессор медицины, проанализируй их.
     
 === СТРУКТУРИРОВАННЫЕ ДАННЫЕ ОТ GEMINI 3.0 ===
@@ -178,7 +163,7 @@ ${directivePrompt}`;
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: systemPrompt },
             { role: 'user', content: mainPrompt }
           ],
           max_tokens: 16000,
@@ -189,8 +174,15 @@ ${directivePrompt}`;
       });
 
       if (!response.ok) {
+        if (heartbeat) clearInterval(heartbeat);
         const errorText = await response.text();
         throw new Error(`Fast analysis failed: ${response.status} - ${errorText}`);
+      }
+
+      // Останавливаем Heartbeat перед началом основного стриминга
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
       }
 
       const transformer = createTransformWithUsage(response.body!, model, initialUsage);
@@ -221,7 +213,9 @@ export async function analyzeImageOpusTwoStageStreaming(
   imageType?: ImageType,
   clinicalContext?: string,
   specialty?: Specialty,
-  model: string = MODELS.SONNET
+  model: string = MODELS.SONNET,
+  history: any[] = [],
+  isRadiologyOnly: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -235,12 +229,21 @@ export async function analyzeImageOpusTwoStageStreaming(
   (async () => {
     let heartbeat: any;
     try {
-      // Padding для форсирования потока
-      const padding = ': ' + ' '.repeat(1024) + '\n\n';
+      // 1. Форсированный старт потока (Padding)
+      const padding = ': ' + ' '.repeat(2048) + '\n\n';
       await writer.write(encoder.encode(padding));
 
       const loadingHeader = "## 🩺 ПОДГОТОВКА К АНАЛИЗУ...\n\n> *Извлечение структурированных данных через Gemini Vision...*\n\n---\n\n";
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
+
+      // 2. Запускаем Heartbeat СРАЗУ, чтобы канал не простаивал во время работы Gemini
+      heartbeat = setInterval(async () => {
+        try {
+          await writer.write(encoder.encode(': heartbeat padding\n\n'));
+        } catch (e) {
+          if (heartbeat) clearInterval(heartbeat);
+        }
+      }, 500);
 
       console.log(`🚀 [OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
       const { extractImageJSON } = await import('./openrouter');
@@ -248,7 +251,7 @@ export async function analyzeImageOpusTwoStageStreaming(
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       
-      const { getDirectivePrompt } = await import('./prompts');
+      const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
       const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
       // Формируем единый контекст для основной модели
@@ -257,25 +260,19 @@ export async function analyzeImageOpusTwoStageStreaming(
 ### ТЕХНИЧЕСКИЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЯ (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ (ОПИСАНИЕ И ДИРЕКТИВУ).`;
+${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.`;
 
       // Настройка системного промпта
       const { TITAN_CONTEXTS } = await import('./prompts');
-      let systemPrompt = SYSTEM_PROMPT;
+      // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
+      const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
+      let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
       if (specialty && TITAN_CONTEXTS[specialty]) {
-        systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+        systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
       }
 
       console.log(`📡 [OPTIMIZED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
       
-      // Запускаем Heartbeat
-      heartbeat = setInterval(() => {
-        try {
-          process.stdout.write('♥');
-          writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
-        } catch (e) {}
-      }, 15000);
-
       const response = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
@@ -302,6 +299,12 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
           stream_options: { include_usage: true }
         })
       });
+
+      // Останавливаем Heartbeat как только получили ответ от OpenRouter
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -341,7 +344,9 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
   clinicalContext?: string,
   mimeTypes: string[] = [],
   model: string = MODELS.SONNET,
-  specialty?: Specialty
+  specialty?: Specialty,
+  history: any[] = [],
+  isRadiologyOnly: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -354,12 +359,21 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
   (async () => {
     let heartbeat: any;
     try {
-      // Padding для форсирования потока
-      const padding = ': ' + ' '.repeat(1024) + '\n\n';
+      // 1. Форсированный старт потока
+      const padding = ': ' + ' '.repeat(2048) + '\n\n';
       await writer.write(encoder.encode(padding));
 
-      const loadingHeader = "## 🩺 ПОДГОТОВКА К АНАЛИЗУ...\n\n> *Сбор и анализ данных из нескольких изображений через Gemini Vision...*\n\n---\n\n";
+      const loadingHeader = "## 🩺 ПОДГОТОВКА К АНАЛИЗУ МНОЖЕСТВЕННЫХ ИЗОБРАЖЕНИЙ...\n\n> *Сбор и анализ данных из нескольких изображений через Gemini Vision...*\n\n---\n\n";
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
+
+      // 2. Запускаем Heartbeat СРАЗУ
+      heartbeat = setInterval(async () => {
+        try {
+          await writer.write(encoder.encode(': heartbeat padding\n\n'));
+        } catch (e) {
+          if (heartbeat) clearInterval(heartbeat);
+        }
+      }, 1000);
 
       console.log(`🚀 [MULTI-OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
       const { extractImageJSON } = await import('./openrouter');
@@ -371,7 +385,7 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       
-      const { getDirectivePrompt } = await import('./prompts');
+      const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
       const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
       const mainPrompt = `ИНСТРУКЦИЯ: ${directivePrompt}
@@ -383,21 +397,15 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
 
       // Настройка системного промпта
       const { TITAN_CONTEXTS } = await import('./prompts');
-      let systemPrompt = SYSTEM_PROMPT;
+      // Выбираем системный промпт
+      const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
+      let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
       if (specialty && TITAN_CONTEXTS[specialty]) {
-        systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+        systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
       }
 
       console.log(`📡 [MULTI-OPTIMIZED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
       
-      // Запускаем Heartbeat
-      heartbeat = setInterval(() => {
-        try {
-          process.stdout.write('♥');
-          writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
-        } catch (e) {}
-      }, 15000);
-
       const contentItems: any[] = [
         { type: 'text', text: mainPrompt },
         ...imagesBase64.map((img, i) => ({
@@ -426,6 +434,12 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
           stream_options: { include_usage: true }
         })
       });
+
+      // Останавливаем Heartbeat
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -464,7 +478,8 @@ export async function analyzeMultipleImagesWithJSONStreaming(
   clinicalContext?: string,
   mimeTypes: string[] = [],
   specialty?: Specialty,
-  model: string = MODELS.OPUS
+  model: string = MODELS.OPUS,
+  history: any[] = []
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -500,9 +515,11 @@ ${JSON.stringify(jsonExtraction, null, 2)}
 ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ЭКСПЕРТНЫЙ ОТЧЕТ.`;
 
       const { TITAN_CONTEXTS } = await import('./prompts');
-      let systemPrompt = SYSTEM_PROMPT;
+      // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
+      const basePrompt = specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT;
+      let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
       if (specialty && TITAN_CONTEXTS[specialty]) {
-        systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+        systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
       }
 
       // Запускаем Heartbeat
@@ -579,7 +596,8 @@ export async function analyzeImageWithJSONStreaming(
   imageType?: ImageType,
   clinicalContext?: string,
   specialty?: Specialty,
-  model: string = MODELS.OPUS
+  model: string = MODELS.OPUS,
+  history: any[] = []
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -599,9 +617,12 @@ ${JSON.stringify(jsonExtraction, null, 2)}
 ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.`;
 
   const { TITAN_CONTEXTS } = await import('./prompts');
-  let systemPrompt = SYSTEM_PROMPT;
+  // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
+  const basePrompt = specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT;
+  let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
+  
   if (specialty && TITAN_CONTEXTS[specialty]) {
-    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+    systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
   }
 
   const response = await fetch(OPENROUTER_API_URL, {
@@ -646,49 +667,104 @@ export async function sendTextRequestStreaming(
   prompt: string,
   history: Array<{role: string, content: string}> = [],
   model: string = MODELS.OPUS,
-  specialty?: Specialty
+  specialty?: Specialty,
+  customSystemPrompt?: string
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
-  const { TITAN_CONTEXTS } = await import('./prompts');
-  
-  let systemPrompt = SYSTEM_PROMPT;
-  if (specialty && TITAN_CONTEXTS[specialty]) {
-    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
-  }
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
 
-  const messages = [
-    { role: 'system' as const, content: systemPrompt },
-    ...history.map(msg => ({ role: msg.role as 'user' | 'assistant', content: msg.content })),
-    { role: 'user' as const, content: prompt }
-  ];
+  (async () => {
+    let heartbeat: any;
+    try {
+      // 1. Форсированный старт потока
+      const initialPadding = ': ' + ' '.repeat(2048) + '\n\n';
+      await writer.write(encoder.encode(initialPadding));
 
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://openrouter.ai',
-        'X-Title': 'Medical AI'
-      },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: 16000,
-      temperature: 0.1,
-      stream: true,
-      stream_options: { include_usage: true }
-    })
-  });
+      // 2. Запускаем активное ожидание (Heartbeat) пока модель думает
+      // Это предотвращает разрыв соединения и "зависание" буфера Nginx
+      heartbeat = setInterval(async () => {
+        try {
+          // Отправляем комментарий каждые 500мс для поддержания канала
+          await writer.write(encoder.encode(': heartbeat padding\n\n'));
+        } catch (e) {
+          if (heartbeat) clearInterval(heartbeat);
+        }
+      }, 500);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ [OPENROUTER ERROR] Status: ${response.status}: ${errorText}`);
-      throw new Error(`API error: ${response.status} - ${errorText}`);
+      const { TITAN_CONTEXTS } = await import('./prompts');
+      
+      // Выбираем системный промпт: Всегда используем полный SYSTEM_PROMPT для глубины аналитики
+      // в ИИ-Консультанте, если не указано иное
+      const basePrompt = (specialty === 'ai_consultant' || specialty === 'openevidence') ? SYSTEM_PROMPT : SYSTEM_PROMPT;
+      let systemPrompt = customSystemPrompt || basePrompt;
+      
+      // Для режима диалога (когда это НЕ первое сообщение и НЕ пересылка анализа)
+      // можно было бы использовать DIALOGUE_SYSTEM_PROMPT, но пользователь просит ПОЛНЫЙ промпт.
+      // Поэтому оставляем SYSTEM_PROMPT как основной.
+      
+      if (specialty && TITAN_CONTEXTS[specialty]) {
+        systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
+      }
+
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        ...history.map(msg => ({ role: msg.role as 'user' | 'assistant', content: msg.content })),
+        { role: 'user' as const, content: prompt }
+      ];
+
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://openrouter.ai',
+            'X-Title': 'Medical AI'
+          },
+        body: JSON.stringify({
+          model,
+          messages,
+          max_tokens: 16000,
+          temperature: 0.1,
+          stream: true,
+          stream_options: { include_usage: true }
+        })
+      });
+
+      // Останавливаем Heartbeat как только получили первый байт ответа
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+      }
+
+      const transformer = createTransformWithUsage(response.body!, model);
+      const reader = transformer.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+      }
+    } catch (error: any) {
+      if (heartbeat) clearInterval(heartbeat);
+      console.error(`❌ [TEXT STREAM ERROR]:`, error);
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      await writer.close();
     }
-  return createTransformWithUsage(response.body!, model);
+  })();
+
+  return readable;
 }
 
 /**
@@ -700,17 +776,22 @@ export async function analyzeImageStreaming(
   model: string = MODELS.OPUS,
   mimeType: string = 'image/png',
   clinicalContext?: string,
-  specialty?: Specialty
+  specialty?: Specialty,
+  history: Array<{role: string, content: string}> = [],
+  isRadiologyOnly: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
-  const { TITAN_CONTEXTS } = await import('./prompts');
+  const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
   
-  let systemPrompt = SYSTEM_PROMPT;
+  // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
+  const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
+  let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
+  
   if (specialty && TITAN_CONTEXTS[specialty]) {
-    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+    systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
   }
 
   let fullPrompt = prompt;
@@ -762,17 +843,22 @@ export async function analyzeMultipleImagesStreaming(
   mimeTypes: string[] = [],
   model: string = MODELS.OPUS,
   clinicalContext?: string,
-  specialty?: Specialty
+  specialty?: Specialty,
+  history: Array<{role: string, content: string}> = [],
+  isRadiologyOnly: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
-  const { TITAN_CONTEXTS } = await import('./prompts');
+  const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
   
-  let systemPrompt = SYSTEM_PROMPT;
+  // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
+  const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
+  let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
+  
   if (specialty && TITAN_CONTEXTS[specialty]) {
-    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+    systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
   }
 
   let fullPrompt = prompt;

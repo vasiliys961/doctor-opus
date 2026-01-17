@@ -11,9 +11,11 @@ import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/c
 import FeedbackForm from '@/components/FeedbackForm'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
+import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
 
 export default function UltrasoundPage() {
   const [file, setFile] = useState<File | null>(null)
+  const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
@@ -24,6 +26,7 @@ export default function UltrasoundPage() {
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
+  const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -36,15 +39,23 @@ export default function UltrasoundPage() {
     setLoading(true)
     setCurrentCost(0)
     setModelInfo({ model: '', mode: '' })
+    setAnalysisStep('description')
 
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('prompt', 'Проанализируйте УЗИ изображение. Опишите эхогенность, структуру, размеры, контуры, патологические изменения.')
+      formData.append('prompt', 'СОСТАВЬ ТОЛЬКО УЛЬТРАЗВУКОВОЙ ПРОТОКОЛ И ЗАКЛЮЧЕНИЕ (РАЗДЕЛЫ 0, 1, 2). НЕ ДАВАЙ ПЛАН ЛЕЧЕНИЯ.')
       formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', 'ultrasound') // Указываем тип изображения
       formData.append('useStreaming', useStream.toString())
+      formData.append('isTwoStage', 'true')
+
+      if (additionalFiles.length > 0) {
+        additionalFiles.forEach((f, i) => {
+          formData.append(`additionalImage_${i}`, f)
+        })
+      }
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
@@ -71,8 +82,9 @@ export default function UltrasoundPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.5';
 
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
@@ -100,6 +112,7 @@ export default function UltrasoundPage() {
           },
           onComplete: (finalText) => {
             console.log('✅ [ULTRASOUND STREAMING] Анализ завершен')
+            setAnalysisStep('description_complete')
           }
         })
       } else {
@@ -113,7 +126,7 @@ export default function UltrasoundPage() {
 
         if (data.success) {
           setResult(data.result)
-          
+          setAnalysisStep('description_complete')
           const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5');
           setCurrentCost(data.cost || 1.0);
           setModelInfo({ model: modelUsed, mode: analysisMode });
@@ -135,8 +148,14 @@ export default function UltrasoundPage() {
     }
   }
 
-  const handleUpload = async (uploadedFile: File) => {
+  const handleUpload = async (uploadedFile: File, slices?: File[]) => {
     setFile(uploadedFile)
+    if (slices && slices.length > 0) {
+      setAdditionalFiles(slices)
+    } else {
+      setAdditionalFiles([])
+    }
+    
     const reader = new FileReader()
     reader.onloadend = () => {
       setImagePreview(reader.result as string)
@@ -157,7 +176,9 @@ export default function UltrasoundPage() {
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс точности и цены для УЗИ.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
           extra: [
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для УЗИ.",
+            "✅ **GPT-5.2**: ЛУЧШИЙ выбор для 80% исследований (общая диагностика УЗИ).",
+            "🦴 **Claude Sonnet 4.5**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на деталях и мелких структурах.",
+            "⚠️ **Claude Opus 4.5**: НЕ рекомендуем для этого раздела (слабая модель для изображений).",
             "📸 Вы можете загрузить снимки УЗИ, сделать фото или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
             "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
@@ -166,8 +187,8 @@ export default function UltrasoundPage() {
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Загрузите УЗИ изображение</h2>
-        <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} />
+        <h2 className="text-xl font-semibold mb-4">Загрузите УЗИ изображение или DICOM файл</h2>
+        <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
       </div>
 
       {file && imagePreview && (

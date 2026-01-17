@@ -22,6 +22,7 @@ import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-c
 
 export default function ImageAnalysisPage() {
   const [file, setFile] = useState<File | null>(null)
+  const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [validation, setValidation] = useState<ImageValidationResult | null>(null)
   const [isDicom, setIsDicom] = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
@@ -162,6 +163,12 @@ export default function ImageAnalysisPage() {
       formData.append('useStreaming', useStream.toString())
       formData.append('useLibrary', useLibrary.toString())
 
+      if (additionalFiles.length > 0) {
+        additionalFiles.forEach((f, i) => {
+          formData.append(`additionalImage_${i}`, f)
+        })
+      }
+
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
@@ -270,8 +277,13 @@ export default function ImageAnalysisPage() {
     }
   }
 
-  const handleUpload = async (uploadedFile: File) => {
+  const handleUpload = async (uploadedFile: File, slices?: File[]) => {
     setFile(uploadedFile)
+    if (slices && slices.length > 0) {
+      setAdditionalFiles(slices)
+    } else {
+      setAdditionalFiles([])
+    }
     setValidation(null)
     const isDcm = uploadedFile.name.toLowerCase().endsWith('.dcm') || uploadedFile.name.toLowerCase().endsWith('.dicom')
     setIsDicom(isDcm)
@@ -336,7 +348,7 @@ export default function ImageAnalysisPage() {
           Поддерживаемые типы: ЭКГ, Рентген, МРТ, КТ, УЗИ, Дерматоскопия, Гистология, Офтальмология, Маммография, DICOM (.dcm)
         </p>
         
-        <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={50} />
+        <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
 
         {validation && validation.warnings.length > 0 && (
           <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">

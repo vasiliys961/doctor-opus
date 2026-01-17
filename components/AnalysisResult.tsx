@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } from 'docx'
 import { saveAs } from 'file-saver'
@@ -16,6 +17,7 @@ interface AnalysisResultProps {
 }
 
 export default function AnalysisResult({ result, loading = false, model, mode, imageType, cost }: AnalysisResultProps) {
+  const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [showPatientSelector, setShowPatientSelector] = useState(false)
@@ -425,6 +427,18 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     }
   }
 
+  const handleTransferToConsultant = () => {
+    // Сохраняем результат анализа для ИИ-Консультанта
+    const data = {
+      text: result,
+      type: imageType,
+      model: model,
+      timestamp: new Date().toISOString()
+    };
+    sessionStorage.setItem('pending_analysis', JSON.stringify(data));
+    router.push('/chat'); // ИИ-Консультант находится по адресу /chat
+  };
+
   // Если есть результат, показываем его даже во время загрузки (для streaming)
   if (!result) {
     if (loading) {
@@ -508,6 +522,14 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           >
             🔗 Поделиться
           </button>
+          {!loading && result && (
+            <button
+              onClick={handleTransferToConsultant}
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
+            >
+              🩺 Обсудить тактику
+            </button>
+          )}
         </div>
       </div>
 
@@ -581,6 +603,20 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           >
             {result}
           </ReactMarkdown>
+
+          {/* Яркая и заметная кнопка прямо под заключением */}
+          {!loading && result && (
+            <div className="mt-12 mb-8 flex justify-center">
+              <button
+                onClick={handleTransferToConsultant}
+                className="group relative px-10 py-5 bg-gradient-to-r from-teal-500 via-emerald-500 to-teal-600 text-white rounded-2xl transition-all shadow-[0_0_20px_rgba(20,184,166,0.4)] hover:shadow-[0_0_40px_rgba(20,184,166,0.7)] hover:scale-105 flex items-center gap-4 text-xl font-black animate-bounce-slow"
+              >
+                <span className="text-3xl animate-pulse">🩺</span>
+                <span className="tracking-widest uppercase">Обсудить клиническую тактику</span>
+                <div className="absolute -inset-1 bg-gradient-to-r from-teal-400 to-emerald-400 rounded-2xl blur opacity-25 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-pulse-fast"></div>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

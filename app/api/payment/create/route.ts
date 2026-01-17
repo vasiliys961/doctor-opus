@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { robokassa } from "@/lib/robokassa";
+import { paymentService } from "@/lib/payment/payment-service";
 import { SUBSCRIPTION_PACKAGES } from "@/lib/subscription-manager";
 import { savePaymentConsent, initDatabase, createPayment } from "@/lib/database";
 
@@ -57,16 +57,17 @@ export async function POST(request: NextRequest) {
       throw new Error('Ошибка сохранения данных платежа в базе');
     }
 
-    // Используем ID из базы как InvId для Робокассы
+    // Используем ID из базы как InvId для провайдера
     const invId = paymentResult.paymentId;
 
-    const paymentUrl = robokassa.generatePaymentUrl(
-      pkg.priceRub,
-      invId,
-      `Активация пакета ${pkg.name} для ${session.user.email}`,
-      session.user.email || undefined,
+    const provider = paymentService.getProvider();
+    const paymentUrl = await provider.generatePaymentUrl({
+      amount: pkg.priceRub,
+      orderId: invId,
+      description: `Активация пакета ${pkg.name} для ${session.user.email}`,
+      email: session.user.email || undefined,
       isRecurring
-    );
+    });
 
     return NextResponse.json({
       success: true,

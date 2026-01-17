@@ -37,7 +37,7 @@ export default function GeneticPage() {
   const [chatLoading, setChatLoading] = useState(false)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [chatFiles, setChatFiles] = useState<File[]>([])
-  const [modelType, setModelType] = useState<'sonnet' | 'gpt52'>('gpt52') // GPT-5.2 по умолчанию, так как мощнее и дешевле
+  const [modelType, setModelType] = useState<'opus' | 'gpt52'>('opus') // Opus по умолчанию для лучшего качества
   const [totalCost, setTotalCost] = useState<number>(0)
   const [lastModelUsed, setLastModelUsed] = useState<string>('')
 
@@ -400,7 +400,7 @@ export default function GeneticPage() {
             setResult(accumulatedText)
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-sonnet-4.5');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-opus-4.5');
             logUsage({
               section: 'genetic',
               model: model,
@@ -550,7 +550,7 @@ export default function GeneticPage() {
             })
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-sonnet-4.5');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-opus-4.5');
             logUsage({
               section: 'chat',
               model: model,
@@ -624,10 +624,10 @@ export default function GeneticPage() {
         title="Как работает генетический анализ"
         content={{
           fast: "первый этап: извлечение данных из сложных отчетов и VCF‑файлов. Мы используем специализированные алгоритмы для корректного чтения rsID и генотипов.",
-          validated: "второй этап: консультация «Профессора генетики» (Gemini JSON + Opus 4.5) — самый точный клинический разбор рисков; самый дорогой режим.",
+          validated: "второй этап: консультация «Профессора генетики» (Claude Opus 4.5) — самый точный клинический разбор рисков; экспертный режим.",
           extra: [
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Sonnet 4.5) — лучший баланс глубины анализа и скорости для генетики.",
-            "🧬 Поддерживаются VCF файлы, PDF отчеты (до 7 страниц), текстовые файлы и фото бумажных бланков.",
+            "⭐ Рекомендуемый режим: «Экспертный» (Opus 4.5) — максимально глубокий анализ генетических данных.",
+            "🚀 Альтернатива: «GPT-5.2» — отличный баланс скорости, мощности и стоимости.",
             "👤 Рекомендуется добавить клинический контекст для более точной интерпретации результатов.",
             "💬 После получения заключения вы можете продолжить диалог с генетиком для уточнения деталей.",
             "📎 Можно прикреплять дополнительные анализы и документы прямо в чат."
@@ -774,16 +774,16 @@ export default function GeneticPage() {
                 </div>
               </button>
               <button
-                onClick={() => setModelType('sonnet')}
+                onClick={() => setModelType('opus')}
                 className={`flex-1 min-w-[200px] px-4 py-3 rounded-lg text-sm font-medium transition-all border-2 ${
-                  modelType === 'sonnet' 
+                  modelType === 'opus' 
                     ? 'bg-white border-blue-500 text-blue-700 shadow-md' 
                     : 'bg-transparent border-gray-200 text-gray-500 hover:border-blue-300'
                 }`}
               >
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-base">🧠 Sonnet 4.5</span>
-                  <span className="text-[10px] uppercase opacity-60 font-bold">Классика антропик</span>
+                  <span className="text-base">🧠 Opus 4.5</span>
+                  <span className="text-[10px] uppercase opacity-60 font-bold">Экспертный (Макс. качество)</span>
                 </div>
               </button>
             </div>
@@ -802,7 +802,7 @@ export default function GeneticPage() {
       <AnalysisResult 
         result={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
         loading={loading && !extractedData} 
-        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-sonnet-4.5')}
+        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-opus-4.5')}
         mode="genetic"
         cost={totalCost}
       />

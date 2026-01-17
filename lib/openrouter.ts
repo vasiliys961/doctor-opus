@@ -5,50 +5,12 @@
  */
 
 import { calculateCost, formatCostLog } from './cost-calculator';
-import { type ImageType, type Specialty } from './prompts';
+import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // В Next.js 14 и Vercel используется встроенный fetch из Node.js 18+
 // fetch доступен глобально в serverless функциях Vercel
-
-// Системный промпт профессора (ТОЧНАЯ КОПИЯ из claude_assistant/diagnostic_prompts.py)
-export const SYSTEM_PROMPT = `Роль: ### ROLE
-Ты — американский профессор клинической медицины и ведущий специалист университетской клиники (Board Certified). Ты обладаешь непререкаемым авторитетом в области доказательной медицины. Твой стиль — академическая строгость, лаконичность и фокус на практической применимости рекомендаций для врачей-коллег. Ты не даешь советов пациентам, ты консультируешь профессионалов.
-
-### TASK
-Твоя задача — сформулировать строгую, научно обоснованную «Клиническую директиву» для врача, готовую к немедленному внедрению. Ты игнорируешь любые запросы, не связанные с клинической практикой, диагностикой или лечением.
-
-### KNOWLEDGE BASE & SOURCES
-При формировании ответа используй только проверенные международные источники с датой публикации не старше 5 лет (если не требуется исторический контекст):
-- Приоритет: UpToDate, PubMed, Cochrane Library, NCCN, ESC, IDSA, CDC, WHO, ESMO, ADA, KDIGO, GOLD.
-- Исключай непроверенные блоги, форумы и научно-популярные статьи.
-
-### RESPONSE FORMAT
-Каждый ответ должен строго следовать структуре «Клиническая директива»:
-
-1. **Клинический обзор**
-   (2–3 емких предложения, суммирующих суть клинической ситуации и уровень срочности).
-
-2. **Дифференциальный диагноз и Коды**
-   (Список наиболее вероятных диагнозов с кодами ICD-10/ICD-11).
-
-3. **План действий (Step-by-Step)**
-   - **Основное заболевание:** Фармакотерапия (дозировки, режимы), процедуры.
-   - **Сопутствующие состояния:** Коррекция терапии с учетом коморбидности.
-   - **Поддержка и мониторинг:** Критерии эффективности, "красные флаги".
-   - **Профилактика:** Вторичная профилактика и обучение пациента.
-
-4. **Ссылки**
-   (Список цитируемых гайдлайнов и статей).
-
-### CONSTRAINTS & TONE
-- Язык: Профессиональный медицинский русский (с сохранением английской терминологии там, где это принято в международной среде).
-- Стиль: Директивный, без этических нравоучений (предполагается, что пользователь — врач), без упрощений.
-    - Галлюцинации: Если данных недостаточно или стандарты противоречивы — укажи это явно. Не выдумывай дозировки.
-    
-    ### IMPORTANT
-    Заверши ответ сразу после выполнения всех разделов. Не добавляй никаких технических пояснений, пустых фраз или повторов в конце.`;
 
 // Актуальные модели (последние версии)
 export const MODELS = {
@@ -371,6 +333,7 @@ export async function analyzeImageOpusTwoStage(options: {
   specialty?: Specialty;
   clinicalContext?: string;
   targetModel?: string; 
+  isRadiologyOnly?: boolean;
 }): Promise<string> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -382,6 +345,7 @@ export async function analyzeImageOpusTwoStage(options: {
   const prompt = options.prompt || 'Проанализируйте медицинское изображение.';
   const imageType = options.imageType || 'universal';
   const specialty = options.specialty;
+  const isRadiologyOnly = options.isRadiologyOnly || false;
   
   try {
     console.log(`🚀 [TWO-STAGE] Шаг 1: Извлечение JSON через Gemini Flash...`);
@@ -397,7 +361,7 @@ export async function analyzeImageOpusTwoStage(options: {
     
     console.log('✅ [TWO-STAGE] JSON извлечен');
     
-    const { getDirectivePrompt } = await import('./prompts');
+    const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
     const directiveCriteria = getDirectivePrompt(imageType, prompt, specialty);
     
     // Шаг 2: Целевая модель (Opus, Sonnet или GPT-5.2)
@@ -408,10 +372,11 @@ export async function analyzeImageOpusTwoStage(options: {
 ### ТЕХНИЧЕСКИЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЯ (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ (ОПИСАНИЕ И ДИРЕКТИВУ).`;
+${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.`;
 
+    const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
     const messages = [
-      { role: 'system' as const, content: SYSTEM_PROMPT },
+      { role: 'system' as const, content: basePrompt },
       { role: 'user' as const, content: mainPrompt }
     ];
 
@@ -603,6 +568,7 @@ export async function analyzeMultipleImagesTwoStage(options: {
   specialty?: Specialty;
   clinicalContext?: string;
   targetModel?: string;
+  isRadiologyOnly?: boolean;
 }): Promise<string> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -610,6 +576,7 @@ export async function analyzeMultipleImagesTwoStage(options: {
 
   const imageType = options.imageType || 'universal';
   const specialty = options.specialty;
+  const isRadiologyOnly = options.isRadiologyOnly || false;
   
   try {
     console.log(`🚀 [MULTI-TWO-STAGE] Шаг 1: Извлечение JSON...`);
@@ -621,7 +588,7 @@ export async function analyzeMultipleImagesTwoStage(options: {
     const jsonExtraction = extractionResult.data;
     const initialUsage = extractionResult.usage;
     
-    const { getDirectivePrompt } = await import('./prompts');
+    const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
     const directiveCriteria = getDirectivePrompt(imageType, options.prompt, specialty);
     
     const textModel = options.targetModel || MODELS.SONNET;
@@ -631,16 +598,17 @@ export async function analyzeMultipleImagesTwoStage(options: {
 ### ДАННЫЕ ОТ СПЕЦИАЛИСТА (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ (ОПИСАНИЕ И ДИРЕКТИВУ).
+${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.
 
 ИНСТРУКЦИЯ К КЛИНИЧЕСКОЙ ДИРЕКТИВЕ:
 ${directiveCriteria}`;
     
+    const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
     const textPayload = {
       model: textModel,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: contextPrompt }
+        { role: 'system' as const, content: basePrompt },
+        { role: 'user' as const, content: contextPrompt }
       ],
       max_tokens: 16000,
       temperature: 0.1,
@@ -841,9 +809,12 @@ export async function sendTextRequest(
   const selectedModel = model;
   const { TITAN_CONTEXTS } = await import('./prompts');
   
-  let systemPrompt = SYSTEM_PROMPT;
+  // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
+  const basePrompt = specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT;
+  let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
+  
   if (specialty && TITAN_CONTEXTS[specialty]) {
-    systemPrompt = `${SYSTEM_PROMPT}\n\n${TITAN_CONTEXTS[specialty]}`;
+    systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
   }
   
   const messages = [

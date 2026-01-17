@@ -5,8 +5,12 @@ module.exports = {
     './components/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
-    extend: {
-      colors: {
+      extend: {
+        animation: {
+          'bounce-slow': 'bounce 3s infinite',
+          'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        },
+        colors: {
         primary: {
           50: '#e0f2f1',
           100: '#b2dfdb',

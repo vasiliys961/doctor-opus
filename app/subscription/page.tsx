@@ -50,7 +50,7 @@ export default function SubscriptionPage() {
       const data = await response.json()
 
       if (data.success && data.paymentUrl) {
-        // Перенаправляем на оплату в Робокассу
+        // Перенаправляем на страницу оплаты
         window.location.href = data.paymentUrl
       } else {
         alert(data.error || 'Ошибка при создании платежа')

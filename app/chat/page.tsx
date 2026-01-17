@@ -45,6 +45,44 @@ export default function ChatPage() {
   const [useStreaming, setUseStreaming] = useState(true)
   const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('gpt52')
   const [specialty, setSpecialty] = useState<Specialty>('universal')
+  const [isCutOff, setIsCutOff] = useState(false)
+  const [lastMessageIndex, setLastMessageIndex] = useState<number | null>(null)
+
+  useEffect(() => {
+    // Проверяем наличие переданных данных из анализа изображений
+    const pendingData = sessionStorage.getItem('pending_analysis');
+    if (pendingData) {
+      try {
+        const { text, type } = JSON.parse(pendingData);
+        
+        // Автоматический выбор специальности
+        if (type === 'ecg') setSpecialty('cardiology');
+        else if (['ct', 'mri', 'xray', 'ultrasound'].includes(type)) setSpecialty('radiology');
+        
+        // Формируем вводное сообщение
+        const typeNames: Record<string, string> = {
+          'ecg': 'ЭКГ',
+          'ct': 'КТ',
+          'mri': 'МРТ',
+          'xray': 'рентгена',
+          'ultrasound': 'УЗИ'
+        };
+        
+        const typeName = typeNames[type] || 'исследования';
+        const initialPrompt = `Проанализируй результат ${typeName} и предложи дальнейшую клиническую тактику:\n\n${text}`;
+        
+        setMessage(initialPrompt);
+        
+        // Очищаем, чтобы не подставлялось при перезагрузке
+        sessionStorage.removeItem('pending_analysis');
+        
+        // Если хотим автоматическую отправку, можно вызвать handleSend(), 
+        // но лучше дать врачу возможность дополнить контекст.
+      } catch (e) {
+        console.error('Ошибка при разборе данных анализа:', e);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     // Автоматически выбираем подходящую модель при смене специальности
@@ -53,8 +91,99 @@ export default function ChatPage() {
     }
   }, [specialty])
 
+  const handleContinue = async () => {
+    if (loading || !isCutOff || lastMessageIndex === null) return;
+    
+    setIsCutOff(false);
+    setLoading(true);
+    
+    // Подготавливаем запрос на продолжение
+    const lastAssistantMessage = messages[lastMessageIndex];
+    const continuePrompt = "Продолжи свой предыдущий ответ с того места, где ты остановился. Начни прямо с прерванного предложения, без вводных слов.";
+    
+    // Добавляем сообщение ассистента, которое будем дополнять
+    const assistantMessageIndex = lastMessageIndex;
+    let accumulatedText = lastAssistantMessage.content;
+
+    try {
+      const modelName = model === 'opus' 
+        ? 'anthropic/claude-opus-4.5' 
+        : model === 'sonnet'
+          ? 'anthropic/claude-sonnet-4.5'
+          : model === 'gpt52'
+            ? 'openai/gpt-5.2-chat'
+            : 'google/gemini-3-flash-preview'
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: continuePrompt,
+          history: messages,
+          useStreaming: true,
+          model: modelName,
+          specialty: specialty,
+        }),
+      });
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') break;
+
+              try {
+                const json = JSON.parse(data);
+                
+                // Проверяем причину завершения
+                const finishReason = json.choices?.[0]?.finish_reason;
+                if (finishReason === 'length') {
+                  setIsCutOff(true);
+                }
+
+                const content = json.choices?.[0]?.delta?.content || '';
+                if (content) {
+                  accumulatedText += content;
+                  setMessages(prev => {
+                    const newMessages = [...prev];
+                    newMessages[assistantMessageIndex] = {
+                      ...newMessages[assistantMessageIndex],
+                      content: accumulatedText
+                    };
+                    return newMessages;
+                  });
+                }
+              } catch (e) {}
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Continue error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSend = async () => {
     if (!message.trim() && selectedFiles.length === 0) return
+
+    setIsCutOff(false)
 
     const userMessage = message || (selectedFiles.length > 0 ? 'Проанализируйте прикрепленные файлы' : '')
     const filesInfo = selectedFiles.map(f => ({
@@ -144,6 +273,14 @@ export default function ChatPage() {
                   try {
                     const json = JSON.parse(data)
                     
+                    // Проверяем причину завершения
+                    const finishReason = json.choices?.[0]?.finish_reason;
+                    if (finishReason === 'length') {
+                      console.log('⚠️ [STREAMING WITH FILES] Ответ прерван по лимиту длины');
+                      setIsCutOff(true);
+                      setLastMessageIndex(assistantMessageIndex);
+                    }
+
                     if (json.error) {
                       setMessages(prev => {
                         const newMessages = [...prev]
@@ -291,6 +428,14 @@ export default function ChatPage() {
 
                   try {
                     const json = JSON.parse(data)
+
+                    // Проверяем причину завершения
+                    const finishReason = json.choices?.[0]?.finish_reason;
+                    if (finishReason === 'length') {
+                      console.log('⚠️ [STREAMING] Ответ прерван по лимиту длины');
+                      setIsCutOff(true);
+                      setLastMessageIndex(assistantMessageIndex);
+                    }
 
                     if (json.error) {
                       setMessages(prev => {
@@ -524,6 +669,16 @@ export default function ChatPage() {
             {loading && (
               <div className="text-center text-gray-500">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto"></div>
+              </div>
+            )}
+            {isCutOff && !loading && (
+              <div className="flex justify-center mt-2">
+                <button
+                  onClick={handleContinue}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-full text-xs font-bold transition-all border border-amber-300 shadow-sm animate-pulse"
+                >
+                  ⏳ Ответ прерван. Дописать до конца?
+                </button>
               </div>
             )}
           </div>

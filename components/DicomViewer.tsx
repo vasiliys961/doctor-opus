@@ -2,35 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import * as cornerstone from 'cornerstone-core'
-import * as dicomParser from 'dicom-parser'
-import * as cornerstoneWADOImageLoader from 'cornerstone-wado-image-loader'
-import * as cornerstoneMath from 'cornerstone-math'
+import { initCornerstone } from '@/lib/dicom-client-processor'
 import * as cornerstoneTools from 'cornerstone-tools'
-
-// Инициализация загрузчика (нужно делать один раз)
-if (typeof window !== 'undefined') {
-  cornerstoneWADOImageLoader.external.cornerstone = cornerstone
-  cornerstoneWADOImageLoader.external.dicomParser = dicomParser
-  
-  // Инициализация инструментов
-  cornerstoneTools.external.cornerstone = cornerstone
-  cornerstoneTools.external.cornerstoneMath = cornerstoneMath
-  cornerstoneTools.init()
-  
-  cornerstoneWADOImageLoader.configure({
-    beforeSend: function(xhr: any) {}
-  })
-
-  const config = {
-    webWorkerPath: 'https://unpkg.com/cornerstone-wado-image-loader@4.1.5/dist/cornerstoneWADOImageLoaderWebWorker.bundle.min.js',
-    taskConfiguration: {
-      decodeTask: {
-        codecsPath: 'https://unpkg.com/cornerstone-wado-image-loader@4.1.5/dist/cornerstoneWADOImageLoaderCodecs.bundle.min.js'
-      }
-    }
-  }
-  cornerstoneWADOImageLoader.webWorkerManager.initialize(config)
-}
+import * as cornerstoneMath from 'cornerstone-math'
 
 interface DicomViewerProps {
   file: File
@@ -47,6 +21,16 @@ export default function DicomViewer({ file, onAnalysisImageReady }: DicomViewerP
 
   useEffect(() => {
     if (!viewerRef.current || !file) return
+
+    // Инициализация Cornerstone
+    initCornerstone()
+    
+    // Инициализация инструментов
+    if (typeof window !== 'undefined' && !cornerstoneTools.external.cornerstone) {
+      cornerstoneTools.external.cornerstone = cornerstone
+      cornerstoneTools.external.cornerstoneMath = cornerstoneMath
+      cornerstoneTools.init()
+    }
 
     const element = viewerRef.current
     cornerstone.enable(element)

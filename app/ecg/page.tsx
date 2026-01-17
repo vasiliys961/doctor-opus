@@ -13,6 +13,7 @@ import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-cache'
+import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
 
 export default function ECGPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -27,7 +28,8 @@ export default function ECGPage() {
   const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>('sonnet')
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
-  const [currentCost, setCurrentCost] = useState<number>(0) // Включаем стриминг по умолчанию для точного анализа
+  const [currentCost, setCurrentCost] = useState<number>(0)
+  const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -39,9 +41,10 @@ export default function ECGPage() {
     setFlashResult('')
     setError(null)
     setLoading(true)
+    setAnalysisStep('description')
 
     try {
-      const prompt = 'Проанализируйте ЭКГ. Опишите ритм, интервалы, сегменты, признаки ишемии, аритмии, блокады.'
+      const prompt = 'СОСТАВЬ ТОЛЬКО ЭКГ-ПРОТОКОЛ И ЗАКЛЮЧЕНИЕ (РАЗДЕЛЫ 0, 1, 2). НЕ ДАВАЙ ПЛАН ЛЕЧЕНИЯ.'
 
       // Проверка кэша
       if (imagePreview) {
@@ -69,6 +72,7 @@ export default function ECGPage() {
       formData.append('mode', analysisMode) // validated, optimized, или fast
       formData.append('imageType', 'ecg') // Указываем тип изображения для использования специфичных промптов
       formData.append('useStreaming', useStream.toString())
+      formData.append('isTwoStage', 'true')
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
@@ -99,8 +103,9 @@ export default function ECGPage() {
             throw new Error(`Ошибка API: ${response.status} - ${errorText}`)
           }
 
+          const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
           const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                          analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+                          analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.5';
           setModelInfo(modelUsed)
 
           await handleSSEStream(response, {
@@ -122,6 +127,7 @@ export default function ECGPage() {
             },
             onComplete: (finalText) => {
               console.log('✅ [ECG STREAMING] Анализ завершен')
+              setAnalysisStep('description_complete')
               if ((window as any)._currentCacheKey) {
                 saveToCache((window as any)._currentCacheKey, finalText, analysisMode);
               }
@@ -148,6 +154,7 @@ export default function ECGPage() {
 
         if (data.success) {
           setResult(data.result)
+          setAnalysisStep('description_complete')
           setAnalysisId(data.analysis_id || '')
           
           if ((window as any)._currentCacheKey) {
@@ -164,8 +171,8 @@ export default function ECGPage() {
           logUsage({
             section: 'ecg',
             model: modelUsed,
-            inputTokens: inputTokens,
-            outputTokens: outputTokens,
+            inputTokens: 2000,
+            outputTokens: 1000,
           })
         } else {
           setError(data.error || 'Ошибка при анализе')
@@ -203,6 +210,7 @@ export default function ECGPage() {
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс глубины и качества для анализа кривых ЭКГ.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев.",
           extra: [
+            "💡 Рекомендуется GPT-5.2 для быстрых анализов и Opus для сложных случаев.",
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества для анализа кривых ЭКГ.",
             "📸 Вы можете загрузить файл с ЭКГ, сделать фото с камеры или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
