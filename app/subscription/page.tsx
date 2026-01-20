@@ -11,7 +11,7 @@ export default function SubscriptionPage() {
   const [selectedPackage, setSelectedPackage] = useState<keyof typeof SUBSCRIPTION_PACKAGES | null>(null)
   const [currentBalance, setCurrentBalance] = useState<SubscriptionBalance | null>(null)
   const [mounted, setMounted] = useState(false)
-
+  const [loading, setLoading] = useState(false)
   const [agreedToRecurring, setAgreedToRecurring] = useState(false)
 
   useEffect(() => {
@@ -62,8 +62,6 @@ export default function SubscriptionPage() {
       setLoading(false)
     }
   }
-
-  const [loading, setLoading] = useState(false)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-emerald-50 p-6">
