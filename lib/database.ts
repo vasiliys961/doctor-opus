@@ -184,7 +184,7 @@ export async function getFineTuningStats() {
       SELECT 
         specialty, 
         COUNT(*) as total_count,
-        SUM(CASE WHEN correctness = 1 THEN 1 ELSE 0 END) as ready_count
+        SUM(CASE WHEN correctness::text = '1' THEN 1 ELSE 0 END) as ready_count
       FROM analysis_feedback
       WHERE specialty IS NOT NULL
       GROUP BY specialty;
