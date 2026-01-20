@@ -26,6 +26,9 @@ export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 // Увеличиваем лимит для больших DICOM файлов
+// В App Router лимиты настраиваются иначе, но config.api устарел.
+// Оставляем комментарием для понимания, что лимиты теперь в next.config.js или middleware.
+/*
 export const config = {
   api: {
     bodyParser: {
@@ -33,6 +36,7 @@ export const config = {
     },
   },
 };
+*/
 
 export async function POST(request: NextRequest) {
   const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
