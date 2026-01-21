@@ -21,12 +21,18 @@ export default function SubscriptionPage() {
 
   // Если система отключена
   if (mounted && !isSubscriptionEnabled()) {
-    // ... (код остается прежним)
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="text-center bg-white p-8 rounded-xl shadow-lg max-w-md">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">💳 Система оплаты временно недоступна</h2>
+          <p className="text-gray-600">Мы проводим технические работы. Пожалуйста, попробуйте зайти позже.</p>
+          <Link href="/" className="mt-6 inline-block bg-teal-600 text-white px-6 py-2 rounded-lg">На главную</Link>
+        </div>
+      </div>
+    )
   }
 
-  if (!mounted) return <div className="min-h-screen bg-gray-50" />;
-
-  const handlePurchase = async () => {
+  return (
     if (!selectedPackage) return
 
     if (!agreedToRecurring) {
@@ -63,6 +69,17 @@ export default function SubscriptionPage() {
     }
   }
 
+  // Пока компонент не примонтирован, показываем скелет страницы без баланса
+  const balanceContent = (mounted && currentBalance) ? (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
+      <p className="text-blue-800">
+        ℹ️ Активный баланс: <strong>{currentBalance.currentCredits}</strong> ед.
+      </p>
+    </div>
+  ) : mounted ? null : (
+    <div className="bg-gray-100 animate-pulse border border-gray-200 rounded-lg p-4 mb-8 h-14"></div>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-emerald-50 p-6">
       <div className="max-w-6xl mx-auto">
@@ -73,13 +90,7 @@ export default function SubscriptionPage() {
           Единицы используются для оплаты анализов и консультаций
         </p>
 
-        {currentBalance && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
-            <p className="text-blue-800">
-              ℹ️ Активный баланс: <strong>{currentBalance.currentCredits}</strong> ед.
-            </p>
-          </div>
-        )}
+        {balanceContent}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-8">
           {Object.entries(SUBSCRIPTION_PACKAGES).map(([key, pkg]) => {
