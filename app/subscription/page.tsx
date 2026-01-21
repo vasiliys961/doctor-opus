@@ -32,7 +32,7 @@ export default function SubscriptionPage() {
     )
   }
 
-  return (
+  const handlePurchase = async () => {
     if (!selectedPackage) return
 
     if (!agreedToRecurring) {
