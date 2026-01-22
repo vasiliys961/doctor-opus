@@ -59,6 +59,54 @@ export async function POST(request: Request) {
       )
     `;
     
+    // 2.1. Обновление существующей таблицы (если нужно)
+    safeLog('🔧 [MIGRATION] Updating user_balances schema...');
+    
+    // Добавляем total_spent (если нет)
+    try {
+      await sql`
+        ALTER TABLE user_balances 
+        ADD COLUMN IF NOT EXISTS total_spent DECIMAL(10,2) DEFAULT 0.00
+      `;
+    } catch (e: any) {
+      safeLog('ℹ️ [MIGRATION] total_spent already exists or error:', e.message);
+    }
+    
+    // Добавляем is_test_account (если нет)
+    try {
+      await sql`
+        ALTER TABLE user_balances 
+        ADD COLUMN IF NOT EXISTS is_test_account BOOLEAN DEFAULT true
+      `;
+    } catch (e: any) {
+      safeLog('ℹ️ [MIGRATION] is_test_account already exists or error:', e.message);
+    }
+    
+    // Переименовываем credits в balance (если нужно)
+    try {
+      await sql`
+        ALTER TABLE user_balances 
+        RENAME COLUMN credits TO balance
+      `;
+      safeLog('✅ [MIGRATION] Renamed credits → balance');
+    } catch (e: any) {
+      safeLog('ℹ️ [MIGRATION] Column credits not found or already renamed');
+    }
+    
+    // Обновляем constraint для balance
+    try {
+      await sql`
+        ALTER TABLE user_balances 
+        DROP CONSTRAINT IF EXISTS user_balances_balance_check
+      `;
+      await sql`
+        ALTER TABLE user_balances 
+        ADD CONSTRAINT user_balances_balance_check CHECK (balance >= -5.00)
+      `;
+    } catch (e: any) {
+      safeLog('ℹ️ [MIGRATION] Constraint update skipped:', e.message);
+    }
+    
     // 3. Индекс для user_balances
     await sql`
       CREATE INDEX IF NOT EXISTS idx_user_balances_email 
