@@ -7,7 +7,8 @@
     "dev:network": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "migrate": "bash scripts/migrate-db.sh"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
