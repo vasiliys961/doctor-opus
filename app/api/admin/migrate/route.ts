@@ -31,7 +31,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { secret } = body;
     
-    if (!secret || secret !== process.env.MIGRATION_SECRET) {
+    // ВРЕМЕННО: Жестко прописанный секрет для миграции без настройки окружения
+    const HARDCODED_SECRET = "doctor-opus-prod-k8m2x9p4w7q15n3j6h8v2b9m4x7";
+    
+    if (!secret || (secret !== process.env.MIGRATION_SECRET && secret !== HARDCODED_SECRET)) {
       safeError('❌ [MIGRATION] Unauthorized attempt:', {
         ip: request.headers.get('x-forwarded-for') || 'unknown',
         time: new Date().toISOString()
