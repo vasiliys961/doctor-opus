@@ -6,6 +6,7 @@
 
 import { calculateCost, formatCostLog } from './cost-calculator';
 import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
+import { safeLog, safeError, safeWarn } from './logger';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -86,7 +87,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   const apiKey = rawKey?.trim();
   
   if (!apiKey) {
-    console.error('OPENROUTER_API_KEY не найден в переменных окружения');
+    safeError('OPENROUTER_API_KEY не найден в переменных окружения');
     throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
   }
 
@@ -178,8 +179,8 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   };
 
   try {
-    // Логируем для отладки (без ключа)
-    console.log('Calling OpenRouter API:', {
+    // Логируем для отладки (с маскировкой ключа через safeLog)
+    safeLog('Calling OpenRouter API:', {
       url: OPENROUTER_API_URL,
       model: model,
       hasApiKey: !!apiKey,
@@ -196,18 +197,18 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
       body: JSON.stringify(payload)
     }, 120000); // Таймаут 120 сек
 
-    console.log('OpenRouter API response status:', response.status);
+    safeLog('OpenRouter API response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenRouter API error response:', errorText);
+      safeError('OpenRouter API error response:', errorText);
       throw new Error(`OpenRouter API error: ${response.status} - ${errorText.substring(0, 500)}`);
     }
 
     const data = await response.json();
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      console.error('Invalid response format:', JSON.stringify(data).substring(0, 500));
+      safeError('Invalid response format:', JSON.stringify(data).substring(0, 500));
       throw new Error('Неверный формат ответа от OpenRouter API');
     }
 
@@ -217,13 +218,13 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     const outputTokens = data.usage?.completion_tokens || Math.floor(tokensUsed / 2);
     
     if (tokensUsed > 0) {
-      console.log(`✅ [${model}] Запрос завершен`);
-      console.log(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
+      safeLog(`✅ [${model}] Запрос завершен`);
+      safeLog(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
     }
 
     return data.choices[0].message.content || '';
   } catch (error: any) {
-    console.error('Error calling OpenRouter API:', {
+    safeError('Error calling OpenRouter API:', {
       name: error.name,
       message: error.message,
       stack: error.stack?.substring(0, 500)
@@ -264,7 +265,7 @@ export async function analyzeImageFast(options: {
   const specialty = options.specialty;
   
   try {
-    console.log('🚀 [FAST] Шаг 1: Извлечение JSON через Gemini 3.0...');
+    safeLog('🚀 [FAST] Шаг 1: Извлечение JSON через Gemini 3.0...');
     const jsonExtraction = await extractImageJSON({
       imageBase64: options.imageBase64,
       modality: imageType
@@ -289,7 +290,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       { role: 'user', content: contextPrompt }
     ];
 
-    console.log('🚀 [FAST] Шаг 2: Gemini 3.0 (Professor Mode) формирует директиву...');
+    safeLog('🚀 [FAST] Шаг 2: Gemini 3.0 (Professor Mode) формирует директиву...');
     
     const textResponse = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
@@ -316,7 +317,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
     return textData.choices[0].message.content || '';
     
   } catch (error: any) {
-    console.error('❌ [FAST] Ошибка:', error);
+    safeError('❌ [FAST] Ошибка:', error);
     throw new Error(`Ошибка быстрого анализа: ${error.message}`);
   }
 }
@@ -348,7 +349,7 @@ export async function analyzeImageOpusTwoStage(options: {
   const isRadiologyOnly = options.isRadiologyOnly || false;
   
   try {
-    console.log(`🚀 [TWO-STAGE] Шаг 1: Извлечение JSON через Gemini Flash...`);
+    safeLog(`🚀 [TWO-STAGE] Шаг 1: Извлечение JSON через Gemini Flash...`);
     
     // Шаг 1: Извлекаем JSON через Gemini
     const extractionResult = await extractImageJSON({
@@ -359,7 +360,7 @@ export async function analyzeImageOpusTwoStage(options: {
     const jsonExtraction = extractionResult.data;
     const initialUsage = extractionResult.usage;
     
-    console.log('✅ [TWO-STAGE] JSON извлечен');
+    safeLog('✅ [TWO-STAGE] JSON извлечен');
     
     const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
     const directiveCriteria = getDirectivePrompt(imageType, prompt, specialty);
@@ -380,7 +381,7 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
       { role: 'user' as const, content: mainPrompt }
     ];
 
-    console.log(`🚀 [TWO-STAGE] Шаг 2: ${textModel} анализирует данные (JSON)...`);
+    safeLog(`🚀 [TWO-STAGE] Шаг 2: ${textModel} анализирует данные (JSON)...`);
     
     const textResponse = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
@@ -415,14 +416,14 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
     const totalOutput = textOutputTokens + (initialUsage?.completion_tokens || 0);
     const totalTokens = textTokensUsed + (initialUsage?.total_tokens || 0);
     
-    console.log('✅ [TWO-STAGE] Анализ завершен');
+    safeLog('✅ [TWO-STAGE] Анализ завершен');
     if (totalTokens > 0) {
-      console.log(`   📊 ИТОГО: ${formatCostLog(textModel, totalInput, totalOutput, totalTokens)}`);
+      safeLog(`   📊 ИТОГО: ${formatCostLog(textModel, totalInput, totalOutput, totalTokens)}`);
     }
     
     return result;
   } catch (error: any) {
-    console.error('Error in analyzeImageOpusTwoStage:', error);
+    safeError('Error in analyzeImageOpusTwoStage:', error);
     throw new Error(`Ошибка анализа: ${error.message}`);
   }
 }
@@ -482,7 +483,7 @@ export async function extractImageJSON(options: {
 
   for (const model of modelsToTry) {
     try {
-      console.log(`📡 [GEMINI JSON] Пробую модель: ${model}`);
+      safeLog(`📡 [GEMINI JSON] Пробую модель: ${model}`);
       
       const payload = {
         model,
@@ -518,9 +519,9 @@ export async function extractImageJSON(options: {
           const inputTokens = resultData.usage?.prompt_tokens || Math.floor(tokensUsed / 2);
           const outputTokens = resultData.usage?.completion_tokens || Math.floor(tokensUsed / 2);
           
-          console.log(`✅ [GEMINI JSON] JSON извлечен успешно через ${model}`);
+          safeLog(`✅ [GEMINI JSON] JSON извлечен успешно через ${model}`);
           if (tokensUsed > 0) {
-            console.log(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
+            safeLog(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
           }
           
           // Возвращаем и данные, и usage для корректного учета стоимости
@@ -534,19 +535,19 @@ export async function extractImageJSON(options: {
             }
           };
         } catch (e) {
-          console.warn(`⚠️ [GEMINI JSON] Ошибка парсинга JSON от ${model}, пробую следующую модель...`);
+          safeWarn(`⚠️ [GEMINI JSON] Ошибка парсинга JSON от ${model}, пробую следующую модель...`);
           continue;
         }
       } else if (response.status === 404) {
-        console.warn(`⚠️ [GEMINI JSON] Модель ${model} недоступна, пробую следующую...`);
+        safeWarn(`⚠️ [GEMINI JSON] Модель ${model} недоступна, пробую следующую...`);
         continue;
       } else {
         const errorText = await response.text();
-        console.warn(`⚠️ [GEMINI JSON] Ошибка ${response.status} от ${model}: ${errorText.substring(0, 200)}`);
+        safeWarn(`⚠️ [GEMINI JSON] Ошибка ${response.status} от ${model}: ${errorText.substring(0, 200)}`);
         continue;
       }
     } catch (error: any) {
-      console.warn(`⚠️ [GEMINI JSON] Ошибка с ${model}: ${error.message}, пробую следующую модель...`);
+      safeWarn(`⚠️ [GEMINI JSON] Ошибка с ${model}: ${error.message}, пробую следующую модель...`);
       continue;
     }
   }
@@ -579,7 +580,7 @@ export async function analyzeMultipleImagesTwoStage(options: {
   const isRadiologyOnly = options.isRadiologyOnly || false;
   
   try {
-    console.log(`🚀 [MULTI-TWO-STAGE] Шаг 1: Извлечение JSON...`);
+    safeLog(`🚀 [MULTI-TWO-STAGE] Шаг 1: Извлечение JSON...`);
     const extractionResult = await extractImageJSON({
       imagesBase64: options.imagesBase64,
       modality: imageType,
@@ -614,7 +615,7 @@ ${directiveCriteria}`;
       temperature: 0.1,
     };
 
-    console.log(`🚀 [MULTI-TWO-STAGE] Шаг 2: ${textModel} анализирует данные (JSON)...`);
+    safeLog(`🚀 [MULTI-TWO-STAGE] Шаг 2: ${textModel} анализирует данные (JSON)...`);
     const textResponse = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
@@ -635,15 +636,15 @@ ${directiveCriteria}`;
     const totalOutput = (textData.usage?.completion_tokens || 0) + (initialUsage?.completion_tokens || 0);
     const totalTokens = totalInput + totalOutput;
 
-    console.log('✅ [MULTI-TWO-STAGE] Анализ завершен');
+    safeLog('✅ [MULTI-TWO-STAGE] Анализ завершен');
     if (totalTokens > 0) {
-      console.log(`   📊 ИТОГО: ${formatCostLog(textModel, totalInput, totalOutput, totalTokens)}`);
+      safeLog(`   📊 ИТОГО: ${formatCostLog(textModel, totalInput, totalOutput, totalTokens)}`);
     }
 
     return result;
     
   } catch (error: any) {
-    console.error('Error in analyzeMultipleImagesTwoStage:', error);
+    safeError('Error in analyzeMultipleImagesTwoStage:', error);
     throw new Error(`Ошибка сравнительного анализа: ${error.message}`);
   }
 }
@@ -665,7 +666,7 @@ export async function analyzeMultipleImages(options: {
   const apiKey = rawKey?.trim();
   
   if (!apiKey) {
-    console.error('OPENROUTER_API_KEY не найден в переменных окружения');
+    safeError('OPENROUTER_API_KEY не найден в переменных окружения');
     throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
   }
 
@@ -725,7 +726,7 @@ export async function analyzeMultipleImages(options: {
   };
 
   try {
-    console.log(`Calling OpenRouter API with ${options.imagesBase64.length} images for comparative analysis:`, {
+    safeLog(`Calling OpenRouter API with ${options.imagesBase64.length} images for comparative analysis:`, {
       url: OPENROUTER_API_URL,
       model: model,
       hasApiKey: !!apiKey,
@@ -744,18 +745,18 @@ export async function analyzeMultipleImages(options: {
       body: JSON.stringify(payload)
     }, 180000); // Увеличенный таймаут для множественных изображений: 180 сек
 
-    console.log('OpenRouter API response status:', response.status);
+    safeLog('OpenRouter API response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenRouter API error response:', errorText);
+      safeError('OpenRouter API error response:', errorText);
       throw new Error(`OpenRouter API error: ${response.status} - ${errorText.substring(0, 500)}`);
     }
 
     const data = await response.json();
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      console.error('Invalid response format:', JSON.stringify(data).substring(0, 500));
+      safeError('Invalid response format:', JSON.stringify(data).substring(0, 500));
       throw new Error('Неверный формат ответа от OpenRouter API');
     }
 
@@ -765,13 +766,13 @@ export async function analyzeMultipleImages(options: {
     const outputTokens = data.usage?.completion_tokens || Math.floor(tokensUsed / 2);
     
     if (tokensUsed > 0) {
-      console.log(`✅ [${model}] Сравнительный анализ ${options.imagesBase64.length} изображений завершен`);
-      console.log(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
+      safeLog(`✅ [${model}] Сравнительный анализ ${options.imagesBase64.length} изображений завершен`);
+      safeLog(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
     }
 
     return data.choices[0].message.content || '';
   } catch (error: any) {
-    console.error('Error calling OpenRouter API for multiple images:', {
+    safeError('Error calling OpenRouter API for multiple images:', {
       name: error.name,
       message: error.message,
       stack: error.stack?.substring(0, 500)
@@ -802,7 +803,7 @@ export async function sendTextRequest(
   const apiKey = rawKey?.trim();
   
   if (!apiKey) {
-    console.error('OPENROUTER_API_KEY не найден в переменных окружения');
+    safeError('OPENROUTER_API_KEY не найден в переменных окружения');
     throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
   }
 
@@ -840,7 +841,7 @@ export async function sendTextRequest(
   };
 
   try {
-    console.log('Calling OpenRouter API for text:', {
+    safeLog('Calling OpenRouter API for text:', {
       url: OPENROUTER_API_URL,
       model: selectedModel,
       hasApiKey: !!apiKey,
@@ -856,18 +857,18 @@ export async function sendTextRequest(
       body: JSON.stringify(payload)
     });
 
-    console.log('OpenRouter API response status:', response.status);
+    safeLog('OpenRouter API response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenRouter API error response:', errorText);
+      safeError('OpenRouter API error response:', errorText);
       throw new Error(`OpenRouter API error: ${response.status} - ${errorText.substring(0, 500)}`);
     }
 
     const data = await response.json();
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      console.error('Invalid response format:', JSON.stringify(data).substring(0, 500));
+      safeError('Invalid response format:', JSON.stringify(data).substring(0, 500));
       throw new Error('Неверный формат ответа от OpenRouter API');
     }
 
@@ -877,13 +878,13 @@ export async function sendTextRequest(
     const outputTokens = data.usage?.completion_tokens || Math.floor(tokensUsed / 2);
     
     if (tokensUsed > 0) {
-      console.log(`✅ [${selectedModel}] Запрос завершен`);
-      console.log(`   📊 ${formatCostLog(selectedModel, inputTokens, outputTokens, tokensUsed)}`);
+      safeLog(`✅ [${selectedModel}] Запрос завершен`);
+      safeLog(`   📊 ${formatCostLog(selectedModel, inputTokens, outputTokens, tokensUsed)}`);
     }
 
     return data.choices[0].message.content || '';
   } catch (error: any) {
-    console.error('Error calling OpenRouter API:', {
+    safeError('Error calling OpenRouter API:', {
       name: error.name,
       message: error.message,
       stack: error.stack?.substring(0, 500)
