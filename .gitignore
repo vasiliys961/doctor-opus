@@ -64,3 +64,4 @@ nginx/ssl/
 
 # Documentation history and temporary files
 docs/history/
+!docs/history/VERSION_*.md
