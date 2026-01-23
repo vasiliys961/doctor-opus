@@ -145,14 +145,17 @@ export default function VideoComparisonPage() {
     try {
       const formData = new FormData()
       
-      // Добавляем кадры из обоих видео
-      // Важно: сохраняем порядок для правильного сравнения
-      frames1.forEach((frame, index) => {
-        formData.append('images', frame.file)
-      })
-      frames2.forEach((frame, index) => {
-        formData.append('images', frame.file)
-      })
+      // Собираем все кадры (сначала видео 1, затем видео 2)
+      const allFrames = [...frames1, ...frames2]
+      
+      // Добавляем в правильном формате для API
+      if (allFrames.length > 0) {
+        formData.append('file', allFrames[0].file) // Первый кадр как основной
+        // Остальные кадры как дополнительные
+        for (let i = 1; i < allFrames.length; i++) {
+          formData.append(`additionalImage_${i - 1}`, allFrames[i].file)
+        }
+      }
       
       // Добавляем метаинформацию о сравнении
       const comparisonPrompt = clinicalContext 

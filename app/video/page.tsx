@@ -118,10 +118,14 @@ export default function VideoPage() {
     try {
       const formData = new FormData()
       
-      // Добавляем все кадры как изображения
-      extractedFrames.forEach((frame, index) => {
-        formData.append('images', frame.file)
-      })
+      // Добавляем кадры в правильном формате для API
+      if (extractedFrames.length > 0) {
+        formData.append('file', extractedFrames[0].file) // Первый кадр как основной
+        // Остальные кадры как дополнительные
+        for (let i = 1; i < extractedFrames.length; i++) {
+          formData.append(`additionalImage_${i - 1}`, extractedFrames[i].file)
+        }
+      }
       
       if (clinicalContext) {
         formData.append('prompt', clinicalContext)
