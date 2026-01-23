@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeVideoTwoStage } from '@/lib/video';
 import { calculateCost } from '@/lib/cost-calculator';
+import { anonymizeText } from '@/lib/anonymization';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
@@ -31,12 +32,17 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
-    const prompt = (formData.get('prompt') as string | null) || undefined;
+    const rawPrompt = (formData.get('prompt') as string | null) || undefined;
+    const rawAdditionalContext = formData.get('additionalContext') as string | null;
+    
+    // Анонимизация текстовых данных
+    const prompt = rawPrompt ? anonymizeText(rawPrompt) : undefined;
+    const additionalContext = rawAdditionalContext ? anonymizeText(rawAdditionalContext) : null;
+    
     const imageType = (formData.get('imageType') as any) || 'universal';
     const patientAge = formData.get('patientAge') as string | null;
     const specialty = formData.get('specialty') as string | null;
     const urgency = formData.get('urgency') as string | null;
-    const additionalContext = formData.get('additionalContext') as string | null;
 
     if (!file) {
       return NextResponse.json(
@@ -86,6 +92,13 @@ export async function POST(request: NextRequest) {
       hasPrompt: !!prompt,
       imageType,
     });
+    
+    if (rawPrompt && rawPrompt !== prompt) {
+      console.log('🛡️ [VIDEO API] Текст анонимизирован (промпт)');
+    }
+    if (rawAdditionalContext && rawAdditionalContext !== additionalContext) {
+      console.log('🛡️ [VIDEO API] Текст анонимизирован (доп. контекст)');
+    }
 
     const { description, analysis, usage } = await analyzeVideoTwoStage({
       prompt: prompt || undefined,
