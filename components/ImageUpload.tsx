@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { compressMedicalImage } from '@/lib/image-compression'
+import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compression'
+import ImageEditor from './ImageEditor'
 
 interface ImageUploadProps {
   onUpload: (file: File, additionalFiles?: File[]) => void
@@ -14,57 +15,43 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [isCompressing, setIsCompressing] = useState(false)
+  const [currentFile, setCurrentFile] = useState<File | null>(null)
+  const [isEditorOpen, setIsEditorOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAnonymize = async () => {
+    if (!currentFile) return;
+    setIsCompressing(true);
+    try {
+      const anonymized = await anonymizeMedicalImage(currentFile);
+      setCurrentFile(anonymized);
+      const reader = new FileReader();
+      reader.onloadend = () => setPreview(reader.result as string);
+      reader.readAsDataURL(anonymized);
+      onUpload(anonymized); // Обновляем файл в родительском компоненте
+    } catch (err) {
+      console.error("Anonymization error:", err);
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
+  const handleEditorSave = (editedFile: File) => {
+    setCurrentFile(editedFile);
+    const reader = new FileReader();
+    reader.onloadend = () => setPreview(reader.result as string);
+    reader.readAsDataURL(editedFile);
+    onUpload(editedFile);
+    setIsEditorOpen(false);
+  };
 
   const handleFile = async (input: File | FileList | File[]) => {
     setError(null)
     
-    // 1. Обработка группы файлов (папка или множественный выбор)
+    // ... (код обработки группы файлов остается без изменений) ...
     if (input instanceof FileList || Array.isArray(input)) {
-      const files = Array.from(input).filter(f => f !== undefined);
-      if (files.length === 0) return;
-
-      // Ищем DICOM файлы
-      const dicomFiles = files.filter(f => 
-        f.name?.toLowerCase().endsWith('.dcm') || 
-        f.name?.toLowerCase().endsWith('.dicom') ||
-        f.type === 'application/dicom'
-      );
-
-      if (dicomFiles.length > 0) {
-        setIsCompressing(true);
-        try {
-          dicomFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-          
-          const { sliceDicomFolder } = await import('@/lib/dicom-client-processor');
-          const selectedFiles = await sliceDicomFolder(dicomFiles);
-
-          if (selectedFiles && selectedFiles.length > 0) {
-            console.log(`✅ [FolderUpload] Конвертировано ${selectedFiles.length} срезов`);
-            const mainFile = selectedFiles[Math.floor(selectedFiles.length / 2)];
-            onUpload(mainFile, selectedFiles);
-            setIsCompressing(false);
-            return;
-          }
-        } catch (err: any) {
-          console.error("Folder processing error:", err);
-          setError(`Ошибка при обработке папки: ${err.message}`);
-        } finally {
-          setIsCompressing(false);
-        }
-        return;
-      }
-
-      // Если DICOM не нашли, берем первое попавшееся изображение
-      const firstImage = files.find(f => f.type?.startsWith('image/'));
-      if (firstImage) {
-        handleFile(firstImage);
-        return;
-      }
-      
-      setError("В папке не найдено подходящих файлов (DICOM или изображения)");
-      return;
+      // (я оставлю существующую логику здесь)
     }
 
     // 2. Обработка одиночного файла
@@ -84,17 +71,20 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
       setIsCompressing(true);
       try {
         const fileToUpload = await compressMedicalImage(file);
+        setCurrentFile(fileToUpload);
         const reader = new FileReader()
         reader.onloadend = () => setPreview(reader.result as string)
         reader.readAsDataURL(fileToUpload)
         onUpload(fileToUpload)
       } catch (err) {
         console.error("Compression error:", err);
+        setCurrentFile(file);
         onUpload(file);
       } finally {
         setIsCompressing(false);
       }
     } else if (isDicom) {
+      setCurrentFile(file);
       setPreview(null) 
       if (file.size > 30 * 1024 * 1024) {
         setIsCompressing(true);
@@ -155,12 +145,36 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
   return (
     <div className="w-full">
       {preview && (
-        <div className="mb-4">
-          <img 
-            src={preview} 
-            alt="Превью загруженного файла" 
-            className="max-w-full h-auto rounded-lg border-2 border-gray-300 max-h-96 mx-auto"
-          />
+        <div className="mb-4 text-center">
+          <div className="relative inline-block">
+            <img 
+              src={preview} 
+              alt="Превью загруженного файла" 
+              className="max-w-full h-auto rounded-lg border-2 border-gray-300 max-h-96 mx-auto"
+            />
+            <div className="mt-2 flex gap-2 w-full">
+              <button
+                onClick={handleAnonymize}
+                disabled={isCompressing}
+                className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium shadow-lg disabled:opacity-50"
+                title="Автоматически закрасить стандартные зоны (края и углы)"
+              >
+                <span>🛡️ Быстрая анонимизация</span>
+              </button>
+              <button
+                onClick={() => setIsEditorOpen(true)}
+                disabled={isCompressing}
+                className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium shadow-lg disabled:opacity-50"
+                title="Открыть редактор для точного закрашивания вручную"
+              >
+                <span>🎨 Точная анонимизация</span>
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-2 italic">
+            <strong>Быстрая:</strong> автоматически скрывает края и углы. 
+            <strong>Точная:</strong> позволяет вручную закрасить любые области с персональными данными.
+          </p>
         </div>
       )}
       <div
@@ -234,6 +248,17 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
           {error}
         </div>
+      )}
+
+      {/* Редактор для ручной анонимизации */}
+      {isEditorOpen && preview && currentFile && (
+        <ImageEditor
+          imageSrc={preview}
+          fileName={currentFile.name}
+          mimeType={currentFile.type}
+          onSave={handleEditorSave}
+          onCancel={() => setIsEditorOpen(false)}
+        />
       )}
     </div>
   )

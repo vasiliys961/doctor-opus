@@ -12,6 +12,7 @@ import {
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
+import { anonymizeImageBuffer } from "@/lib/image-compression";
 import { extractDicomMetadata, formatDicomMetadataForAI } from '@/lib/dicom-service';
 import { processDicomJs } from "@/lib/dicom-processor";
 import { exec } from 'child_process';
@@ -78,6 +79,7 @@ export async function POST(request: NextRequest) {
     for (const img of allImages) {
       const isDicom = img.name.toLowerCase().endsWith('.dcm') || img.type === 'application/dicom';
       if (isDicom) {
+        // DICOM: используем processDicomJs (уже включает анонимизацию)
         const arrayBuffer = await img.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         const nativeMeta = extractDicomMetadata(buffer);
@@ -91,8 +93,18 @@ export async function POST(request: NextRequest) {
           mimeTypes.push(img.type || 'application/dicom');
         }
       } else {
+        // ОБЫЧНОЕ ИЗОБРАЖЕНИЕ: АВТОМАТИЧЕСКАЯ АНОНИМИЗАЦИЯ НА СЕРВЕРЕ
         const arrayBuffer = await img.arrayBuffer();
-        imagesBase64.push(Buffer.from(arrayBuffer).toString('base64'));
+        let buffer = Buffer.from(arrayBuffer);
+        
+        // Применяем анонимизацию для всех изображений (JPG, PNG и т.д.)
+        if (img.type.startsWith('image/')) {
+          console.log(`🛡️ [Anonymization] Автоматическая анонимизация: ${img.name}`);
+          // @ts-expect-error - Несовместимость типов Buffer между canvas и Node.js, но код работает корректно
+          buffer = await anonymizeImageBuffer(buffer, img.type);
+        }
+        
+        imagesBase64.push(buffer.toString('base64'));
         mimeTypes.push(img.type);
       }
     }
@@ -118,7 +130,8 @@ export async function POST(request: NextRequest) {
           finalClinicalContext, 
           mimeTypes, 
           modelToUse, 
-          [], 
+          undefined,  // specialty
+          [],         // history
           isTwoStage
         );
         return handleStreamingResponse(stream, modelToUse);
@@ -139,9 +152,9 @@ export async function POST(request: NextRequest) {
           imagesBase64[0], 
           imageType as any, 
           finalClinicalContext, 
-          undefined, 
+          undefined,  // specialty
           modelToUse, 
-          [], 
+          [],         // history
           isTwoStage
         );
         return handleStreamingResponse(stream, modelToUse);

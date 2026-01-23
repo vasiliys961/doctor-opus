@@ -111,16 +111,46 @@ export async function processDicomJs(buffer: Buffer): Promise<DicomProcessResult
     const low = windowCenter - windowWidth / 2;
     const high = windowCenter + windowWidth / 2;
 
+    // РАСШИРЕННЫЕ параметры анонимизации: скрываем верх, низ и боковые края
+    const anonymizeTopPercent = 0.10;    // 10% сверху (было 8%)
+    const anonymizeBottomPercent = 0.08; // 8% снизу (новое)
+    const anonymizeSidePercent = 0.12;   // 12% с боков по всей высоте (было 15% только сверху)
+    
+    const topRowsToHide = Math.floor(rows * anonymizeTopPercent);
+    const bottomRowsToHide = Math.floor(rows * anonymizeBottomPercent);
+    const sideColsToHide = Math.floor(cols * anonymizeSidePercent);
+
     for (let i = 0; i < rows * cols; i++) {
+      const x = i % cols;
+      const y = Math.floor(i / cols);
+      
       let val = processedPixels[i];
       // Применяем окно
       val = ((val - low) / (high - low)) * 255;
       val = Math.min(255, Math.max(0, val));
 
       const idx = i * 4;
-      imageData.data[idx] = val;     // R
-      imageData.data[idx + 1] = val; // G
-      imageData.data[idx + 2] = val; // B
+
+      // Проверка на зону анонимизации (РАСШИРЕННАЯ)
+      // 1. Верхняя полоса (ФИО, дата рождения)
+      // 2. Нижняя полоса (доп. данные аппарата, footer)
+      // 3. Левый край по всей высоте
+      // 4. Правый край по всей высоте
+      const isInAnonymizeZone = 
+        y < topRowsToHide ||                    // Верх
+        y >= rows - bottomRowsToHide ||         // Низ
+        x < sideColsToHide ||                   // Левый край
+        x >= cols - sideColsToHide;             // Правый край
+
+      if (isInAnonymizeZone) {
+        imageData.data[idx] = 0;     // R
+        imageData.data[idx + 1] = 0; // G
+        imageData.data[idx + 2] = 0; // B
+      } else {
+        imageData.data[idx] = val;     // R
+        imageData.data[idx + 1] = val; // G
+        imageData.data[idx + 2] = val; // B
+      }
       imageData.data[idx + 3] = 255; // A
     }
 

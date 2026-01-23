@@ -8,7 +8,7 @@
  * но адаптирована под формат OpenRouter Chat Completions и под TypeScript.
  */
 
-import { getObjectiveDescriptionPrompt, getDirectivePrompt, ImageType } from './prompts';
+import { getObjectiveDescriptionPrompt, getDirectivePrompt, getVideoComparisonPrompt, ImageType } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -26,6 +26,15 @@ export interface AnalyzeVideoOptions {
   /** Тип исследования (modality) */
   imageType?: ImageType;
   /** Дополнительные метаданные (возраст, срочность и т.д.) */
+  metadata?: Record<string, any> | null;
+}
+
+export interface AnalyzeTwoVideosOptions {
+  prompt?: string;
+  video1Base64: string;
+  video2Base64: string;
+  mimeType1?: string;
+  mimeType2?: string;
   metadata?: Record<string, any> | null;
 }
 
@@ -154,6 +163,117 @@ export async function analyzeVideoTwoStage(
   const analysis = analysisData?.choices?.[0]?.message?.content || 'Не удалось получить заключение.';
 
   // Суммируем токены второго этапа
+  if (analysisData?.usage) {
+    totalPromptTokens += analysisData.usage.prompt_tokens || 0;
+    totalCompletionTokens += analysisData.usage.completion_tokens || 0;
+  }
+
+  return {
+    description,
+    analysis,
+    usage: {
+      prompt_tokens: totalPromptTokens,
+      completion_tokens: totalCompletionTokens,
+      total_tokens: totalPromptTokens + totalCompletionTokens
+    }
+  };
+}
+
+/**
+ * Сравнительный анализ двух видео через OpenRouter (Gemini 3.0 + Gemini 3.0)
+ */
+export async function analyzeTwoVideosTwoStage(
+  options: AnalyzeTwoVideosOptions
+): Promise<AnalyzeVideoResult> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  let totalPromptTokens = 0;
+  let totalCompletionTokens = 0;
+
+  // ЭТАП 1: Описание динамики
+  const descPrompt = getVideoComparisonPrompt(options.prompt);
+  
+  const descriptionContent = [
+    {
+      type: 'video_url' as const,
+      video_url: { url: `data:${options.mimeType1 || 'video/mp4'};base64,${options.video1Base64}` },
+    },
+    {
+      type: 'video_url' as const,
+      video_url: { url: `data:${options.mimeType2 || 'video/mp4'};base64,${options.video2Base64}` },
+    },
+    {
+      type: 'text' as const,
+      text: descPrompt,
+    },
+  ];
+
+  const descriptionPayload = {
+    model: MODELS.GEMINI_3_FLASH,
+    messages: [{ role: 'user', content: descriptionContent }],
+    max_tokens: 16000,
+    temperature: 0.1,
+  };
+
+  const descriptionResponse = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://doctor-opus.ru',
+      'X-Title': 'Doctor Opus',
+    },
+    body: JSON.stringify(descriptionPayload),
+  });
+
+  if (!descriptionResponse.ok) {
+    throw new Error(`OpenRouter error (Stage 1): ${await descriptionResponse.text()}`);
+  }
+
+  const descriptionData = await descriptionResponse.json();
+  const description = descriptionData?.choices?.[0]?.message?.content || 'Не удалось получить описание.';
+
+  if (descriptionData?.usage) {
+    totalPromptTokens += descriptionData.usage.prompt_tokens || 0;
+    totalCompletionTokens += descriptionData.usage.completion_tokens || 0;
+  }
+
+  // ЭТАП 2: Финальное заключение Профессора
+  const analysisPayload = {
+    model: MODELS.GEMINI_3_FLASH,
+    messages: [
+      {
+        role: 'system',
+        content: "Ты — американский профессор клинической медицины. Проанализируй описание динамики двух видео и дай финальную клиническую директиву."
+      },
+      {
+        role: 'user',
+        content: `На основе сравнения двух видео:\n\n${description}\n\nСформулируй краткую и точную клиническую тактику.`
+      },
+    ],
+    max_tokens: 16000,
+    temperature: 0.2,
+  };
+
+  const analysisResponse = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://doctor-opus.ru',
+      'X-Title': 'Doctor Opus',
+    },
+    body: JSON.stringify(analysisPayload),
+  });
+
+  if (!analysisResponse.ok) {
+    throw new Error(`OpenRouter error (Stage 2): ${await analysisResponse.text()}`);
+  }
+
+  const analysisData = await analysisResponse.json();
+  const analysis = analysisData?.choices?.[0]?.message?.content || 'Не удалось получить заключение.';
+
   if (analysisData?.usage) {
     totalPromptTokens += analysisData.usage.prompt_tokens || 0;
     totalCompletionTokens += analysisData.usage.completion_tokens || 0;

@@ -201,6 +201,15 @@ export default function ComparativeAnalysisPage() {
               <div className="font-semibold text-sm">Общее сравнение</div>
             </button>
           </div>
+          
+          <div className="mt-4 flex justify-center">
+            <a 
+              href="/comparative/video" 
+              className="text-primary-600 hover:text-primary-800 font-semibold flex items-center gap-2 bg-primary-50 px-4 py-2 rounded-lg border border-primary-200 transition-colors"
+            >
+              🎬 Перейти к сравнению видео-исследований →
+            </a>
+          </div>
         </div>
 
         <div className="mb-6">

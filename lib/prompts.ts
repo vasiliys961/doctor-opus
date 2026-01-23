@@ -477,3 +477,37 @@ export function getPrompt(imageType: ImageType, mode: 'fast' | 'optimized', spec
 export function getFastAnalysisPrompt(imageType: ImageType, specialty?: Specialty): string {
   return getDirectivePrompt(imageType, 'Дай краткий разбор основных патологий.', specialty);
 }
+
+// === СРАВНИТЕЛЬНЫЙ АНАЛИЗ ВИДЕО ===
+export const VIDEO_COMPARISON_PROMPT = `
+Ты — американский профессор медицины и эксперт-радиолог. 
+Перед тобой два видео-исследования одного пациента. 
+
+### ТВОЯ ЗАДАЧА:
+1. Провести СРАВНИТЕЛЬНЫЙ АНАЛИЗ Видео 1 (АРХИВ/БАЗА) и Видео 2 (ТЕКУЩЕЕ).
+2. Оценить динамику выявленных ранее изменений.
+3. Составить подробный описательный протокол динамики (Раздел 0).
+4. Сформулировать клиническую директиву на основе выявленных изменений.
+
+### RESPONSE FORMAT
+Используй стандартную структуру "Клинической директивы":
+**0. Протокол описания (Radiological Report)**
+- Сравнение ключевых находок на Видео 1 и Видео 2.
+- Точные измерения изменений (если возможно оценить визуально).
+- Динамика (улучшение, стабилизация, прогрессирование).
+
+**1. Клинический обзор**
+**2. Диференциальный диагноз и Коды**
+**3. План действий (Step-by-Step)**
+**4. Ссылки**
+
+${COMMON_FORMAT}
+`;
+
+export function getVideoComparisonPrompt(userPrompt: string = ''): string {
+  let prompt = VIDEO_COMPARISON_PROMPT;
+  if (userPrompt) {
+    prompt += `\n\nДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ ОТ ПОЛЬЗОВАТЕЛЯ:\n${userPrompt}`;
+  }
+  return prompt;
+}

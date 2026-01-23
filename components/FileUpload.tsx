@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { compressMedicalImage } from '@/lib/image-compression'
+import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compression'
+import ImageEditor from './ImageEditor'
 
 interface FileUploadProps {
   onUpload: (files: File[]) => void
@@ -20,6 +21,7 @@ export default function FileUpload({
   const [error, setError] = useState<string | null>(null)
   const [previewFiles, setPreviewFiles] = useState<Array<{ file: File; preview?: string }>>([])
   const [isCompressing, setIsCompressing] = useState(false)
+  const [editingFileIndex, setEditingFileIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
@@ -127,6 +129,58 @@ export default function FileUpload({
     setPreviewFiles(prev => prev.filter(p => p.file !== fileToRemove))
   }
 
+  const anonymizeAllImages = async () => {
+    setIsCompressing(true);
+    try {
+      const newPreviewFiles = await Promise.all(
+        previewFiles.map(async (item) => {
+          // Анонимизируем только изображения
+          if (!item.file.type.startsWith('image/')) {
+            return item;
+          }
+
+          const anonymized = await anonymizeMedicalImage(item.file);
+          
+          // Обновляем превью
+          return new Promise<{ file: File; preview?: string }>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              resolve({ file: anonymized, preview: reader.result as string });
+            };
+            reader.readAsDataURL(anonymized);
+          });
+        })
+      );
+
+      setPreviewFiles(newPreviewFiles);
+      
+      // Обновляем файлы в родительском компоненте
+      const updatedFiles = newPreviewFiles.map(item => item.file);
+      onUpload(updatedFiles);
+    } catch (err) {
+      console.error("Anonymization error:", err);
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
+  const handleEditorSave = (editedFile: File) => {
+    if (editingFileIndex === null) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const newPreviewFiles = previewFiles.map((item, idx) =>
+        idx === editingFileIndex
+          ? { file: editedFile, preview: reader.result as string }
+          : item
+      );
+      setPreviewFiles(newPreviewFiles);
+      onUpload(newPreviewFiles.map(item => item.file));
+      setEditingFileIndex(null);
+    };
+    reader.readAsDataURL(editedFile);
+  };
+
   const getFileIcon = (file: File) => {
     if (file.type.startsWith('image/')) return '🖼️'
     if (file.type === 'application/pdf') return '📄'
@@ -145,7 +199,7 @@ export default function FileUpload({
   return (
     <div className="w-full">
       {previewFiles.length > 0 && (
-        <div className="mb-4 space-y-2">
+        <div className="mb-4 space-y-3">
           {previewFiles.map((item, idx) => (
             <div
               key={idx}
@@ -166,15 +220,44 @@ export default function FileUpload({
                 <div className="font-medium text-sm truncate">{item.file.name}</div>
                 <div className="text-xs text-gray-500">{formatFileSize(item.file.size)}</div>
               </div>
-              <button
-                onClick={() => removeFile(item.file)}
-                className="text-red-500 hover:text-red-700 text-xl"
-                title="Удалить файл"
-              >
-                ✕
-              </button>
+              <div className="flex gap-2">
+                {item.file.type.startsWith('image/') && item.preview && (
+                  <button
+                    onClick={() => setEditingFileIndex(idx)}
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium px-2"
+                    title="Открыть редактор для точной анонимизации"
+                  >
+                    🎨 Редактировать
+                  </button>
+                )}
+                <button
+                  onClick={() => removeFile(item.file)}
+                  className="text-red-500 hover:text-red-700 text-xl"
+                  title="Удалить файл"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           ))}
+          
+          {/* Кнопка анонимизации для всех изображений */}
+          {previewFiles.some(item => item.file.type.startsWith('image/')) && (
+            <div className="pt-2">
+              <button
+                onClick={anonymizeAllImages}
+                disabled={isCompressing}
+                className="w-full flex items-center justify-center space-x-2 py-2 px-4 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Закрасить черным области с персональными данными на всех изображениях"
+              >
+                <span>🛡️ Анонимизировать все изображения</span>
+              </button>
+              <p className="text-xs text-gray-500 mt-2 italic text-center">
+                Автоматически скроет зоны с ФИО и персональными данными на всех загруженных снимках. 
+                Защита по ФЗ-152.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -252,6 +335,17 @@ export default function FileUpload({
         <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
           ❌ {error}
         </div>
+      )}
+
+      {/* Редактор для ручной анонимизации */}
+      {editingFileIndex !== null && previewFiles[editingFileIndex] && (
+        <ImageEditor
+          imageSrc={previewFiles[editingFileIndex].preview!}
+          fileName={previewFiles[editingFileIndex].file.name}
+          mimeType={previewFiles[editingFileIndex].file.type}
+          onSave={handleEditorSave}
+          onCancel={() => setEditingFileIndex(null)}
+        />
       )}
     </div>
   )
