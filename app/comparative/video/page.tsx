@@ -134,7 +134,7 @@ export default function VideoComparisonPage() {
   }
 
   // Анализ кадров
-  const handleAnalyze = async () => {
+  const handleAnalyzeFrames = async () => {
     if (frames1.length === 0 || frames2.length === 0) {
       setError('Сначала извлеките кадры из обоих видео')
       return
@@ -200,6 +200,75 @@ export default function VideoComparisonPage() {
     }
   }
 
+  // Анализ полного видео (для анонимных файлов)
+  const handleAnalyzeFullVideo = async () => {
+    if (!video1 || !video2) {
+      setError('Загрузите оба видео для сравнения')
+      return
+    }
+
+    if (!confirmNoPersonalData) {
+      setError('Необходимо подтвердить отсутствие персональных данных в обоих видео')
+      return
+    }
+
+    setAnalyzing(true)
+    setLoading(true)
+    setError(null)
+    setResult('')
+    setCurrentCost(0)
+
+    try {
+      const formData = new FormData()
+      formData.append('video1', video1)
+      formData.append('video2', video2)
+      if (clinicalContext) formData.append('prompt', clinicalContext)
+
+      console.log('🎬 [VIDEO COMPARISON] Отправка ПОЛНЫХ видео на анализ...')
+      console.warn('⚠️ [VIDEO COMPARISON] Режим без анонимизации - врач подтвердил отсутствие ПД')
+
+      const response = await fetch('/api/analyze/video-comparison', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        let fullResult = ''
+        if (data.description) fullResult += `## 📝 ЭТАП 1: Сравнение динамики\n\n${data.description}\n\n`
+        if (data.analysis) fullResult += `## 🏥 ЭТАП 2: Клиническая директива\n\n${data.analysis}`
+        
+        setResult(fullResult)
+        setCurrentCost(data.cost || 0)
+        setModel(data.model)
+        
+        logUsage({
+          section: 'video-comparison-full',
+          model: data.model,
+          inputTokens: data.usage?.prompt_tokens || 8000,
+          outputTokens: data.usage?.completion_tokens || 4000,
+        })
+      } else {
+        setError(data.error || 'Ошибка при анализе')
+      }
+    } catch (err: any) {
+      setError(err.message || 'Ошибка сервера')
+    } finally {
+      setAnalyzing(false)
+      setLoading(false)
+    }
+  }
+
+  // Универсальный обработчик анализа
+  const handleAnalyze = () => {
+    if (analysisMode === 'frames') {
+      return handleAnalyzeFrames()
+    } else {
+      return handleAnalyzeFullVideo()
+    }
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 Сравнительный анализ видео</h1>
@@ -256,22 +325,108 @@ export default function VideoComparisonPage() {
         </div>
       </div>
 
-      {/* Кнопка извлечения кадров */}
-      {video1 && video2 && frames1.length === 0 && (
+      {/* Переключатель режимов и кнопки */}
+      {video1 && video2 && (
         <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <button
-            onClick={handleExtractFrames}
-            disabled={extracting}
-            className="w-full px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {extracting 
-              ? `⏳ Извлечение кадров... ${extractionProgress.current}/${extractionProgress.total}` 
-              : '🎞️ Извлечь и анонимизировать кадры из обоих видео'
-            }
-          </button>
-          <p className="text-sm text-gray-600 mt-2 text-center">
-            Будет извлечено одинаковое количество кадров из каждого видео в синхронных позициях
-          </p>
+          {/* Режим анализа */}
+          <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <p className="text-sm font-semibold text-gray-900 mb-2">Выберите режим анализа:</p>
+            <div className="space-y-2">
+              <label className="flex items-start cursor-pointer">
+                <input
+                  type="radio"
+                  value="frames"
+                  checked={analysisMode === 'frames'}
+                  onChange={() => {
+                    setAnalysisMode('frames')
+                    setConfirmNoPersonalData(false)
+                  }}
+                  className="mt-1 mr-3"
+                />
+                <div className="flex-1">
+                  <span className="font-semibold text-green-700">🛡️ Безопасный (извлечение кадров)</span>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Система извлечет синхронные кадры из обоих видео, анонимизирует каждый, покажет preview попарно. 
+                    <strong>Рекомендуется по умолчанию.</strong>
+                  </p>
+                </div>
+              </label>
+              
+              <label className="flex items-start cursor-pointer">
+                <input
+                  type="radio"
+                  value="full-video"
+                  checked={analysisMode === 'full-video'}
+                  onChange={() => setAnalysisMode('full-video')}
+                  className="mt-1 mr-3"
+                />
+                <div className="flex-1">
+                  <span className="font-semibold text-amber-700">⚡ Полное видео</span>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Оба видео отправляются целиком без обработки. Максимальная точность (100%), 
+                    но требует предварительной проверки на отсутствие ПД.
+                    <strong> Только для анонимных файлов!</strong>
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+          
+          {/* Предупреждение для режима "полное видео" */}
+          {analysisMode === 'full-video' && (
+            <div className="p-4 bg-red-50 border-2 border-red-300 rounded-lg mb-4">
+              <div className="flex items-start space-x-2 mb-3">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <p className="font-bold text-red-900 text-lg">ВНИМАНИЕ: Оба видео будут отправлены без анонимизации!</p>
+                  <p className="text-red-800 text-sm mt-1">
+                    В режиме "Полное видео" кадры НЕ анонимизируются. 
+                    Если на ЛЮБОМ из видео присутствуют ПД - 
+                    <strong> это нарушение ФЗ-152!</strong>
+                  </p>
+                  <ul className="text-red-700 text-xs mt-2 ml-4 list-disc space-y-1">
+                    <li>Оба видео будут отправлены в OpenRouter (США) целиком</li>
+                    <li>Все кадры попадут в обработку без изменений</li>
+                    <li>Более высокая стоимость (~$1.00 vs $0.15)</li>
+                    <li>Время обработки: 60-120 секунд</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <label className="flex items-start cursor-pointer p-3 bg-white rounded border-2 border-red-400 hover:bg-red-50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={confirmNoPersonalData}
+                  onChange={(e) => setConfirmNoPersonalData(e.target.checked)}
+                  className="mt-1 mr-3"
+                  required
+                />
+                <span className="text-sm font-semibold text-red-900">
+                  Подтверждаю: я просмотрел ОБА видео и удостоверяю, что они НЕ содержат 
+                  персональных данных пациента. Я беру на себя ответственность за соблюдение ФЗ-152.
+                </span>
+              </label>
+            </div>
+          )}
+          
+          {/* Кнопка извлечения кадров (только для режима "кадры") */}
+          {analysisMode === 'frames' && frames1.length === 0 && (
+            <>
+              <button
+                onClick={handleExtractFrames}
+                disabled={extracting}
+                className="w-full px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {extracting 
+                  ? `⏳ Извлечение кадров... ${extractionProgress.current}/${extractionProgress.total}` 
+                  : '🎞️ Извлечь и анонимизировать кадры из обоих видео'
+                }
+              </button>
+              <p className="text-sm text-gray-600 mt-2 text-center">
+                Будет извлечено одинаковое количество кадров из каждого видео в синхронных позициях
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -376,14 +531,25 @@ export default function VideoComparisonPage() {
 
       <button
         onClick={handleAnalyze}
-        disabled={loading || extracting || frames1.length === 0 || frames2.length === 0}
+        disabled={
+          loading || 
+          extracting || 
+          (analysisMode === 'frames' && (frames1.length === 0 || frames2.length === 0)) ||
+          (analysisMode === 'full-video' && !confirmNoPersonalData)
+        }
         className="w-full py-4 bg-primary-600 text-white rounded-xl font-bold text-xl shadow-lg hover:bg-primary-700 disabled:opacity-50 transition-all"
       >
         {analyzing 
-          ? '⌛ Идет сравнительный анализ кадров...' 
-          : frames1.length > 0 && frames2.length > 0
-            ? `📤 Сравнить ${frames1.length + frames2.length} кадров`
-            : '🔍 Сначала извлеките кадры'
+          ? '⌛ Идет сравнительный анализ...' 
+          : analysisMode === 'frames'
+            ? (frames1.length > 0 && frames2.length > 0
+                ? `📤 Сравнить ${frames1.length + frames2.length} кадров`
+                : '🔍 Сначала извлеките кадры'
+              )
+            : (confirmNoPersonalData
+                ? '⚡ Сравнить полные видео'
+                : '⚠️ Подтвердите отсутствие ПД'
+              )
         }
       </button>
 
