@@ -36,6 +36,10 @@ export default function VideoComparisonPage() {
   const [frames2, setFrames2] = useState<ExtractedFrame[]>([])
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 })
   const [editingFrame, setEditingFrame] = useState<{ videoIndex: 1 | 2; frameIndex: number } | null>(null)
+  
+  // Режим анализа
+  const [analysisMode, setAnalysisMode] = useState<'frames' | 'full-video'>('frames')
+  const [confirmNoPersonalData, setConfirmNoPersonalData] = useState(false)
 
   const handleFileChange = (index: 1 | 2) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

@@ -35,6 +35,10 @@ export default function VideoPage() {
   const [extractedFrames, setExtractedFrames] = useState<ExtractedFrame[]>([])
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 })
   const [editingFrameIndex, setEditingFrameIndex] = useState<number | null>(null)
+  
+  // Режим анализа видео
+  const [analysisMode, setAnalysisMode] = useState<'frames' | 'full-video'>('frames')
+  const [confirmNoPersonalData, setConfirmNoPersonalData] = useState(false)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -47,6 +51,7 @@ export default function VideoPage() {
       }
       setFile(selectedFile)
       setExtractedFrames([]) // Сбросить предыдущие кадры
+      setConfirmNoPersonalData(false) // Сбросить подтверждение
       setError(null)
       setResult('')
     }
@@ -103,7 +108,7 @@ export default function VideoPage() {
   }
 
   // Анализ извлеченных кадров
-  const handleAnalyze = async () => {
+  const handleAnalyzeFrames = async () => {
     if (extractedFrames.length === 0) {
       setError('Сначала извлеките кадры из видео')
       return
@@ -166,6 +171,87 @@ export default function VideoPage() {
     }
   }
 
+  // Анализ полного видео (для анонимных файлов)
+  const handleAnalyzeFullVideo = async () => {
+    if (!file) {
+      setError('Пожалуйста, выберите видео файл')
+      return
+    }
+
+    if (!confirmNoPersonalData) {
+      setError('Необходимо подтвердить отсутствие персональных данных')
+      return
+    }
+
+    setAnalyzing(true)
+    setLoading(true)
+    setError(null)
+    setResult('')
+    setCurrentCost(0)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      if (clinicalContext) {
+        formData.append('prompt', clinicalContext)
+      }
+      formData.append('imageType', imageType)
+
+      console.log('🎬 [VIDEO] Отправка ПОЛНОГО видео на анализ...')
+      console.warn('⚠️ [VIDEO] Режим без анонимизации - врач подтвердил отсутствие ПД')
+      
+      const response = await fetch('/api/analyze/video', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Формируем результат с описанием и анализом
+        let fullResult = ''
+        
+        if (data.description) {
+          fullResult += `## 📝 ЭТАП 1: Описание видео (Gemini 3.0 Flash)\n\n${data.description}\n\n`
+        }
+        
+        if (data.analysis) {
+          fullResult += `## 🏥 ЭТАП 2: Клиническая директива (Профессор)\n\n${data.analysis}`
+        }
+        
+        setResult(fullResult || data.result || 'Анализ выполнен')
+        setCurrentCost(data.cost || 0)
+        setModel(data.model || 'google/gemini-3-flash-preview')
+        setMode('fast')
+        
+        // Логирование использования
+        logUsage({
+          section: 'video-full',
+          model: data.model || 'google/gemini-3-flash-preview',
+          inputTokens: data.usage?.prompt_tokens || 5000, 
+          outputTokens: data.usage?.completion_tokens || 4000,
+        })
+      } else {
+        setError(data.error || 'Ошибка при анализе видео')
+      }
+    } catch (err: any) {
+      console.error('❌ [VIDEO] Ошибка:', err)
+      setError(err.message || 'Произошла ошибка при анализе')
+    } finally {
+      setAnalyzing(false)
+      setLoading(false)
+    }
+  }
+
+  // Универсальный обработчик анализа
+  const handleAnalyze = () => {
+    if (analysisMode === 'frames') {
+      return handleAnalyzeFrames()
+    } else {
+      return handleAnalyzeFullVideo()
+    }
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🎬 Анализ видео</h1>
@@ -213,39 +299,101 @@ export default function VideoPage() {
                   ✅ Выбран: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
                 </p>
                 
-                {/* Кнопка извлечения кадров */}
-                <button
-                  onClick={handleExtractFrames}
-                  disabled={extracting || extractedFrames.length > 0}
-                  className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {extracting 
-                    ? `⏳ Извлечение кадров... ${extractionProgress.current}/${extractionProgress.total}` 
-                    : extractedFrames.length > 0 
-                      ? `✅ Извлечено ${extractedFrames.length} кадров` 
-                      : '🎞️ Извлечь и анонимизировать кадры'
-                  }
-                </button>
-              </div>
-            )}
-            
-            {/* Информация о новой системе */}
-            {file && extractedFrames.length === 0 && (
-              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-start space-x-2">
-                  <span className="text-lg">ℹ️</span>
-                  <div className="text-sm">
-                    <p className="font-semibold text-blue-900 mb-1">Умная обработка видео</p>
-                    <p className="text-blue-800">
-                      Система автоматически извлечет 5-12 ключевых кадров (зависит от длины видео) и 
-                      <strong> анонимизирует каждый кадр</strong> (черные полосы по краям). 
-                      Вы увидите preview всех кадров перед отправкой.
-                    </p>
-                    <p className="text-blue-700 mt-2 text-xs">
-                      🛡️ <strong>Безопасность:</strong> Каждый кадр автоматически защищен. Вы можете дополнительно отредактировать любой кадр вручную.
-                    </p>
+                {/* Переключатель режимов анализа */}
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <p className="text-sm font-semibold text-gray-900 mb-2">Выберите режим анализа:</p>
+                  <div className="space-y-2">
+                    <label className="flex items-start cursor-pointer">
+                      <input
+                        type="radio"
+                        value="frames"
+                        checked={analysisMode === 'frames'}
+                        onChange={() => {
+                          setAnalysisMode('frames')
+                          setConfirmNoPersonalData(false)
+                        }}
+                        className="mt-1 mr-3"
+                      />
+                      <div className="flex-1">
+                        <span className="font-semibold text-green-700">🛡️ Безопасный (извлечение кадров)</span>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Система извлечет 5-12 ключевых кадров, анонимизирует каждый (черные полосы по краям), 
+                          покажет preview. Вы сможете отредактировать любой кадр вручную. 
+                          <strong>Рекомендуется по умолчанию.</strong>
+                        </p>
+                      </div>
+                    </label>
+                    
+                    <label className="flex items-start cursor-pointer">
+                      <input
+                        type="radio"
+                        value="full-video"
+                        checked={analysisMode === 'full-video'}
+                        onChange={() => setAnalysisMode('full-video')}
+                        className="mt-1 mr-3"
+                      />
+                      <div className="flex-1">
+                        <span className="font-semibold text-amber-700">⚡ Полное видео</span>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Видео отправляется целиком без обработки. Более высокая точность (100%), 
+                          но требует предварительной проверки на отсутствие ПД.
+                          <strong> Только для анонимных файлов!</strong>
+                        </p>
+                      </div>
+                    </label>
                   </div>
                 </div>
+                
+                {/* Предупреждение и подтверждение для режима "полное видео" */}
+                {analysisMode === 'full-video' && (
+                  <div className="p-4 bg-red-50 border-2 border-red-300 rounded-lg">
+                    <div className="flex items-start space-x-2 mb-3">
+                      <span className="text-2xl">⚠️</span>
+                      <div>
+                        <p className="font-bold text-red-900 text-lg">ВНИМАНИЕ: Риск утечки персональных данных!</p>
+                        <p className="text-red-800 text-sm mt-1">
+                          В режиме "Полное видео" кадры НЕ анонимизируются автоматически. 
+                          Если на видео присутствуют ФИО, дата рождения, паспортные данные или ID пациента - 
+                          <strong> это нарушение ФЗ-152!</strong>
+                        </p>
+                        <ul className="text-red-700 text-xs mt-2 ml-4 list-disc space-y-1">
+                          <li>Видео будет отправлено в OpenRouter (США) целиком</li>
+                          <li>Все кадры попадут в обработку без изменений</li>
+                          <li>Текстовые оверлеи и метаданные сохраняются</li>
+                        </ul>
+                      </div>
+                    </div>
+                    
+                    <label className="flex items-start cursor-pointer p-3 bg-white rounded border-2 border-red-400 hover:bg-red-50 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={confirmNoPersonalData}
+                        onChange={(e) => setConfirmNoPersonalData(e.target.checked)}
+                        className="mt-1 mr-3"
+                        required
+                      />
+                      <span className="text-sm font-semibold text-red-900">
+                        Подтверждаю: я просмотрел видео и удостоверяю, что оно НЕ содержит 
+                        персональных данных пациента (ФИО, дата рождения, паспорт, ID, адрес, телефон). 
+                        Я беру на себя ответственность за соблюдение ФЗ-152.
+                      </span>
+                    </label>
+                  </div>
+                )}
+                
+                {/* Кнопка извлечения кадров (только для режима "кадры") */}
+                {analysisMode === 'frames' && extractedFrames.length === 0 && (
+                  <button
+                    onClick={handleExtractFrames}
+                    disabled={extracting}
+                    className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {extracting 
+                      ? `⏳ Извлечение кадров... ${extractionProgress.current}/${extractionProgress.total}` 
+                      : '🎞️ Извлечь и анонимизировать кадры'
+                    }
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -335,14 +483,25 @@ export default function VideoPage() {
           {/* Кнопка анализа */}
           <button
             onClick={handleAnalyze}
-            disabled={loading || extracting || extractedFrames.length === 0}
+            disabled={
+              loading || 
+              extracting || 
+              (analysisMode === 'frames' && extractedFrames.length === 0) ||
+              (analysisMode === 'full-video' && !confirmNoPersonalData)
+            }
             className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
           >
             {analyzing 
-              ? '⏳ Анализ кадров...' 
-              : extractedFrames.length > 0
-                ? `📤 Отправить ${extractedFrames.length} кадров на анализ`
-                : '🎬 Сначала извлеките кадры'
+              ? '⏳ Анализ...' 
+              : analysisMode === 'frames'
+                ? (extractedFrames.length > 0
+                    ? `📤 Отправить ${extractedFrames.length} кадров на анализ`
+                    : '🎬 Сначала извлеките кадры'
+                  )
+                : (confirmNoPersonalData
+                    ? '⚡ Отправить полное видео на анализ'
+                    : '⚠️ Подтвердите отсутствие ПД'
+                  )
             }
           </button>
         </div>
