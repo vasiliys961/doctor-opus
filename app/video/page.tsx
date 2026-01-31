@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisTips from '@/components/AnalysisTips'
@@ -20,6 +20,7 @@ import { logUsage } from '@/lib/simple-logger'
 
 export default function VideoPage() {
   const [file, setFile] = useState<File | null>(null)
+  const [playlist, setPlaylist] = useState<File[]>([])
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [extracting, setExtracting] = useState(false)
@@ -30,6 +31,8 @@ export default function VideoPage() {
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [model, setModel] = useState<string>('')
   const [mode, setMode] = useState<string>('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
   
   // Новые state для работы с кадрами
   const [extractedFrames, setExtractedFrames] = useState<ExtractedFrame[]>([])
@@ -43,6 +46,16 @@ export default function VideoPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
     if (selectedFile) {
+      // Проверка на DICOM
+      const isDicom = selectedFile.name.toLowerCase().endsWith('.dcm') || 
+                      selectedFile.name.toLowerCase().endsWith('.dicom') || 
+                      selectedFile.type === 'application/dicom';
+      
+      if (isDicom) {
+        handleDicomFile(selectedFile);
+        return;
+      }
+
       // Проверка размера (100MB max)
       const maxSize = 100 * 1024 * 1024
       if (selectedFile.size > maxSize) {
@@ -50,6 +63,7 @@ export default function VideoPage() {
         return
       }
       setFile(selectedFile)
+      setPlaylist([]) // Сбросить плейлист при выборе одиночного файла
       setExtractedFrames([]) // Сбросить предыдущие кадры
       setConfirmNoPersonalData(false) // Сбросить подтверждение
       setError(null)
@@ -57,29 +71,129 @@ export default function VideoPage() {
     }
   }
 
-  // Извлечение и анонимизация кадров
+  const handleDicomFile = async (selectedFile: File) => {
+    setExtracting(true);
+    setError(null);
+    setPlaylist([]); // Сбросить плейлист
+    try {
+      const { sliceDicomFile } = await import('@/lib/dicom-client-processor');
+      const slices = await sliceDicomFile(selectedFile);
+      if (slices && slices.length > 0) {
+        const frames = slices.map((f, i) => ({
+          index: i,
+          timestamp: 0,
+          file: f,
+          preview: URL.createObjectURL(f)
+        }));
+        setExtractedFrames(frames);
+        setFile(selectedFile);
+        setAnalysisMode('frames');
+      } else {
+        setFile(selectedFile);
+      }
+    } catch (err: any) {
+      setError('Ошибка при обработке DICOM: ' + err.message);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileList = Array.from(files);
+    const dicomFiles = fileList.filter(f => 
+      f.name.toLowerCase().endsWith('.dcm') || 
+      f.name.toLowerCase().endsWith('.dicom') || 
+      f.type === 'application/dicom'
+    );
+
+    if (dicomFiles.length > 0) {
+      setExtracting(true);
+      setError(null);
+      setPlaylist(dicomFiles);
+      try {
+        const { sliceDicomFolder } = await import('@/lib/dicom-client-processor');
+        const slices = await sliceDicomFolder(dicomFiles);
+        if (slices && slices.length > 0) {
+          const frames = slices.map((f, i) => ({
+            index: i,
+            timestamp: 0,
+            file: f,
+            preview: URL.createObjectURL(f)
+          }));
+          setExtractedFrames(frames);
+          setFile(dicomFiles[0]); // Используем первый как базовый
+          setAnalysisMode('frames');
+        }
+      } catch (err: any) {
+        setError('Ошибка при обработке папки: ' + err.message);
+      } finally {
+        setExtracting(false);
+      }
+    } else {
+      // Если DICOM нет, ищем все видео-файлы
+      const videoFiles = fileList.filter(f => f.type.startsWith('video/'));
+      if (videoFiles.length > 0) {
+        setPlaylist(videoFiles);
+        setFile(videoFiles[0]); // Первое видео по умолчанию
+        setExtractedFrames([]);
+        setError(null);
+      } else {
+        setError('В папке не найдено DICOM-файлов или видео');
+      }
+    }
+  }
+
+  // Извлечение и анонимизация кадров из ВСЕХ видео в плейлисте (по порядку)
   const handleExtractFrames = async () => {
-    if (!file) {
-      setError('Пожалуйста, выберите видео файл')
+    if (playlist.length === 0 && !file) {
+      setError('Пожалуйста, выберите видео файл или папку')
       return
     }
 
     setExtracting(true)
     setError(null)
+    setExtractedFrames([])
     setExtractionProgress({ current: 0, total: 0 })
 
     try {
-      console.log('🎬 [VIDEO] Начало извлечения кадров...')
+      const filesToProcess = playlist.length > 0 ? playlist : [file!];
+      const allExtractedFrames: ExtractedFrame[] = [];
       
-      const frames = await extractAndAnonymizeFrames(
-        file,
-        (current, total) => {
-          setExtractionProgress({ current, total })
-        }
-      )
+      console.log(`🎬 [VIDEO] Начало пакетного извлечения кадров из ${filesToProcess.length} видео...`)
       
-      setExtractedFrames(frames)
-      console.log(`✅ [VIDEO] Извлечено ${frames.length} кадров`)
+      for (let i = 0; i < filesToProcess.length; i++) {
+        const currentFile = filesToProcess[i];
+        console.log(`🎞️ [VIDEO] Обработка видео ${i + 1}/${filesToProcess.length}: ${currentFile.name}`)
+        
+        const frames = await extractAndAnonymizeFrames(
+          currentFile,
+          (current, total) => {
+            // Для пакетной обработки прогресс считаем суммарно
+            setExtractionProgress({ 
+              current: (i * total) + current, 
+              total: filesToProcess.length * total 
+            })
+          }
+        )
+        
+        // Добавляем информацию о том, из какого видео кадр
+        const framesWithSource = frames.map(f => ({
+          ...f,
+          // Переименовываем файл для ясности в API
+          file: new File([f.file], `v${i+1}_${f.file.name}`, { type: f.file.type })
+        }));
+        
+        allExtractedFrames.push(...framesWithSource);
+      }
+      
+      // Обновляем индексы для всей коллекции
+      const finalFrames = allExtractedFrames.map((f, i) => ({ ...f, index: i }));
+      
+      setExtractedFrames(finalFrames)
+      console.log(`✅ [VIDEO] Успешно извлечено ${finalFrames.length} кадров из всех ракурсов`)
       
     } catch (err: any) {
       console.error('❌ [VIDEO] Ошибка извлечения кадров:', err)
@@ -135,7 +249,17 @@ export default function VideoPage() {
       if (clinicalContext) {
         formData.append('prompt', clinicalContext)
       }
+      
+      // Если у нас много видео, добавляем пояснение для ИИ
+      if (playlist.length > 1) {
+        const batchContext = `Проанализируй серию из ${playlist.length} видео-ракурсов одного исследования. Кадры извлечены по порядку из каждого файла. Сформируй единый отчет по всем предоставленным визуальным данным.`
+        const existingPrompt = clinicalContext || '';
+        // Перезаписываем промпт с учетом батча
+        formData.set('prompt', existingPrompt ? `${batchContext}\n\nКонтекст: ${existingPrompt}` : batchContext)
+      }
+
       formData.append('imageType', imageType)
+      formData.append('isTwoStage', 'true') // Включаем режим радиологического протокола
 
       console.log(`🎬 [VIDEO] Отправка ${extractedFrames.length} кадров на анализ...`)
       
@@ -149,13 +273,13 @@ export default function VideoPage() {
       if (data.success) {
         setResult(data.result || 'Анализ выполнен')
         setCurrentCost(data.cost || 0)
-        setModel(data.model || 'google/gemini-flash-1.5')
+        setModel(data.model || 'google/gemini-3-flash-preview')
         setMode(data.mode || 'fast')
         
         // Логирование использования
         logUsage({
           section: 'video-frames',
-          model: data.model || 'google/gemini-flash-1.5',
+          model: data.model || 'google/gemini-3-flash-preview',
           inputTokens: data.usage?.prompt_tokens || 0, 
           outputTokens: data.usage?.completion_tokens || 0,
         })
@@ -175,6 +299,11 @@ export default function VideoPage() {
   const handleAnalyzeFullVideo = async () => {
     if (!file) {
       setError('Пожалуйста, выберите видео файл')
+      return
+    }
+
+    if (playlist.length > 1) {
+      setError('Режим "Полное видео" пока поддерживает только один файл. Для анализа всей папки (всех ракурсов) используйте "Безопасный режим (извлечение кадров)".')
       return
     }
 
@@ -275,29 +404,71 @@ export default function VideoPage() {
         <h2 className="text-xl font-semibold mb-4">Загрузите видео для анализа</h2>
         
         <div className="space-y-4">
-          {/* Загрузка видео */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Видео файл (MP4, MOV, AVI) — макс. 100MB
-            </label>
+          {/* Загрузка видео или папки */}
+          <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-primary-400 transition-colors">
             <input
+              ref={fileInputRef}
               type="file"
-              accept="video/*"
+              accept="video/*,.dcm,.dicom"
               capture="environment"
               onChange={handleFileChange}
-              className="block w-full text-sm text-gray-500
-                file:mr-4 file:py-2 file:px-4
-                file:rounded-lg file:border-0
-                file:text-sm file:font-semibold
-                file:bg-primary-50 file:text-primary-700
-                hover:file:bg-primary-100
-                cursor-pointer"
+              className="hidden"
             />
-            {file && (
+            <input
+              ref={folderInputRef}
+              type="file"
+              webkitdirectory=""
+              mozdirectory=""
+              directory=""
+              onChange={handleFolderSelect}
+              className="hidden"
+            />
+            
+            <div className="flex flex-col items-center space-y-4">
+              <div className="text-4xl">📁</div>
+              <div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-primary-600 hover:text-primary-700 font-semibold underline"
+                >
+                  Выберите файл
+                </button>
+                <span className="text-gray-600"> или </span>
+                <button
+                  onClick={() => folderInputRef.current?.click()}
+                  className="text-primary-600 hover:text-primary-700 font-semibold underline"
+                >
+                  папку целиком
+                </button>
+              </div>
+              <p className="text-sm text-gray-500">
+                Поддерживаются: Видео (MP4, MOV, AVI) или DICOM-серии (папка)
+              </p>
+            </div>
+          </div>
+
+          {file && (
               <div className="mt-2 space-y-2">
                 <p className="text-sm text-gray-600">
-                  ✅ Выбран: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                  {playlist.length > 1 
+                    ? `✅ Найдено в папке: ${playlist.length} видео`
+                    : `✅ Выбран: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`
+                  }
                 </p>
+
+                {playlist.length > 1 && (
+                  <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg max-h-40 overflow-y-auto">
+                    <p className="text-xs font-bold text-blue-700 mb-2 uppercase">Список файлов для комплексного анализа:</p>
+                    <ul className="text-xs text-blue-600 space-y-1">
+                      {playlist.map((f, i) => (
+                        <li key={i} className="flex justify-between">
+                          <span>{i + 1}. {f.name}</span>
+                          <span className="text-blue-400">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 
                 {/* Переключатель режимов анализа */}
                 <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
@@ -396,7 +567,6 @@ export default function VideoPage() {
                 )}
               </div>
             )}
-          </div>
 
           {/* Preview извлеченных кадров */}
           {extractedFrames.length > 0 && (

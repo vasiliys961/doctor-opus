@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisTips from '@/components/AnalysisTips'
@@ -20,6 +20,8 @@ const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false
 export default function VideoComparisonPage() {
   const [video1, setVideo1] = useState<File | null>(null)
   const [video2, setVideo2] = useState<File | null>(null)
+  const [playlist1, setPlaylist1] = useState<File[]>([])
+  const [playlist2, setPlaylist2] = useState<File[]>([])
   const [preview1, setPreview1] = useState<string | null>(null)
   const [preview2, setPreview2] = useState<string | null>(null)
   const [result, setResult] = useState<string>('')
@@ -30,6 +32,11 @@ export default function VideoComparisonPage() {
   const [clinicalContext, setClinicalContext] = useState<string>('')
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [model, setModel] = useState<string>('')
+  
+  const fileInputRef1 = useRef<HTMLInputElement>(null)
+  const folderInputRef1 = useRef<HTMLInputElement>(null)
+  const fileInputRef2 = useRef<HTMLInputElement>(null)
+  const folderInputRef2 = useRef<HTMLInputElement>(null)
   
   // Состояния для кадров
   const [frames1, setFrames1] = useState<ExtractedFrame[]>([])
@@ -52,10 +59,12 @@ export default function VideoComparisonPage() {
       
       if (index === 1) {
         setVideo1(file)
+        setPlaylist1([]) // Сброс плейлиста
         setPreview1(URL.createObjectURL(file))
         setFrames1([]) // Сбросить кадры
       } else {
         setVideo2(file)
+        setPlaylist2([]) // Сброс плейлиста
         setPreview2(URL.createObjectURL(file))
         setFrames2([]) // Сбросить кадры
       }
@@ -64,10 +73,112 @@ export default function VideoComparisonPage() {
     }
   }
 
-  // Извлечение кадров из обоих видео СИНХРОННО
+  const handleDicomFile = (index: 1 | 2) => async (selectedFile: File) => {
+    setExtracting(true);
+    setError(null);
+    if (index === 1) setPlaylist1([]);
+    else setPlaylist2([]);
+    
+    try {
+      const { sliceDicomFile } = await import('@/lib/dicom-client-processor');
+      const slices = await sliceDicomFile(selectedFile);
+      if (slices && slices.length > 0) {
+        const frames = slices.map((f, i) => ({
+          index: i,
+          timestamp: 0,
+          file: f,
+          preview: URL.createObjectURL(f)
+        }));
+        if (index === 1) {
+          setFrames1(frames);
+          setVideo1(selectedFile);
+          setPreview1(null); // У DICOM нет стандартного видео-превью
+        } else {
+          setFrames2(frames);
+          setVideo2(selectedFile);
+          setPreview2(null);
+        }
+        setAnalysisMode('frames');
+      } else {
+        if (index === 1) setVideo1(selectedFile);
+        else setVideo2(selectedFile);
+      }
+    } catch (err: any) {
+      setError(`Ошибка при обработке DICOM #${index}: ` + err.message);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleFolderSelect = (index: 1 | 2) => async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileList = Array.from(files);
+    const dicomFiles = fileList.filter(f => 
+      f.name.toLowerCase().endsWith('.dcm') || 
+      f.name.toLowerCase().endsWith('.dicom') || 
+      f.type === 'application/dicom'
+    );
+
+    if (dicomFiles.length > 0) {
+      setExtracting(true);
+      setError(null);
+      if (index === 1) setPlaylist1(dicomFiles);
+      else setPlaylist2(dicomFiles);
+      
+      try {
+        const { sliceDicomFolder } = await import('@/lib/dicom-client-processor');
+        const slices = await sliceDicomFolder(dicomFiles);
+        if (slices && slices.length > 0) {
+          const frames = slices.map((f, i) => ({
+            index: i,
+            timestamp: 0,
+            file: f,
+            preview: URL.createObjectURL(f)
+          }));
+          if (index === 1) {
+            setFrames1(frames);
+            setVideo1(dicomFiles[0]);
+            setPreview1(null);
+          } else {
+            setFrames2(frames);
+            setVideo2(dicomFiles[0]);
+            setPreview2(null);
+          }
+          setAnalysisMode('frames');
+        }
+      } catch (err: any) {
+        setError(`Ошибка при обработке папки #${index}: ` + err.message);
+      } finally {
+        setExtracting(false);
+      }
+    } else {
+      // Если DICOM нет, ищем все видео
+      const videoFiles = fileList.filter(f => f.type.startsWith('video/'));
+      if (videoFiles.length > 0) {
+        if (index === 1) {
+          setPlaylist1(videoFiles);
+          setVideo1(videoFiles[0]);
+          setPreview1(URL.createObjectURL(videoFiles[0]));
+          setFrames1([]);
+        } else {
+          setPlaylist2(videoFiles);
+          setVideo2(videoFiles[0]);
+          setPreview2(URL.createObjectURL(videoFiles[0]));
+          setFrames2([]);
+        }
+        setError(null);
+      } else {
+        setError(`В папке #${index} не найдено DICOM-файлов или видео`);
+      }
+    }
+  }
+
+  // Извлечение кадров из обоих наборов (видео или папок)
   const handleExtractFrames = async () => {
     if (!video1 || !video2) {
-      setError('Загрузите оба видео для сравнения')
+      setError('Загрузите данные в оба слота для сравнения')
       return
     }
 
@@ -76,27 +187,42 @@ export default function VideoComparisonPage() {
     setExtractionProgress({ current: 0, total: 0 })
 
     try {
-      console.log('🎬 [VIDEO COMPARISON] Извлечение кадров из обоих видео...')
+      console.log('🎬 [VIDEO COMPARISON] Начало пакетного извлечения кадров...')
       
-      // Извлекаем кадры параллельно
-      const [extractedFrames1, extractedFrames2] = await Promise.all([
-        extractAndAnonymizeFrames(video1, (current, total) => {
-          setExtractionProgress({ current, total: total * 2 })
-        }),
-        extractAndAnonymizeFrames(video2, (current, total) => {
-          setExtractionProgress({ current: total + current, total: total * 2 })
-        })
-      ])
+      const files1 = playlist1.length > 0 ? playlist1 : [video1];
+      const files2 = playlist2.length > 0 ? playlist2 : [video2];
       
-      setFrames1(extractedFrames1)
-      setFrames2(extractedFrames2)
+      const totalSteps = files1.length + files2.length;
+      let currentStep = 0;
+
+      // Функция для извлечения из массива файлов
+      const extractFromList = async (files: File[], slotIndex: number) => {
+        const results: ExtractedFrame[] = [];
+        for (let i = 0; i < files.length; i++) {
+          const frames = await extractAndAnonymizeFrames(files[i], (curr, tot) => {
+            // Упрощенный прогресс
+          });
+          results.push(...frames.map(f => ({
+            ...f,
+            file: new File([f.file], `slot${slotIndex}_v${i+1}_${f.file.name}`, { type: f.file.type })
+          })));
+          currentStep++;
+          setExtractionProgress({ current: currentStep, total: totalSteps });
+        }
+        return results;
+      };
+
+      const [allFrames1, allFrames2] = await Promise.all([
+        extractFromList(files1, 1),
+        extractFromList(files2, 2)
+      ]);
       
-      console.log(`✅ [VIDEO COMPARISON] Извлечено ${extractedFrames1.length} + ${extractedFrames2.length} кадров`)
+      // Для корректного сравнения попарно нам нужно одинаковое кол-во кадров.
+      // Но если это разные серии, мы просто покажем их все.
+      setFrames1(allFrames1.map((f, i) => ({ ...f, index: i })));
+      setFrames2(allFrames2.map((f, i) => ({ ...f, index: i })));
       
-      // Проверка синхронности
-      if (extractedFrames1.length !== extractedFrames2.length) {
-        console.warn(`⚠️ [VIDEO COMPARISON] Разное количество кадров: ${extractedFrames1.length} vs ${extractedFrames2.length}`)
-      }
+      console.log(`✅ [VIDEO COMPARISON] Извлечено ${allFrames1.length} и ${allFrames2.length} кадров`)
       
     } catch (err: any) {
       console.error('❌ [VIDEO COMPARISON] Ошибка извлечения:', err)
@@ -162,12 +288,18 @@ export default function VideoComparisonPage() {
       }
       
       // Добавляем метаинформацию о сравнении
-      const comparisonPrompt = clinicalContext 
+      let comparisonPrompt = clinicalContext 
         ? `Сравните динамику изменений между двумя видео. Если изображения идентичны - четко укажите это. Первые ${frames1.length} кадров — из архивного видео, следующие ${frames2.length} кадров — из текущего. ${clinicalContext}`
         : `Сравните динамику изменений между двумя видео. Если изображения идентичны - четко укажите это, если есть различия - опишите их детально. Первые ${frames1.length} кадров — из архивного видео, следующие ${frames2.length} кадров — из текущего. Выявите все значимые отличия.`
       
+      if (playlist1.length > 1 || playlist2.length > 1) {
+        const batchInfo = `\n\nВНИМАНИЕ: Сравнение проводится между сериями видео-ракурсов. Архивный набор содержит ${playlist1.length || 1} видео, текущий набор содержит ${playlist2.length || 1} видео. Проанализируйте все ракурсы для выявления патологий.`
+        comparisonPrompt += batchInfo;
+      }
+
       formData.append('prompt', comparisonPrompt)
       formData.append('imageType', 'universal')
+      formData.append('isTwoStage', 'true') // Включаем режим радиологического протокола
 
       console.log(`🎬 [VIDEO COMPARISON] Отправка ${frames1.length + frames2.length} кадров на анализ...`)
       
@@ -181,11 +313,11 @@ export default function VideoComparisonPage() {
       if (data.success) {
         setResult(data.result || 'Анализ выполнен')
         setCurrentCost(data.cost || 0)
-        setModel(data.model || 'google/gemini-flash-1.5')
+        setModel(data.model || 'google/gemini-3-flash-preview')
         
         logUsage({
           section: 'video-comparison-frames',
-          model: data.model || 'google/gemini-flash-1.5',
+          model: data.model || 'google/gemini-3-flash-preview',
           inputTokens: data.usage?.prompt_tokens || 0,
           outputTokens: data.usage?.completion_tokens || 0,
         })
@@ -204,6 +336,11 @@ export default function VideoComparisonPage() {
   const handleAnalyzeFullVideo = async () => {
     if (!video1 || !video2) {
       setError('Загрузите оба видео для сравнения')
+      return
+    }
+
+    if (playlist1.length > 1 || playlist2.length > 1) {
+      setError('Сравнительный анализ полных видео поддерживает только по одному файлу в каждом слоте. Для сравнения папок (серий ракурсов) используйте "Безопасный режим (извлечение кадров)".')
       return
     }
 
@@ -298,11 +435,59 @@ export default function VideoComparisonPage() {
               <span className="text-gray-400">Нет видео</span>
             </div>
           )}
-          <input type="file" accept="video/*" onChange={handleFileChange(1)} className="w-full text-sm" />
+          
+          <div className="space-y-4">
+            <input
+              ref={fileInputRef1}
+              type="file"
+              accept="video/*,.dcm,.dicom"
+              onChange={handleFileChange(1)}
+              className="hidden"
+            />
+            <input
+              ref={folderInputRef1}
+              type="file"
+              webkitdirectory=""
+              mozdirectory=""
+              directory=""
+              onChange={handleFolderSelect(1)}
+              className="hidden"
+            />
+            
+            <div className="flex flex-col items-center space-y-2 border-2 border-dashed border-gray-200 p-4 rounded-xl">
+              <div className="text-2xl">📁</div>
+              <div>
+                <button
+                  onClick={() => fileInputRef1.current?.click()}
+                  className="text-primary-600 hover:text-primary-700 font-semibold underline text-sm"
+                >
+                  Выберите файл
+                </button>
+                <span className="text-gray-600 text-sm"> или </span>
+                <button
+                  onClick={() => folderInputRef1.current?.click()}
+                  className="text-primary-600 hover:text-primary-700 font-semibold underline text-sm"
+                >
+                  папку
+                </button>
+              </div>
+            </div>
+          </div>
+
           {video1 && (
-            <p className="text-sm text-gray-600 mt-2">
-              ✅ {video1.name} ({(video1.size / 1024 / 1024).toFixed(1)} MB)
-            </p>
+            <div className="mt-2 space-y-2">
+              <p className="text-sm text-gray-600 text-center">
+                {playlist1.length > 1 
+                  ? `✅ Найдено в папке: ${playlist1.length} видео`
+                  : `✅ ${video1.name} (${(video1.size / 1024 / 1024).toFixed(1)} MB)`
+                }
+              </p>
+              {playlist1.length > 1 && (
+                <div className="p-2 bg-gray-50 border border-gray-100 rounded text-[10px] text-gray-500 max-h-24 overflow-y-auto">
+                  {playlist1.map((f, i) => <div key={i}>{i+1}. {f.name}</div>)}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -316,11 +501,59 @@ export default function VideoComparisonPage() {
               <span className="text-gray-400">Нет видео</span>
             </div>
           )}
-          <input type="file" accept="video/*" onChange={handleFileChange(2)} className="w-full text-sm" />
+          
+          <div className="space-y-4">
+            <input
+              ref={fileInputRef2}
+              type="file"
+              accept="video/*,.dcm,.dicom"
+              onChange={handleFileChange(2)}
+              className="hidden"
+            />
+            <input
+              ref={folderInputRef2}
+              type="file"
+              webkitdirectory=""
+              mozdirectory=""
+              directory=""
+              onChange={handleFolderSelect(2)}
+              className="hidden"
+            />
+            
+            <div className="flex flex-col items-center space-y-2 border-2 border-dashed border-blue-100 p-4 rounded-xl">
+              <div className="text-2xl">📁</div>
+              <div>
+                <button
+                  onClick={() => fileInputRef2.current?.click()}
+                  className="text-primary-600 hover:text-primary-700 font-semibold underline text-sm"
+                >
+                  Выберите файл
+                </button>
+                <span className="text-gray-600 text-sm"> или </span>
+                <button
+                  onClick={() => folderInputRef2.current?.click()}
+                  className="text-primary-600 hover:text-primary-700 font-semibold underline text-sm"
+                >
+                  папку
+                </button>
+              </div>
+            </div>
+          </div>
+
           {video2 && (
-            <p className="text-sm text-gray-600 mt-2">
-              ✅ {video2.name} ({(video2.size / 1024 / 1024).toFixed(1)} MB)
-            </p>
+            <div className="mt-2 space-y-2">
+              <p className="text-sm text-gray-600 text-center">
+                {playlist2.length > 1 
+                  ? `✅ Найдено в папке: ${playlist2.length} видео`
+                  : `✅ ${video2.name} (${(video2.size / 1024 / 1024).toFixed(1)} MB)`
+                }
+              </p>
+              {playlist2.length > 1 && (
+                <div className="p-2 bg-blue-50 border border-blue-100 rounded text-[10px] text-blue-500 max-h-24 overflow-y-auto">
+                  {playlist2.map((f, i) => <div key={i}>{i+1}. {f.name}</div>)}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

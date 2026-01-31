@@ -277,13 +277,15 @@ export async function analyzeImageFast(options: {
 
     const textModel = MODELS.GEMINI_3_FLASH;
     
-    const contextPrompt = `Ты — Профессор медицины. На основе этих данных и своей экспертизы дай клиническую директиву.
+    const contextPrompt = `Ты — Профессор медицины. На основе этих данных и своей экспертизы дай клиническую директиву. ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
 
 === СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI 3.0) ===
 ${JSON.stringify(jsonExtraction, null, 2)}
 \n=== ИНСТРУКЦИЯ ===
 ${directivePrompt}
-${options.clinicalContext ? `\nКонтекст пациента: ${options.clinicalContext}` : ''}`;
+${options.clinicalContext ? `\nКонтекст пациента: ${options.clinicalContext}` : ''}
+
+ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.`;
     
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -373,7 +375,7 @@ export async function analyzeImageOpusTwoStage(options: {
 ### ТЕХНИЧЕСКИЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЯ (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.`;
+${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ НА РУССКОМ ЯЗЫКЕ.`;
 
     const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
     const messages = [
@@ -594,12 +596,12 @@ export async function analyzeMultipleImagesTwoStage(options: {
     
     const textModel = options.targetModel || MODELS.SONNET;
     
-    const contextPrompt = `Ты — Профессор медицины. Проведи сравнительную клиническую интерпретацию данных по НЕСКОЛЬКИМ изображениям, полученных от Специалиста.
+    const contextPrompt = `Ты — Профессор медицины. Проведи сравнительную клиническую интерпретацию данных по НЕСКОЛЬКИМ изображениям, полученных от Специалиста. ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
 
 ### ДАННЫЕ ОТ СПЕЦИАЛИСТА (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.
+${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ НА РУССКОМ ЯЗЫКЕ.
 
 ИНСТРУКЦИЯ К КЛИНИЧЕСКОЙ ДИРЕКТИВЕ:
 ${directiveCriteria}`;

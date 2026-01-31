@@ -49,9 +49,40 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
   const handleFile = async (input: File | FileList | File[]) => {
     setError(null)
     
-    // ... (код обработки группы файлов остается без изменений) ...
+    // 1. Обработка группы файлов (FileList или массив) - например, при загрузке папки
     if (input instanceof FileList || Array.isArray(input)) {
-      // (я оставлю существующую логику здесь)
+      const files = Array.from(input);
+      const dicomFiles = files.filter(f => 
+        f.name.toLowerCase().endsWith('.dcm') || 
+        f.name.toLowerCase().endsWith('.dicom') || 
+        f.type === 'application/dicom'
+      );
+
+      if (dicomFiles.length > 0) {
+        setIsCompressing(true);
+        try {
+          const { sliceDicomFolder } = await import('@/lib/dicom-client-processor');
+          // Берем первый DICOM как основной файл для метаданных, а остальные как срезы
+          const slices = await sliceDicomFolder(dicomFiles);
+          if (slices && slices.length > 0) {
+            onUpload(dicomFiles[0], slices);
+            setCurrentFile(dicomFiles[0]);
+            setPreview(null);
+          } else {
+            onUpload(dicomFiles[0]);
+          }
+        } catch (err) {
+          console.error("DICOM Folder Slicing error:", err);
+          onUpload(dicomFiles[0]);
+        } finally {
+          setIsCompressing(false);
+        }
+        return;
+      } else if (files.length > 0) {
+        // Если это не DICOM, просто берем первый файл
+        return handleFile(files[0]);
+      }
+      return;
     }
 
     // 2. Обработка одиночного файла

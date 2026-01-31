@@ -390,6 +390,7 @@ export function getDescriptionPrompt(imageType: ImageType, specialty?: Specialty
 ${specialtyContext}
 
 Твоя задача: найти ПАТОЛОГИИ и выдать их в СЖАТОМ JSON для анализа Профессором.
+ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
 
 ### АЛГОРИТМ:
 ${criteria.requirements}
@@ -421,6 +422,7 @@ export function getObjectiveDescriptionPrompt(imageType: ImageType, specialty?: 
 ${specialtyContext}
 
 Твоя задача: дать профессиональное описание выявленных изменений в стиле медицинского протокола.
+ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
 
 ### ТРЕБОВАНИЯ:
 ${criteria.requirements}

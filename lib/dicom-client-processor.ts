@@ -85,12 +85,25 @@ export async function sliceDicomFolder(files: File[], maxFrames: number = 12): P
     
     try {
       const image = await cornerstone.loadImage(imageId);
-      cornerstone.displayImage(offscreenElement, image);
+      
+      // Настройка вьюпорта для предотвращения "белого шума" или слишком темных кадров
+      const viewport = cornerstone.getDefaultViewportForImage(offscreenElement, image);
+      
+      // Если в DICOM нет настроек окна, или они некорректны, применяем авто-настройку
+      if (!viewport.voi.windowWidth || viewport.voi.windowWidth <= 1) {
+        // Рассчитываем окно на основе экстремумов пикселей (min/max)
+        const minPixelValue = image.minPixelValue || 0;
+        const maxPixelValue = image.maxPixelValue || 255;
+        viewport.voi.windowWidth = maxPixelValue - minPixelValue;
+        viewport.voi.windowCenter = (maxPixelValue + minPixelValue) / 2;
+      }
+
+      cornerstone.displayImage(offscreenElement, image, viewport);
       
       const canvas = offscreenElement.querySelector('canvas');
       if (canvas) {
         const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
-        if (blob) {
+        if (blob && isCanvasValid(canvas)) {
           extractedFiles.push(new File([blob], `folder_slice_${i}.jpg`, { type: 'image/jpeg' }));
         }
       }
@@ -114,11 +127,24 @@ async function renderFramesToFiles(imageId: string, frames: number[], totalFrame
     
     try {
       const image = await cornerstone.loadImage(frameImageId);
-      cornerstone.displayImage(offscreenElement, image);
+      
+      // Настройка вьюпорта для предотвращения "белого шума" или слишком темных кадров
+      const viewport = cornerstone.getDefaultViewportForImage(offscreenElement, image);
+      
+      // Если в DICOM нет настроек окна, или они некорректны, применяем авто-настройку
+      if (!viewport.voi.windowWidth || viewport.voi.windowWidth <= 1) {
+        // Рассчитываем окно на основе экстремумов пикселей (min/max)
+        const minPixelValue = image.minPixelValue || 0;
+        const maxPixelValue = image.maxPixelValue || 255;
+        viewport.voi.windowWidth = maxPixelValue - minPixelValue;
+        viewport.voi.windowCenter = (maxPixelValue + minPixelValue) / 2;
+      }
+
+      cornerstone.displayImage(offscreenElement, image, viewport);
       const canvas = offscreenElement.querySelector('canvas');
       if (canvas) {
         const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
-        if (blob) {
+        if (blob && isCanvasValid(canvas)) {
           extractedFiles.push(new File([blob], `slice_${frameIndex}.jpg`, { type: 'image/jpeg' }));
         }
       }
@@ -145,4 +171,39 @@ function createOffscreenElement() {
 function destroyOffscreenElement(el: HTMLElement) {
   cornerstone.disable(el);
   document.body.removeChild(el);
+}
+
+/**
+ * Проверяет, является ли изображение валидным (не пустым и не слишком темным)
+ */
+function isCanvasValid(canvas: HTMLCanvasElement): boolean {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return false;
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  
+  let totalBrightness = 0;
+  let hasVariation = false;
+  const firstPixelR = data[0];
+  const firstPixelG = data[1];
+  const firstPixelB = data[2];
+
+  // Проверяем каждую 10-ю точку для скорости
+  for (let i = 0; i < data.length; i += 40) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    
+    totalBrightness += (r + g + b) / 3;
+    
+    if (!hasVariation && (Math.abs(r - firstPixelR) > 5 || Math.abs(g - firstPixelG) > 5 || Math.abs(b - firstPixelB) > 5)) {
+      hasVariation = true;
+    }
+  }
+
+  const avgBrightness = totalBrightness / (data.length / 40);
+  
+  // Изображение валидно, если оно не слишком темное (avg > 5) и имеет хоть какую-то вариативность
+  return avgBrightness > 5 && hasVariation;
 }
