@@ -1,6 +1,22 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: doctor-opus-db
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-neondb_owner}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password_here}
+      - POSTGRES_DB=${POSTGRES_DATABASE:-neondb}
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   medical-assistant:
     build:
       context: .
@@ -13,11 +29,13 @@ services:
       - ASSEMBLYAI_API_KEY=${ASSEMBLYAI_API_KEY}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL}
-      - POSTGRES_URL=${POSTGRES_URL}
+      - POSTGRES_URL=postgres://${POSTGRES_USER:-neondb_owner}:${POSTGRES_PASSWORD:-password_here}@db:5432/${POSTGRES_DATABASE:-neondb}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - NEXT_PUBLIC_AUTH_DISABLED=${NEXT_PUBLIC_AUTH_DISABLED}
       - PYTHONUNBUFFERED=1
     restart: always
+    depends_on:
+      - db
     logging:
       driver: "json-file"
       options:

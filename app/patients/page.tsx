@@ -1,22 +1,49 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { getAllPatients, savePatient, deletePatient, Patient, getPatientHistory, deleteHistoryRecord, AnalysisRecord } from '@/lib/patient-db'
 import ReactMarkdown from 'react-markdown'
 
 const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
+const LabTrendChart = dynamic(() => import('@/components/LabTrendChart'), { ssr: false })
 
-export default function PatientsPage() {
+function PatientsContent() {
+  const searchParams = useSearchParams()
   const [patients, setPatients] = useState<Patient[]>([])
   const [filteredPatients, setFilteredPatients] = useState<Patient[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
+  
+  useEffect(() => {
+    const action = searchParams.get('action')
+    const patientId = searchParams.get('id')
+    const recordId = searchParams.get('record')
+
+    if (action === 'new') {
+      setShowAddModal(true)
+    } else if (patientId) {
+      // Ищем пациента в загруженном списке и выбираем его
+      const patient = patients.find(p => p.id === patientId)
+      if (patient) {
+        setSelectedPatient(patient)
+        if (recordId) {
+          setActiveTab('history')
+          // Можно добавить подсветку конкретной записи, если нужно
+        }
+      }
+    }
+  }, [searchParams, patients])
+
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'info' | 'history'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'history' | 'trends' | 'timeline'>('info')
   const [history, setHistory] = useState<AnalysisRecord[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [labTrends, setLabTrends] = useState<Record<string, any[]>>({})
+  const [caseSummary, setCaseSummary] = useState<string | null>(null)
+  const [generatingSummary, setGeneratingSummary] = useState(false)
 
   useEffect(() => {
     loadPatients()
@@ -28,18 +55,56 @@ export default function PatientsPage() {
     } else {
       setActiveTab('info')
       setHistory([])
+      setLabTrends({})
     }
   }, [selectedPatient])
 
   const loadHistory = async (patientId: string) => {
     setLoadingHistory(true)
+    setCaseSummary(null)
     try {
       const data = await getPatientHistory(patientId)
       setHistory(data)
+      
+      // Парсим тренды из лабораторных анализов
+      const labRecords = data
+        .filter(r => r.type === 'lab')
+        .map(r => ({ date: r.date, text: r.conclusion }))
+      
+      if (labRecords.length > 0) {
+        const { extractLabTrends } = await import('@/lib/lab-parser')
+        setLabTrends(extractLabTrends(labRecords))
+      }
     } catch (error) {
       console.error('Error loading history:', error)
     } finally {
       setLoadingHistory(false)
+    }
+  }
+
+  const handleGenerateSummary = async () => {
+    if (!selectedPatient || history.length === 0) return
+    
+    setGeneratingSummary(true)
+    try {
+      const response = await fetch('/api/analyze/patient-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          history: history.slice(0, 10), // Берем последние 10 записей для контекста
+          patientName: selectedPatient.name 
+        })
+      })
+      const data = await response.json()
+      if (data.success) {
+        setCaseSummary(data.summary)
+      } else {
+        alert('Ошибка: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Error generating summary:', error)
+    } finally {
+      setGeneratingSummary(false)
     }
   }
 
@@ -423,6 +488,22 @@ export default function PatientsPage() {
                 >
                   📜 История ({history.length})
                 </button>
+                <button
+                  onClick={() => setActiveTab('trends')}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    activeTab === 'trends' ? 'bg-primary-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  📈 Динамика
+                </button>
+                <button
+                  onClick={() => setActiveTab('timeline')}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    activeTab === 'timeline' ? 'bg-primary-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  🕒 Таймлайн
+                </button>
               </div>
             </div>
 
@@ -517,7 +598,7 @@ export default function PatientsPage() {
                     </p>
                   </div>
                 </div>
-              ) : (
+              ) : activeTab === 'history' ? (
                 <div className="space-y-4">
                   {loadingHistory ? (
                     <p className="text-center py-8 text-gray-500">Загрузка истории...</p>
@@ -572,6 +653,109 @@ export default function PatientsPage() {
                     </div>
                   )}
                 </div>
+              ) : activeTab === 'timeline' ? (
+                <div className="space-y-0 relative">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-gray-900">Лента событий пациента</h3>
+                    {history.length > 0 && (
+                      <button
+                        onClick={handleGenerateSummary}
+                        disabled={generatingSummary}
+                        className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {generatingSummary ? (
+                          <>⏳ Генерирую сводку...</>
+                        ) : (
+                          <>🧠 Сделать AI-сводку по случаю</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {caseSummary && (
+                    <div className="mb-8 p-4 bg-indigo-50 border border-indigo-100 rounded-xl shadow-sm relative animate-in fade-in slide-in-from-top-4 duration-500">
+                      <div className="absolute -top-3 left-4 bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                        AI Case Summary
+                      </div>
+                      <div className="prose prose-sm max-w-none text-indigo-900 leading-relaxed italic">
+                        <ReactMarkdown>{caseSummary}</ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
+
+                  {history.length === 0 ? (
+                    <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                      <p className="text-gray-500">Событий пока нет</p>
+                    </div>
+                  ) : (
+                    <div className="relative ml-4 border-l-2 border-primary-100 pl-8 pb-4 space-y-8">
+                      {history.map((record, index) => (
+                        <div key={record.id} className="relative">
+                          {/* Точка на линии */}
+                          <div className="absolute -left-[41px] top-1 w-6 h-6 rounded-full bg-white border-4 border-primary-400 z-10"></div>
+                          
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-primary-600 mb-1">
+                              {new Date(record.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            </span>
+                            <div className="bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer" onClick={() => setActiveTab('history')}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-lg">
+                                  {record.type === 'ecg' ? '📈' : record.type === 'image' ? '🩻' : record.type === 'lab' ? '🔬' : '📝'}
+                                </span>
+                                <span className="font-bold text-sm text-gray-800 uppercase tracking-tight">
+                                  {record.type === 'ecg' ? 'ЭКГ анализ' : 
+                                   record.type === 'image' ? (record.imageType === 'xray' ? 'Рентген' : record.imageType === 'ct' ? 'КТ' : record.imageType === 'mri' ? 'МРТ' : 'Анализ снимка') : 
+                                   record.type === 'lab' ? 'Лабораторный анализ' : 'Обследование'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-600 line-clamp-2 italic">
+                                {record.conclusion.replace(/[#*]/g, '').substring(0, 150)}...
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {/* Начало пути */}
+                      <div className="relative">
+                        <div className="absolute -left-[41px] top-1 w-6 h-6 rounded-full bg-gray-100 border-4 border-gray-300 z-10 flex items-center justify-center">
+                          <span className="text-[10px] text-gray-500">👶</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-gray-400 mb-1">
+                            {new Date(selectedPatient.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </span>
+                          <div className="text-xs text-gray-400 italic">Создание карты пациента</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <h3 className="font-bold text-gray-900 mb-4">Динамика лабораторных показателей</h3>
+                  {Object.keys(labTrends).length === 0 ? (
+                    <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                      <p className="text-gray-500">Нет данных для построения графиков</p>
+                      <p className="text-xs text-gray-400 mt-1 italic">
+                        Загружайте анализы в разделе «Лабораторные данные» для этого пациента.
+                        <br />Система автоматически извлечет показатели (Гемоглобин, Глюкоза и др.)
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {Object.entries(labTrends).map(([label, data]) => (
+                        <LabTrendChart 
+                          key={label}
+                          label={label}
+                          data={data}
+                          unit={data[0]?.unit || ''}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -611,5 +795,13 @@ export default function PatientsPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function PatientsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-gray-600">Загрузка...</div>}>
+      <PatientsContent />
+    </Suspense>
   )
 }

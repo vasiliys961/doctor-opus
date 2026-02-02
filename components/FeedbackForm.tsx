@@ -12,7 +12,7 @@ interface FeedbackFormProps {
 const specialties = [
   "Кардиология", "Онкология", "Пульмонология", "Неврология", 
   "ОВП", "Инфекционные болезни", "Гастроэнтерология", 
-  "Радиология", "Дерматология", "Лабораторная диагностика",
+  "Радиология", "Дерматология", "Лабораторный анализ",
   "Генетика", "Другое"
 ];
 
@@ -87,7 +87,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
       <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center shadow-sm">
         <h3 className="text-green-800 font-bold text-lg mb-2">✅ Спасибо за ваш отзыв!</h3>
         <p className="text-green-700 text-sm">
-          Ваш вклад помогает нам улучшить качество диагностики и сделать систему точнее.
+          Ваш вклад помогает нам улучшить качество анализа и сделать систему точнее.
         </p>
       </div>
     );
@@ -183,7 +183,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
           />
           <label htmlFor="consent" className="text-xs text-gray-600 leading-relaxed cursor-pointer select-none">
             ✓ Согласен использовать этот случай для улучшения модели (анонимно). 
-            Данные будут использованы исключительно для повышения точности диагностики.
+            Данные будут использованы исключительно для повышения точности анализа.
           </label>
         </div>
 

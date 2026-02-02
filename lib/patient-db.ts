@@ -122,6 +122,25 @@ export async function getAllPatients(): Promise<Patient[]> {
   });
 }
 
+/**
+ * Получает всю историю всех пациентов
+ */
+export async function getAllHistory(): Promise<AnalysisRecord[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(HISTORY_STORE, 'readonly');
+    const store = transaction.objectStore(HISTORY_STORE);
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const results = request.result as AnalysisRecord[];
+      results.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      resolve(results);
+    };
+  });
+}
+
 export async function savePatient(patient: Patient): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {

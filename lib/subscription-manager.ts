@@ -53,6 +53,18 @@ export const SUBSCRIPTION_PACKAGES = {
     priceRub: 2500,
     bonusPercent: 0
   },
+  clinic_mini: { 
+    name: 'Клиника: Мини', 
+    credits: 5000,
+    priceRub: 10000,
+    bonusPercent: 0
+  },
+  clinic_start: { 
+    name: 'Клиника: Старт', 
+    credits: 10000,
+    priceRub: 20000,
+    bonusPercent: 0
+  },
 } as const;
 
 export interface SubscriptionBalance {
@@ -77,6 +89,7 @@ export interface Transaction {
   costUsd: number;
   costCredits: number;
   operation: string;
+  specialty?: string; // Поле для аудита клиники
 }
 
 const BALANCE_KEY = 'userSubscriptionBalance';
@@ -248,6 +261,7 @@ export function deductBalance(params: {
   inputTokens: number;
   outputTokens: number;
   operation: string;
+  specialty?: string; // Добавлено поле специальности
 }): { success: boolean; message?: string; cost?: number } {
   try {
     // Если система отключена - пропускаем
@@ -305,13 +319,14 @@ export function deductBalance(params: {
       costUsd: costInfo.totalCostUsd,
       costCredits: costCredits,
       operation: params.operation,
+      specialty: params.specialty, // Сохраняем специальность
     };
 
     const transactions = getTransactions();
     transactions.push(transaction);
     localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
 
-    console.log(`💰 [SUBSCRIPTION] Списано ${costCredits.toFixed(2)} ед. Остаток: ${balance.currentCredits.toFixed(2)} ед.`);
+    console.log(`💰 [SUBSCRIPTION] Списано ${costCredits.toFixed(2)} ед. Остаток: ${balance.currentCredits.toFixed(2)} ед. (${params.specialty || 'Общее'})`);
     
     return { success: true, cost: costCredits };
   } catch (error) {

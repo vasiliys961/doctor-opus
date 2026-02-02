@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } from 'docx'
 import { saveAs } from 'file-saver'
 import { saveAnalysisResult, getAllPatients, Patient } from '@/lib/patient-db'
+import LibrarySearch from './LibrarySearch'
 
 interface AnalysisResultProps {
   result: string
@@ -14,9 +15,10 @@ interface AnalysisResultProps {
   mode?: string
   imageType?: string
   cost?: number
+  isAnonymous?: boolean
 }
 
-export default function AnalysisResult({ result, loading = false, model, mode, imageType, cost }: AnalysisResultProps) {
+export default function AnalysisResult({ result, loading = false, model, mode, imageType, cost, isAnonymous }: AnalysisResultProps) {
   const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -24,6 +26,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   const [patients, setPatients] = useState<Patient[]>([])
   const [saving, setSaving] = useState(false)
   const [sessionId, setSessionId] = useState('')
+  const [showLibrarySearch, setShowLibrarySearch] = useState(false)
 
   useEffect(() => {
     if (showPatientSelector) {
@@ -233,7 +236,30 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         sections: [
           {
             properties: {},
-            children: paragraphs,
+            children: [
+              ...paragraphs,
+              new Paragraph({ text: '', spacing: { before: 400 } }),
+              new Paragraph({
+                children: [
+                  new TextRun({ 
+                    text: "________________________________________________________________________________", 
+                    color: "CCCCCC" 
+                  }),
+                ],
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ 
+                    text: "⚠️ Важное уведомление: Данный документ сформирован программным обеспечением doctor-opus.ru с использованием технологий искусственного интеллекта и носит информационно-справочный характер. Не является медицинским заключением. Требует обязательной проверки и редактирования лечащим врачом. Окончательное решение принимает врач.",
+                    size: 16,
+                    color: "666666",
+                    italics: true
+                  }),
+                ],
+                alignment: AlignmentType.BOTH,
+                spacing: { before: 200 },
+              })
+            ],
           },
         ],
       })
@@ -428,7 +454,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   }
 
   const handleTransferToConsultant = () => {
-    // Сохраняем результат анализа для ИИ-Консультанта
+    // Сохраняем результат анализа для ИИ-Ассистента
     const data = {
       text: result,
       type: imageType,
@@ -436,7 +462,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       timestamp: new Date().toISOString()
     };
     sessionStorage.setItem('pending_analysis', JSON.stringify(data));
-    router.push('/chat'); // ИИ-Консультант находится по адресу /chat
+    router.push('/chat'); // ИИ-Ассистент находится по адресу /chat
   };
 
   // Если есть результат, показываем его даже во время загрузки (для streaming)
@@ -491,11 +517,19 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           </a>
         </div>
         <div className="flex flex-wrap gap-2">
+          {!isAnonymous && (
+            <button
+              onClick={() => setShowPatientSelector(true)}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm flex items-center gap-2"
+            >
+              📌 В карту пациента
+            </button>
+          )}
           <button
-            onClick={() => setShowPatientSelector(true)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm flex items-center gap-2"
+            onClick={() => setShowLibrarySearch(!showLibrarySearch)}
+            className={`px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2 font-bold ${showLibrarySearch ? 'bg-primary-100 text-primary-700' : 'bg-primary-50 text-primary-600 hover:bg-primary-100'}`}
           >
-            📌 В карту пациента
+            📚 {showLibrarySearch ? 'Скрыть библиотеку' : 'Найти в Библиотеке'}
           </button>
           <button
             onClick={handleCopy}
@@ -617,6 +651,8 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
               </button>
             </div>
           )}
+
+          <LibrarySearch query={result} isActive={showLibrarySearch} />
         </div>
       </div>
 

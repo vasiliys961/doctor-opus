@@ -15,8 +15,11 @@ import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
 
 export default function XRayPage() {
   const [file, setFile] = useState<File | null>(null)
+  const [archiveFile, setArchiveFile] = useState<File | null>(null)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [archivePreview, setArchivePreview] = useState<string | null>(null)
+  const [isComparisonMode, setIsComparisonMode] = useState(false)
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,7 +47,14 @@ export default function XRayPage() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('prompt', 'СОСТАВЬ ТОЛЬКО РАДИОЛОГИЧЕСКИЙ ПРОТОКОЛ И ЗАКЛЮЧЕНИЕ (РАЗДЕЛЫ 0, 1, 2). НЕ ДАВАЙ ПЛАН ЛЕЧЕНИЯ.')
+      
+      if (isComparisonMode && archiveFile) {
+        formData.append('archiveFile', archiveFile)
+        formData.append('prompt', 'ПРОВЕДИ СРАВНИТЕЛЬНЫЙ АНАЛИЗ ТЕКУЩЕГО И АРХИВНОГО СНИМКОВ. Опиши динамику изменений (улучшение, стабилизация, прогрессирование). СОСТАВЬ ПРОТОКОЛ И ЗАКЛЮЧЕНИЕ (РАЗДЕЛЫ 0, 1, 2).')
+      } else {
+        formData.append('prompt', 'СОСТАВЬ ТОЛЬКО РАДИОЛОГИЧЕСКИЙ ПРОТОКОЛ И ЗАКЛЮЧЕНИЕ (РАЗДЕЛЫ 0, 1, 2). НЕ ДАВАЙ ПЛАН ЛЕЧЕНИЯ.')
+      }
+      
       formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', 'xray')
@@ -55,6 +65,11 @@ export default function XRayPage() {
         additionalFiles.forEach((f, i) => {
           formData.append(`additionalImage_${i}`, f)
         })
+      }
+
+      // Добавляем архивный файл в дополнительные изображения, если он есть
+      if (isComparisonMode && archiveFile) {
+        formData.append(`additionalImage_${additionalFiles.length}`, archiveFile)
       }
 
       // Добавляем конкретную модель для оптимизированного режима
@@ -173,6 +188,16 @@ export default function XRayPage() {
     setError(null)
   }
 
+  const handleArchiveUpload = async (uploadedFile: File) => {
+    setArchiveFile(uploadedFile)
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setArchivePreview(reader.result as string)
+    }
+    reader.readAsDataURL(uploadedFile)
+    setResult('')
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🩻 Анализ рентгена</h1>
@@ -183,7 +208,7 @@ export default function XRayPage() {
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс точности и качества для анализа рентгенограмм.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев.",
           extra: [
-            "✅ **GPT-5.2**: ЛУЧШИЙ выбор для 80% рентгена (общая диагностика, МРТ).",
+            "✅ **GPT-5.2**: ЛУЧШИЙ выбор для 80% рентгена (общий анализ, МРТ).",
             "🦴 **Claude Sonnet 4.5**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах (83% точности).",
             "⚠️ **Claude Opus 4.5**: НЕ рекомендуем для этого раздела (самая слабая модель для изображений).",
             "📸 Вы можете загрузить файл рентгена, сделать фото с камеры или использовать ссылку.",
@@ -194,19 +219,67 @@ export default function XRayPage() {
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Загрузите рентгеновский снимок или DICOM файл</h2>
-        <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">Загрузите снимки</h2>
+          <button
+            onClick={() => {
+              setIsComparisonMode(!isComparisonMode)
+              if (isComparisonMode) {
+                setArchiveFile(null)
+                setArchivePreview(null)
+              }
+            }}
+            className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
+              isComparisonMode 
+                ? 'bg-blue-600 text-white shadow-md' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {isComparisonMode ? '✅ Режим сравнения ВКЛ' : '📊 Включить сравнение (Было/Стало)'}
+          </button>
+        </div>
+        
+        <div className={`grid grid-cols-1 ${isComparisonMode ? 'lg:grid-cols-2' : ''} gap-6`}>
+          <div>
+            <p className="text-sm font-medium text-gray-700 mb-2">{isComparisonMode ? '🔵 ТЕКУЩИЙ СНИМОК (СТАЛО)' : 'Выберите снимок для анализа'}</p>
+            <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
+          </div>
+          
+          {isComparisonMode && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2 text-blue-600">⚪ АРХИВНЫЙ СНИМОК (БЫЛО)</p>
+              <ImageUpload onUpload={handleArchiveUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
+            </div>
+          )}
+        </div>
       </div>
 
-      {file && imagePreview && (
+      {(imagePreview || archivePreview) && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">📷 Загруженное изображение</h2>
-          <div className="flex justify-center w-full">
-            <img 
-              src={imagePreview} 
-              alt="Загруженное изображение" 
-              className="w-full max-h-[800px] rounded-lg shadow-lg object-contain"
-            />
+          <h2 className="text-xl font-semibold mb-4">📷 {isComparisonMode ? 'Просмотр сравнения' : 'Загруженное изображение'}</h2>
+          
+          <div className={`grid grid-cols-1 ${isComparisonMode && archivePreview ? 'md:grid-cols-2' : ''} gap-4`}>
+            {imagePreview && (
+              <div className="flex flex-col items-center">
+                {isComparisonMode && <span className="text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">Текущий</span>}
+                <img 
+                  src={imagePreview} 
+                  alt="Текущее изображение" 
+                  className="w-full max-h-[600px] rounded-lg shadow-lg object-contain border-2 border-blue-100"
+                />
+              </div>
+            )}
+            
+            {isComparisonMode && archivePreview && (
+              <div className="flex flex-col items-center">
+                <span className="text-xs font-bold text-blue-600 mb-1 uppercase tracking-widest">Архив (БЫЛО)</span>
+                <img 
+                  src={archivePreview} 
+                  alt="Архивное изображение" 
+                  className="w-full max-h-[600px] rounded-lg shadow-lg object-contain border-2 border-gray-200 opacity-80"
+                />
+              </div>
+            )}
           </div>
           
           <div className="mt-6 space-y-4">

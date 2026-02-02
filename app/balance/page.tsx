@@ -54,9 +54,17 @@ export default function BalancePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-emerald-50 p-6">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">
-          💰 Баланс и история
-        </h1>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+          <h1 className="text-3xl font-bold text-gray-800">
+            💰 Баланс и история
+          </h1>
+          <Link 
+            href="/clinic/dashboard"
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition shadow-md font-bold text-sm"
+          >
+            🏢 Панель клиники (Аудит)
+          </Link>
+        </div>
 
         {balance ? (
           <>

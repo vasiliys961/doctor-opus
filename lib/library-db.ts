@@ -100,7 +100,7 @@ export async function deleteDocument(id: string): Promise<void> {
 }
 
 /**
- * Простой полнотекстовый поиск по чанкам (клиентский)
+ * Улучшенный поиск по чанкам: ищет совпадение по ключевым словам
  */
 export async function searchLibraryLocal(query: string, limit: number = 3): Promise<string[]> {
   const db = await openLibraryDB();
@@ -113,11 +113,35 @@ export async function searchLibraryLocal(query: string, limit: number = 3): Prom
       const allChunks = request.result as LibraryChunk[];
       const queryLower = query.toLowerCase();
       
-      // Очень простой поиск по вхождению слов
-      const results = allChunks
-        .filter(chunk => chunk.content.toLowerCase().includes(queryLower))
+      // Разбиваем запрос на слова длиннее 3 символов
+      const keywords = queryLower
+        .replace(/[.,!?;:()]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 3);
+      
+      if (keywords.length === 0) {
+        resolve([]);
+        return;
+      }
+
+      // Считаем количество совпавших ключевых слов для каждого чанка
+      const scoredChunks = allChunks.map(chunk => {
+        const contentLower = chunk.content.toLowerCase();
+        let score = 0;
+        keywords.forEach(word => {
+          if (contentLower.includes(word)) {
+            score++;
+          }
+        });
+        return { content: chunk.content, score };
+      });
+
+      // Сортируем по весу (количеству совпадений) и фильтруем пустые
+      const results = scoredChunks
+        .filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score)
         .slice(0, limit)
-        .map(chunk => chunk.content);
+        .map(item => item.content);
         
       resolve(results);
     };

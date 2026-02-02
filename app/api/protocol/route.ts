@@ -13,7 +13,8 @@ export async function POST(request: NextRequest) {
       model = 'sonnet',
       templateId,
       customTemplate,
-      specialistName 
+      specialistName,
+      universalPrompt = ''
     } = body;
     const rawText = anonymizeText(rawIncomingText);
 
@@ -21,9 +22,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Текст не предоставлен' }, { status: 400 });
     }
 
-    // АДАПТИРОВАННЫЙ ПРОМПТ НА ОСНОВЕ ВАШЕГО ЗАПРОСА
-    const prompt = `Вы — опытный врач-специалист (${specialistName || 'Терапевт'}), американский профессор клинической медицины и ведущий специалист университетской клиники с многолетним клиническим опытом.
+    // Добавляем специфическую инструкцию специалиста в промпт
+    const specialistDirective = universalPrompt ? `СПЕЦИФИЧЕСКАЯ ИНСТРУКЦИЯ ДЛЯ ПРОФИЛЯ (${specialistName}): ${universalPrompt}\n\n` : '';
 
+    // АДАПТИРОВАННЫЙ ПРОМПТ НА ОСНОВЕ ВАШЕГО ЗАПРОСА
+    const prompt = `Вы — опытный врач-специалист (${specialistName || 'Терапевт'}), экспертный интеллектуальный ассистент с компетенциями профессора клинической медицины и ведущий специалист университетской клиники с многолетним клиническим опытом.
+${specialistDirective}
 Вы совмещаете клиническую строгость и ответственность, обрабатывая несистемно изложенную информацию и облекая её в стандартный протокол осмотра с рекомендациями по обследованию и лечению.
 
 ВАША ЗАДАЧА:

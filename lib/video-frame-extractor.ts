@@ -103,7 +103,6 @@ async function extractFrameAtTime(
 
 /**
  * Применяет анонимизацию к canvas (черные полосы по краям)
- * Использует те же зоны, что и в ImageEditor/ImageUpload
  */
 function anonymizeCanvas(canvas: HTMLCanvasElement): void {
   const ctx = canvas.getContext('2d');
@@ -155,7 +154,6 @@ async function canvasToFile(
 
 /**
  * Извлекает и анонимизирует ключевые кадры из видео
- * Главная функция модуля
  */
 export async function extractAndAnonymizeFrames(
   videoFile: File,

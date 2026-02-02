@@ -7,18 +7,23 @@ import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisTips from '@/components/AnalysisTips'
-import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
+import dynamic from 'next/dynamic'
+const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
 import FeedbackForm from '@/components/FeedbackForm'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
 
+const Dicom3DViewer = dynamic(() => import('@/components/Dicom3DViewer'), { ssr: false })
+
 export default function MRIPage() {
   const [file, setFile] = useState<File | null>(null)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
+  const [originalDicomStack, setOriginalDicomStack] = useState<File[]>([])
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [show3D, setShow3D] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<AnalysisMode>('optimized')
   const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>('sonnet')
@@ -151,12 +156,18 @@ export default function MRIPage() {
     }
   }
 
-  const handleUpload = async (uploadedFile: File, slices?: File[]) => {
+  const handleUpload = async (uploadedFile: File, slices?: File[], originalFiles?: File[]) => {
     setFile(uploadedFile)
     if (slices && slices.length > 0) {
       setAdditionalFiles(slices)
     } else {
       setAdditionalFiles([])
+    }
+
+    if (originalFiles && originalFiles.length > 0) {
+      setOriginalDicomStack(originalFiles)
+    } else {
+      setOriginalDicomStack([])
     }
     
     const reader = new FileReader()
@@ -179,7 +190,7 @@ export default function MRIPage() {
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс точности и качества для МРТ‑исследований.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев.",
           extra: [
-            "✅ **GPT-5.2**: ЛУЧШИЙ выбор для 80% исследований (общая диагностика, МРТ).",
+            "✅ **GPT-5.2**: ЛУЧШИЙ выбор для 80% исследований (общий анализ, МРТ).",
             "🦴 **Claude Sonnet 4.5**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах и костных травмах.",
             "⚠️ **Claude Opus 4.5**: НЕ рекомендуем для этого раздела (слабая модель для изображений).",
             "📸 Вы можете загрузить снимки МРТ, сделать фото или использовать ссылку.",
@@ -197,12 +208,20 @@ export default function MRIPage() {
       {file && imagePreview && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">📷 Загруженное изображение</h2>
-          <div className="flex justify-center w-full">
+          <div className="flex flex-col items-center w-full">
             <img 
               src={imagePreview} 
               alt="Загруженное изображение" 
-              className="w-full max-h-[800px] rounded-lg shadow-lg object-contain"
+              className="w-full max-h-[800px] rounded-lg shadow-lg object-contain mb-4"
             />
+            {originalDicomStack.length > 0 && (
+              <button
+                onClick={() => setShow3D(true)}
+                className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-all shadow-lg hover:scale-105 active:scale-95"
+              >
+                <span>🧊 Открыть в 3D (Volume Render)</span>
+              </button>
+            )}
           </div>
           
           <div className="mt-6 space-y-4">
@@ -300,6 +319,13 @@ export default function MRIPage() {
           analysisType="MRI" 
           analysisResult={result} 
           inputCase={clinicalContext}
+        />
+      )}
+
+      {show3D && originalDicomStack.length > 0 && (
+        <Dicom3DViewer 
+          files={originalDicomStack} 
+          onClose={() => setShow3D(false)} 
         />
       )}
     </div>

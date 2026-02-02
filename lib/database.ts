@@ -1,8 +1,54 @@
 /**
- * Реализация работы с базой данных PostgreSQL (Neon) через @vercel/postgres
+ * Реализация работы с базой данных PostgreSQL (Timeweb / любой хостинг) через драйвер pg
  */
 
-import { sql } from '@vercel/postgres';
+import { Pool, QueryResult } from 'pg';
+
+let pool: Pool | null = null;
+
+function getPool(): Pool {
+  if (!pool) {
+    const connectionString =
+      process.env.POSTGRES_URL ||
+      process.env.DATABASE_URL ||
+      process.env.POSTGRES_CONNECTION_STRING;
+    if (!connectionString) {
+      throw new Error(
+        'Не задана строка подключения к PostgreSQL. Укажите POSTGRES_URL или DATABASE_URL в .env'
+      );
+    }
+    pool = new Pool({
+      connectionString,
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    });
+  }
+  return pool;
+}
+
+/**
+ * Адаптер для тегированного sql — совместим с API @vercel/postgres.
+ * Преобразует шаблон в запрос pg с плейсхолдерами $1, $2, ...
+ */
+export function sql(
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+): Promise<QueryResult> {
+  const text = strings.reduce(
+    (acc, part, i) => acc + part + (i < values.length ? `$${i + 1}` : ''),
+    ''
+  );
+  return getPool().query(text, values);
+}
+
+/**
+ * Получить клиент пула для транзакций (BEGIN/COMMIT/ROLLBACK).
+ * После использования обязательно вызвать client.release().
+ */
+export function getDbClient() {
+  return getPool().connect();
+}
 
 /**
  * Инициализация таблиц базы данных (создание, если не существуют)
@@ -56,17 +102,19 @@ export async function initDatabase() {
       );
     `;
 
-    // Таблица балансов пользователей
+    // Таблица балансов пользователей (Версия 3.40.0)
     await sql`
       CREATE TABLE IF NOT EXISTS user_balances (
-        email VARCHAR(255) PRIMARY KEY,
-        balance DECIMAL(10, 2) DEFAULT 0,
-        total_spent DECIMAL(10, 2) DEFAULT 0,
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        balance DECIMAL(10,2) DEFAULT 50.00 CHECK (balance >= -5.00),
+        total_spent DECIMAL(10,2) DEFAULT 0.00,
+        is_test_account BOOLEAN DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
 
-    // console.log('✅ [DATABASE] База данных инициализирована (Neon)');
     return true;
   } catch (error) {
     console.error('❌ [DATABASE] Ошибка инициализации:', error);
@@ -163,10 +211,10 @@ export async function savePatientNote(data: {
  */
 export async function getPatientNotes(patientId?: string) {
   try {
-    const { rows } = patientId 
+    const result = patientId
       ? await sql`SELECT * FROM patient_notes WHERE patient_id = ${parseInt(patientId)} ORDER BY created_at DESC`
       : await sql`SELECT * FROM patient_notes ORDER BY created_at DESC LIMIT 100`;
-    
+    const { rows } = result;
     return { success: true, notes: rows };
   } catch (error) {
     console.error('❌ [DATABASE] Ошибка получения заметок:', error);
@@ -179,7 +227,6 @@ export async function getPatientNotes(patientId?: string) {
  */
 export async function getFineTuningStats() {
   try {
-    // Получаем реальное количество отзывов по каждой специальности
     const { rows } = await sql`
       SELECT 
         specialty, 
@@ -190,7 +237,6 @@ export async function getFineTuningStats() {
       GROUP BY specialty;
     `;
 
-    // Если база пуста, добавляем хотя бы специальности для отображения в UI
     const defaultSpecialties = ['ЭКГ', 'Дерматоскопия', 'УЗИ', 'Рентген'];
     const stats = rows.length > 0 ? rows : defaultSpecialties.map(s => ({
       specialty: s,
@@ -235,7 +281,6 @@ export async function createPayment(data: {
  */
 export async function confirmPayment(paymentId: number, transactionId: string) {
   try {
-    // 1. Обновляем статус платежа
     const { rows } = await sql`
       UPDATE payments 
       SET status = 'completed', transaction_id = ${transactionId}, updated_at = CURRENT_TIMESTAMP
@@ -247,7 +292,6 @@ export async function confirmPayment(paymentId: number, transactionId: string) {
 
     const { email, units } = rows[0];
 
-    // 2. Начисляем единицы в таблицу балансов
     await sql`
       INSERT INTO user_balances (email, balance)
       VALUES (${email}, ${units})

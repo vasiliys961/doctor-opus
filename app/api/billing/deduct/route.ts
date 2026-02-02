@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { sql } from '@vercel/postgres';
+import { sql, getDbClient } from '@/lib/database';
 
 /**
  * Doctor Opus v3.40.0 - Серверный биллинг с транзакциями
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ===== ТРАНЗАКЦИЯ С FOR UPDATE (защита от race conditions) =====
-    const client = await sql.connect();
+    const client = await getDbClient();
     
     try {
       await client.query('BEGIN');

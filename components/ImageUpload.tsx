@@ -5,7 +5,7 @@ import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compres
 import ImageEditor from './ImageEditor'
 
 interface ImageUploadProps {
-  onUpload: (file: File, additionalFiles?: File[]) => void
+  onUpload: (file: File, additionalFiles?: File[], originalFiles?: File[]) => void
   accept?: string
   maxSize?: number // в MB
 }
@@ -65,11 +65,11 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           // Берем первый DICOM как основной файл для метаданных, а остальные как срезы
           const slices = await sliceDicomFolder(dicomFiles);
           if (slices && slices.length > 0) {
-            onUpload(dicomFiles[0], slices);
+            onUpload(dicomFiles[0], slices, dicomFiles);
             setCurrentFile(dicomFiles[0]);
             setPreview(null);
           } else {
-            onUpload(dicomFiles[0]);
+            onUpload(dicomFiles[0], [], dicomFiles);
           }
         } catch (err) {
           console.error("DICOM Folder Slicing error:", err);
@@ -78,8 +78,42 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           setIsCompressing(false);
         }
         return;
+      }
+
+      // Проверка на видео-файлы
+      const videoFiles = files.filter(f => f.type.startsWith('video/'));
+      if (videoFiles.length > 0) {
+        setIsCompressing(true);
+        try {
+          const { extractAndAnonymizeFrames } = await import('@/lib/video-frame-extractor');
+          // Извлекаем кадры из первого видео в папке
+          const frames = await extractAndAnonymizeFrames(videoFiles[0]);
+          const frameFiles = frames.map(f => f.file);
+          if (frameFiles.length > 0) {
+            // Передаем первый кадр как основной, а остальные как дополнительные/оригинальные
+            onUpload(frameFiles[0], [], frameFiles);
+            setCurrentFile(videoFiles[0]);
+            const reader = new FileReader();
+            reader.onloadend = () => setPreview(reader.result as string);
+            reader.readAsDataURL(frameFiles[0]);
+          }
+        } catch (err) {
+          console.error("Video processing in MRI error:", err);
+        } finally {
+          setIsCompressing(false);
+        }
+        return;
+      }
+
+      if (files.length > 1) {
+        // Если это несколько изображений (например, кадры из видео)
+        const imageFiles = files.filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name));
+        if (imageFiles.length > 0) {
+          onUpload(imageFiles[0], [], imageFiles);
+          return handleFile(imageFiles[0]);
+        }
       } else if (files.length > 0) {
-        // Если это не DICOM, просто берем первый файл
+        // Если это один файл
         return handleFile(files[0]);
       }
       return;
@@ -96,6 +130,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
 
     const fileName = file.name.toLowerCase();
     const isDicom = fileName.endsWith('.dcm') || fileName.endsWith('.dicom') || file.type === 'application/dicom';
+    const isVideo = file.type.startsWith('video/');
     const isImage = file.type.startsWith('image/');
 
     if (isImage) {
@@ -123,18 +158,38 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           const { sliceDicomFile } = await import('@/lib/dicom-client-processor');
           const slices = await sliceDicomFile(file);
           if (slices && slices.length > 0) {
-            onUpload(file, slices);
+            onUpload(file, slices, [file]);
           } else {
-            onUpload(file);
+            onUpload(file, [], [file]);
           }
         } catch (err) {
           console.error("DICOM Slicing error:", err);
-          onUpload(file);
+          onUpload(file, [], [file]);
         } finally {
           setIsCompressing(false);
         }
       } else {
-        onUpload(file);
+        onUpload(file, [], [file]);
+      }
+    } else if (isVideo) {
+      setIsCompressing(true);
+      try {
+        const { extractAndAnonymizeFrames } = await import('@/lib/video-frame-extractor');
+        const frames = await extractAndAnonymizeFrames(file);
+        const frameFiles = frames.map(f => f.file);
+        if (frameFiles.length > 0) {
+          // ПЕРЕДАЕМ: 1. Первый кадр (для превью), 2. Пусто, 3. Оригинальное видео + кадры
+          onUpload(frameFiles[0], [], [file, ...frameFiles]);
+          setCurrentFile(file);
+          const reader = new FileReader();
+          reader.onloadend = () => setPreview(reader.result as string);
+          reader.readAsDataURL(frameFiles[0]);
+        }
+      } catch (err) {
+        console.error("Video processing error:", err);
+        onUpload(file, [], [file]);
+      } finally {
+        setIsCompressing(false);
       }
     } else {
       setPreview(null);

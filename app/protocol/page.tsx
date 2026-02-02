@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import AudioUpload from '@/components/AudioUpload'
 
@@ -10,6 +11,7 @@ import ReactMarkdown from 'react-markdown'
 import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } from 'docx'
 import { saveAs } from 'file-saver'
 import { DEFAULT_TEMPLATES, ProtocolTemplate } from '@/lib/protocol-templates'
+import { UNIVERSAL_SPECIALIST_TEMPLATES } from '@/lib/prompts'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
@@ -29,6 +31,65 @@ export default function ProtocolPage() {
   const [customTemplate, setCustomTemplate] = useState(DEFAULT_TEMPLATES[0].content)
   const [isEditingTemplate, setIsEditingTemplate] = useState(false)
 
+  // Универсальные промпты
+  const [selectedUniversalKey, setSelectedUniversalKey] = useState<string>('')
+  const [universalPrompt, setUniversalUniversalPrompt] = useState<string>('')
+  
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Загрузка пользовательского шаблона при старте
+  useEffect(() => {
+    const saved = localStorage.getItem('user_protocol_template')
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        setCustomTemplate(parsed.template)
+        setSpecialistName(parsed.name || specialistName)
+        setIsEditingTemplate(true)
+      } catch (e) {}
+    }
+  }, [])
+
+  const handleUniversalSelect = (key: string) => {
+    setSelectedUniversalKey(key)
+    if (key && UNIVERSAL_SPECIALIST_TEMPLATES[key]) {
+      const tpl = UNIVERSAL_SPECIALIST_TEMPLATES[key]
+      setUniversalUniversalPrompt(tpl.prompt)
+      setSpecialistName(tpl.name)
+      
+      // Если у специалиста есть своя структура, подставляем её
+      if (tpl.structure) {
+        setCustomTemplate(tpl.structure)
+      }
+    } else {
+      setUniversalUniversalPrompt('')
+    }
+  }
+
+  const handleSaveAsDefault = () => {
+    const data = {
+      template: customTemplate,
+      name: specialistName
+    }
+    localStorage.setItem('user_protocol_template', JSON.stringify(data))
+    alert('Шаблон сохранен как ваш персональный стандарт!')
+  }
+
+  const handleLoadFromFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const content = event.target?.result as string
+      if (content) {
+        setCustomTemplate(content)
+        setIsEditingTemplate(true)
+      }
+    }
+    reader.readAsText(file)
+  }
+
   const handleGenerateProtocol = async () => {
     if (!rawText.trim()) return
 
@@ -43,7 +104,9 @@ export default function ProtocolPage() {
         model: model,
         templateId: selectedTemplateId,
         customTemplate: customTemplate,
-        specialistName: specialistName
+        specialistName: specialistName,
+        // Добавляем универсальный промпт, если он есть
+        universalPrompt: universalPrompt
       };
 
       const modelUsed = model === 'opus' ? 'anthropic/claude-opus-4.5' : 
@@ -72,6 +135,7 @@ export default function ProtocolPage() {
               model: usage.model || modelUsed,
               inputTokens: usage.prompt_tokens,
               outputTokens: usage.completion_tokens,
+              specialty: specialistName // Передаем специальность для аудита
             });
           },
           onComplete: (finalText) => {
@@ -96,7 +160,8 @@ export default function ProtocolPage() {
             section: 'protocols',
             model: modelUsed,
             inputTokens,
-            outputTokens
+            outputTokens,
+            specialty: specialistName // Передаем специальность для аудита
           });
         }
         else setProtocol(`Ошибка: ${data.error}`)
@@ -176,28 +241,58 @@ export default function ProtocolPage() {
 
           {/* Специалист и Шаблоны */}
           <div className="mb-6 space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">👨‍⚕️ Кто проводит осмотр:</label>
-              <input 
-                type="text"
-                value={specialistName}
-                onChange={(e) => setSpecialistName(e.target.value)}
-                placeholder="Например: Врач-невролог Иванов И.И."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">👨‍⚕️ Кто проводит осмотр:</label>
+                <input 
+                  type="text"
+                  value={specialistName}
+                  onChange={(e) => setSpecialistName(e.target.value)}
+                  placeholder="Например: Врач-невролог"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">🏥 Специализация (шаблон):</label>
+                <select 
+                  value={selectedUniversalKey}
+                  onChange={(e) => handleUniversalSelect(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm bg-white"
+                >
+                  <option value="">-- Выберите профиль --</option>
+                  {Object.entries(UNIVERSAL_SPECIALIST_TEMPLATES).map(([key, tpl]) => (
+                    <option key={key} value={key}>{tpl.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
+            {selectedUniversalKey && (
+              <div className="animate-in fade-in slide-in-from-top-1">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest">Инструкция для ИИ (можно редактировать):</label>
+                  <span className="text-[10px] text-gray-400 italic">Фокус: {UNIVERSAL_SPECIALIST_TEMPLATES[selectedUniversalKey].focus}</span>
+                </div>
+                <textarea
+                  value={universalPrompt}
+                  onChange={(e) => setUniversalUniversalPrompt(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none min-h-[60px] bg-indigo-50/30 font-medium leading-relaxed"
+                  placeholder="Специфические инструкции для этого врача..."
+                />
+              </div>
+            )}
+
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Быстрые шаблоны:</label>
+              <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider italic">Быстрое форматирование:</label>
               <div className="flex flex-wrap gap-2">
                 {DEFAULT_TEMPLATES.map((tpl) => (
                   <button
                     key={tpl.id}
                     onClick={() => applyTemplate(tpl)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
+                    className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all border ${
                       selectedTemplateId === tpl.id 
-                        ? 'bg-primary-500 text-white border-primary-600 shadow-sm' 
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400 hover:bg-primary-50'
+                        ? 'bg-primary-500 text-white border-primary-600' 
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-primary-400'
                     }`}
                   >
                     {tpl.name}
@@ -208,18 +303,39 @@ export default function ProtocolPage() {
 
             <button
               onClick={() => setIsEditingTemplate(!isEditingTemplate)}
-              className="text-xs text-primary-600 hover:underline flex items-center gap-1"
+              className="text-[10px] font-bold text-primary-600 hover:underline flex items-center gap-1 uppercase tracking-tighter"
             >
-              {isEditingTemplate ? '🔼 Свернуть шаблон' : '⚙️ Редактировать структуру шаблона'}
+              {isEditingTemplate ? '🔼 Скрыть структуру документа' : '⚙️ Настроить структуру документа (H1, H2...)'}
             </button>
 
             {isEditingTemplate && (
-              <div className="mt-2 animate-in fade-in slide-in-from-top-1">
+              <div className="mt-2 animate-in fade-in slide-in-from-top-1 space-y-2">
                 <textarea
                   value={customTemplate}
                   onChange={(e) => setCustomTemplate(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none min-h-[200px] font-mono"
+                  className="w-full px-3 py-2 text-[10px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none min-h-[150px] font-mono leading-tight bg-white"
                 />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleSaveAsDefault}
+                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-colors shadow-sm"
+                  >
+                    💾 Сохранить как мой стандарт
+                  </button>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 bg-gray-600 text-white rounded-lg text-[10px] font-bold hover:bg-gray-700 transition-colors shadow-sm"
+                  >
+                    📁 Загрузить из файла (.txt)
+                  </button>
+                  <input 
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleLoadFromFile}
+                    accept=".txt"
+                    className="hidden"
+                  />
+                </div>
               </div>
             )}
           </div>

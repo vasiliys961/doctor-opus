@@ -87,12 +87,13 @@ export default function SubscriptionPage() {
           💎 Пакеты единиц
         </h1>
         <p className="text-gray-600 mb-8">
-          Единицы используются для оплаты анализов и консультаций
+          Единицы используются для оплаты анализов и консультаций. 
+          <Link href="/clinic/dashboard" className="ml-2 text-indigo-600 font-bold hover:underline">🏢 Панель для клиник →</Link>
         </p>
 
         {balanceContent}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto mb-8">
           {Object.entries(SUBSCRIPTION_PACKAGES).map(([key, pkg]) => {
             const pricePerCredit = (pkg.priceRub / pkg.credits).toFixed(2)
             const isSelected = selectedPackage === key

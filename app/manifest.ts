@@ -27,7 +27,7 @@ export default function manifest(): MetadataRoute.Manifest {
       {
         name: 'Чат',
         short_name: 'Чат',
-        description: 'Открыть ИИ-консультант',
+        description: 'Открыть ИИ-ассистент',
         url: '/chat',
       },
       {

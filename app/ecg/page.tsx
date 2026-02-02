@@ -30,6 +30,8 @@ export default function ECGPage() {
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
+  const [isAnonymous, setIsAnonymous] = useState(false)
+  const [showCaliper, setShowCaliper] = useState(false)
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -198,7 +200,10 @@ export default function ECGPage() {
     setResult('')
     setFlashResult('')
     setError(null)
+    setShowCaliper(false)
   }
+
+  const EcgCaliper = dynamic(() => import('@/components/EcgCaliper'), { ssr: false })
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -235,21 +240,53 @@ export default function ECGPage() {
               />
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-700">
-                  👤 Клинический контекст пациента (жалобы, анамнез, цель исследования)
+                  👤 Клинический контекст (жалобы, анамнез, цель исследования)
                 </label>
                 <VoiceInput 
                   onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
                   disabled={loading}
                 />
               </div>
+              <div className="mb-2 p-2 bg-amber-50 border border-amber-100 rounded text-[10px] text-amber-800">
+                ⚠️ <strong>Важно:</strong> Не указывайте ФИО, дату рождения и другие персональные данные пациента. 
+                Используйте обезличенные формулировки (например: "пациент М., 45 лет").
+              </div>
               <textarea
                 value={clinicalContext}
                 onChange={(e) => setClinicalContext(e.target.value)}
                 placeholder="Пример: Пациент 55 лет, боли в груди при нагрузке, в анамнезе ИБС. Оценить наличие ишемических изменений."
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4 ${
+                  /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
+                  ? 'border-red-500 bg-red-50' 
+                  : 'border-gray-300'
+                }`}
                 rows={3}
                 disabled={loading}
               />
+              {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
+                <p className="text-[10px] text-red-600 mb-2 font-bold">
+                  ⚠️ Похоже, вы ввели ФИО. Пожалуйста, удалите персональные данные для защиты приватности.
+                </p>
+              )}
+              <div className="mb-4">
+                <label className="flex items-center space-x-2 cursor-pointer p-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-900">
+                  <input
+                    type="checkbox"
+                    checked={isAnonymous}
+                    onChange={(e) => setIsAnonymous(e.target.checked)}
+                    disabled={loading}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-blue-900">
+                      🛡️ Разовый анонимный анализ
+                    </span>
+                    <span className="text-[10px] text-blue-700 font-normal">
+                      Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                    </span>
+                  </div>
+                </label>
+              </div>
               <p className="text-xs text-gray-500 mb-4">
                 💡 Добавление контекста значительно повышает точность и релевантность анализа.
               </p>
@@ -307,13 +344,30 @@ export default function ECGPage() {
       
       {file && imagePreview && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">📷 Загруженное изображение ЭКГ</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">📷 Загруженное изображение ЭКГ</h2>
+            <button
+              onClick={() => setShowCaliper(!showCaliper)}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                showCaliper 
+                  ? 'bg-blue-600 text-white shadow-md' 
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              📏 {showCaliper ? 'Выключить линейку' : 'Цифровой циркуль (линейка)'}
+            </button>
+          </div>
+          
           <div className="flex justify-center w-full">
-            <img 
-              src={imagePreview} 
-              alt="Загруженное изображение ЭКГ" 
-              className="w-full max-h-[800px] rounded-lg shadow-md object-contain border border-gray-200"
-            />
+            {showCaliper ? (
+              <EcgCaliper imageUrl={imagePreview} containerWidth={800} />
+            ) : (
+              <img 
+                src={imagePreview} 
+                alt="Загруженное изображение ЭКГ" 
+                className="w-full max-h-[800px] rounded-lg shadow-md object-contain border border-gray-200"
+              />
+            )}
           </div>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600 border-t pt-4">
             <p><strong>Имя:</strong> {file.name}</p>
@@ -337,6 +391,7 @@ export default function ECGPage() {
         mode={mode}
         imageType="ecg"
         cost={currentCost}
+        isAnonymous={isAnonymous}
       />
 
       {result && !loading && (

@@ -42,6 +42,11 @@ export default function LegalFooter() {
                   ✅ Согласие на обработку ПД
                 </Link>
               </li>
+              <li>
+                <Link href="/compliance" className="hover:text-primary-600 transition-colors">
+                  🔍 Для платежных систем
+                </Link>
+              </li>
             </ul>
           </div>
 

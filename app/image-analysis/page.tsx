@@ -43,6 +43,7 @@ export default function ImageAnalysisPage() {
   const [lastAnalysisData, setLastAnalysisData] = useState<any>(null)
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [useLibrary, setUseLibrary] = useState(false)
+  const [isAnonymous, setIsAnonymous] = useState(false)
 
   const handleLabsFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -369,21 +370,53 @@ export default function ImageAnalysisPage() {
                 />
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold text-gray-700">
-                    👤 Клинический контекст пациента (жалобы, анамнез, цель исследования)
+                    👤 Клинический контекст (жалобы, анамнез, цель исследования)
                   </label>
                   <VoiceInput 
                     onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
                     disabled={loading}
                   />
                 </div>
+                <div className="mb-2 p-2 bg-amber-50 border border-amber-100 rounded text-[10px] text-amber-800">
+                  ⚠️ <strong>Важно:</strong> Не указывайте ФИО, дату рождения и другие персональные данные пациента. 
+                  Используйте обезличенные формулировки (например: "пациент М., 45 лет").
+                </div>
                 <textarea
                   value={clinicalContext}
                   onChange={(e) => setClinicalContext(e.target.value)}
                   placeholder="Например: Пациент 60 лет, жалобы на одышку при нагрузке, в анамнезе ГБ 2 ст. Исключить застойные явления."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4 ${
+                    /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
+                    ? 'border-red-500 bg-red-50' 
+                    : 'border-gray-300'
+                  }`}
                   rows={3}
                   disabled={loading}
                 />
+                {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
+                  <p className="text-[10px] text-red-600 mb-2 font-bold">
+                    ⚠️ Похоже, вы ввели ФИО. Пожалуйста, удалите персональные данные для защиты приватности.
+                  </p>
+                )}
+                <div className="mb-4">
+                  <label className="flex items-center space-x-2 cursor-pointer p-2 bg-blue-50 border border-blue-100 rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={isAnonymous}
+                      onChange={(e) => setIsAnonymous(e.target.checked)}
+                      disabled={loading}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-blue-900">
+                        🛡️ Разовый анонимный анализ
+                      </span>
+                      <span className="text-[10px] text-blue-700">
+                        Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                      </span>
+                    </div>
+                  </label>
+                </div>
                 <p className="text-xs text-gray-500 mb-4">
                   💡 Добавление контекста значительно повышает точность и релевантность анализа.
                 </p>
@@ -558,6 +591,7 @@ export default function ImageAnalysisPage() {
         mode={lastAnalysisData?.mode || modelInfo.mode || mode} 
         imageType={imageType}
         cost={currentCost}
+        isAnonymous={isAnonymous}
       />
 
       {result && !loading && (

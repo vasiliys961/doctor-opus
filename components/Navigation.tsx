@@ -14,7 +14,7 @@ export default function Navigation() {
   const pages = [
     { name: '🏠 Главная', href: '/' },
     { name: '📘 Инструкция для врача', href: '/manual' },
-    { name: '🤖 ИИ-Консультант', href: '/chat' },
+    { name: '🤖 ИИ-Ассистент', href: '/chat' },
     { name: '📚 Персональная библиотека', href: '/library' },
     { name: '📝 Протокол приёма', href: '/protocol' },
     { name: '🧮 Мед. калькуляторы', href: 'https://medcalculator.vercel.app', isExternal: true },

@@ -35,9 +35,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru">
-      <body>
+      <body className="antialiased">
+        <div className="fixed top-0 left-0 right-0 z-[9999] bg-amber-50 border-b border-amber-100 py-1 px-4 text-[10px] sm:text-xs text-amber-800 text-center leading-tight">
+          ⚠️ <strong>doctor-opus.ru</strong> — программный инструмент для медицинских специалистов. Не является медицинской организацией, не оказывает медицинских услуг и не заменяет консультацию.
+        </div>
         <Providers>
-          <div className="flex min-h-screen">
+          <div className="flex min-h-screen pt-6 sm:pt-4">
             {/* Навигация - адаптивная для всех устройств */}
             <Navigation />
             

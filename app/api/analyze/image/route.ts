@@ -112,19 +112,26 @@ export async function POST(request: NextRequest) {
     const finalClinicalContext = [clinicalContext, dicomContext].filter(Boolean).join('\n\n');
     let modelToUse = customModel || (mode === 'fast' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
 
+    // Если изображений несколько, используем специальный промпт для сравнения, если он еще не задан явно
+    let finalPrompt = prompt;
+    if (allImages.length > 1 && !prompt.includes('СРАВНИТЕЛЬНЫЙ')) {
+      const { getImageComparisonPrompt } = await import('@/lib/prompts');
+      finalPrompt = getImageComparisonPrompt(prompt);
+    }
+
     if (mode === 'fast') {
       if (useStreaming) {
-        const stream = await analyzeImageFastStreaming(prompt, imagesBase64[0], imageType, finalClinicalContext, undefined, [], isTwoStage);
+        const stream = await analyzeImageFastStreaming(finalPrompt, imagesBase64, imageType, finalClinicalContext, undefined, [], isTwoStage);
         return handleStreamingResponse(stream, MODELS.GEMINI_3_FLASH);
       }
-      const result = await analyzeImageFast({ prompt, imageBase64: imagesBase64[0], imageType: imageType as any, clinicalContext: finalClinicalContext });
+      const result = await analyzeImageFast({ prompt: finalPrompt, imagesBase64, imageType: imageType as any, clinicalContext: finalClinicalContext });
       return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: 0.5 });
     }
 
     if (allImages.length > 1) {
       if (useStreaming) {
         const stream = await analyzeMultipleImagesOpusTwoStageStreaming(
-          prompt, 
+          finalPrompt, 
           imagesBase64, 
           imageType as any, 
           finalClinicalContext, 
@@ -137,7 +144,7 @@ export async function POST(request: NextRequest) {
         return handleStreamingResponse(stream, modelToUse);
       }
       const result = await analyzeMultipleImagesTwoStage({ 
-        prompt, 
+        prompt: finalPrompt, 
         imagesBase64, 
         imageType: imageType as any, 
         clinicalContext: finalClinicalContext, 
@@ -148,7 +155,7 @@ export async function POST(request: NextRequest) {
     } else {
       if (useStreaming) {
         const stream = await analyzeImageOpusTwoStageStreaming(
-          prompt, 
+          finalPrompt, 
           imagesBase64[0], 
           imageType as any, 
           finalClinicalContext, 
@@ -160,7 +167,7 @@ export async function POST(request: NextRequest) {
         return handleStreamingResponse(stream, modelToUse);
       }
       const result = await analyzeImageOpusTwoStage({ 
-        prompt, 
+        prompt: finalPrompt, 
         imageBase64: imagesBase64[0], 
         imageType: imageType as any, 
         clinicalContext: finalClinicalContext, 

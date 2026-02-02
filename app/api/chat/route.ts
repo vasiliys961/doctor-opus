@@ -11,7 +11,7 @@ export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 /**
- * API endpoint для ИИ-консультанта
+ * API endpoint для ИИ-ассистента
  */
 export async function POST(request: NextRequest) {
   try {

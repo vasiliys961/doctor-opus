@@ -6,8 +6,10 @@ import { logUsage } from '@/lib/simple-logger'
 import { deductBalance } from '@/lib/subscription-manager'
 
 import { handleSSEStream } from '@/lib/streaming-utils'
+import { useRouter } from 'next/navigation'
 
 export default function ClinicalProtocolsPage() {
+  const router = useRouter()
   const [query, setQuery] = useState('')
   const [specialty, setSpecialty] = useState('')
   const [result, setResult] = useState<string>('')
@@ -17,6 +19,9 @@ export default function ClinicalProtocolsPage() {
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [model, setModel] = useState<string>('')
   const [modelMode, setModelMode] = useState<'standard' | 'detailed' | 'online'>('standard')
+  const [followUp, setFollowUp] = useState('')
+  const [isAskingFollowUp, setIsAskingFollowUp] = useState(false)
+  const [chatHistory, setHistory] = useState<{role: 'user' | 'assistant', content: string}[]>([])
 
   const specialties = [
     'Кардиология',
@@ -88,6 +93,7 @@ export default function ClinicalProtocolsPage() {
             model: usage.model || (modelMode === 'online' ? 'perplexity/sonar' : modelMode === 'detailed' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-haiku-4.5'),
             inputTokens: usage.prompt_tokens,
             outputTokens: usage.completion_tokens,
+            specialty: specialty // Передаем специальность
           });
 
           // 2. Списываем с баланса подписки (если есть)
@@ -97,7 +103,8 @@ export default function ClinicalProtocolsPage() {
             model: usage.model || (modelMode === 'online' ? 'perplexity/sonar' : modelMode === 'detailed' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-haiku-4.5'),
             inputTokens: usage.prompt_tokens,
             outputTokens: usage.completion_tokens,
-            operation: `Поиск: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`
+            operation: `Поиск: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`,
+            specialty: specialty // Передаем специальность
           });
         },
         onComplete: (finalText) => {
@@ -115,6 +122,43 @@ export default function ClinicalProtocolsPage() {
       setLoading(false)
     }
   }
+
+  const handleFollowUp = async () => {
+    if (!followUp.trim() || !result) return
+
+    const userMsg = followUp.trim()
+    setFollowUp('')
+    
+    // Сохраняем контекст и вопрос для полноценного чата
+    const data = {
+      text: result,
+      type: 'Клинические рекомендации',
+      initialQuestion: userMsg, // Передаем сам вопрос
+      model: model,
+      timestamp: new Date().toISOString()
+    };
+    
+    sessionStorage.setItem('pending_analysis', JSON.stringify(data));
+    
+    // Показываем статус перехода
+    setResult(prev => prev + `\n\n---\n⏳ **Переходим в ИИ-Ассистент для обсуждения вопроса:** _${userMsg}_...`);
+    
+    // Перенаправляем через небольшую задержку для наглядности
+    setTimeout(() => {
+      router.push('/chat');
+    }, 800);
+  }
+
+  const handleTransferToChat = () => {
+    const data = {
+      text: result,
+      type: 'Клинические рекомендации',
+      model: model,
+      timestamp: new Date().toISOString()
+    };
+    sessionStorage.setItem('pending_analysis', JSON.stringify(data));
+    router.push('/chat');
+  };
 
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-6xl">
@@ -191,7 +235,7 @@ export default function ClinicalProtocolsPage() {
               }`}
               disabled={loading}
             >
-              🎓 Подробно
+              🎓 Клинический разбор
             </button>
             <button
               onClick={() => setModelMode('online')}
@@ -209,7 +253,7 @@ export default function ClinicalProtocolsPage() {
             {modelMode === 'standard' 
               ? '💡 Рекомендуется для быстрого поиска основных протоколов.' 
               : modelMode === 'detailed'
-                ? '💡 Глубокий анализ с подробными дозировками и уровнями доказательности.'
+                ? '💡 Глубокий клинический разбор: дифференциальный анализ, шкалы, пошаговая тактика ведения и схемы терапии.'
                 : '💡 Поиск в реальном времени по свежим публикациям 2024-2025 гг. со ссылками.'}
           </p>
         </div>
@@ -326,6 +370,57 @@ export default function ClinicalProtocolsPage() {
             </ReactMarkdown>
           </div>
 
+          {/* Блок уточняющих вопросов */}
+          <div className="mt-8 pt-6 border-t border-gray-100">
+            <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
+              <h3 className="text-base font-bold text-gray-900 flex-grow">
+                🧐 Есть уточняющие вопросы по этому протоколу?
+              </h3>
+              <button
+                onClick={handleTransferToChat}
+                className="w-full sm:w-auto px-4 py-2 bg-teal-50 text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors text-xs font-bold flex items-center justify-center gap-2"
+              >
+                <span>💬 Обсудить в полном чате</span>
+              </button>
+            </div>
+            
+            <div className="relative">
+              <textarea
+                value={followUp}
+                onChange={(e) => setFollowUp(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleFollowUp()
+                  }
+                }}
+                placeholder="Задайте вопрос (например: 'А можно ли этот препарат при почечной недостаточности?')"
+                className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm resize-none pr-12"
+                rows={2}
+                disabled={isAskingFollowUp}
+              />
+              <button
+                onClick={handleFollowUp}
+                disabled={!followUp.trim() || isAskingFollowUp}
+                className="absolute right-2 bottom-2 p-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-30 transition-all shadow-md"
+              >
+                {isAskingFollowUp ? (
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            <p className="mt-2 text-[10px] text-gray-400 italic">
+              💡 Нажмите Enter для отправки. Ассистент ответит с учетом контекста текущего протокола.
+            </p>
+          </div>
+
           <div className="mt-6 p-3 sm:p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-xs sm:text-sm">
             <p className="font-semibold text-yellow-900 mb-1">⚠️ ВАЖНО:</p>
             <p className="text-yellow-800">
@@ -344,12 +439,12 @@ export default function ClinicalProtocolsPage() {
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             {[
-              'Протокол лечения артериальной гипертензии',
-              'Клинические рекомендации по сахарному диабету 2 типа',
-              'Диагностика и лечение острого коронарного синдрома',
-              'Протокол ведения пациентов с ХОБЛ',
-              'Лечение ревматоидного артрита',
-              'Клинические рекомендации по COVID-19',
+              'Клинический алгоритм при подозрении на ОКС',
+              'Дифференциальный анализ аритмий на ЭКГ',
+              'Пошаговая тактика при фибрилляции предсердий',
+              'Диагностические критерии и шкалы при ХСН',
+              'Алгоритм ведения пациента с внебольничной пневмонией',
+              'Дифференциальная диагностика болей в суставах',
             ].map((example, idx) => (
               <button
                 key={idx}

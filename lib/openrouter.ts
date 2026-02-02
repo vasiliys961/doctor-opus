@@ -249,7 +249,8 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
  */
 export async function analyzeImageFast(options: { 
   prompt: string; 
-  imageBase64: string;
+  imageBase64?: string;
+  imagesBase64?: string[];
   imageType?: ImageType;
   specialty?: Specialty;
   clinicalContext?: string;
@@ -263,13 +264,15 @@ export async function analyzeImageFast(options: {
 
   const imageType = options.imageType || 'universal';
   const specialty = options.specialty;
+  const allImages = options.imagesBase64 || (options.imageBase64 ? [options.imageBase64] : []);
   
   try {
-    safeLog('🚀 [FAST] Шаг 1: Извлечение JSON через Gemini 3.0...');
-    const jsonExtraction = await extractImageJSON({
-      imageBase64: options.imageBase64,
+    safeLog(`🚀 [FAST] Шаг 1: Извлечение JSON через Gemini 3.0 (${allImages.length} изображений)...`);
+    const jsonExtractionResult = await extractImageJSON({
+      imagesBase64: allImages,
       modality: imageType
     });
+    const jsonExtraction = jsonExtractionResult.data;
     
     // Получаем специализированный промпт для Профессора
     const { getDirectivePrompt } = await import('./prompts');
@@ -277,7 +280,7 @@ export async function analyzeImageFast(options: {
 
     const textModel = MODELS.GEMINI_3_FLASH;
     
-    const contextPrompt = `Ты — Профессор медицины. На основе этих данных и своей экспертизы дай клиническую директиву. ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
+    const contextPrompt = `Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. На основе этих данных и своей экспертизы дай клиническую директиву. ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
 
 === СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI 3.0) ===
 ${JSON.stringify(jsonExtraction, null, 2)}
@@ -463,8 +466,10 @@ export async function extractImageJSON(options: {
   ];
 
   // Получаем детальные инструкции специалиста для этого типа исследования
-  const { getDescriptionPrompt } = await import('./prompts');
-  const jsonPrompt = getDescriptionPrompt(modality as any, specialty);
+  const { getDescriptionPrompt, getComparisonDescriptionPrompt } = await import('./prompts');
+  const jsonPrompt = allImages.length > 1 
+    ? getComparisonDescriptionPrompt(modality as any, specialty)
+    : getDescriptionPrompt(modality as any, specialty);
 
   const content: any[] = [
     {
@@ -596,7 +601,7 @@ export async function analyzeMultipleImagesTwoStage(options: {
     
     const textModel = options.targetModel || MODELS.SONNET;
     
-    const contextPrompt = `Ты — Профессор медицины. Проведи сравнительную клиническую интерпретацию данных по НЕСКОЛЬКИМ изображениям, полученных от Специалиста. ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
+    const contextPrompt = `Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. Проведи сравнительную клиническую интерпретацию данных по НЕСКОЛЬКИМ изображениям, полученных от Специалиста. ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
 
 ### ДАННЫЕ ОТ СПЕЦИАЛИСТА (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}

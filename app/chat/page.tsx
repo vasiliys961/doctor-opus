@@ -9,6 +9,7 @@ import ReactMarkdown from 'react-markdown'
 import { logUsage } from '@/lib/simple-logger'
 import { ChatSpecialistSelector } from '@/components/ChatSpecialistSelector'
 import { Specialty } from '@/lib/prompts'
+import { searchLibraryLocal } from '@/lib/library-db'
 
 type ModelType = 'opus' | 'sonnet'
 
@@ -25,7 +26,7 @@ const specialtyMap: Record<string, Specialty> = {
   'Гинеколог': 'gynecology',
   'Ревматолог': 'rheumatology',
   'Академический поиск': 'openevidence',
-  'ИИ-Эксперт': 'ai_consultant',
+  'ИИ-Эксперт': 'ai_assistant',
 };
 
 export default function ChatPage() {
@@ -47,37 +48,50 @@ export default function ChatPage() {
   const [specialty, setSpecialty] = useState<Specialty>('universal')
   const [isCutOff, setIsCutOff] = useState(false)
   const [lastMessageIndex, setLastMessageIndex] = useState<number | null>(null)
+  const [searchingLibrary, setSearchingLibrary] = useState(false)
 
   useEffect(() => {
     // Проверяем наличие переданных данных из анализа изображений
     const pendingData = sessionStorage.getItem('pending_analysis');
     if (pendingData) {
       try {
-        const { text, type } = JSON.parse(pendingData);
+        const { text, type, initialQuestion } = JSON.parse(pendingData);
         
         // Автоматический выбор специальности
         if (type === 'ecg') setSpecialty('cardiology');
         else if (['ct', 'mri', 'xray', 'ultrasound'].includes(type)) setSpecialty('radiology');
+        else if (type === 'Клинические рекомендации') setSpecialty('universal');
         
         // Формируем вводное сообщение
-        const typeNames: Record<string, string> = {
-          'ecg': 'ЭКГ',
-          'ct': 'КТ',
-          'mri': 'МРТ',
-          'xray': 'рентгена',
-          'ultrasound': 'УЗИ'
-        };
+        let initialPrompt = '';
         
-        const typeName = typeNames[type] || 'исследования';
-        const initialPrompt = `Проанализируй результат ${typeName} и предложи дальнейшую клиническую тактику:\n\n${text}`;
+        if (type === 'Клинические рекомендации') {
+          initialPrompt = `Я изучаю следующие клинические рекомендации:\n\n${text}\n\nВопрос: ${initialQuestion || 'Проанализируй эти данные.'}`;
+        } else {
+          const typeNames: Record<string, string> = {
+            'ecg': 'ЭКГ',
+            'ct': 'КТ',
+            'mri': 'МРТ',
+            'xray': 'рентгена',
+            'ultrasound': 'УЗИ'
+          };
+          const typeName = typeNames[type] || 'исследования';
+          initialPrompt = `Проанализируй результат ${typeName} и предложи дальнейшую клиническую тактику:\n\n${text}${initialQuestion ? `\n\nУточняющий вопрос: ${initialQuestion}` : ''}`;
+        }
         
         setMessage(initialPrompt);
         
         // Очищаем, чтобы не подставлялось при перезагрузке
         sessionStorage.removeItem('pending_analysis');
         
-        // Если хотим автоматическую отправку, можно вызвать handleSend(), 
-        // но лучше дать врачу возможность дополнить контекст.
+        // Если передан конкретный вопрос, сразу отправляем его
+        if (initialQuestion) {
+          // Используем setTimeout, чтобы дождаться обновления стейта сообщения
+          setTimeout(() => {
+            const sendButton = document.querySelector('button.bg-primary-500.active\\:bg-primary-700') as HTMLButtonElement;
+            if (sendButton) sendButton.click();
+          }, 100);
+        }
       } catch (e) {
         console.error('Ошибка при разборе данных анализа:', e);
       }
@@ -315,6 +329,7 @@ export default function ChatPage() {
                         model: json.model || modelName,
                         inputTokens: json.usage.prompt_tokens,
                         outputTokens: json.usage.completion_tokens,
+                        specialty: specialty // Передаем специальность
                       })
                       continue; // Переходим к следующей строке, контента здесь нет
                     }
@@ -471,6 +486,7 @@ export default function ChatPage() {
                         model: json.model || modelName,
                         inputTokens: json.usage.prompt_tokens,
                         outputTokens: json.usage.completion_tokens,
+                        specialty: specialty // Передаем специальность
                       })
                       continue;
                     }
@@ -538,6 +554,7 @@ export default function ChatPage() {
               model: modelName,
               inputTokens: 1000,
               outputTokens: 1000,
+              specialty: specialty // Передаем специальность
             })
           } else {
             setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${data.error}` }])
@@ -562,6 +579,25 @@ export default function ChatPage() {
     }
   }
 
+  const handleLibrarySearch = async () => {
+    if (!message.trim()) return
+    
+    setSearchingLibrary(true)
+    try {
+      const results = await searchLibraryLocal(message, 3)
+      if (results.length > 0) {
+        const context = `\n\n### КОНТЕКСТ ИЗ БИБЛИОТЕКИ:\n${results.join('\n---\n')}`
+        setMessage(prev => prev + context)
+      } else {
+        alert('В библиотеке не найдено релевантных материалов.')
+      }
+    } catch (err) {
+      console.error('Library search error:', err)
+    } finally {
+      setSearchingLibrary(false)
+    }
+  }
+
   const clearChat = () => {
     if (confirm('Вы уверены, что хотите очистить историю чата?')) {
       setMessages([])
@@ -574,7 +610,7 @@ export default function ChatPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-2">
             <span className="bg-teal-600 text-white p-1.5 rounded-lg shadow-sm">🤖</span>
-            ИИ-Консультант
+            ИИ-Ассистент
           </h1>
           {session?.user && (
             <p className="text-xs text-slate-500 mt-1">
@@ -604,7 +640,7 @@ export default function ChatPage() {
       <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6 mb-4 sm:mb-6 h-[70vh] sm:h-[700px] overflow-y-auto">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-10 sm:mt-20 text-sm sm:text-base">
-            Начните диалог с ИИ-консультантом
+            Начните диалог с ИИ-ассистентом
           </div>
         ) : (
           <div className="space-y-3 sm:space-y-4">
@@ -618,7 +654,7 @@ export default function ChatPage() {
                 }`}
               >
                 <div className="font-semibold mb-2 text-sm sm:text-base flex items-center justify-between">
-                  <span>{msg.role === 'user' ? 'Вы' : 'ИИ-Консультант'}</span>
+                  <span>{msg.role === 'user' ? 'Вы' : `Аналитический ответ (${msg.model || 'ИИ-Ассистент'})`}</span>
                   {msg.role === 'assistant' && msg.cost !== undefined && (
                     <span className="text-[10px] bg-teal-50 text-teal-700 px-2 py-0.5 rounded border border-teal-100 font-bold">
                       💰 {msg.cost.toFixed(2)} ед.
@@ -805,6 +841,16 @@ export default function ChatPage() {
             title="Загрузить файлы"
           >
             📎 {selectedFiles.length > 0 && `(${selectedFiles.length})`}
+          </button>
+          <button
+            onClick={handleLibrarySearch}
+            disabled={searchingLibrary || !message.trim()}
+            className={`px-4 py-3 sm:py-2 rounded-lg transition-colors text-lg sm:text-base touch-manipulation ${
+              searchingLibrary ? 'bg-indigo-100 text-indigo-400' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+            }`}
+            title="Найти контекст в вашей библиотеке PDF"
+          >
+            {searchingLibrary ? '⏳' : '📚'}
           </button>
         </div>
         <textarea

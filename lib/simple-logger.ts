@@ -21,7 +21,7 @@ const SECTION_NAMES: Record<string, string> = {
   'retinal': 'Офтальмология (сетчатка)',
   'mammography': 'Маммография',
   'image-analysis': 'Анализ изображений',
-  'chat': 'ИИ-Консультант',
+  'chat': 'ИИ-Ассистент',
   'protocols': 'Клинические рекомендации',
 };
 
@@ -42,6 +42,7 @@ export function logUsage(params: {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  specialty?: string; // Добавлено поле специальности
 }): void {
   try {
     if (typeof window === 'undefined') return;
@@ -80,7 +81,8 @@ export function logUsage(params: {
       model: params.model,
       inputTokens: params.inputTokens,
       outputTokens: params.outputTokens,
-      operation: 'AI Analysis'
+      operation: 'AI Analysis',
+      specialty: params.specialty // Передаем специальность
     });
     
     // Учесть модель

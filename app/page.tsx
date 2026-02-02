@@ -30,36 +30,41 @@ export default async function HomePage() {
         <div className="lg:col-span-2">
           <div className="py-4 sm:py-6">
             <div className="text-primary-900 font-bold text-sm sm:text-base lg:text-lg uppercase tracking-wider mb-2">
-              Медицинский ИИ‑ассистент профессора
+              Система поддержки клинических решений (CDSS)
             </div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight text-gray-900 mb-3">
               Правильное время<br />
-              для экспертной<br />
-              <span className="text-primary-600">клинической диагностики</span>
+              для экспертного<br />
+              <span className="text-primary-600">клинического анализа</span>
             </h1>
             <p className="max-w-lg text-sm sm:text-base text-primary-900 mb-4 sm:mb-6">
-              Единый ИИ‑центр: Opus‑профессор для ЭКГ, рентгена, КТ, МРТ, УЗИ, гистологии, офтальмологии, маммографии и генетики.
-              Автоматический анализ изображений, лабораторных и генетических отчётов
-              с выводом в формате «клиническая директива» для врача.
+              Единый ИИ‑центр для анализа ЭКГ, рентгена, КТ, МРТ, УЗИ, гистологии и генетики.
+              Автоматизированная интерпретация данных с выводом результатов в формате «черновик описания» для врача.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 sm:mb-6">
-              <Link
-                href="/image-analysis"
-                className="bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white font-semibold py-3 px-4 sm:px-6 rounded-full transition-colors text-center touch-manipulation"
-              >
-                🔍 Начать анализ изображения
-              </Link>
-              <Link
-                href="/genetic"
-                className="bg-secondary-500 hover:bg-secondary-600 active:bg-secondary-700 text-white font-semibold py-3 px-4 sm:px-6 rounded-full transition-colors text-center touch-manipulation"
-              >
-                🧬 Генетический консультант
-              </Link>
+              <div className="flex flex-col gap-2">
+                <p className="text-[10px] text-primary-700 italic px-2">Система формирует вспомогательный черновик. Ответственность за анализ несёт врач.</p>
+                <Link
+                  href="/image-analysis"
+                  className="bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white font-semibold py-3 px-4 sm:px-6 rounded-full transition-colors text-center touch-manipulation shadow-lg"
+                >
+                  🔍 Начать анализ данных
+                </Link>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-[10px] text-secondary-700 italic px-2">Модуль анализа VCF-файлов и интерпретации исследований.</p>
+                <Link
+                  href="/genetic"
+                  className="bg-secondary-500 hover:bg-secondary-600 active:bg-secondary-700 text-white font-semibold py-3 px-4 sm:px-6 rounded-full transition-colors text-center touch-manipulation shadow-lg"
+                >
+                  🧬 Анализ генетики
+                </Link>
+              </div>
             </div>
             
             <p className="text-xs sm:text-sm text-primary-700">
-              24/7 доступ к Opus‑консилиуму · Поддержка сложных клинических случаев ·
+              24/7 доступ к Opus‑консилиуму · Поддержка в сложных клинических случаях ·
               Безопасная локальная обработка данных
             </p>
           </div>
@@ -69,16 +74,17 @@ export default async function HomePage() {
           <div className="bg-gradient-to-br from-primary-400 to-secondary-400 rounded-2xl p-4 sm:p-6 text-white text-center shadow-2xl">
             <div className="text-4xl sm:text-5xl mb-2">🩺</div>
             <h2 className="font-bold text-lg sm:text-xl mb-2">
-              Профессор‑консультант Opus
+              Для профессионалов здравоохранения
             </h2>
             <p className="text-xs sm:text-sm opacity-90 mb-3 sm:mb-4">
-              Кардиология · Неврология · Онкология · Генетика · Терапия
+              doctor-opus.ru — облачная CDSS-платформа для врачей.
             </p>
-            <div className="mt-3 sm:mt-4 text-xs sm:text-sm text-left bg-white/10 p-3 rounded-xl">
-              ✔ Сложные ЭКГ и аритмии<br />
-              ✔ Рентген/КТ/МРТ с оценкой динамики<br />
-              ✔ Лабораторные и генетические панели<br />
-              ✔ Формирование готового клинического протокола
+            <div className="mt-3 sm:mt-4 text-xs sm:text-sm text-left bg-white/10 p-3 rounded-xl space-y-2">
+              <p>✔ <strong>Доступ к ИИ-моделям</strong> для анализа снимков и данных.</p>
+              <p>✔ <strong>Автоматизация:</strong> формирование черновиков описаний.</p>
+              <p>✔ <strong>Безопасность:</strong> без хранения ПД пациентов на сервере.</p>
+              <hr className="opacity-20" />
+              <p className="text-[10px] italic opacity-80 leading-tight">Система не ставит диагнозы, не оказывает мед. услуги и не заменяет клиническое мышление врача.</p>
             </div>
           </div>
         </div>
@@ -112,7 +118,7 @@ export default async function HomePage() {
             href="/chat"
             className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
           >
-            🤖 ИИ-Консультант
+            🤖 ИИ-Ассистент
           </Link>
           <Link
             href="/protocol"
@@ -162,7 +168,7 @@ export default async function HomePage() {
             </p>
           </div>
           <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
-            <h3 className="font-bold text-base sm:text-lg mb-2">🩻 Визуальная диагностика</h3>
+            <h3 className="font-bold text-base sm:text-lg mb-2">🩻 Визуальный анализ</h3>
             <p className="text-xs sm:text-sm text-gray-600">
               Рентген, КТ, МРТ, УЗИ — структурированный отчёт и оценка динамики.
             </p>
@@ -176,7 +182,7 @@ export default async function HomePage() {
           <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
             <h3 className="font-bold text-base sm:text-lg mb-2">🧬 Генетика & фармакогеномика</h3>
             <p className="text-xs sm:text-sm text-gray-600">
-              Разбор VCF/PDF, заключение генетика и профессорский обзор.
+              Разбор VCF/PDF, анализ генетики и экспертный обзор.
             </p>
           </div>
         </div>
@@ -186,8 +192,8 @@ export default async function HomePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           <div className="md:col-span-2 lg:col-span-1">
             <h3 className="text-lg font-bold text-slate-900 mb-4">Doctor Opus</h3>
-            <p className="text-sm text-slate-500 max-w-xs">
-              Профессиональный инструмент поддержки принятия клинических решений на базе искусственного интеллекта.
+            <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+              Программное обеспечение для поддержки принятия клинических решений (CDSS). Инструмент автоматизации анализа данных для медицинских специалистов.
             </p>
           </div>
           
@@ -198,18 +204,21 @@ export default async function HomePage() {
               <li><Link href="/docs/privacy" className="text-sm text-slate-600 hover:text-teal-600 transition-colors">Политика конфиденциальности</Link></li>
               <li><Link href="/docs/terms" className="text-sm text-slate-600 hover:text-teal-600 transition-colors">Условия использования</Link></li>
               <li><Link href="/docs/consent" className="text-sm text-slate-600 hover:text-teal-600 transition-colors">Согласие на обработку</Link></li>
+              <li><Link href="/clinic/dashboard" className="text-sm font-bold text-indigo-600 hover:text-indigo-700 transition-colors">🏢 Панель клиники</Link></li>
             </ul>
           </div>
 
           <div className="md:col-span-2 lg:col-span-2">
             <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Реквизиты</h4>
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <p className="text-[10px] text-slate-600 leading-relaxed italic mb-2">
+                ⚠️ doctor-opus.ru — информационный IT-сервис для врачей. Не является медицинской организацией.
+              </p>
               <p className="text-xs text-slate-600 leading-relaxed">
                 Исполнитель: Самозанятый <strong>Селиванов Василий Федорович</strong><br />
                 ИНН: 920455053236<br />
                 Email: support@doctor-opus.ru<br />
                 Телефон: +7 979 037 05 96<br />
-                Сайт является информационным сервисом и не заменяет консультацию врача.
               </p>
             </div>
             <div className="mt-4 grid grid-cols-3 sm:grid-cols-6 gap-2 opacity-70 hover:opacity-100 transition-all">

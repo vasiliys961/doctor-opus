@@ -15,6 +15,7 @@ import {
 } from '@/lib/video-frame-extractor'
 
 const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
+const Dicom3DViewer = dynamic(() => import('@/components/Dicom3DViewer'), { ssr: false })
 
 import { logUsage } from '@/lib/simple-logger'
 
@@ -26,6 +27,7 @@ export default function VideoPage() {
   const [extracting, setExtracting] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [show3D, setShow3D] = useState(false)
   const [clinicalContext, setClinicalContext] = useState<string>('')
   const [imageType, setImageType] = useState<ImageModality>('universal')
   const [currentCost, setCurrentCost] = useState<number>(0)
@@ -33,11 +35,14 @@ export default function VideoPage() {
   const [mode, setMode] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
   
   // Новые state для работы с кадрами
   const [extractedFrames, setExtractedFrames] = useState<ExtractedFrame[]>([])
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 })
   const [editingFrameIndex, setEditingFrameIndex] = useState<number | null>(null)
+  const [isManualCaptureMode, setIsManualCaptureMode] = useState(false)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
   
   // Режим анализа видео
   const [analysisMode, setAnalysisMode] = useState<'frames' | 'full-video'>('frames')
@@ -62,12 +67,48 @@ export default function VideoPage() {
         setError(`Размер видео превышает 100MB (${(selectedFile.size / 1024 / 1024).toFixed(1)}MB)`)
         return
       }
+      
       setFile(selectedFile)
+      setVideoUrl(URL.createObjectURL(selectedFile))
       setPlaylist([]) // Сбросить плейлист при выборе одиночного файла
       setExtractedFrames([]) // Сбросить предыдущие кадры
       setConfirmNoPersonalData(false) // Сбросить подтверждение
       setError(null)
       setResult('')
+    }
+  }
+
+  const captureCurrentFrame = () => {
+    if (!videoRef.current || !file) return
+
+    const video = videoRef.current
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    
+    canvas.toBlob(async (blob) => {
+      if (!blob) return
+      
+      const frameFile = new File([blob], `captured_frame_${Date.now()}.png`, { type: 'image/png' })
+      const newFrame: ExtractedFrame = {
+        index: extractedFrames.length,
+        timestamp: video.currentTime,
+        file: frameFile,
+        preview: URL.createObjectURL(frameFile),
+        isAnonymized: false // Ручной захват требует проверки
+      }
+      
+      setExtractedFrames(prev => [...prev, newFrame])
+    }, 'image/png')
+  }
+
+  const stepFrame = (seconds: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime += seconds
     }
   }
 
@@ -138,6 +179,7 @@ export default function VideoPage() {
       if (videoFiles.length > 0) {
         setPlaylist(videoFiles);
         setFile(videoFiles[0]); // Первое видео по умолчанию
+        setVideoUrl(URL.createObjectURL(videoFiles[0]));
         setExtractedFrames([]);
         setError(null);
       } else {
@@ -345,7 +387,7 @@ export default function VideoPage() {
         }
         
         if (data.analysis) {
-          fullResult += `## 🏥 ЭТАП 2: Клиническая директива (Профессор)\n\n${data.analysis}`
+          fullResult += `## 🏥 ЭТАП 2: Клиническая директива (Экспертный ассистент)\n\n${data.analysis}`
         }
         
         setResult(fullResult || data.result || 'Анализ выполнен')
@@ -552,8 +594,93 @@ export default function VideoPage() {
                   </div>
                 )}
                 
-                {/* Кнопка извлечения кадров (только для режима "кадры") */}
-                {analysisMode === 'frames' && extractedFrames.length === 0 && (
+                {/* Выбор режима извлечения */}
+                <div className="flex gap-4 mb-4">
+                  <button
+                    onClick={() => {
+                      setIsManualCaptureMode(false)
+                      setExtractedFrames([])
+                    }}
+                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold transition-all border-2 ${
+                      !isManualCaptureMode 
+                        ? 'bg-primary-50 border-primary-500 text-primary-700' 
+                        : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    🤖 Авто-извлечение
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsManualCaptureMode(true)
+                      setExtractedFrames([])
+                    }}
+                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold transition-all border-2 ${
+                      isManualCaptureMode 
+                        ? 'bg-blue-50 border-blue-500 text-blue-700' 
+                        : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    🖱️ Ручной захват (УЗИ-петля)
+                  </button>
+                </div>
+
+                {isManualCaptureMode && videoUrl && (
+                  <div className="bg-gray-900 rounded-xl p-4 mb-4">
+                    <div className="relative group">
+                      <video 
+                        ref={videoRef}
+                        src={videoUrl}
+                        className="w-full max-h-[400px] rounded-lg bg-black mb-4"
+                        controls
+                      />
+                      <button 
+                        onClick={captureCurrentFrame}
+                        className="absolute bottom-16 right-4 px-6 py-3 bg-blue-600/90 hover:bg-blue-600 text-white font-black rounded-2xl shadow-2xl transform active:scale-95 transition-all flex items-center gap-2 backdrop-blur-sm z-10 border border-blue-400"
+                      >
+                        <span className="text-2xl">📸</span>
+                        ЗАХВАТИТЬ
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      <div className="flex bg-gray-800 rounded-lg p-1 border border-gray-700">
+                        <button 
+                          onClick={() => stepFrame(-1)}
+                          className="px-3 py-1.5 text-white hover:bg-gray-700 rounded transition-colors text-xs font-bold"
+                          title="Назад на 1 сек"
+                        >-1s</button>
+                        <button 
+                          onClick={() => stepFrame(-0.1)}
+                          className="px-3 py-1.5 text-white hover:bg-gray-700 rounded transition-colors text-xs font-bold border-l border-gray-700"
+                          title="Назад на 0.1 сек"
+                        >-0.1s</button>
+                        <button 
+                          onClick={() => stepFrame(0.1)}
+                          className="px-3 py-1.5 text-white hover:bg-gray-700 rounded transition-colors text-xs font-bold border-l border-gray-700"
+                          title="Вперед на 0.1 сек"
+                        >+0.1s</button>
+                        <button 
+                          onClick={() => stepFrame(1)}
+                          className="px-3 py-1.5 text-white hover:bg-gray-700 rounded transition-colors text-xs font-bold border-l border-gray-700"
+                          title="Вперед на 1 сек"
+                        >+1s</button>
+                      </div>
+                      
+                      <button
+                        onClick={captureCurrentFrame}
+                        className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg transition-all transform active:scale-95 flex items-center gap-2"
+                      >
+                        <span className="text-xl">📸</span>
+                        <span>ЗАХВАТИТЬ КАДР</span>
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-gray-400 text-center mt-3">
+                      💡 Используйте кнопки ±0.1s для точного выбора кадра УЗИ-петли.
+                    </p>
+                  </div>
+                )}
+
+                {/* Кнопка извлечения кадров (только для режима "кадры" и если не ручной режим) */}
+                {analysisMode === 'frames' && !isManualCaptureMode && extractedFrames.length === 0 && (
                   <button
                     onClick={handleExtractFrames}
                     disabled={extracting}
@@ -570,26 +697,34 @@ export default function VideoPage() {
 
           {/* Preview извлеченных кадров */}
           {extractedFrames.length > 0 && (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+            <div className={`p-4 rounded-lg border ${isManualCaptureMode ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-green-900">
-                  ✅ Извлечено {extractedFrames.length} кадров (все анонимизированы)
+                <h3 className={`font-semibold ${isManualCaptureMode ? 'text-blue-900' : 'text-green-900'}`}>
+                  ✅ {isManualCaptureMode ? 'Захвачено' : 'Извлечено'} {extractedFrames.length} кадров
                 </h3>
-                <button
-                  onClick={() => {
-                    setExtractedFrames([])
-                    setResult('')
-                  }}
-                  className="text-sm text-green-700 hover:text-green-900 underline"
-                >
-                  🔄 Переизвлечь
-                </button>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => setShow3D(true)}
+                    className="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-xs font-bold shadow-sm"
+                  >
+                    <span>🧊 Вращать в 3D</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setExtractedFrames([])
+                      setResult('')
+                    }}
+                    className={`text-sm underline ${isManualCaptureMode ? 'text-blue-700 hover:text-blue-900' : 'text-green-700 hover:text-green-900'}`}
+                  >
+                    🔄 Сбросить кадры
+                  </button>
+                </div>
               </div>
               
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-2 mb-3">
                 {extractedFrames.map((frame) => (
                   <div key={frame.index} className="relative group">
-                    <div className="aspect-video bg-gray-100 rounded overflow-hidden border-2 border-green-300">
+                    <div className={`aspect-video bg-gray-100 rounded overflow-hidden border-2 ${isManualCaptureMode ? 'border-blue-300' : 'border-green-300'}`}>
                       <img 
                         src={frame.preview} 
                         alt={`Кадр ${frame.index + 1}`}
@@ -604,15 +739,15 @@ export default function VideoPage() {
                         🎨 Редактировать
                       </button>
                     </div>
-                    <p className="text-xs text-center text-green-700 mt-1">
+                    <p className={`text-xs text-center mt-1 ${isManualCaptureMode ? 'text-blue-700' : 'text-green-700'}`}>
                       {frame.index + 1}: {formatTimestamp(frame.timestamp)}
                     </p>
                   </div>
                 ))}
               </div>
               
-              <p className="text-xs text-green-700">
-                💡 Наведите на кадр, чтобы дополнительно отредактировать его вручную
+              <p className={`text-xs ${isManualCaptureMode ? 'text-blue-700' : 'text-green-700'}`}>
+                💡 {isManualCaptureMode ? 'Вы можете захватить еще кадры или отправить текущие на анализ.' : 'Наведите на кадр, чтобы дополнительно отредактировать его вручную.'}
               </p>
             </div>
           )}
@@ -717,6 +852,13 @@ export default function VideoPage() {
           mimeType={extractedFrames[editingFrameIndex].file.type}
           onSave={handleFrameEditorSave}
           onCancel={() => setEditingFrameIndex(null)}
+        />
+      )}
+
+      {show3D && extractedFrames.length > 0 && (
+        <Dicom3DViewer
+          files={extractedFrames.map(f => f.file)}
+          onClose={() => setShow3D(false)}
         />
       )}
     </div>

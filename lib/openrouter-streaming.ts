@@ -89,7 +89,7 @@ function createTransformWithUsage(
  */
 export async function analyzeImageFastStreaming(
   prompt: string,
-  imageBase64: string,
+  imagesBase64: string | string[],
   imageType?: string,
   clinicalContext?: string,
   specialty?: Specialty,
@@ -99,6 +99,8 @@ export async function analyzeImageFastStreaming(
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+
+  const allImages = Array.isArray(imagesBase64) ? imagesBase64 : [imagesBase64];
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -111,7 +113,7 @@ export async function analyzeImageFastStreaming(
       const padding = ': ' + ' '.repeat(2048) + '\n\n';
       await writer.write(encoder.encode(padding));
 
-      const loadingHeader = "## 🩺 БЫСТРЫЙ АНАЛИЗ...\n\n> *Извлечение данных через Gemini Vision...*\n\n---\n\n";
+      const loadingHeader = `## 🩺 БЫСТРЫЙ АНАЛИЗ (${allImages.length} изображений)...\n\n> *Извлечение данных через Gemini Vision...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
 
       // 2. Запускаем Heartbeat СРАЗУ
@@ -125,7 +127,7 @@ export async function analyzeImageFastStreaming(
 
       const { extractImageJSON } = await import('./openrouter');
       const extractionResult = await extractImageJSON({
-        imageBase64,
+        imagesBase64: allImages,
         modality: imageType || 'unknown',
         specialty: specialty
       });
@@ -139,7 +141,7 @@ export async function analyzeImageFastStreaming(
       const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
       let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
       
-      const mainPrompt = `Ниже приведены данные из изображения. Как Профессор медицины, проанализируй их.
+      const mainPrompt = `Ниже приведены данные из изображения. Как экспертный ассистент с компетенциями профессора медицины, проанализируй их.
     
 === СТРУКТУРИРОВАННЫЕ ДАННЫЕ ОТ GEMINI 3.0 ===
 ${JSON.stringify(jsonExtraction, null, 2)}
@@ -699,7 +701,7 @@ export async function sendTextRequestStreaming(
       const { TITAN_CONTEXTS } = await import('./prompts');
       
       // Выбираем системный промпт: Всегда используем полный SYSTEM_PROMPT для глубины аналитики
-      // в ИИ-Консультанте, если не указано иное
+      // в ИИ-Ассистенте, если не указано иное
       const basePrompt = (specialty === 'ai_consultant' || specialty === 'openevidence') ? SYSTEM_PROMPT : SYSTEM_PROMPT;
       let systemPrompt = customSystemPrompt || basePrompt;
       
