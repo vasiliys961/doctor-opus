@@ -28,4 +28,4 @@ export interface PaymentProvider {
   getSuccessResponse(orderId: string): string | object;
 }
 
-export type PaymentProviderType = 'robokassa' | 'tinkoff' | 'prodamus' | 'yoomoney';
+export type PaymentProviderType = 'robokassa' | 'tinkoff' | 'prodamus' | 'yoomoney' | 'botoplat';

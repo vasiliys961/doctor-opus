@@ -4,7 +4,12 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 
 export default async function HomePage() {
-  const session = await getServerSession(authOptions)
+  let session = null
+  try {
+    session = await getServerSession(authOptions)
+  } catch (_e) {
+    // Без NEXTAUTH_SECRET или при ошибке auth — показываем главную без сессии
+  }
 
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-7xl">
@@ -30,26 +35,26 @@ export default async function HomePage() {
         <div className="lg:col-span-2">
           <div className="py-4 sm:py-6">
             <div className="text-primary-900 font-bold text-sm sm:text-base lg:text-lg uppercase tracking-wider mb-2">
-              Система поддержки клинических решений (CDSS)
+              Система поддержки принятия клинических решений (CDSS)
             </div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight text-gray-900 mb-3">
               Правильное время<br />
               для экспертного<br />
-              <span className="text-primary-600">клинического анализа</span>
+              <span className="text-primary-600">консультативного мнения</span>
             </h1>
             <p className="max-w-lg text-sm sm:text-base text-primary-900 mb-4 sm:mb-6">
-              Единый ИИ‑центр для анализа ЭКГ, рентгена, КТ, МРТ, УЗИ, гистологии и генетики.
-              Автоматизированная интерпретация данных с выводом результатов в формате «черновик описания» для врача.
+              Единый ИИ‑центр для описания ЭКГ, рентгена, КТ, МРТ, УЗИ, гистологии и генетики.
+              Профессиональная интерпретация данных с выводом результатов в формате «консультативное заключение» для врача.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 sm:mb-6">
               <div className="flex flex-col gap-2">
-                <p className="text-[10px] text-primary-700 italic px-2">Система формирует вспомогательный черновик. Ответственность за анализ несёт врач.</p>
+                <p className="text-[10px] text-primary-700 italic px-2">Система формирует Консультативное заключение. Ответственность несёт лечащий врач.</p>
                 <Link
                   href="/image-analysis"
                   className="bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white font-semibold py-3 px-4 sm:px-6 rounded-full transition-colors text-center touch-manipulation shadow-lg"
                 >
-                  🔍 Начать анализ данных
+                  🩺 Получить консультацию по данным
                 </Link>
               </div>
               <div className="flex flex-col gap-2">
@@ -80,11 +85,11 @@ export default async function HomePage() {
               doctor-opus.ru — облачная CDSS-платформа для врачей.
             </p>
             <div className="mt-3 sm:mt-4 text-xs sm:text-sm text-left bg-white/10 p-3 rounded-xl space-y-2">
-              <p>✔ <strong>Доступ к ИИ-моделям</strong> для анализа снимков и данных.</p>
-              <p>✔ <strong>Автоматизация:</strong> формирование черновиков описаний.</p>
+              <p>✔ <strong>Доступ к ИИ-моделям</strong> для получения второго мнения.</p>
+              <p>✔ <strong>Автоматизация:</strong> формирование консультативных отчетов.</p>
               <p>✔ <strong>Безопасность:</strong> без хранения ПД пациентов на сервере.</p>
               <hr className="opacity-20" />
-              <p className="text-[10px] italic opacity-80 leading-tight">Система не ставит диагнозы, не оказывает мед. услуги и не заменяет клиническое мышление врача.</p>
+              <p className="text-[10px] italic opacity-80 leading-tight">Система носит консультативный характер и требует верификации лечащим врачом.</p>
             </div>
           </div>
         </div>

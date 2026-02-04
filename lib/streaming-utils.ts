@@ -65,6 +65,7 @@ export async function handleSSEStream(
       buffer = lines.pop() || '' // Последняя строка может быть неполной
 
       for (const line of lines) {
+        console.log('📡 [STREAMING UTILS] Обработка строки:', line.substring(0, 50))
         const result = processSSELine(line, handler, accumulatedText)
         if (result.content) {
           accumulatedText += result.content

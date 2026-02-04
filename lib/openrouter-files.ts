@@ -244,14 +244,14 @@ export async function sendTextRequestStreamingWithFiles(
       const initialPadding = ': ' + ' '.repeat(2048) + '\n\n';
       await writer.write(encoder.encode(initialPadding));
 
-      // 2. Запускаем Heartbeat пока модель думает
+      // 2. Запускаем Heartbeat на весь период
       heartbeat = setInterval(async () => {
         try {
-          await writer.write(encoder.encode(': heartbeat padding\n\n'));
+          await writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
         } catch (e) {
           if (heartbeat) clearInterval(heartbeat);
         }
-      }, 500);
+      }, 5000);
 
       const response = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
@@ -264,11 +264,7 @@ export async function sendTextRequestStreamingWithFiles(
         body: JSON.stringify(payload)
       });
 
-      if (heartbeat) {
-        clearInterval(heartbeat);
-        heartbeat = null;
-      }
-
+      // Heartbeat остановится в finally
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);

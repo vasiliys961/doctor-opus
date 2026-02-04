@@ -89,184 +89,165 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   }
 
   const handleDownloadDoc = async () => {
+    setDownloading(false)
     setDownloading(true)
     try {
-      // Парсим markdown и создаем параграфы для DOCX
-      const lines = result.split('\n')
+      // Агрессивная очистка текста для чистого клинического экспорта
+      let isSourcesSection = false;
+      const cleanedLines = result
+        .split('\n')
+        .filter(line => {
+          const l = line.toLowerCase();
+          // Убираем технические статусы, дисклеймеры и мусор
+          if (l.includes('дисклеймер') || l.includes('disclaimer')) return false;
+          if (l.includes('данные приняты') || l.includes('раздел 0 принят')) return false;
+          if (l.includes('подготовка к анализу') || l.includes('извлечение данных')) return false;
+          if (l.includes('клинический разбор через') || l.includes('профессорский разбор через')) return false;
+          if (line.trim() === '.' || line.trim() === '..' || line.trim() === '...') return false;
+          if (l.startsWith('>') && l.includes('этап')) return false;
+          if (l.includes('gemini vision') || line.trim().startsWith('🩺')) return false;
+          
+          // Определяем начало раздела источников, чтобы отсечь его
+          if (l.includes('источники') || l.includes('references') || l.includes('sources')) {
+            isSourcesSection = true;
+            return false;
+          }
+          return !isSourcesSection;
+        })
+        .map(line => {
+          // Очистка от маркдауна и табличных символов
+          return line
+            .replace(/[*_]/g, '') // Убираем звездочки и подчеркивания
+            .replace(/\|/g, ' ')  // Заменяем разделители таблиц на пробелы
+            .replace(/^[-*+]\s+/, '') // Убираем маркеры списков в начале строки
+            .trim();
+        })
+        .filter(line => line.length > 0);
+
       const paragraphs: any[] = []
 
-      // Медицинский заголовок
+      // 1. ГЛАВНАЯ ШАПКА (UPPERCASE)
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: "МЕДИЦИНСКИЙ КОНСУЛЬТАТИВНЫЙ ОТЧЕТ", bold: true, size: 28 }),
+            new TextRun({ text: "МЕДИЦИНСКИЙ КОНСУЛЬТАТИВНЫЙ ОТЧЕТ", bold: true, size: 22 }),
           ],
           alignment: AlignmentType.CENTER,
+          spacing: { after: 120 },
+        })
+      )
+
+      // 2. ИДЕНТИФИКАЦИЯ (Одна строка)
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Ф.И.О. / Full Name: __________________________   ", size: 18 }),
+            new TextRun({ text: `Дата / Date: ${new Date().toLocaleDateString('ru-RU')}`, size: 18 }),
+          ],
           spacing: { after: 200 },
         })
       )
 
+      // Тонкая линия
+      paragraphs.push(new Paragraph({ 
+        border: { bottom: { color: "auto", space: 1, value: "single", size: 6 } },
+        spacing: { after: 150 }
+      }))
+
+      // 3. ОСНОВНОЙ КОНТЕНТ
+      for (const line of cleanedLines) {
+        const l = line.toLowerCase();
+        
+        // Особая обработка для ЗАКЛЮЧЕНИЯ
+        const isConclusionHeader = l.includes('заключение') || l.includes('impression') || l.includes('впечатление');
+        const isRegularHeader = line.match(/^#{1,4}\s+/) || line.match(/^\d+\.\s+[A-ZА-Я]/) || isConclusionHeader;
+
+        if (isRegularHeader) {
+          const headerText = line.replace(/^#{1,4}\s+/, '');
+          const finalHeader = isConclusionHeader ? "ЗАКЛЮЧЕНИЕ" : headerText;
+          
+          paragraphs.push(
+            new Paragraph({
+              children: [new TextRun({ 
+                text: finalHeader, 
+                bold: true, 
+                size: 18,
+                allCaps: isConclusionHeader // Только заключение в CAPS
+              })],
+              spacing: { before: 80, after: 40 },
+            })
+          )
+        } else {
+          // Обычный текст (плотно)
+          paragraphs.push(
+            new Paragraph({
+              children: [new TextRun({ text: line, size: 18 })],
+              spacing: { after: 30, line: 240 }, // Одинарный интервал, минимальный отступ
+            })
+          )
+        }
+      }
+
+      // 4. БЛОК ВЕРИФИКАЦИИ (компактно)
+      paragraphs.push(new Paragraph({ spacing: { before: 300 } }));
+      paragraphs.push(new Paragraph({ 
+        border: { top: { color: "CCCCCC", space: 1, value: "single", size: 6 } },
+        children: [
+          new TextRun({ text: "ВЕРИФИЦИРОВАНО ВРАЧОМ / VERIFIED BY PHYSICIAN", bold: true, size: 18 })
+        ],
+        spacing: { before: 100, after: 40 },
+      }));
+      
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: `Дата: ${new Date().toLocaleDateString('ru-RU')}`, size: 20 }),
+            new TextRun({ text: "Врач / Physician: ____________________ / ____________________", size: 18 }),
           ],
-          alignment: AlignmentType.RIGHT,
-          spacing: { after: 400 },
+          spacing: { after: 40 },
+        })
+      )
+      
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: "                                     (подпись / signature)             (ФИО / Full Name)", size: 12, color: "999999" }),
+          ],
+          spacing: { after: 150 },
         })
       )
 
-      // Информация о модели (техническая сноска)
-      if (model) {
-        const modelName = getModelDisplayName(model) || model;
-        const analysisMode = mode === 'fast' ? 'быстрый' : mode === 'optimized' ? 'оптимизированный' : 'с валидацией';
-        
-        paragraphs.push(
-          new Paragraph({
-            children: [
-              new TextRun({ 
-                text: `Техническая информация: Анализ выполнен ИИ-системой (модель ${modelName}, режим: ${analysisMode}). `,
-                italics: true,
-                size: 16,
-                color: "666666"
-              }),
-            ],
-            spacing: { after: 200 },
-          })
-        )
-      }
+      // Подвал
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({ 
+              text: "Doctor Opus v3.50 Clinical. Документ носит информационно-справочный характер.",
+              size: 12,
+              color: "AAAAAA",
+              italics: true
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+        })
+      )
 
-      // Разделительная линия (горизонтальная черта)
-      paragraphs.push(new Paragraph({ 
-        text: "________________________________________________________________________________",
-        spacing: { after: 300 }
-      }))
-
-      // Парсим содержимое
-      for (const line of lines) {
-        if (!line.trim()) {
-          // Пустая строка
-          paragraphs.push(new Paragraph({ text: '' }))
-          continue
-        }
-
-        // Заголовок H1
-        if (line.match(/^#\s+/)) {
-          paragraphs.push(
-            new Paragraph({
-              text: line.replace(/^#\s+/, ''),
-              heading: HeadingLevel.HEADING_1,
-              spacing: { before: 240, after: 120 },
-            })
-          )
-        }
-        // Заголовок H2
-        else if (line.match(/^##\s+/)) {
-          paragraphs.push(
-            new Paragraph({
-              text: line.replace(/^##\s+/, ''),
-              heading: HeadingLevel.HEADING_2,
-              spacing: { before: 200, after: 100 },
-            })
-          )
-        }
-        // Заголовок H3
-        else if (line.match(/^###\s+/)) {
-          paragraphs.push(
-            new Paragraph({
-              text: line.replace(/^###\s+/, ''),
-              heading: HeadingLevel.HEADING_3,
-              spacing: { before: 160, after: 80 },
-            })
-          )
-        }
-        // Заголовок H4
-        else if (line.match(/^####\s+/)) {
-          paragraphs.push(
-            new Paragraph({
-              text: line.replace(/^####\s+/, ''),
-              heading: HeadingLevel.HEADING_4,
-              spacing: { before: 120, after: 60 },
-            })
-          )
-        }
-        // Маркированный список
-        else if (line.match(/^[-*]\s+/)) {
-          const text = line.replace(/^[-*]\s+/, '')
-          const textRuns = parseMarkdownTextRuns(text)
-          paragraphs.push(
-            new Paragraph({
-              children: textRuns,
-              bullet: { level: 0 },
-              spacing: { after: 60 },
-            })
-          )
-        }
-        // Нумерованный список
-        else if (line.match(/^\d+\.\s+/)) {
-          const text = line.replace(/^\d+\.\s+/, '')
-          const textRuns = parseMarkdownTextRuns(text)
-          paragraphs.push(
-            new Paragraph({
-              children: textRuns,
-              bullet: { level: 0 },
-              spacing: { after: 60 },
-            })
-          )
-        }
-        // Код блок (начинается с ```)
-        else if (line.startsWith('```')) {
-          // Пропускаем строки кода - они будут обработаны отдельно
-          continue
-        }
-        // Обычный текст
-        else {
-          const textRuns = parseMarkdownTextRuns(line)
-          paragraphs.push(
-            new Paragraph({
-              children: textRuns,
-              spacing: { after: 120 },
-            })
-          )
-        }
-      }
-
-      // Создаем документ
+      // Создаем документ с полями 0.5 дюйма
       const doc = new Document({
         sections: [
           {
-            properties: {},
-            children: [
-              ...paragraphs,
-              new Paragraph({ text: '', spacing: { before: 400 } }),
-              new Paragraph({
-                children: [
-                  new TextRun({ 
-                    text: "________________________________________________________________________________", 
-                    color: "CCCCCC" 
-                  }),
-                ],
-              }),
-              new Paragraph({
-                children: [
-                  new TextRun({ 
-                    text: "⚠️ Важное уведомление: Данный документ сформирован программным обеспечением doctor-opus.ru с использованием технологий искусственного интеллекта и носит информационно-справочный характер. Не является медицинским заключением. Требует обязательной проверки и редактирования лечащим врачом. Окончательное решение принимает врач.",
-                    size: 16,
-                    color: "666666",
-                    italics: true
-                  }),
-                ],
-                alignment: AlignmentType.BOTH,
-                spacing: { before: 200 },
-              })
-            ],
+            properties: {
+              page: {
+                margin: { top: 720, right: 720, bottom: 720, left: 720 },
+              },
+            },
+            children: paragraphs,
           },
         ],
       })
 
-      // Экспортируем
       const blob = await Packer.toBlob(doc)
-      saveAs(blob, `результат_анализа_${new Date().toISOString().split('T')[0]}.docx`)
+      const fileName = `Report_${new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')}.docx`;
+      saveAs(blob, fileName)
     } catch (error) {
       console.error('Ошибка при скачивании документа:', error)
       alert('Ошибка при скачивании документа. Попробуйте еще раз.')
@@ -335,6 +316,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     
     const runs: Array<{text: string, bold?: boolean, italics?: boolean}> = []
     let lastIndex = 0
+    let i = 0
 
     // Сначала обрабатываем жирный текст **text**
     const boldRegex = /\*\*(.*?)\*\*/g
@@ -484,7 +466,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mt-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-xl font-bold text-primary-900">Результат анализа</h3>
+          <h3 className="text-xl font-bold text-primary-900">🩺 Консультативное заключение</h3>
           {loading && (
             <div className="flex items-center space-x-2 mt-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
@@ -659,16 +641,15 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       <div className="mt-8 pt-4 border-t border-gray-100">
         <div className="flex flex-col md:flex-row justify-between gap-4 text-[10px] text-gray-400">
           <div className="space-y-1 max-w-2xl">
-            <p><strong>⚠️ Внимание:</strong> Данный анализ выполнен искусственным интеллектом и носит справочный характер. Он не является медицинским заключением. Окончательное решение принимает лечащий врач.</p>
-            <p><strong>ℹ️ О тарификации:</strong> Повторные запросы к тем же данным тарифицируются заново, если они не были сохранены в кэше системы (кэш активен 24 часа). Расчет единиц является оценочным и может незначительно отличаться от финального списания.</p>
+            <p><strong>⚠️ Верификация:</strong> Данное консультативное заключение требует обязательной проверки и подписи лечащего врача. Система Doctor Opus является инструментом поддержки принятия решений (CDSS).</p>
+            <p><strong>ℹ️ О тарификации:</strong> Повторные запросы к тем же данным тарифицируются заново, если они не были сохранены в кэше системы.</p>
           </div>
           <div className="text-right">
             <p>ID сессии: {sessionId || 'N/A'}</p>
-            <p>Версия ядра: 3.39.0-optima</p>
+            <p>Версия ядра: 3.50.0-clinical</p>
           </div>
         </div>
       </div>
     </div>
   )
 }
-

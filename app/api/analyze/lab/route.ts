@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeImage, sendTextRequest, MODELS } from '@/lib/openrouter';
-import { analyzeImageStreaming, sendTextRequestStreaming } from '@/lib/openrouter-streaming';
+import { 
+  analyzeImageStreaming, 
+  sendTextRequestStreaming, 
+  analyzeImageOpusTwoStageStreaming 
+} from '@/lib/openrouter-streaming';
 import { detectFileType } from '@/lib/file-extractor';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
@@ -77,7 +81,12 @@ export async function POST(request: NextRequest) {
         let fullPrompt = `${prompt}\n\nЭто изображение лабораторного бланка или медицинского документа. Проанализируйте изображение и извлеките все лабораторные показатели, их значения, единицы измерения и референсные диапазоны.`;
         
         if (useStreaming) {
-          const stream = await analyzeImageStreaming(fullPrompt, base64Image, modelToUse, file.type, clinicalContext);
+          let stream: ReadableStream;
+          if (mode === 'optimized' || mode === 'validated') {
+            stream = await analyzeImageOpusTwoStageStreaming(fullPrompt, base64Image, 'lab', clinicalContext, undefined, modelToUse);
+          } else {
+            stream = await analyzeImageStreaming(fullPrompt, base64Image, modelToUse, file.type, clinicalContext);
+          }
           return handleStreamingResponse(stream);
         }
 

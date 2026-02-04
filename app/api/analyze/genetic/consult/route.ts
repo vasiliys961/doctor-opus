@@ -233,27 +233,42 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(payload),
     });
 
-    // Режим streaming: проксируем поток OpenRouter как SSE без пересборки
+    // Режим streaming: проксируем поток OpenRouter как SSE
     if (useStreaming && response.body) {
       const readableStream = new ReadableStream({
         async start(controller) {
           const reader = response.body!.getReader();
           const encoder = new TextEncoder();
+          let heartbeat: any;
+
           try {
+            // 1. Padding
+            const padding = ': ' + ' '.repeat(2048) + '\n\n';
+            controller.enqueue(encoder.encode(padding));
+
+            // 2. Heartbeat СРАЗУ
+            heartbeat = setInterval(() => {
+              try {
+                controller.enqueue(encoder.encode(': keep-alive heartbeat\n\n'));
+              } catch (e) {
+                if (heartbeat) clearInterval(heartbeat);
+              }
+            }, 5000);
+
             while (true) {
               const { done, value } = await reader.read();
               if (done) {
                 controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                controller.close();
                 break;
               }
-              // Просто пробрасываем как есть, streaming-utils умеет разбирать формат OpenRouter
               controller.enqueue(value);
             }
           } catch (err) {
             controller.error(err);
           } finally {
+            if (heartbeat) clearInterval(heartbeat);
             reader.releaseLock();
+            controller.close();
           }
         },
       });

@@ -12,6 +12,7 @@ import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } fro
 import { saveAs } from 'file-saver'
 import { DEFAULT_TEMPLATES, ProtocolTemplate } from '@/lib/protocol-templates'
 import { UNIVERSAL_SPECIALIST_TEMPLATES } from '@/lib/prompts'
+import { MODELS } from '@/lib/openrouter'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
@@ -97,6 +98,19 @@ export default function ProtocolPage() {
     setProtocol('')
     setCurrentCost(0)
 
+    const modelUsed = model === 'opus' ? MODELS.OPUS : 
+                    model === 'gpt52' ? MODELS.GPT_5_2 :
+                    model === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET;
+
+    const modelsMap: Record<string, string> = {
+      'opus': MODELS.OPUS,
+      'sonnet': MODELS.SONNET,
+      'gpt52': MODELS.GPT_5_2,
+      'gemini': MODELS.GEMINI_3_FLASH
+    };
+
+    const finalModel = modelsMap[model] || MODELS.SONNET;
+
     try {
       const payload = {
         rawText,
@@ -108,10 +122,6 @@ export default function ProtocolPage() {
         // Добавляем универсальный промпт, если он есть
         universalPrompt: universalPrompt
       };
-
-      const modelUsed = model === 'opus' ? 'anthropic/claude-opus-4.5' : 
-                      model === 'gpt52' ? 'openai/gpt-5.2-chat' :
-                      model === 'gemini' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-sonnet-4.5';
 
       if (useStreaming) {
         const response = await fetch('/api/protocol', {
@@ -132,7 +142,7 @@ export default function ProtocolPage() {
             
             logUsage({
               section: 'protocols',
-              model: usage.model || modelUsed,
+              model: usage.model || finalModel,
               inputTokens: usage.prompt_tokens,
               outputTokens: usage.completion_tokens,
               specialty: specialistName // Передаем специальность для аудита
@@ -153,12 +163,12 @@ export default function ProtocolPage() {
           setProtocol(data.protocol)
           const inputTokens = Math.ceil(rawText.length / 4) + 1000;
           const outputTokens = Math.ceil(data.protocol.length / 4);
-          const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
+          const costInfo = calculateCost(inputTokens, outputTokens, finalModel);
           setCurrentCost(costInfo.totalCostUnits);
 
           logUsage({
             section: 'protocols',
-            model: modelUsed,
+            model: finalModel,
             inputTokens,
             outputTokens,
             specialty: specialistName // Передаем специальность для аудита
@@ -395,6 +405,19 @@ export default function ProtocolPage() {
                   💰 Списано: {currentCost.toFixed(2)} ед.
                 </div>
               )}
+              <div className="mt-2">
+                <a 
+                  href="https://medcalculator.vercel.app" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded-md transition-colors"
+                >
+                  🧮 Проверить через Мед. калькуляторы
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
             </div>
             {protocol && (
               <div className="flex gap-2">

@@ -63,17 +63,26 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔬 [LAB IMAGES] Получено ${images.length} изображений для анализа, режим: ${mode}, модель: ${modelToUse}, streaming: ${useStreaming}`);
 
-    // Если запрошен стриминг для нескольких изображений
-    if (useStreaming && images.length > 1) {
-      console.log('📡 [LAB IMAGES] Запуск мульти-изображений стриминга...');
+    // Если запрошен стриминг
+    if (useStreaming) {
+      console.log(`📡 [LAB IMAGES] Запуск стриминга (${images.length} изображений)...`);
       let stream: ReadableStream;
       
-      if (mode === 'optimized') {
-        stream = await analyzeMultipleImagesOpusTwoStageStreaming(prompt, images, 'universal', clinicalContext, images.map(() => 'image/png'), modelToUse);
-      } else if (mode === 'validated') {
-        stream = await analyzeMultipleImagesWithJSONStreaming(prompt, images, 'universal', clinicalContext, images.map(() => 'image/png'), undefined);
+      if (images.length > 1) {
+        if (mode === 'optimized') {
+          stream = await analyzeMultipleImagesOpusTwoStageStreaming(prompt, images, 'lab', clinicalContext, images.map(() => 'image/png'), modelToUse);
+        } else if (mode === 'validated') {
+          stream = await analyzeMultipleImagesWithJSONStreaming(prompt, images, 'lab', clinicalContext, images.map(() => 'image/png'), undefined, modelToUse);
+        } else {
+          stream = await analyzeMultipleImagesStreaming(prompt, images, images.map(() => 'image/png'), modelToUse, clinicalContext);
+        }
       } else {
-        stream = await analyzeMultipleImagesStreaming(prompt, images, images.map(() => 'image/png'), modelToUse, clinicalContext);
+        // Одиночное изображение
+        if (mode === 'optimized' || mode === 'validated') {
+          stream = await analyzeImageOpusTwoStageStreaming(prompt, images[0], 'universal', clinicalContext, undefined, modelToUse);
+        } else {
+          stream = await analyzeImageStreaming(prompt, images[0], modelToUse, 'image/png', clinicalContext);
+        }
       }
       
       return handleStreamingResponse(stream);

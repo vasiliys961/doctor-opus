@@ -17,7 +17,12 @@ import { getToken } from 'next-auth/jwt';
  */
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  
+
+  // Статика Next.js — не трогаем (избегаем 404 на layout.css, main-app.js и т.д.)
+  if (path.startsWith('/_next/') || path.startsWith('/favicon')) {
+    return NextResponse.next();
+  }
+
   // ===== ПУБЛИЧНЫЕ МАРШРУТЫ (без токена) =====
   const publicPaths = [
     '/',

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { formatCostLog } from '@/lib/cost-calculator';
+import { MODELS } from '@/lib/openrouter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /**
  * API endpoint для поиска актуальных клинических рекомендаций
- * Использует Gemini 3.0 Flash через OpenRouter
+ * Использует Gemini через OpenRouter
  * Основан на международных и российских клинических рекомендациях
  */
 export async function POST(request: NextRequest) {
@@ -74,15 +75,15 @@ ${specialty ? `Специальность: ${specialty}` : ''}
 - НЕ выдумывай ссылки.
 - Если по теме нет шкал или специфической тактики — укажи это.`;
 
-    // Выбор модели в зависимости от режима: standard (Gemini), detailed (GPT-5.2) или online (Perplexity)
-    let MODEL = 'google/gemini-3-flash-preview';
+    // Выбор модели в зависимости от режима: standard (Gemini), detailed (GPT-4o) или online (Perplexity)
+    let MODEL = MODELS.GEMINI_3_FLASH;
     let MAX_TOKENS = 16000;
 
     if (modelMode === 'online') {
       MODEL = 'perplexity/sonar';
       MAX_TOKENS = 4000;
     } else if (modelMode === 'detailed') {
-      MODEL = 'openai/gpt-5.2-chat';
+      MODEL = MODELS.GPT_5_2; 
       MAX_TOKENS = 20000;
     }
     

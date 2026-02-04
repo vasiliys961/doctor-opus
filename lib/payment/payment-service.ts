@@ -1,5 +1,6 @@
 import { PaymentProvider, PaymentProviderType } from './types';
 import { RobokassaProvider } from './providers/robokassa';
+import { BotoplatProvider } from './providers/botoplat';
 
 // Placeholder classes for other providers
 class TinkoffProvider implements PaymentProvider {
@@ -29,7 +30,8 @@ class PaymentService {
       robokassa: new RobokassaProvider(),
       tinkoff: new TinkoffProvider(),
       prodamus: new ProdamusProvider(),
-      yoomoney: new YooMoneyProvider()
+      yoomoney: new YooMoneyProvider(),
+      botoplat: new BotoplatProvider()
     };
     
     // Set active provider from env, default to robokassa for now

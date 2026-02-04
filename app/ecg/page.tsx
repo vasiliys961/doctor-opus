@@ -130,8 +130,27 @@ export default function ECGPage() {
             onComplete: (finalText) => {
               console.log('✅ [ECG STREAMING] Анализ завершен')
               setAnalysisStep('description_complete')
+              
+              // Очищаем текст от технических заголовков перед сохранением в кэш
+              const cleanText = finalText
+                .split('\n')
+                .filter(line => {
+                  const l = line.toLowerCase();
+                  return !l.includes('подготовка к анализу') && 
+                         !l.includes('извлечение данных') && 
+                         !l.includes('клинический разбор через') &&
+                         !l.includes('профессорский разбор через') &&
+                         !l.startsWith('---') &&
+                         line.trim() !== '.' &&
+                         line.trim() !== '..' &&
+                         line.trim() !== '...' &&
+                         !(l.startsWith('>') && l.includes('этап'));
+                })
+                .join('\n')
+                .trim();
+
               if ((window as any)._currentCacheKey) {
-                saveToCache((window as any)._currentCacheKey, finalText, analysisMode);
+                saveToCache((window as any)._currentCacheKey, cleanText, analysisMode);
               }
             },
             onError: (err) => {

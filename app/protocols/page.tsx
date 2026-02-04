@@ -4,6 +4,7 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { logUsage } from '@/lib/simple-logger'
 import { deductBalance } from '@/lib/subscription-manager'
+import { MODELS } from '@/lib/openrouter'
 
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { useRouter } from 'next/navigation'
@@ -71,8 +72,8 @@ export default function ClinicalProtocolsPage() {
       }
 
       let detectedModel = modelMode === 'online' ? 'Perplexity Sonar (Online)' : 
-                          modelMode === 'detailed' ? 'Claude Sonnet 4.5' : 
-                          'Claude Haiku 4.5';
+                          modelMode === 'detailed' ? MODELS.SONNET : 
+                          MODELS.GEMINI_3_FLASH;
 
       await handleSSEStream(response, {
         onChunk: (content, accumulatedText) => {
@@ -90,7 +91,7 @@ export default function ClinicalProtocolsPage() {
           // 1. Записываем в общую статистику по разделам
           logUsage({
             section: 'protocols',
-            model: usage.model || (modelMode === 'online' ? 'perplexity/sonar' : modelMode === 'detailed' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-haiku-4.5'),
+            model: usage.model || (modelMode === 'online' ? 'perplexity/sonar' : modelMode === 'detailed' ? MODELS.SONNET : MODELS.GEMINI_3_FLASH),
             inputTokens: usage.prompt_tokens,
             outputTokens: usage.completion_tokens,
             specialty: specialty // Передаем специальность
@@ -100,7 +101,7 @@ export default function ClinicalProtocolsPage() {
           deductBalance({
             section: 'protocols',
             sectionName: 'Клинические рекомендации',
-            model: usage.model || (modelMode === 'online' ? 'perplexity/sonar' : modelMode === 'detailed' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-haiku-4.5'),
+            model: usage.model || (modelMode === 'online' ? 'perplexity/sonar' : modelMode === 'detailed' ? MODELS.SONNET : MODELS.GEMINI_3_FLASH),
             inputTokens: usage.prompt_tokens,
             outputTokens: usage.completion_tokens,
             operation: `Поиск: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`,

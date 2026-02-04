@@ -13,12 +13,12 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // В Next.js 14 и Vercel используется встроенный fetch из Node.js 18+
 // fetch доступен глобально в serverless функциях Vercel
 
-// Актуальные модели (последние версии)
+// Актуальные модели (последние флагманы 2025-2026)
 export const MODELS = {
   OPUS: 'anthropic/claude-opus-4.5',                       // Claude Opus 4.5
   SONNET: 'anthropic/claude-sonnet-4.5',                 // Claude Sonnet 4.5
-  GPT_5_2: 'openai/gpt-5.2-chat',                        // GPT-5.2 (как замена Sonnet 4.5 для тестов)
-  HAIKU: 'anthropic/claude-haiku-4.5',                     // Claude Haiku 4.5
+  GPT_5_2: 'openai/gpt-5.2-chat',                        // GPT-5.2 Chat
+  HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
   GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
   GEMINI_3_PRO: 'google/gemini-3-pro-preview'            // Gemini 3 Pro Preview
@@ -458,11 +458,13 @@ export async function extractImageJSON(options: {
     throw new Error('Не предоставлено ни одного изображения для извлечения JSON');
   }
   
-  // Используем Gemini Flash для извлечения JSON
+  // Используем Gemini 3 Flash для извлечения JSON
   const modelsToTry = [
     MODELS.GEMINI_3_FLASH,
     MODELS.GEMINI_3_PRO,
-    'google/gemini-2.0-flash-001'
+    'google/gemini-2.0-flash-001',
+    'google/gemini-flash-1.5',
+    'google/gemini-pro-1.5'
   ];
 
   // Получаем детальные инструкции специалиста для этого типа исследования

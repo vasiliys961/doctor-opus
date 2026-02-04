@@ -216,8 +216,7 @@ export default function ChatPage() {
     }])
     setLoading(true)
 
-    // Добавляем пустое сообщение ассистента для streaming
-    const assistantMessageIndex = messages.length + 1 // +1 т.к. только что добавили userMessage
+    const assistantMessageIndex = messages.length + 1
     if (useStreaming) {
       setMessages(prev => [...prev, { role: 'assistant', content: '' }])
     }
@@ -232,16 +231,13 @@ export default function ChatPage() {
             : 'google/gemini-3-flash-preview'
 
       if (selectedFiles.length > 0) {
-        // Отправка с файлами через FormData
         const formData = new FormData()
         formData.append('message', userMessage)
         formData.append('history', JSON.stringify(messages))
         formData.append('useStreaming', useStreaming.toString())
         formData.append('model', modelName)
         formData.append('specialty', specialty)
-        selectedFiles.forEach(file => {
-          formData.append('files', file)
-        })
+        selectedFiles.forEach(file => formData.append('files', file))
 
         if (useStreaming) {
           // Streaming режим с файлами

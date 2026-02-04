@@ -19,19 +19,19 @@ export default function Navigation() {
     { name: '📝 Протокол приёма', href: '/protocol' },
     { name: '🧮 Мед. калькуляторы', href: 'https://medcalculator.vercel.app', isExternal: true },
     { name: '📚 Клинические рекомендации', href: '/protocols' },
-    { name: '📈 Анализ ЭКГ', href: '/ecg' },
-    { name: '🔍 Анализ изображений', href: '/image-analysis' },
-    { name: '🔬 Расширенный анализ', href: '/advanced' },
-    { name: '📊 Сравнительный анализ', href: '/comparative' },
-    { name: '🩻 Анализ рентгена', href: '/xray' },
-    { name: '🧠 Анализ МРТ', href: '/mri' },
-    { name: '🩻 Анализ КТ', href: '/ct' },
-    { name: '🔊 Анализ УЗИ', href: '/ultrasound' },
-    { name: '🔬 Анализ дерматоскопии', href: '/dermatoscopy' },
-    { name: '🔬 Анализ лабораторных данных', href: '/lab' },
-    { name: '🎬 Анализ видео', href: '/video' },
+    { name: '📈 Оценка ЭКГ', href: '/ecg' },
+    { name: '🔍 Описание визуализации', href: '/image-analysis' },
+    { name: '🔬 Клинический разбор (Case Review)', href: '/advanced' },
+    { name: '📊 Сравнение с предыдущим (Follow-up)', href: '/comparative' },
+    { name: '🩻 Описание рентгена', href: '/xray' },
+    { name: '🧠 Описание МРТ', href: '/mri' },
+    { name: '🩻 Описание КТ', href: '/ct' },
+    { name: '🔊 Описание УЗИ', href: '/ultrasound' },
+    { name: '🔬 Оценка дерматоскопии', href: '/dermatoscopy' },
+    { name: '🔬 Оценка лабораторных данных', href: '/lab' },
+    { name: '🎬 Клинический разбор видео', href: '/video' },
     { name: '📄 Сканирование документов', href: '/document' },
-    { name: '🧬 Генетический анализ', href: '/genetic' },
+    { name: '🧬 Генетический профиль', href: '/genetic' },
     { name: '🧪 Лаборатория (USB)', href: '/devices' },
     { name: '👤 База данных пациентов', href: '/patients' },
     { name: '📊 Расход единиц', href: '/statistics' },
@@ -165,8 +165,8 @@ export default function Navigation() {
             })}
           </div>
           <div className="mt-6 p-4 bg-primary-800/50 rounded-lg text-sm border border-primary-700">
-            <p className="font-semibold mb-1">Медицинский Ассистент v3.39.0</p>
-            <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Optima Edition</p>
+            <p className="font-semibold mb-1">Клинический Ассистент v3.50</p>
+            <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Clinical Edition</p>
             <ul className="space-y-1 text-xs opacity-70">
               <li>• Claude 4.5 + Gemini 3.0</li>
               <li>• DICOM Viewer + Measure</li>

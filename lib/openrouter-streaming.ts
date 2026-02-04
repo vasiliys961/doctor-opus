@@ -8,10 +8,11 @@ import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, 
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+// Актуальные модели (последние флагманы 2025-2026)
 const MODELS = {
   OPUS: 'anthropic/claude-opus-4.5',                       // Claude Opus 4.5
   SONNET: 'anthropic/claude-sonnet-4.5',                 // Claude Sonnet 4.5
-  GPT_5_2: 'openai/gpt-5.2-chat',                        // GPT-5.2
+  GPT_5_2: 'openai/gpt-5.2-chat',                        // GPT-5.2 Chat
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
   GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
@@ -116,14 +117,14 @@ export async function analyzeImageFastStreaming(
       const loadingHeader = `## 🩺 БЫСТРЫЙ АНАЛИЗ (${allImages.length} изображений)...\n\n> *Извлечение данных через Gemini Vision...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
 
-      // 2. Запускаем Heartbeat СРАЗУ
+      // 2. Запускаем фоновый Heartbeat на весь период анализа
       heartbeat = setInterval(async () => {
         try {
-          await writer.write(encoder.encode(': heartbeat padding\n\n'));
+          await writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
         } catch (e) {
           if (heartbeat) clearInterval(heartbeat);
         }
-      }, 1000);
+      }, 5000);
 
       const { extractImageJSON } = await import('./openrouter');
       const extractionResult = await extractImageJSON({
@@ -176,17 +177,11 @@ ${directivePrompt}`;
       });
 
       if (!response.ok) {
-        if (heartbeat) clearInterval(heartbeat);
         const errorText = await response.text();
         throw new Error(`Fast analysis failed: ${response.status} - ${errorText}`);
       }
 
-      // Останавливаем Heartbeat перед началом основного стриминга
-      if (heartbeat) {
-        clearInterval(heartbeat);
-        heartbeat = null;
-      }
-
+      // Heartbeat остановится в finally
       const transformer = createTransformWithUsage(response.body!, model, initialUsage);
       const reader = transformer.getReader();
 
@@ -230,22 +225,46 @@ export async function analyzeImageOpusTwoStageStreaming(
   // Запускаем процесс асинхронно
   (async () => {
     let heartbeat: any;
+    let loadingInterval: any;
     try {
-      // 1. Форсированный старт потока (Padding)
-      const padding = ': ' + ' '.repeat(2048) + '\n\n';
+      // 1. Форсированный старт потока (Padding) - 4KB для обхода агрессивных прокси
+      const padding = ': ' + ' '.repeat(4096) + '\n\n';
       await writer.write(encoder.encode(padding));
 
-      const loadingHeader = "## 🩺 ПОДГОТОВКА К АНАЛИЗУ...\n\n> *Извлечение структурированных данных через Gemini Vision...*\n\n---\n\n";
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
+      let loadingSeconds = 0;
+      const getLoadingHeader = (sec: number) => {
+        const dots = '.'.repeat((sec % 3) + 1);
+        return `## 🩺 ПОДГОТОВКА К АНАЛИЗУ${dots}\n\n> *Этап 1: Извлечение структурированных данных через Gemini Vision... (${sec}с)*\n\n---\n\n`;
+      };
 
-      // 2. Запускаем Heartbeat СРАЗУ, чтобы канал не простаивал во время работы Gemini
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: getLoadingHeader(0) } }] })}\n\n`));
+
+      // 2. Умная индикация загрузки (обновляет текст, чтобы пользователь видел прогресс)
+      loadingInterval = setInterval(async () => {
+        loadingSeconds += 2;
+        try {
+          // Отправляем просто точку для визуального прогресса
+          const updateChunk = {
+            choices: [{
+              delta: {
+                content: `.`
+              }
+            }]
+          };
+          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
+        } catch (e) {
+          if (loadingInterval) clearInterval(loadingInterval);
+        }
+      }, 2000);
+
+      // 3. Фоновый Heartbeat для поддержания канала
       heartbeat = setInterval(async () => {
         try {
-          await writer.write(encoder.encode(': heartbeat padding\n\n'));
+          await writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
         } catch (e) {
           if (heartbeat) clearInterval(heartbeat);
         }
-      }, 500);
+      }, 5000);
 
       console.log(`🚀 [OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
       const { extractImageJSON } = await import('./openrouter');
@@ -253,6 +272,11 @@ export async function analyzeImageOpusTwoStageStreaming(
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       
+      // Обновляем статус перед запуском второй модели
+      if (loadingInterval) clearInterval(loadingInterval);
+      const stage2Header = `\n\n> *Этап 2: Клинический разбор через ${model.includes('opus') ? 'Opus 4.5' : 'Sonnet 4.5'}...*\n\n---\n\n`;
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
+
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
       const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
@@ -275,6 +299,19 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
 
       console.log(`📡 [OPTIMIZED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
       
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 секунд таймаут на запуск модели
+
+      // Запускаем второй интервал для Этапа 2
+      let stage2Seconds = 0;
+      const stage2Interval = setInterval(async () => {
+        stage2Seconds += 2;
+        try {
+          const updateChunk = { choices: [{ delta: { content: `.` } }] };
+          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
+        } catch (e) {}
+      }, 2000);
+
       const response = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
@@ -299,15 +336,14 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
           temperature: 0.1,
           stream: true,
           stream_options: { include_usage: true }
-        })
+        }),
+        signal: controller.signal
       });
 
-      // Останавливаем Heartbeat как только получили ответ от OpenRouter
-      if (heartbeat) {
-        clearInterval(heartbeat);
-        heartbeat = null;
-      }
+      clearTimeout(timeoutId);
+      clearInterval(stage2Interval);
 
+      // Останавливаем Heartbeat только в блоке finally
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Main model failed: ${response.status} - ${errorText}`);
@@ -360,22 +396,39 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
 
   (async () => {
     let heartbeat: any;
+    let loadingInterval: any;
     try {
       // 1. Форсированный старт потока
-      const padding = ': ' + ' '.repeat(2048) + '\n\n';
+      const padding = ': ' + ' '.repeat(4096) + '\n\n';
       await writer.write(encoder.encode(padding));
 
-      const loadingHeader = "## 🩺 ПОДГОТОВКА К АНАЛИЗУ МНОЖЕСТВЕННЫХ ИЗОБРАЖЕНИЙ...\n\n> *Сбор и анализ данных из нескольких изображений через Gemini Vision...*\n\n---\n\n";
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
+      let loadingSeconds = 0;
+      const getLoadingHeader = (sec: number) => {
+        const dots = '.'.repeat((sec % 3) + 1);
+        return `## 🩺 ПОДГОТОВКА К СРАВНИТЕЛЬНОМУ АНАЛИЗУ${dots}\n\n> *Этап 1: Сбор и анализ данных из нескольких изображений через Gemini Vision... (${sec}с)*\n\n---\n\n`;
+      };
 
-      // 2. Запускаем Heartbeat СРАЗУ
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: getLoadingHeader(0) } }] })}\n\n`));
+
+      // 2. Умная индикация загрузки
+      loadingInterval = setInterval(async () => {
+        loadingSeconds += 2;
+        try {
+          const updateChunk = { choices: [{ delta: { content: `.` } }] };
+          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
+        } catch (e) {
+          if (loadingInterval) clearInterval(loadingInterval);
+        }
+      }, 2000);
+
+      // 3. Запускаем фоновый Heartbeat на весь период анализа
       heartbeat = setInterval(async () => {
         try {
-          await writer.write(encoder.encode(': heartbeat padding\n\n'));
+          await writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
         } catch (e) {
           if (heartbeat) clearInterval(heartbeat);
         }
-      }, 1000);
+      }, 5000);
 
       console.log(`🚀 [MULTI-OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
       const { extractImageJSON } = await import('./openrouter');
@@ -387,6 +440,10 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       
+      if (loadingInterval) clearInterval(loadingInterval);
+      const stage2Header = `\n\n> *Этап 2: Детальный клинический разбор и сравнение через ${model.includes('opus') ? 'Opus 4.5' : 'Sonnet 4.5'}...*\n\n---\n\n`;
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
+
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
       const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
@@ -408,6 +465,13 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
 
       console.log(`📡 [MULTI-OPTIMIZED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
       
+      const stage2Interval = setInterval(async () => {
+        try {
+          const updateChunk = { choices: [{ delta: { content: `.` } }] };
+          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
+        } catch (e) {}
+      }, 2000);
+
       const contentItems: any[] = [
         { type: 'text', text: mainPrompt },
         ...imagesBase64.map((img, i) => ({
@@ -415,6 +479,9 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
           image_url: { url: `data:${mimeTypes[i] || 'image/png'};base64,${img}` }
         }))
       ];
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 180000); // 180 секунд для сравнения
 
       const response = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
@@ -434,15 +501,14 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
           temperature: 0.1,
           stream: true,
           stream_options: { include_usage: true }
-        })
+        }),
+        signal: controller.signal
       });
 
-      // Останавливаем Heartbeat
-      if (heartbeat) {
-        clearInterval(heartbeat);
-        heartbeat = null;
-      }
+      clearTimeout(timeoutId);
+      clearInterval(stage2Interval);
 
+      // Heartbeat остановится в finally
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Main model failed: ${response.status} - ${errorText}`);
@@ -463,6 +529,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
       await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
     } finally {
       if (heartbeat) clearInterval(heartbeat);
+      if (loadingInterval) clearInterval(loadingInterval);
       await writer.close();
     }
   })();
@@ -493,19 +560,49 @@ export async function analyzeMultipleImagesWithJSONStreaming(
 
   (async () => {
     let heartbeat: any;
+    let loadingInterval: any;
     try {
       // Padding для форсирования flush
-      const padding = ': ' + ' '.repeat(1024) + '\n\n';
+      const padding = ': ' + ' '.repeat(4096) + '\n\n';
       await writer.write(encoder.encode(padding));
 
-      const loadingHeader = "## 🩺 ПОДГОТОВКА К ЭКСПЕРТНОМУ АНАЛИЗУ...\n\n> *Сбор данных через Gemini Vision...*\n\n---\n\n";
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
+      let loadingSeconds = 0;
+      const getLoadingHeader = (sec: number) => {
+        const dots = '.'.repeat((sec % 3) + 1);
+        return `## 🩺 ПОДГОТОВКА К ЭКСПЕРТНОМУ АНАЛИЗУ${dots}\n\n> *Этап 1: Сбор данных через Gemini Vision... (${sec}с)*\n\n---\n\n`;
+      };
+
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: getLoadingHeader(0) } }] })}\n\n`));
+
+      // 2. Умная индикация загрузки
+      loadingInterval = setInterval(async () => {
+        loadingSeconds += 2;
+        try {
+          const updateChunk = { choices: [{ delta: { content: `.` } }] };
+          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
+        } catch (e) {
+          if (loadingInterval) clearInterval(loadingInterval);
+        }
+      }, 2000);
+
+      // 3. Запускаем фоновый Heartbeat
+      heartbeat = setInterval(() => {
+        try {
+          writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
+        } catch (e) {
+          if (heartbeat) clearInterval(heartbeat);
+        }
+      }, 5000);
 
       const { extractImageJSON } = await import('./openrouter');
       const extractionResult = await extractImageJSON({ imagesBase64, modality: imageType || 'unknown', specialty });
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       
+      if (loadingInterval) clearInterval(loadingInterval);
+      const stage2Header = `\n\n> *Этап 2: Профессорский разбор через Opus 4.5 (максимальная точность)...*\n\n---\n\n`;
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
+
       const { getDirectivePrompt } = await import('./prompts');
       const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
@@ -524,13 +621,14 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
         systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
       }
 
-      // Запускаем Heartbeat
-      heartbeat = setInterval(() => {
+      console.log(`📡 [MULTI-VALIDATED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
+      
+      const stage2Interval = setInterval(async () => {
         try {
-          process.stdout.write('♥');
-          writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
+          const updateChunk = { choices: [{ delta: { content: `.` } }] };
+          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
         } catch (e) {}
-      }, 15000);
+      }, 2000);
 
       const contentItems: any[] = [
         { type: 'text', text: mainPrompt },
@@ -539,6 +637,9 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
           image_url: { url: `data:${mimeTypes[i] || 'image/png'};base64,${img}` }
         }))
       ];
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 240000); // 4 минуты для супер-точного Opus
 
       const response = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
@@ -558,8 +659,12 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
           temperature: 0.1,
           stream: true,
           stream_options: { include_usage: true }
-        })
+        }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
+      clearInterval(stage2Interval);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -580,6 +685,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
       await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
     } finally {
       if (heartbeat) clearInterval(heartbeat);
+      if (loadingInterval) clearInterval(loadingInterval);
       await writer.close();
     }
   })();
@@ -687,16 +793,15 @@ export async function sendTextRequestStreaming(
       const initialPadding = ': ' + ' '.repeat(2048) + '\n\n';
       await writer.write(encoder.encode(initialPadding));
 
-      // 2. Запускаем активное ожидание (Heartbeat) пока модель думает
-      // Это предотвращает разрыв соединения и "зависание" буфера Nginx
+      // 2. Запускаем фоновый Heartbeat на весь период анализа
       heartbeat = setInterval(async () => {
         try {
-          // Отправляем комментарий каждые 500мс для поддержания канала
-          await writer.write(encoder.encode(': heartbeat padding\n\n'));
+          // Отправляем комментарий раз в 5 секунд для поддержания канала
+          await writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
         } catch (e) {
           if (heartbeat) clearInterval(heartbeat);
         }
-      }, 500);
+      }, 5000);
 
       const { TITAN_CONTEXTS } = await import('./prompts');
       
@@ -737,12 +842,7 @@ export async function sendTextRequestStreaming(
         })
       });
 
-      // Останавливаем Heartbeat как только получили первый байт ответа
-      if (heartbeat) {
-        clearInterval(heartbeat);
-        heartbeat = null;
-      }
-
+      // Heartbeat остановится в finally
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`API error: ${response.status} - ${errorText}`);
@@ -786,7 +886,7 @@ export async function analyzeImageStreaming(
   const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
-  const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
+  const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
   
   // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
   const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
@@ -801,39 +901,76 @@ export async function analyzeImageStreaming(
     fullPrompt = `${prompt}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${clinicalContext}`;
   }
 
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://openrouter.ai',
-        'X-Title': 'Medical AI'
-      },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { 
-          role: 'user', 
-          content: [
-            { type: 'text', text: fullPrompt },
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }
-          ] 
-        }
-      ],
-      max_tokens: 16000,
-      temperature: 0.1,
-      stream: true,
-      stream_options: { include_usage: true }
-    })
-  });
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ [OPENROUTER ERROR] Status: ${response.status}: ${errorText}`);
-      throw new Error(`API error: ${response.status} - ${errorText}`);
+  (async () => {
+    let heartbeat: any;
+    try {
+      // 1. Форсированный старт потока
+      const initialPadding = ': ' + ' '.repeat(2048) + '\n\n';
+      await writer.write(encoder.encode(initialPadding));
+
+      // 2. Heartbeat для поддержания соединения
+      heartbeat = setInterval(async () => {
+        try {
+          await writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
+        } catch (e) {
+          if (heartbeat) clearInterval(heartbeat);
+        }
+      }, 5000);
+
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://doctor-opus.ru',
+            'X-Title': 'Doctor Opus'
+          },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { 
+              role: 'user', 
+              content: [
+                { type: 'text', text: fullPrompt },
+                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }
+              ] 
+            }
+          ],
+          max_tokens: 16000,
+          temperature: 0.1,
+          stream: true,
+          stream_options: { include_usage: true }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+      }
+
+      const transformer = createTransformWithUsage(response.body!, model);
+      const reader = transformer.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+      }
+    } catch (error: any) {
+      console.error(`❌ [IMAGE STREAM ERROR]:`, error);
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      await writer.close();
     }
-  return createTransformWithUsage(response.body!, model);
+  })();
+
+  return readable;
 }
 
 /**
@@ -853,7 +990,7 @@ export async function analyzeMultipleImagesStreaming(
   const apiKey = rawKey?.trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
-  const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
+  const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
   
   // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
   const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
@@ -873,31 +1010,68 @@ export async function analyzeMultipleImagesStreaming(
     contentItems.push({ type: 'image_url', image_url: { url: `data:${mimeTypes[i] || 'image/png'};base64,${img}` } });
   });
 
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://openrouter.ai',
-        'X-Title': 'Medical AI'
-      },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: contentItems }
-      ],
-      max_tokens: 16000,
-      temperature: 0.1,
-      stream: true,
-      stream_options: { include_usage: true }
-    })
-  });
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ [OPENROUTER ERROR] Status: ${response.status}: ${errorText}`);
-      throw new Error(`API error: ${response.status} - ${errorText}`);
+  (async () => {
+    let heartbeat: any;
+    try {
+      // 1. Форсированный старт потока
+      const initialPadding = ': ' + ' '.repeat(2048) + '\n\n';
+      await writer.write(encoder.encode(initialPadding));
+
+      // 2. Heartbeat для поддержания соединения
+      heartbeat = setInterval(async () => {
+        try {
+          await writer.write(encoder.encode(': keep-alive heartbeat\n\n'));
+        } catch (e) {
+          if (heartbeat) clearInterval(heartbeat);
+        }
+      }, 5000);
+
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://doctor-opus.ru',
+            'X-Title': 'Doctor Opus'
+          },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: contentItems }
+          ],
+          max_tokens: 16000,
+          temperature: 0.1,
+          stream: true,
+          stream_options: { include_usage: true }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+      }
+
+      const transformer = createTransformWithUsage(response.body!, model);
+      const reader = transformer.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+      }
+    } catch (error: any) {
+      console.error(`❌ [MULTI-IMAGE STREAM ERROR]:`, error);
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      await writer.close();
     }
-  return createTransformWithUsage(response.body!, model);
+  })();
+
+  return readable;
 }

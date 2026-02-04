@@ -5,7 +5,7 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Модели для сканирования документов (Gemini Flash, Haiku или Llama)
 const DOCUMENT_SCAN_MODELS = [
-  'google/gemini-3-flash-preview',           // Gemini 3 Flash — дешево и качественно для OCR
+  'google/gemini-3-flash-preview',           // Gemini 1.5 Flash — стабильно и качественно для OCR
   'anthropic/claude-haiku-4.5',              // Haiku 4.5 — быстрое сканирование документов
   'meta-llama/llama-3.2-90b-vision-instruct', // Llama 3.2 90B — резерв для документов
 ];
