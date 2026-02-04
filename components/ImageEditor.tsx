@@ -3,14 +3,12 @@
 import { useState, useRef, useEffect } from 'react'
 
 interface ImageEditorProps {
-  imageSrc: string
-  onSave: (editedFile: File) => void
+  image: string // Принимает либо URL, либо base64
+  onSave: (editedImage: string) => void // Возвращает base64
   onCancel: () => void
-  fileName: string
-  mimeType: string
 }
 
-export default function ImageEditor({ imageSrc, onSave, onCancel, fileName, mimeType }: ImageEditorProps) {
+export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [brushSize, setBrushSize] = useState(40)
@@ -22,7 +20,7 @@ export default function ImageEditor({ imageSrc, onSave, onCancel, fileName, mime
     if (!canvas) return
 
     const img = new Image()
-    img.src = imageSrc
+    img.src = image
     img.onload = () => {
       imageRef.current = img
       canvas.width = img.width
@@ -35,7 +33,7 @@ export default function ImageEditor({ imageSrc, onSave, onCancel, fileName, mime
         saveToHistory(ctx)
       }
     }
-  }, [imageSrc])
+  }, [image])
 
   const saveToHistory = (ctx: CanvasRenderingContext2D) => {
     const canvas = canvasRef.current
@@ -105,11 +103,8 @@ export default function ImageEditor({ imageSrc, onSave, onCancel, fileName, mime
     const canvas = canvasRef.current
     if (!canvas) return
 
-    canvas.toBlob((blob) => {
-      if (!blob) return
-      const file = new File([blob], fileName, { type: mimeType })
-      onSave(file)
-    }, mimeType)
+    const editedImage = canvas.toDataURL('image/jpeg', 0.9)
+    onSave(editedImage)
   }
 
   return (

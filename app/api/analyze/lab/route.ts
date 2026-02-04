@@ -8,6 +8,8 @@ import {
 import { detectFileType } from '@/lib/file-extractor';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { anonymizeText } from "@/lib/anonymization";
+import { anonymizeImageBuffer } from "@/lib/image-compression";
 import * as XLSX from 'xlsx';
 
 // Максимальное время выполнения (5 минут)
@@ -38,11 +40,12 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const prompt = formData.get('prompt') as string || 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.';
-    const clinicalContext = formData.get('clinicalContext') as string || '';
+    const prompt = anonymizeText(formData.get('prompt') as string || 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.');
+    const clinicalContext = anonymizeText(formData.get('clinicalContext') as string || '');
     const mode = formData.get('mode') as string || 'fast';
     const model = formData.get('model') as string;
     const useStreaming = formData.get('useStreaming') === 'true';
+    const isAnonymous = formData.get('isAnonymous') === 'true';
 
     if (!file) {
       return NextResponse.json(
@@ -62,13 +65,21 @@ export async function POST(request: NextRequest) {
     // Определение модели на основе режима или прямого указания
     let modelToUse = model || MODELS.GEMINI_3_FLASH;
     if (!model) {
-      if (mode === 'optimized') modelToUse = MODELS.SONNET;
+      if (mode === 'fast') modelToUse = MODELS.GEMINI_3_FLASH;
+      else if (mode === 'optimized') modelToUse = MODELS.SONNET;
       else if (mode === 'validated') modelToUse = MODELS.OPUS;
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    let buffer = Buffer.from(arrayBuffer);
     const fileType = detectFileType(file.name);
+
+    // Если анонимно и это изображение - анонимизируем буфер
+    if (isAnonymous && (file.type.startsWith('image/') || fileType === 'jpg' || fileType === 'jpeg' || fileType === 'png')) {
+      console.log(`🛡️ [LAB] Анонимизация изображения: ${file.name}`);
+      // @ts-expect-error - Несовместимость типов Buffer
+      buffer = await anonymizeImageBuffer(buffer, file.type);
+    }
 
     console.log(`🔬 [LAB] Обработка файла: ${file.name}, тип: ${fileType}, режим: ${mode}, модель: ${modelToUse}, streaming: ${useStreaming}`);
 

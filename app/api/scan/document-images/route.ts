@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateCost } from '@/lib/cost-calculator';
+import { anonymizeImageBuffer } from "@/lib/image-compression";
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -17,7 +18,7 @@ const DOCUMENT_SCAN_MODELS = [
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { images, prompt } = body;
+    const { images, prompt, isAnonymous } = body;
 
     if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
@@ -44,7 +45,16 @@ export async function POST(request: NextRequest) {
 
     // Сканируем каждое изображение (страницу PDF)
     for (let i = 0; i < images.length; i++) {
-      const imageBase64 = images[i];
+      let imageBase64 = images[i];
+
+      // Если анонимно — затираем данные на изображении
+      if (isAnonymous) {
+        console.log(`🛡️ [DOC IMAGES] Анонимизация страницы ${i + 1}`);
+        const buffer = Buffer.from(imageBase64, 'base64');
+        const anonBuffer = await anonymizeImageBuffer(buffer, 'image/png');
+        imageBase64 = anonBuffer.toString('base64');
+      }
+
       const pagePrompt = i === 0 
         ? `${prompt}\n\nЭто страница ${i + 1} из ${images.length} документа. ОБЯЗАТЕЛЬНО сохраняй таблицы в формате Markdown со всеми строками и столбцами.`
         : `Продолжение сканирования документа. Страница ${i + 1} из ${images.length}. ОБЯЗАТЕЛЬНО сохраняй таблицы в формате Markdown со всеми строками и столбцами.`;

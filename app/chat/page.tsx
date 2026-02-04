@@ -44,6 +44,7 @@ export default function ChatPage() {
   const [showFileUpload, setShowFileUpload] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
+  const [useLibrary, setUseLibrary] = useState(false)
   const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('gpt52')
   const [specialty, setSpecialty] = useState<Specialty>('universal')
   const [isCutOff, setIsCutOff] = useState(false)
@@ -198,8 +199,25 @@ export default function ChatPage() {
     if (!message.trim() && selectedFiles.length === 0) return
 
     setIsCutOff(false)
+    setLoading(true)
 
-    const userMessage = message || (selectedFiles.length > 0 ? 'Проанализируйте прикрепленные файлы' : '')
+    let userMessage = message || (selectedFiles.length > 0 ? 'Проанализируйте прикрепленные файлы' : '')
+    
+    // Автоматический поиск в библиотеке (RAG), если включен тумблер
+    if (useLibrary && message.trim()) {
+      setSearchingLibrary(true)
+      try {
+        const results = await searchLibraryLocal(message, 3)
+        if (results.length > 0) {
+          userMessage += `\n\n### КОНТЕКСТ ИЗ БИБЛИОТЕКИ:\n${results.join('\n---\n')}`
+        }
+      } catch (err) {
+        console.error('Auto library search error:', err)
+      } finally {
+        setSearchingLibrary(false)
+      }
+    }
+
     const filesInfo = selectedFiles.map(f => ({
       name: f.name,
       size: f.size,
@@ -214,7 +232,6 @@ export default function ChatPage() {
       content: userMessage,
       files: filesInfo.length > 0 ? filesInfo : undefined
     }])
-    setLoading(true)
 
     const assistantMessageIndex = messages.length + 1
     if (useStreaming) {
@@ -800,6 +817,16 @@ export default function ChatPage() {
             />
             <span className="text-xs sm:text-sm">Streaming</span>
           </label>
+
+          <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
+            <input
+              type="checkbox"
+              checked={useLibrary}
+              onChange={(e) => setUseLibrary(e.target.checked)}
+              className="w-5 h-5 sm:w-4 sm:h-4 text-teal-600"
+            />
+            <span className="text-xs sm:text-sm font-medium text-teal-700">📚 Библиотека (RAG)</span>
+          </label>
           
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Модель:</span>
@@ -840,11 +867,15 @@ export default function ChatPage() {
           </button>
           <button
             onClick={handleLibrarySearch}
-            disabled={searchingLibrary || !message.trim()}
+            disabled={searchingLibrary || !message.trim() || useLibrary}
             className={`px-4 py-3 sm:py-2 rounded-lg transition-colors text-lg sm:text-base touch-manipulation ${
-              searchingLibrary ? 'bg-indigo-100 text-indigo-400' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+              useLibrary 
+                ? 'bg-teal-100 text-teal-400 cursor-not-allowed' 
+                : searchingLibrary 
+                  ? 'bg-indigo-100 text-indigo-400' 
+                  : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
             }`}
-            title="Найти контекст в вашей библиотеке PDF"
+            title={useLibrary ? "Автоматический поиск включен" : "Найти и вставить контекст из вашей библиотеки PDF вручную"}
           >
             {searchingLibrary ? '⏳' : '📚'}
           </button>

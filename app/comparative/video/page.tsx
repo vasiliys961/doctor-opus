@@ -794,6 +794,7 @@ export default function VideoComparisonPage() {
         cost={currentCost} 
         model={model} 
         mode="comparative-video" 
+        images={[...frames1.map(f => f.preview), ...frames2.map(f => f.preview)]}
       />
 
       {result && !loading && (
@@ -804,22 +805,30 @@ export default function VideoComparisonPage() {
         />
       )}
 
-      {/* Редактор кадров */}
       {editingFrame && (
         <ImageEditor
-          imageSrc={editingFrame.videoIndex === 1 
+          image={editingFrame.videoIndex === 1 
             ? frames1[editingFrame.frameIndex].preview 
             : frames2[editingFrame.frameIndex].preview
           }
-          fileName={editingFrame.videoIndex === 1 
-            ? frames1[editingFrame.frameIndex].file.name 
-            : frames2[editingFrame.frameIndex].file.name
-          }
-          mimeType={editingFrame.videoIndex === 1 
-            ? frames1[editingFrame.frameIndex].file.type 
-            : frames2[editingFrame.frameIndex].file.type
-          }
-          onSave={handleFrameEditorSave}
+          onSave={async (editedDataUrl) => {
+            const response = await fetch(editedDataUrl);
+            const blob = await response.blob();
+            const { videoIndex, frameIndex } = editingFrame;
+            const originalFile = videoIndex === 1 ? frames1[frameIndex].file : frames2[frameIndex].file;
+            const editedFile = new File([blob], originalFile.name, { type: 'image/png' });
+            
+            if (videoIndex === 1) {
+              const newFrames = [...frames1];
+              newFrames[frameIndex] = { ...newFrames[frameIndex], file: editedFile, preview: editedDataUrl };
+              setFrames1(newFrames);
+            } else {
+              const newFrames = [...frames2];
+              newFrames[frameIndex] = { ...newFrames[frameIndex], file: editedFile, preview: editedDataUrl };
+              setFrames2(newFrames);
+            }
+            setEditingFrame(null);
+          }}
           onCancel={() => setEditingFrame(null)}
         />
       )}

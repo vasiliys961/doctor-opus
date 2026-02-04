@@ -46,7 +46,7 @@ export default function ECGPage() {
     setAnalysisStep('description')
 
     try {
-      const prompt = 'СОСТАВЬ ТОЛЬКО ЭКГ-ПРОТОКОЛ И ЗАКЛЮЧЕНИЕ (РАЗДЕЛЫ 0, 1, 2). НЕ ДАВАЙ ПЛАН ЛЕЧЕНИЯ.'
+      const prompt = 'Проанализируйте изображение ЭКГ и сформируйте диагностический протокол.'
 
       // Проверка кэша
       if (imagePreview) {
@@ -75,6 +75,7 @@ export default function ECGPage() {
       formData.append('imageType', 'ecg') // Указываем тип изображения для использования специфичных промптов
       formData.append('useStreaming', useStream.toString())
       formData.append('isTwoStage', 'true')
+      formData.append('isAnonymous', isAnonymous.toString())
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
@@ -411,6 +412,7 @@ export default function ECGPage() {
         imageType="ecg"
         cost={currentCost}
         isAnonymous={isAnonymous}
+        images={imagePreview ? [imagePreview] : []}
       />
 
       {result && !loading && (

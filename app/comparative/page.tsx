@@ -291,6 +291,7 @@ export default function ComparativeAnalysisPage() {
         model={modelInfo.model} 
         mode={modelInfo.mode || 'comparative'} 
         cost={currentCost}
+        images={images.map(img => img.preview)}
       />
     </div>
   )

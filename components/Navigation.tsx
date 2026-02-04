@@ -20,7 +20,7 @@ export default function Navigation() {
     { name: '🧮 Мед. калькуляторы', href: 'https://medcalculator.vercel.app', isExternal: true },
     { name: '📚 Клинические рекомендации', href: '/protocols' },
     { name: '📈 Оценка ЭКГ', href: '/ecg' },
-    { name: '🔍 Описание визуализации', href: '/image-analysis' },
+    { name: '🔍 Изображение+синхронизация', href: '/image-analysis' },
     { name: '🔬 Клинический разбор (Case Review)', href: '/advanced' },
     { name: '📊 Сравнение с предыдущим (Follow-up)', href: '/comparative' },
     { name: '🩻 Описание рентгена', href: '/xray' },

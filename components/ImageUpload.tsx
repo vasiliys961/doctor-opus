@@ -336,13 +336,19 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         </div>
       )}
 
-      {/* Редактор для ручной анонимизации */}
       {isEditorOpen && preview && currentFile && (
         <ImageEditor
-          imageSrc={preview}
-          fileName={currentFile.name}
-          mimeType={currentFile.type}
-          onSave={handleEditorSave}
+          image={preview}
+          onSave={async (editedDataUrl) => {
+            const response = await fetch(editedDataUrl);
+            const blob = await response.blob();
+            const editedFile = new File([blob], currentFile.name, { type: 'image/jpeg' });
+            
+            setCurrentFile(editedFile);
+            setPreview(editedDataUrl);
+            onUpload(editedFile);
+            setIsEditorOpen(false);
+          }}
           onCancel={() => setIsEditorOpen(false)}
         />
       )}

@@ -27,6 +27,7 @@ export default function UltrasoundPage() {
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
+  const [isAnonymous, setIsAnonymous] = useState(false)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   
   // Видео / Cine-loop стейты
@@ -68,12 +69,13 @@ export default function UltrasoundPage() {
         }
       }
 
-      formData.append('prompt', 'СОСТАВЬ ТОЛЬКО УЛЬТРАЗВУКОВОЙ ПРОТОКОЛ И ЗАКЛЮЧЕНИЕ (РАЗДЕЛЫ 0, 1, 2). НЕ ДАВАЙ ПЛАН ЛЕЧЕНИЯ.')
+      formData.append('prompt', 'Проанализируйте УЗИ-исследование и сформируйте диагностический протокол.')
       formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', 'ultrasound')
       formData.append('useStreaming', useStream.toString())
       formData.append('isTwoStage', 'true')
+      formData.append('isAnonymous', isAnonymous.toString())
 
       // Подбор модели
       const targetModelId = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
@@ -309,9 +311,37 @@ export default function UltrasoundPage() {
                 value={clinicalContext}
                 onChange={(e) => setClinicalContext(e.target.value)}
                 placeholder="Жалобы, анамнез, цель исследования..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 text-sm h-32"
+                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 text-sm h-32 ${
+                  /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
+                  ? 'border-red-500 bg-red-50' 
+                  : 'border-gray-300'
+                }`}
                 disabled={loading}
               />
+              {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
+                <p className="text-[10px] text-red-600 mb-2 font-bold">
+                  ⚠️ Похоже, вы ввели ФИО. Пожалуйста, удалите персональные данные для защиты приватности.
+                </p>
+              )}
+              <div className="mb-4 mt-4">
+                <label className="flex items-center space-x-2 cursor-pointer p-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-900">
+                  <input
+                    type="checkbox"
+                    checked={isAnonymous}
+                    onChange={(e) => setIsAnonymous(e.target.checked)}
+                    disabled={loading}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-blue-900">
+                      🛡️ Разовый анонимный анализ
+                    </span>
+                    <span className="text-[10px] text-blue-700 font-normal">
+                      Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                    </span>
+                  </div>
+                </label>
+              </div>
             </div>
             <div>
               <AnalysisModeSelector value={mode} onChange={setMode} optimizedModel={optimizedModel} onOptimizedModelChange={setOptimizedModel} disabled={loading} />
@@ -336,18 +366,29 @@ export default function UltrasoundPage() {
 
       {error && <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 font-bold shadow-sm">❌ {error}</div>}
 
-      <AnalysisResult result={result} loading={loading} mode={modelInfo.mode || mode} model={modelInfo.model} imageType="ultrasound" cost={currentCost} />
+      <AnalysisResult 
+        result={result} 
+        loading={loading} 
+        mode={modelInfo.mode || mode} 
+        model={modelInfo.model} 
+        imageType="ultrasound" 
+        cost={currentCost} 
+        isAnonymous={isAnonymous}
+        images={extractedFrames.length > 0 ? extractedFrames.map(f => f.preview) : imagePreview ? [imagePreview] : []}
+      />
 
       {result && !loading && <FeedbackForm analysisType="ULTRASOUND" analysisResult={result} inputCase={clinicalContext} />}
 
       {editingFrameIndex !== null && extractedFrames[editingFrameIndex] && (
         <ImageEditor
-          imageSrc={extractedFrames[editingFrameIndex].preview}
-          fileName={extractedFrames[editingFrameIndex].file.name}
-          mimeType={extractedFrames[editingFrameIndex].file.type}
-          onSave={(edited) => {
+          image={extractedFrames[editingFrameIndex].preview}
+          onSave={async (editedDataUrl) => {
+            const response = await fetch(editedDataUrl);
+            const blob = await response.blob();
+            const editedFile = new File([blob], extractedFrames[editingFrameIndex].file.name, { type: 'image/png' });
+            
             const newFrames = [...extractedFrames];
-            newFrames[editingFrameIndex] = { ...newFrames[editingFrameIndex], file: edited, preview: URL.createObjectURL(edited) };
+            newFrames[editingFrameIndex] = { ...newFrames[editingFrameIndex], file: editedFile, preview: editedDataUrl };
             setExtractedFrames(newFrames);
             setEditingFrameIndex(null);
           }}

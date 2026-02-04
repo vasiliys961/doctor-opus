@@ -23,6 +23,7 @@ export default function DermatoscopyPage() {
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
+  const [isAnonymous, setIsAnonymous] = useState(false)
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -44,6 +45,8 @@ export default function DermatoscopyPage() {
       formData.append('mode', analysisMode)
       formData.append('imageType', 'dermatoscopy') // Указываем тип изображения
       formData.append('useStreaming', useStream.toString())
+      formData.append('isAnonymous', isAnonymous.toString())
+      formData.append('isTwoStage', 'true')
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
@@ -196,10 +199,38 @@ export default function DermatoscopyPage() {
                 value={clinicalContext}
                 onChange={(e) => setClinicalContext(e.target.value)}
                 placeholder="Пример: Пациент 45 лет, образование на спине, заметил рост и изменение цвета в последние 3 месяца. Зуд отсутствует."
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4 ${
+                  /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
+                  ? 'border-red-500 bg-red-50' 
+                  : 'border-gray-300'
+                }`}
                 rows={3}
                 disabled={loading}
               />
+              {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
+                <p className="text-[10px] text-red-600 mb-2 font-bold">
+                  ⚠️ Похоже, вы ввели ФИО. Пожалуйста, удалите персональные данные для защиты приватности.
+                </p>
+              )}
+              <div className="mb-4">
+                <label className="flex items-center space-x-2 cursor-pointer p-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-900">
+                  <input
+                    type="checkbox"
+                    checked={isAnonymous}
+                    onChange={(e) => setIsAnonymous(e.target.checked)}
+                    disabled={loading}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-blue-900">
+                      🛡️ Разовый анонимный анализ
+                    </span>
+                    <span className="text-[10px] text-blue-700 font-normal">
+                      Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                    </span>
+                  </div>
+                </label>
+              </div>
               <p className="text-xs text-gray-500 mb-4">
                 💡 Добавление контекста значительно повышает точность и релевантность анализа.
               </p>
@@ -265,6 +296,8 @@ export default function DermatoscopyPage() {
         model={modelInfo.model}
         imageType="dermatoscopy" 
         cost={currentCost} 
+        isAnonymous={isAnonymous}
+        images={imagePreview ? [imagePreview] : []}
       />
 
       {result && !loading && (

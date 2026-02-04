@@ -269,7 +269,12 @@ export default function SerialDeviceManager() {
       </div>
 
       {analysisResult && (
-        <AnalysisResult result={analysisResult} model="google/gemini-3-flash-preview" mode="optimized" />
+        <AnalysisResult 
+          result={analysisResult} 
+          model="google/gemini-3-flash-preview" 
+          mode="optimized" 
+          images={canvasRef.current ? [canvasRef.current.toDataURL('image/png')] : []}
+        />
       )}
     </div>
   )

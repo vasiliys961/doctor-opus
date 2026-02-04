@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateCost } from '@/lib/cost-calculator';
+import { anonymizeText } from "@/lib/anonymization";
+import { anonymizeImageBuffer } from "@/lib/image-compression";
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -18,7 +20,8 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const prompt = formData.get('prompt') as string || 'Извлеки весь текст из документа. Просто скопируй текст как есть, без комментариев и анализа.';
+    const prompt = anonymizeText(formData.get('prompt') as string || 'Извлеки весь текст из документа. Просто скопируй текст как есть, без комментариев и анализа.');
+    const isAnonymous = formData.get('isAnonymous') === 'true';
 
     if (!file) {
       return NextResponse.json(
@@ -33,7 +36,15 @@ export async function POST(request: NextRequest) {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    let buffer = Buffer.from(arrayBuffer);
+
+    // Если анонимно и это изображение - анонимизируем буфер
+    if (isAnonymous && file.type.startsWith('image/')) {
+      console.log(`🛡️ [SCAN] Анонимизация изображения: ${file.name}`);
+      // @ts-expect-error - Несовместимость типов Buffer
+      buffer = await anonymizeImageBuffer(buffer, file.type);
+    }
+
     const base64Image = buffer.toString('base64');
 
     // Промпт для извлечения текста с сохранением структуры

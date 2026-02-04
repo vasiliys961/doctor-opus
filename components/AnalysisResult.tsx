@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
-import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } from 'docx'
+import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer, ImageRun } from 'docx'
 import { saveAs } from 'file-saver'
 import { saveAnalysisResult, getAllPatients, Patient } from '@/lib/patient-db'
 import LibrarySearch from './LibrarySearch'
@@ -16,9 +16,10 @@ interface AnalysisResultProps {
   imageType?: string
   cost?: number
   isAnonymous?: boolean
+  images?: string[] // Новое поле для передачи снимков в отчет
 }
 
-export default function AnalysisResult({ result, loading = false, model, mode, imageType, cost, isAnonymous }: AnalysisResultProps) {
+export default function AnalysisResult({ result, loading = false, model, mode, imageType, cost, isAnonymous, images }: AnalysisResultProps) {
   const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -89,10 +90,9 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   }
 
   const handleDownloadDoc = async () => {
-    setDownloading(false)
     setDownloading(true)
     try {
-      // Агрессивная очистка текста для чистого клинического экспорта
+      // Агрессивная очистка текста для чистого клинического экспорта v3.50
       let isSourcesSection = false;
       const cleanedLines = result
         .split('\n')
@@ -117,9 +117,20 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         .map(line => {
           // Очистка от маркдауна и табличных символов
           return line
-            .replace(/[*_]/g, '') // Убираем звездочки и подчеркивания
+            .replace(/[*_~`#]/g, '') // Убираем звездочки, подчеркивания, тильды, решетки
             .replace(/\|/g, ' ')  // Заменяем разделители таблиц на пробелы
-            .replace(/^[-*+]\s+/, '') // Убираем маркеры списков в начале строки
+            .replace(/^[-*+•]\s+/, '') // Убираем маркеры списков в начале строки
+            .replace(/History/i, 'История / History')
+            .replace(/Technique/i, 'Техника / Technique')
+            .replace(/Findings/i, 'Находки / Findings')
+            .replace(/Clinical Review/i, 'Клинический обзор / Clinical Review')
+            .replace(/Differential Diagnosis/i, 'Дифференциальный диагноз / Differential Diagnosis')
+            .replace(/Clinical Considerations/i, 'Клинические рекомендации / Clinical Recommendations')
+            .replace(/Clinical Directive/i, 'Клиническая директива / Clinical Directive')
+            .replace(/Macroscopic Description/i, 'Макроскопическое описание / Macroscopic Description')
+            .replace(/Microscopic Description/i, 'Микроскопическое описание / Microscopic Description')
+            .replace(/Impression/i, 'ЗАКЛЮЧЕНИЕ')
+            .replace(/—/g, '-') // Нормализуем тире
             .trim();
         })
         .filter(line => line.length > 0);
@@ -144,26 +155,47 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             new TextRun({ text: "Ф.И.О. / Full Name: __________________________   ", size: 18 }),
             new TextRun({ text: `Дата / Date: ${new Date().toLocaleDateString('ru-RU')}`, size: 18 }),
           ],
-          spacing: { after: 200 },
+          spacing: { after: 120 },
         })
       )
 
       // Тонкая линия
       paragraphs.push(new Paragraph({ 
-        border: { bottom: { color: "auto", space: 1, value: "single", size: 6 } },
-        spacing: { after: 150 }
+        border: { bottom: { color: "000000", space: 1, value: "single", size: 6 } },
+        spacing: { after: 120 }
       }))
 
       // 3. ОСНОВНОЙ КОНТЕНТ
-      for (const line of cleanedLines) {
+      let currentSectionText: string[] = [];
+
+      for (let i = 0; i < cleanedLines.length; i++) {
+        const line = cleanedLines[i];
         const l = line.toLowerCase();
         
-        // Особая обработка для ЗАКЛЮЧЕНИЯ
+        // Расширенное определение заголовка
         const isConclusionHeader = l.includes('заключение') || l.includes('impression') || l.includes('впечатление');
-        const isRegularHeader = line.match(/^#{1,4}\s+/) || line.match(/^\d+\.\s+[A-ZА-Я]/) || isConclusionHeader;
+        const isRegularHeader = 
+          line.match(/^\d+\.\s+[A-ZА-Я]/) || 
+          isConclusionHeader ||
+          (line === line.toUpperCase() && line.length > 3 && line.length < 50) ||
+          l.includes('история /') || l.includes('техника /') || l.includes('находки /') || 
+          l.includes('обзор /') || l.includes('диагноз /') || l.includes('директива /') ||
+          l.includes('описание /');
 
         if (isRegularHeader) {
-          const headerText = line.replace(/^#{1,4}\s+/, '');
+          // Если был накопленный текст предыдущей секции, сбрасываем его
+          if (currentSectionText.length > 0) {
+            paragraphs.push(
+              new Paragraph({
+                children: [new TextRun({ text: currentSectionText.join(' ').replace(/\s+/g, ' '), size: 18 })],
+                spacing: { after: 60, line: 240 },
+                alignment: AlignmentType.JUSTIFY
+              })
+            );
+            currentSectionText = [];
+          }
+
+          const headerText = line.replace(/^\d+\.\s+/, '').toUpperCase();
           const finalHeader = isConclusionHeader ? "ЗАКЛЮЧЕНИЕ" : headerText;
           
           paragraphs.push(
@@ -172,32 +204,88 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
                 text: finalHeader, 
                 bold: true, 
                 size: 18,
-                allCaps: isConclusionHeader // Только заключение в CAPS
+                allCaps: true
               })],
-              spacing: { before: 80, after: 40 },
+              spacing: { before: 120, after: 60 },
             })
           )
         } else {
-          // Обычный текст (плотно)
-          paragraphs.push(
-            new Paragraph({
-              children: [new TextRun({ text: line, size: 18 })],
-              spacing: { after: 30, line: 240 }, // Одинарный интервал, минимальный отступ
-            })
-          )
+          // Накапливаем текст для "плотного потока"
+          // Убираем маркеры списков в начале накопленных строк
+          const cleanBodyLine = line.replace(/^[-*+•]\s+/, '').replace(/^\d+\.\s+/, '');
+          currentSectionText.push(cleanBodyLine);
         }
       }
 
-      // 4. БЛОК ВЕРИФИКАЦИИ (компактно)
-      paragraphs.push(new Paragraph({ spacing: { before: 300 } }));
+      // Сбрасываем последний накопленный текст
+      if (currentSectionText.length > 0) {
+        paragraphs.push(
+          new Paragraph({
+            children: [new TextRun({ text: currentSectionText.join(' ').replace(/\s+/g, ' '), size: 18 })],
+            spacing: { after: 120, line: 240 },
+            alignment: AlignmentType.JUSTIFY
+          })
+        );
+      }
+
+      // 4. ВИЗУАЛЬНАЯ ВЕРИФИКАЦИЯ (Если есть снимки)
+      if (images && images.length > 0) {
+        paragraphs.push(
+          new Paragraph({
+            children: [new TextRun({ text: "ВИЗУАЛЬНАЯ ВЕРИФИКАЦИЯ / VISUAL EVIDENCE", bold: true, size: 18, allCaps: true })],
+            spacing: { before: 200, after: 100 },
+          })
+        );
+
+        const imageChildren: any[] = [];
+        for (const base64Data of images.slice(0, 4)) { // Ограничиваем до 4 снимков для плотности
+          try {
+            const base64Content = base64Data.split(',')[1] || base64Data;
+            imageChildren.push(
+              new ImageRun({
+                data: Buffer.from(base64Content, 'base64'),
+                transformation: {
+                  width: images.length > 1 ? 250 : 500, // Если снимков много, делаем их меньше
+                  height: images.length > 1 ? 180 : 350,
+                },
+              })
+            );
+            // Добавляем пробел между картинками в ряду
+            imageChildren.push(new TextRun({ text: "   " }));
+          } catch (imgErr) {
+            console.error('Ошибка при вставке изображения в DOCX:', imgErr);
+          }
+        }
+
+        if (imageChildren.length > 0) {
+          paragraphs.push(
+            new Paragraph({
+              children: imageChildren,
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 200 },
+            })
+          );
+        }
+      }
+
+      // 5. БЛОК ВЕРИФИКАЦИИ (компактно)
       paragraphs.push(new Paragraph({ 
-        border: { top: { color: "CCCCCC", space: 1, value: "single", size: 6 } },
+        border: { top: { color: "000000", space: 1, value: "single", size: 6 } },
         children: [
           new TextRun({ text: "ВЕРИФИЦИРОВАНО ВРАЧОМ / VERIFIED BY PHYSICIAN", bold: true, size: 18 })
         ],
-        spacing: { before: 100, after: 40 },
+        spacing: { before: 150, after: 40 },
       }));
       
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Результаты автоматизированного анализа проверены и подтверждены. / Automated analysis results verified and confirmed.", size: 10, italics: true, color: "666666" }),
+          ],
+          spacing: { after: 80 },
+        })
+      )
+
       paragraphs.push(
         new Paragraph({
           children: [
@@ -210,19 +298,19 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: "                                     (подпись / signature)             (ФИО / Full Name)", size: 12, color: "999999" }),
+            new TextRun({ text: "                                     (подпись / signature)             (ФИО / Full Name)", size: 10, color: "999999" }),
           ],
-          spacing: { after: 150 },
+          spacing: { after: 120 },
         })
       )
 
-      // Подвал
+      // Подвал (очень компактно)
       paragraphs.push(
         new Paragraph({
           children: [
             new TextRun({ 
               text: "Doctor Opus v3.50 Clinical. Документ носит информационно-справочный характер.",
-              size: 12,
+              size: 10,
               color: "AAAAAA",
               italics: true
             }),
@@ -231,7 +319,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         })
       )
 
-      // Создаем документ с полями 0.5 дюйма
+      // Создаем документ с полями 0.5 дюйма (720 twips)
       const doc = new Document({
         sections: [
           {

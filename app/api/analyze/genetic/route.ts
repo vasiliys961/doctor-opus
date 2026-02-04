@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { anonymizeText } from "@/lib/anonymization";
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const gunzipAsync = promisify(gunzip);
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    const isAnonymous = formData.get('isAnonymous') === 'true';
 
     if (!file) {
       console.error('❌ [GENETIC] Файл не предоставлен');
@@ -301,6 +303,10 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
         },
         { status: 400 }
       );
+    }
+
+    if (isAnonymous) {
+      extractedData = anonymizeText(extractedData);
     }
 
     return NextResponse.json({

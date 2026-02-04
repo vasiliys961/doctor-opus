@@ -195,6 +195,7 @@ export default function AdvancedAnalysisPage() {
         model={modelInfo.model} 
         mode={modelInfo.mode} 
         cost={currentCost}
+        images={mainImagePreview ? [mainImagePreview] : []}
       />
     </div>
   )

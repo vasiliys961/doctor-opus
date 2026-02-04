@@ -834,6 +834,7 @@ export default function VideoPage() {
         cost={currentCost} 
         model={model}
         mode={mode}
+        images={extractedFrames.map(f => f.preview)}
       />
 
       {result && !loading && (
@@ -844,13 +845,15 @@ export default function VideoPage() {
         />
       )}
 
-      {/* Редактор кадров */}
       {editingFrameIndex !== null && extractedFrames[editingFrameIndex] && (
         <ImageEditor
-          imageSrc={extractedFrames[editingFrameIndex].preview}
-          fileName={extractedFrames[editingFrameIndex].file.name}
-          mimeType={extractedFrames[editingFrameIndex].file.type}
-          onSave={handleFrameEditorSave}
+          image={extractedFrames[editingFrameIndex].preview}
+          onSave={async (editedDataUrl) => {
+            const response = await fetch(editedDataUrl);
+            const blob = await response.blob();
+            const editedFile = new File([blob], extractedFrames[editingFrameIndex].file.name, { type: extractedFrames[editingFrameIndex].file.type });
+            handleFrameEditorSave(editedFile);
+          }}
           onCancel={() => setEditingFrameIndex(null)}
         />
       )}

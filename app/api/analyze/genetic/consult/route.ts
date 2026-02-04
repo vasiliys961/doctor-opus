@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { anonymizeText } from "@/lib/anonymization";
 
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
@@ -42,16 +43,21 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
-      analysis = '',
-      clinicalContext = '',
-      question = '',
+      analysis: rawAnalysis = '',
+      clinicalContext: rawClinicalContext = '',
+      question: rawQuestion = '',
       mode = 'professor',
       model = 'sonnet', // Добавляем поддержку выбора модели
       useStreaming = true,
       history = [],
       isFollowUp = false,
       files = [],
+      isAnonymous = false,
     } = body || {};
+
+    const analysis = isAnonymous ? anonymizeText(rawAnalysis) : rawAnalysis;
+    const clinicalContext = isAnonymous ? anonymizeText(rawClinicalContext) : rawClinicalContext;
+    const question = isAnonymous ? anonymizeText(rawQuestion) : rawQuestion;
 
     if (!analysis || typeof analysis !== 'string' || analysis.trim().length === 0) {
       return NextResponse.json(

@@ -113,24 +113,54 @@ export async function searchLibraryLocal(query: string, limit: number = 3): Prom
       const allChunks = request.result as LibraryChunk[];
       const queryLower = query.toLowerCase();
       
-      // Разбиваем запрос на слова длиннее 3 символов
+      // Разбиваем запрос на слова длиннее 2 символов
       const keywords = queryLower
         .replace(/[.,!?;:()]/g, ' ')
         .split(/\s+/)
-        .filter(word => word.length > 3);
+        .filter(word => word.length >= 3);
       
       if (keywords.length === 0) {
         resolve([]);
         return;
       }
 
+      // Добавляем англоязычные аналоги для базовых терминов, если запрос на русском
+      const medicalSynonyms: Record<string, string> = {
+        'эндокардит': 'endocarditis',
+        'диабет': 'diabetes',
+        'инфаркт': 'infarction',
+        'стеноз': 'stenosis',
+        'пневмония': 'pneumonia',
+        'терапия': 'therapy',
+        'антибиотики': 'antibiotics',
+        'бактерии': 'bacteria',
+        'сердце': 'heart',
+        'легкие': 'lungs',
+        'печень': 'liver',
+        'почки': 'kidney',
+        'кровь': 'blood',
+        'сосуды': 'vessels'
+      };
+
+      const expandedKeywords = [...keywords];
+      keywords.forEach(word => {
+        if (medicalSynonyms[word]) {
+          expandedKeywords.push(medicalSynonyms[word]);
+        }
+      });
+
       // Считаем количество совпавших ключевых слов для каждого чанка
       const scoredChunks = allChunks.map(chunk => {
         const contentLower = chunk.content.toLowerCase();
         let score = 0;
-        keywords.forEach(word => {
+        expandedKeywords.forEach(word => {
           if (contentLower.includes(word)) {
-            score++;
+            // Вес за точное совпадение слова выше
+            score += 1;
+            // Дополнительный вес за начало слова (более точный поиск)
+            if (contentLower.includes(' ' + word) || contentLower.startsWith(word)) {
+              score += 0.5;
+            }
           }
         });
         return { content: chunk.content, score };

@@ -163,6 +163,7 @@ export default function ImageAnalysisPage() {
       formData.append('imageType', imageType)
       formData.append('useStreaming', useStream.toString())
       formData.append('useLibrary', useLibrary.toString())
+      formData.append('isAnonymous', isAnonymous.toString())
 
       if (additionalFiles.length > 0) {
         additionalFiles.forEach((f, i) => {
@@ -592,6 +593,7 @@ export default function ImageAnalysisPage() {
         imageType={imageType}
         cost={currentCost}
         isAnonymous={isAnonymous}
+        images={isDicom && dicomAnalysisImage ? [dicomAnalysisImage] : imagePreview ? [imagePreview] : []}
       />
 
       {result && !loading && (

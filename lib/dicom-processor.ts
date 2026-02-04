@@ -22,6 +22,47 @@ export interface DicomProcessResult {
 }
 
 /**
+ * Анонимизирует буфер DICOM, затирая чувствительные теги прямо в байтах.
+ * Это позволяет передавать файл дальше, даже если мы не можем его отрендерить.
+ */
+export function anonymizeDicomBuffer(buffer: Buffer): Buffer {
+  try {
+    const byteArray = new Uint8Array(buffer);
+    const dataSet = dicomParser.parseDicom(byteArray);
+
+    // Список тегов для удаления (затирки пробелами)
+    const tagsToWipe = [
+      'x00100010', // Patient's Name
+      'x00100020', // Patient ID
+      'x00100030', // Patient's Birth Date
+      'x00101030', // Patient's Weight
+      'x00080080', // Institution Name
+      'x00080081', // Institution Address
+      'x00080090', // Referring Physician's Name
+      'x00081010', // Station Name
+    ];
+
+    const newBuffer = Buffer.from(buffer);
+
+    tagsToWipe.forEach(tag => {
+      const element = dataSet.elements[tag];
+      if (element && element.length > 0) {
+        // Затираем данные элемента пробелами (ASCII 32)
+        for (let i = 0; i < element.length; i++) {
+          newBuffer[element.dataOffset + i] = 32; 
+        }
+      }
+    });
+
+    console.log('🛡️ [DICOM] Теги анонимизированы в буфере');
+    return newBuffer;
+  } catch (error) {
+    console.error('❌ [DICOM] Ошибка при анонимизации буфера:', error);
+    return buffer; // Возвращаем как есть в случае ошибки, но лучше бы выкинуть исключение
+  }
+}
+
+/**
  * Нативный JS процессор для DICOM файлов
  */
 export async function processDicomJs(buffer: Buffer): Promise<DicomProcessResult> {
@@ -112,9 +153,9 @@ export async function processDicomJs(buffer: Buffer): Promise<DicomProcessResult
     const high = windowCenter + windowWidth / 2;
 
     // РАСШИРЕННЫЕ параметры анонимизации: скрываем верх, низ и боковые края
-    const anonymizeTopPercent = 0.10;    // 10% сверху (было 8%)
-    const anonymizeBottomPercent = 0.08; // 8% снизу (новое)
-    const anonymizeSidePercent = 0.12;   // 12% с боков по всей высоте (было 15% только сверху)
+    const anonymizeTopPercent = 0.10;    // 10% сверху
+    const anonymizeBottomPercent = 0.15; // 15% снизу (увеличено для скрытия печатей и подписей)
+    const anonymizeSidePercent = 0.12;   // 12% с боков по всей высоте
     
     const topRowsToHide = Math.floor(rows * anonymizeTopPercent);
     const bottomRowsToHide = Math.floor(rows * anonymizeBottomPercent);

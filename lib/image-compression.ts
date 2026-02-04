@@ -82,8 +82,8 @@ export async function anonymizeMedicalImage(file: File): Promise<File> {
       // Накладываем плашки (расширенные зоны)
       ctx.fillStyle = 'black';
       
-      const topPercent = 0.10;      // 10% сверху (было 8%)
-      const bottomPercent = 0.08;   // 8% снизу (новое)
+      const topPercent = 0.10;      // 10% сверху
+      const bottomPercent = 0.15;   // 15% снизу (увеличено для скрытия печатей и подписей)
       const sidePercent = 0.12;     // 12% с боков по всей высоте
       
       const topRows = Math.floor(canvas.height * topPercent);
@@ -139,7 +139,7 @@ export async function anonymizeImageBuffer(
     ctx.fillStyle = 'black';
     
     const topPercent = 0.10;
-    const bottomPercent = 0.08;
+    const bottomPercent = 0.15; // 15% снизу (увеличено для скрытия печатей и подписей)
     const sidePercent = 0.12;
     
     const topRows = Math.floor(img.height * topPercent);

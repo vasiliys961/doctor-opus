@@ -25,7 +25,7 @@ export default function LabPage() {
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<AnalysisMode>('optimized')
+  const [mode, setMode] = useState<AnalysisMode>('fast')
   const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>('sonnet')
   const [convertingPDF, setConvertingPDF] = useState(false)
   const [conversionProgress, setConversionProgress] = useState<{ current: number; total: number } | null>(null)
@@ -33,6 +33,7 @@ export default function LabPage() {
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
+  const [isAnonymous, setIsAnonymous] = useState(false)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
 
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
@@ -143,8 +144,9 @@ export default function LabPage() {
           body: JSON.stringify({
             images: pdfImages,
             mode: mode,
-            model: mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : (mode === 'validated' ? 'anthropic/claude-opus-4.5' : 'google/gemini-3-flash-preview'),
+            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.5'),
             useStreaming: useStreaming,
+            isAnonymous: isAnonymous,
             prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
             clinicalContext: clinicalContext
           }),
@@ -202,9 +204,10 @@ export default function LabPage() {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('mode', mode)
-        const targetModelId = mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : (mode === 'validated' ? 'anthropic/claude-opus-4.5' : 'google/gemini-3-flash-preview');
+        const targetModelId = mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.5');
         formData.append('model', targetModelId)
         formData.append('useStreaming', useStreaming.toString())
+        formData.append('isAnonymous', isAnonymous.toString())
         formData.append('prompt', 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.')
         formData.append('clinicalContext', clinicalContext)
 
@@ -295,10 +298,11 @@ export default function LabPage() {
         
         <AnalysisTips 
           content={{
-            fast: "анализ лабораторных бланков (выделение показателей, их значений и референсов), структурирование данных для удобного просмотра.",
-            validated: "самый точный клинический разбор (Gemini JSON + Opus 4.5) — детальная оценка отклонений от нормы.",
+            fast: "быстрый анализ через Gemini 3.0 Flash — идеально подходит для мгновенного извлечения данных из лабораторных бланков.",
+            optimized: "сбалансированный режим (Gemini JSON + Sonnet 4.5) — глубокий клинический разбор на основе извлеченных данных.",
+            validated: "экспертный анализ (Gemini JSON + Opus 4.5) — максимально детальная оценка отклонений от нормы.",
             extra: [
-              "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности извлечения данных и глубины анализа.",
+              "🚀 Рекомендуемый выбор: Gemini 3.0 Flash (режим «Быстрый») — самая высокая точность распознавания таблиц и показателей.",
               "📄 Вы можете загрузить PDF, Excel (XLSX/XLS), CSV или просто фото бланка.",
               "🔍 Система автоматически распознает таблицы и переводит их в цифровой формат.",
               "💾 Результаты можно сохранить и использовать для сравнительного анализа в будущем."
@@ -321,10 +325,38 @@ export default function LabPage() {
               value={clinicalContext}
               onChange={(e) => setClinicalContext(e.target.value)}
               placeholder="Пример: Пациент 40 лет, слабость, быстрая утомляемость. Подозрение на железодефицитную анемию."
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4"
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4 ${
+                /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
+                ? 'border-red-500 bg-red-50' 
+                : 'border-gray-300'
+              }`}
               rows={3}
               disabled={loading}
             />
+            {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
+              <p className="text-[10px] text-red-600 mb-2 font-bold">
+                ⚠️ Похоже, вы ввели ФИО. Пожалуйста, удалите персональные данные для защиты приватности.
+              </p>
+            )}
+            <div className="mb-4">
+              <label className="flex items-center space-x-2 cursor-pointer p-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-900">
+                <input
+                  type="checkbox"
+                  checked={isAnonymous}
+                  onChange={(e) => setIsAnonymous(e.target.checked)}
+                  disabled={loading}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-blue-900">
+                    🛡️ Разовый анонимный анализ
+                  </span>
+                  <span className="text-[10px] text-blue-700 font-normal">
+                    Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                  </span>
+                </div>
+              </label>
+            </div>
             <p className="text-xs text-gray-500 mb-4">
               💡 Клинический контекст поможет системе точнее интерпретировать отклонения от нормы.
             </p>
@@ -409,6 +441,8 @@ export default function LabPage() {
           model={modelInfo.model}
           mode={modelInfo.mode || mode}
           cost={currentCost} 
+          isAnonymous={isAnonymous}
+          images={file?.type.startsWith('image/') ? [URL.createObjectURL(file)] : []}
         />
 
         {result && !loading && (

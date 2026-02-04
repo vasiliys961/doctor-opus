@@ -337,13 +337,24 @@ export default function FileUpload({
         </div>
       )}
 
-      {/* Редактор для ручной анонимизации */}
       {editingFileIndex !== null && previewFiles[editingFileIndex] && (
         <ImageEditor
-          imageSrc={previewFiles[editingFileIndex].preview!}
-          fileName={previewFiles[editingFileIndex].file.name}
-          mimeType={previewFiles[editingFileIndex].file.type}
-          onSave={handleEditorSave}
+          image={previewFiles[editingFileIndex].preview!}
+          onSave={async (editedDataUrl) => {
+            const response = await fetch(editedDataUrl);
+            const blob = await response.blob();
+            const originalFile = previewFiles[editingFileIndex].file;
+            const editedFile = new File([blob], originalFile.name, { type: 'image/jpeg' });
+            
+            const newPreviewFiles = previewFiles.map((item, idx) =>
+              idx === editingFileIndex
+                ? { file: editedFile, preview: editedDataUrl }
+                : item
+            );
+            setPreviewFiles(newPreviewFiles);
+            onUpload(newPreviewFiles.map(item => item.file));
+            setEditingFileIndex(null);
+          }}
           onCancel={() => setEditingFileIndex(null)}
         />
       )}

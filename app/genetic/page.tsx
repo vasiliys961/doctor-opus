@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import ImageUpload from '@/components/ImageUpload'
+import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
@@ -40,6 +41,10 @@ export default function GeneticPage() {
   const [modelType, setModelType] = useState<'opus' | 'gpt52'>('opus') // Opus по умолчанию для лучшего качества
   const [totalCost, setTotalCost] = useState<number>(0)
   const [lastModelUsed, setLastModelUsed] = useState<string>('')
+  const [isAnonymous, setIsAnonymous] = useState(false)
+  const [showEditor, setShowEditor] = useState(false)
+  const [processedImages, setProcessedImages] = useState<string[]>([])
+  const [currentEditorIndex, setCurrentEditorIndex] = useState(0)
 
   // Конвертация файлов в base64
   const convertFilesToBase64 = async (files: File[]): Promise<Array<{ name: string; type: string; base64: string }>> => {
@@ -211,12 +216,11 @@ export default function GeneticPage() {
     setFile(uploadedFile)
     setResult('')
     setExtractedData('')
+    setProcessedImages([])
     setError(null)
     setLoading(true)
 
     try {
-      console.log('🧬 [GENETIC PAGE] Этап 1: Извлечение данных из файла...')
-
       // Если PDF, конвертируем в изображения на клиенте
       if (uploadedFile.type === 'application/pdf' || uploadedFile.name.toLowerCase().endsWith('.pdf')) {
         console.log('📄 [GENETIC PAGE] PDF обнаружен, конвертируем в изображения...')
@@ -232,73 +236,10 @@ export default function GeneticPage() {
 
         try {
           const base64Images = await convertPDFToImages(uploadedFile)
-          console.log(`✅ [GENETIC PAGE] PDF конвертирован в ${base64Images.length} изображений`)
-          
-          // Проверяем что изображения получены
-          if (base64Images.length === 0) {
-            throw new Error('Не удалось конвертировать PDF в изображения')
-          }
-          
-          const totalSize = base64Images.reduce((sum, img) => sum + img.length, 0)
-          console.log(`📊 [GENETIC PAGE] Общий размер изображений: ${Math.round(totalSize / 1024)} KB`)
-
-          // Отправляем изображения на сервер для извлечения данных
-          console.log(`📤 [GENETIC PAGE] Отправка ${base64Images.length} изображений на сервер для извлечения данных...`)
-          console.log(`📊 [GENETIC PAGE] Размеры изображений:`, base64Images.map((img, idx) => `Стр.${idx+1}: ${Math.round(img.length/1024)}KB`).join(', '))
-          
-          const extractionResponse = await fetch('/api/analyze/genetic/extract-images', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              images: base64Images,
-              fileName: uploadedFile.name,
-            }),
-          })
-          
-          console.log(`📥 [GENETIC PAGE] Ответ сервера: ${extractionResponse.status} ${extractionResponse.statusText}`)
-
-          const extractionData = await extractionResponse.json()
-          
-          console.log(`📊 [GENETIC PAGE] Данные ответа:`, {
-            success: extractionData.success,
-            extractedLength: extractionData.extractedData?.length || 0,
-            stats: extractionData.stats,
-            error: extractionData.error,
-          })
-
-          if (!extractionData.success) {
-            const errorMsg = extractionData.error || 'Ошибка при извлечении данных'
-            const statsInfo = extractionData.stats 
-              ? ` (Обработано: ${extractionData.stats.successPages}/${extractionData.stats.totalPages} страниц, ошибок: ${extractionData.stats.errorPages})`
-              : ''
-            setError(`${errorMsg}${statsInfo}`)
-            setLoading(false)
-            setConvertingPDF(false)
-            return
-          }
-
-          console.log('✅ [GENETIC PAGE] Данные извлечены, длина:', extractionData.extractedData?.length)
-          
-          // Логирование использования для PDF/OCR
-          const ocrModel = extractionData.ocrModel || 'google/gemini-3-flash-preview';
-          const ocrCost = extractionData.ocrApproxCostUnits || 0;
-          
-          logUsage({
-            section: 'genetic',
-            model: ocrModel,
-            inputTokens: Math.round((extractionData.ocrTokensUsed || 1000) * 0.7),
-            outputTokens: Math.round((extractionData.ocrTokensUsed || 1000) * 0.3),
-          })
-
-          setTotalCost(prev => prev + ocrCost)
-          setLastModelUsed(ocrModel)
-          setExtractedData(extractionData.extractedData || '')
+          setProcessedImages(base64Images)
           setConvertingPDF(false)
           setLoading(false)
           return
-
         } catch (pdfError: any) {
           console.error('❌ [GENETIC PAGE] Ошибка конвертации PDF:', pdfError)
           setError(`Ошибка конвертации PDF: ${pdfError.message}`)
@@ -308,34 +249,19 @@ export default function GeneticPage() {
         }
       }
 
-      // Для остальных файлов (VCF, TXT, изображения) - стандартная обработка
-      const formData = new FormData()
-      formData.append('file', uploadedFile)
-
-      const extractionResponse = await fetch('/api/analyze/genetic', {
-        method: 'POST',
-        body: formData,
-      })
-
-      const extractionData = await extractionResponse.json()
-
-      if (!extractionData.success) {
-        setError(extractionData.error || 'Ошибка при извлечении данных')
-        setLoading(false)
+      // Если изображение
+      if (uploadedFile.type.startsWith('image/')) {
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          const base64 = (reader.result as string).split(',')[1]
+          setProcessedImages([base64])
+          setLoading(false)
+        }
+        reader.readAsDataURL(uploadedFile)
         return
       }
 
-      console.log('✅ [GENETIC PAGE] Данные извлечены, длина:', extractionData.extractedData?.length)
-      setExtractedData(extractionData.extractedData || '')
-      
-      // Логирование использования (этап извлечения)
-      logUsage({
-        section: 'genetic',
-        model: 'google/gemini-2.0-flash-exp:free',
-        inputTokens: 3000, // примерное значение для PDF
-        outputTokens: 2000,
-      })
-      
+      // Для текстовых файлов (VCF, TXT) - просто оставляем как есть, анализ запустим позже
       setLoading(false)
 
     } catch (err: any) {
@@ -343,6 +269,85 @@ export default function GeneticPage() {
       setError(err.message || 'Произошла ошибка')
       setLoading(false)
       setConvertingPDF(false)
+    }
+  }
+
+  const runExtraction = async () => {
+    if (!file) return
+    
+    setLoading(true)
+    setError(null)
+
+    try {
+      console.log('🧬 [GENETIC PAGE] Запуск извлечения данных...')
+
+      if (processedImages.length > 0) {
+        // Отправляем изображения (PDF или картинки)
+        const extractionResponse = await fetch('/api/analyze/genetic/extract-images', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            images: processedImages,
+            fileName: file.name,
+            isAnonymous: isAnonymous
+          }),
+        })
+
+        const extractionData = await extractionResponse.json()
+
+        if (!extractionData.success) {
+          const errorMsg = extractionData.error || 'Ошибка при извлечении данных'
+          setError(errorMsg)
+          setLoading(false)
+          return
+        }
+
+        setExtractedData(extractionData.extractedData || '')
+        
+        const ocrModel = extractionData.ocrModel || 'google/gemini-3-flash-preview';
+        logUsage({
+          section: 'genetic',
+          model: ocrModel,
+          inputTokens: Math.round((extractionData.ocrTokensUsed || 1000) * 0.7),
+          outputTokens: Math.round((extractionData.ocrTokensUsed || 1000) * 0.3),
+        })
+        setTotalCost(prev => prev + (extractionData.ocrApproxCostUnits || 0))
+        setLastModelUsed(ocrModel)
+      } else {
+        // Для VCF/TXT
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('isAnonymous', isAnonymous.toString())
+
+        const extractionResponse = await fetch('/api/analyze/genetic', {
+          method: 'POST',
+          body: formData,
+        })
+
+        const extractionData = await extractionResponse.json()
+
+        if (!extractionData.success) {
+          setError(extractionData.error || 'Ошибка при извлечении данных')
+          setLoading(false)
+          return
+        }
+
+        setExtractedData(extractionData.extractedData || '')
+        logUsage({
+          section: 'genetic',
+          model: 'google/gemini-2.0-flash-exp:free',
+          inputTokens: 3000,
+          outputTokens: 2000,
+        })
+      }
+      
+      setLoading(false)
+    } catch (err: any) {
+      console.error('❌ [GENETIC PAGE] Ошибка extraction:', err)
+      setError(err.message || 'Произошла ошибка при анализе')
+      setLoading(false)
     }
   }
 
@@ -382,6 +387,7 @@ export default function GeneticPage() {
           model: modelType, // Отправляем выбранную модель
           useStreaming: useStreaming,
           files: filesBase64,
+          isAnonymous: isAnonymous,
         }),
       })
 
@@ -525,6 +531,7 @@ export default function GeneticPage() {
           history: chatHistory.slice(0, -1), // Вся история кроме последнего пустого сообщения
           isFollowUp: true,
           files: filesBase64,
+          isAnonymous: isAnonymous,
         }),
       })
 
@@ -659,6 +666,129 @@ export default function GeneticPage() {
           </div>
         )}
       </div>
+
+      {file && processedImages.length > 0 && !extractedData && (
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">📷 Предпросмотр и анонимизация</h2>
+            <div className="text-sm text-gray-500">
+              {processedImages.length > 1 && `Страница ${currentEditorIndex + 1} из ${processedImages.length}`}
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center bg-gray-50 rounded-xl p-4 border-2 border-dashed border-gray-200 mb-6 relative group">
+            <img 
+              src={`data:image/jpeg;base64,${processedImages[currentEditorIndex]}`} 
+              alt="Загруженный отчет" 
+              className="max-w-full max-h-[600px] rounded-lg shadow-lg object-contain"
+            />
+            <button
+              onClick={() => setShowEditor(true)}
+              className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
+            >
+              🎨 Закрасить данные на этой странице
+            </button>
+            
+            {processedImages.length > 1 && (
+              <div className="flex gap-4 mt-6">
+                <button
+                  onClick={() => setCurrentEditorIndex(prev => Math.max(0, prev - 1))}
+                  disabled={currentEditorIndex === 0}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg disabled:opacity-30"
+                >
+                  ← Пред.
+                </button>
+                <button
+                  onClick={() => setCurrentEditorIndex(prev => Math.min(processedImages.length - 1, prev + 1))}
+                  disabled={currentEditorIndex === processedImages.length - 1}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg disabled:opacity-30"
+                >
+                  След. →
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t pt-6">
+            <label className="flex items-center space-x-2 cursor-pointer p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-900 w-full sm:w-fit shadow-sm">
+              <input
+                type="checkbox"
+                checked={isAnonymous}
+                onChange={(e) => setIsAnonymous(e.target.checked)}
+                disabled={loading}
+                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-blue-900">
+                  🛡️ Анонимный анализ активен
+                </span>
+                <span className="text-[10px] text-blue-700 font-normal">
+                  ФИО и адрес будут затерты перед отправкой к ИИ.
+                </span>
+              </div>
+            </label>
+
+            <button
+              onClick={runExtraction}
+              disabled={loading}
+              className="w-full sm:w-auto px-10 py-4 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-lg transform hover:scale-105 disabled:opacity-50 flex items-center justify-center gap-3"
+            >
+              <span className="text-xl">🚀</span>
+              Извлечь данные
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Для VCF/TXT если нет изображений */}
+      {file && processedImages.length === 0 && !extractedData && !loading && !convertingPDF && (
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
+          <div className="mb-4 text-4xl">📄</div>
+          <h3 className="text-lg font-bold mb-2">Файл загружен: {file.name}</h3>
+          <p className="text-sm text-gray-600 mb-6">Готов к извлечению генетических данных</p>
+          
+          <div className="flex flex-col items-center gap-4">
+             <label className="flex items-center space-x-2 cursor-pointer p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-900 w-fit shadow-sm">
+              <input
+                type="checkbox"
+                checked={isAnonymous}
+                onChange={(e) => setIsAnonymous(e.target.checked)}
+                disabled={loading}
+                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <div className="flex flex-col text-left">
+                <span className="text-sm font-bold text-blue-900">
+                  🛡️ Анонимный анализ
+                </span>
+                <span className="text-[10px] text-blue-700 font-normal">
+                  Текстовые данные будут анонимизированы.
+                </span>
+              </div>
+            </label>
+
+            <button
+              onClick={runExtraction}
+              className="px-10 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-lg"
+            >
+              🚀 Извлечь данные
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно редактора */}
+      {showEditor && processedImages[currentEditorIndex] && (
+        <ImageEditor
+          image={`data:image/jpeg;base64,${processedImages[currentEditorIndex]}`}
+          onSave={(editedImage) => {
+            const newImages = [...processedImages]
+            newImages[currentEditorIndex] = editedImage.split(',')[1]
+            setProcessedImages(newImages)
+            setShowEditor(false)
+          }}
+          onCancel={() => setShowEditor(false)}
+        />
+      )}
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 whitespace-pre-wrap">
@@ -801,10 +931,12 @@ export default function GeneticPage() {
 
       <AnalysisResult 
         result={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
-        loading={loading && !extractedData} 
+        loading={loading} 
         model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-opus-4.5')}
         mode="genetic"
         cost={totalCost}
+        images={file?.type.startsWith('image/') ? [URL.createObjectURL(file)] : []}
+        isAnonymous={isAnonymous}
       />
 
       {result && !loading && (

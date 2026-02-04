@@ -77,6 +77,14 @@ async function fetchWithTimeout(url: string, options: any, timeout = 120000) {
   }
 }
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+function isRateLimit(status: number, errorText?: string) {
+  if (status === 429) return true;
+  const text = (errorText || '').toLowerCase();
+  return text.includes('rate-limited') || text.includes('rate limited');
+}
+
 /**
  * Анализ медицинского изображения через OpenRouter API
  * Использует ту же логику, что и Python vision_client.py
@@ -278,7 +286,11 @@ export async function analyzeImageFast(options: {
     const { getDirectivePrompt } = await import('./prompts');
     const directivePrompt = getDirectivePrompt(imageType, options.prompt, specialty);
 
-    const textModel = MODELS.GEMINI_3_FLASH;
+    const textModels = [
+      MODELS.GEMINI_3_FLASH,
+      MODELS.HAIKU,
+      MODELS.SONNET
+    ];
     
     const contextPrompt = `Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. На основе этих данных и своей экспертизы дай клиническую директиву. ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
 
@@ -295,31 +307,44 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       { role: 'user', content: contextPrompt }
     ];
 
-    safeLog('🚀 [FAST] Шаг 2: Gemini 3.0 (Professor Mode) формирует директиву...');
-    
-    const textResponse = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus'
-      },
-      body: JSON.stringify({
-        model: textModel,
-        messages: messages,
-        max_tokens: 16000,
-        temperature: 0.1,
-      })
-    });
+    safeLog('🚀 [FAST] Шаг 2: формирование директивы (fallback при 429)...');
 
-    if (!textResponse.ok) {
-      const errorText = await textResponse.text();
-      throw new Error(`OpenRouter API error: ${textResponse.status} - ${errorText}`);
+    for (const textModel of textModels) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const textResponse = await fetch(OPENROUTER_API_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://doctor-opus.ru',
+            'X-Title': 'Doctor Opus'
+          },
+          body: JSON.stringify({
+            model: textModel,
+            messages: messages,
+            max_tokens: 16000,
+            temperature: 0.1,
+          })
+        });
+
+        if (textResponse.ok) {
+          const textData = await textResponse.json();
+          return textData.choices[0].message.content || '';
+        }
+
+        const errorText = await textResponse.text();
+        if (isRateLimit(textResponse.status, errorText) && attempt === 0) {
+          safeWarn(`⚠️ [FAST] 429 на модели ${textModel}, повтор через паузу...`);
+          await sleep(1500);
+          continue;
+        }
+
+        safeWarn(`⚠️ [FAST] Ошибка ${textResponse.status} на модели ${textModel}: ${errorText.substring(0, 200)}`);
+        break;
+      }
     }
 
-    const textData = await textResponse.json();
-    return textData.choices[0].message.content || '';
+    throw new Error('Не удалось завершить быстрый анализ ни через одну модель');
     
   } catch (error: any) {
     safeError('❌ [FAST] Ошибка:', error);
@@ -549,6 +574,11 @@ export async function extractImageJSON(options: {
         }
       } else if (response.status === 404) {
         safeWarn(`⚠️ [GEMINI JSON] Модель ${model} недоступна, пробую следующую...`);
+        continue;
+      } else if (response.status === 429) {
+        const errorText = await response.text();
+        safeWarn(`⚠️ [GEMINI JSON] 429 от ${model}: ${errorText.substring(0, 200)}`);
+        await sleep(1500);
         continue;
       } else {
         const errorText = await response.text();

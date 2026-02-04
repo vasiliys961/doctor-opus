@@ -29,6 +29,7 @@ export default function XRayPage() {
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
+  const [isAnonymous, setIsAnonymous] = useState(false)
   const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
@@ -50,9 +51,9 @@ export default function XRayPage() {
       
       if (isComparisonMode && archiveFile) {
         formData.append('archiveFile', archiveFile)
-        formData.append('prompt', 'ПРОВЕДИ СРАВНИТЕЛЬНЫЙ АНАЛИЗ ТЕКУЩЕГО И АРХИВНОГО СНИМКОВ. Опиши динамику изменений (улучшение, стабилизация, прогрессирование). СОСТАВЬ ПРОТОКОЛ И ЗАКЛЮЧЕНИЕ (РАЗДЕЛЫ 0, 1, 2).')
+        formData.append('prompt', 'ПРОВЕДИ СРАВНИТЕЛЬНЫЙ АНАЛИЗ ТЕКУЩЕГО И АРХИВНОГО СНИМКОВ РЕНТГЕНА. Опиши динамику изменений (улучшение, стабилизация, прогрессирование).')
       } else {
-        formData.append('prompt', 'СОСТАВЬ ТОЛЬКО РАДИОЛОГИЧЕСКИЙ ПРОТОКОЛ И ЗАКЛЮЧЕНИЕ (РАЗДЕЛЫ 0, 1, 2). НЕ ДАВАЙ ПЛАН ЛЕЧЕНИЯ.')
+        formData.append('prompt', 'Проанализируйте рентгеновский снимок и сформируйте диагностический протокол.')
       }
       
       formData.append('clinicalContext', clinicalContext)
@@ -60,6 +61,7 @@ export default function XRayPage() {
       formData.append('imageType', 'xray')
       formData.append('useStreaming', useStream.toString())
       formData.append('isTwoStage', 'true')
+      formData.append('isAnonymous', isAnonymous.toString())
 
       if (additionalFiles.length > 0) {
         additionalFiles.forEach((f, i) => {
@@ -370,6 +372,8 @@ export default function XRayPage() {
         model={modelInfo.model}
         imageType="xray" 
         cost={currentCost} 
+        isAnonymous={isAnonymous}
+        images={isComparisonMode && archivePreview ? [imagePreview!, archivePreview] : imagePreview ? [imagePreview] : []}
       />
 
       {result && !loading && (

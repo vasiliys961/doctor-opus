@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
     const customModel = formData.get('model') as string | null;
     const useStreaming = formData.get('useStreaming') === 'true';
     const isTwoStage = formData.get('isTwoStage') === 'true';
+    const isAnonymous = formData.get('isAnonymous') === 'true';
     
     // Специальности удалены для стабильности
     const specialty = undefined;
@@ -81,14 +82,24 @@ export async function POST(request: NextRequest) {
       if (isDicom) {
         // DICOM: используем processDicomJs (уже включает анонимизацию)
         const arrayBuffer = await img.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
+        let buffer = Buffer.from(arrayBuffer);
+        
+        // 1. Если анонимно — затираем теги в буфере ПЕРЕД обработкой
+        if (isAnonymous) {
+          console.log(`🛡️ [DICOM] Анонимизация буфера для: ${img.name}`);
+          const { anonymizeDicomBuffer } = await import('@/lib/dicom-processor');
+          buffer = anonymizeDicomBuffer(buffer);
+        }
+
         const nativeMeta = extractDicomMetadata(buffer);
         if (nativeMeta.modality) dicomContext += formatDicomMetadataForAI(nativeMeta);
+        
         const jsResult = await processDicomJs(buffer);
         if (jsResult.success && jsResult.image) {
           imagesBase64.push(jsResult.image);
           mimeTypes.push('image/png');
         } else {
+          // Если не смогли отрендерить, отправляем буфер (который уже анонимизирован, если флаг стоял)
           imagesBase64.push(buffer.toString('base64'));
           mimeTypes.push(img.type || 'application/dicom');
         }
