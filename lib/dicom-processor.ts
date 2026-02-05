@@ -65,7 +65,7 @@ export function anonymizeDicomBuffer(buffer: Buffer): Buffer {
 /**
  * Нативный JS процессор для DICOM файлов
  */
-export async function processDicomJs(buffer: Buffer): Promise<DicomProcessResult> {
+export async function processDicomJs(buffer: Buffer, isAnonymous: boolean = false): Promise<DicomProcessResult> {
   try {
     // 1. Парсим метаданные
     const byteArray = new Uint8Array(buffer);
@@ -173,15 +173,13 @@ export async function processDicomJs(buffer: Buffer): Promise<DicomProcessResult
       const idx = i * 4;
 
       // Проверка на зону анонимизации (РАСШИРЕННАЯ)
-      // 1. Верхняя полоса (ФИО, дата рождения)
-      // 2. Нижняя полоса (доп. данные аппарата, footer)
-      // 3. Левый край по всей высоте
-      // 4. Правый край по всей высоте
-      const isInAnonymizeZone = 
+      // Применяется только если включен режим анонимности
+      const isInAnonymizeZone = isAnonymous && (
         y < topRowsToHide ||                    // Верх
         y >= rows - bottomRowsToHide ||         // Низ
         x < sideColsToHide ||                   // Левый край
-        x >= cols - sideColsToHide;             // Правый край
+        x >= cols - sideColsToHide              // Правый край
+      );
 
       if (isInAnonymizeZone) {
         imageData.data[idx] = 0;     // R

@@ -32,25 +32,25 @@ export function isVIP(email?: string | null): boolean {
 // Курс конвертации USD -> единицы (настраивается через .env)
 const USD_TO_CREDITS_RATE = parseInt(process.env.NEXT_PUBLIC_USD_TO_CREDITS || '100');
 
-// Пакеты подписки (100% маржа)
-// При курсе 100 ед./USD: 1000₽ = ~500 ед., 2500₽ = ~1250 ед.
+// Пакеты подписки
+// При 5 ₽/ед.: 1250₽ = 250 ед., 2500₽ = 500 ед., 6250₽ = 1250 ед.
 export const SUBSCRIPTION_PACKAGES = {
   trial: { 
     name: 'Пробный', 
     credits: 250,
-    priceRub: 500,
+    priceRub: 1250,
     bonusPercent: 0
   },
   basic: { 
     name: 'Базовый', 
     credits: 500,
-    priceRub: 1000,
+    priceRub: 2500,
     bonusPercent: 0
   },
   pro: { 
     name: 'Профессиональный', 
     credits: 1250,
-    priceRub: 2500,
+    priceRub: 6250,
     bonusPercent: 0
   },
   clinic_mini: { 

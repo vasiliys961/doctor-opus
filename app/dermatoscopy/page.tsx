@@ -73,8 +73,10 @@ export default function DermatoscopyPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
+        
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.5';
+                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.5';
 
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {

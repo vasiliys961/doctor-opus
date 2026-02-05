@@ -141,10 +141,10 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: "МЕДИЦИНСКИЙ КОНСУЛЬТАТИВНЫЙ ОТЧЕТ", bold: true, size: 22 }),
+            new TextRun({ text: "МЕДИЦИНСКИЙ КОНСУЛЬТАТИВНЫЙ ОТЧЕТ", bold: true, size: 28 }),
           ],
           alignment: AlignmentType.CENTER,
-          spacing: { after: 120 },
+          spacing: { after: 200 },
         })
       )
 
@@ -152,17 +152,16 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: "Ф.И.О. / Full Name: __________________________   ", size: 18 }),
-            new TextRun({ text: `Дата / Date: ${new Date().toLocaleDateString('ru-RU')}`, size: 18 }),
+            new TextRun({ text: `Ф.И.О. / Full Name: __________________________   Дата / Date: ${new Date().toLocaleDateString('ru-RU')}`, size: 20 }),
           ],
-          spacing: { after: 120 },
+          spacing: { after: 300 },
         })
       )
 
       // Тонкая линия
       paragraphs.push(new Paragraph({ 
         border: { bottom: { color: "000000", space: 1, value: "single", size: 6 } },
-        spacing: { after: 120 }
+        spacing: { after: 240 }
       }))
 
       // 3. ОСНОВНОЙ КОНТЕНТ
@@ -301,6 +300,27 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             new TextRun({ text: "                                     (подпись / signature)             (ФИО / Full Name)", size: 10, color: "999999" }),
           ],
           spacing: { after: 120 },
+        })
+      )
+
+      // 6. ЮРИДИЧЕСКИЙ СТАТУС (Обязательный блок)
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({ 
+              text: "ЮРИДИЧЕСКИЙ СТАТУС: ", 
+              bold: true, 
+              size: 14,
+              color: "333333"
+            }),
+            new TextRun({ 
+              text: "ПО «Doctor Opus» классифицируется как информационная система поддержки принятия клинических решений. Программа не ставит диагнозы и не назначает лечение самостоятельно. Все результаты работы нейросетей являются «вторым мнением» и носят рекомендательный характер. Окончательное клиническое решение принимает врач (согласно 152-ФЗ и рекомендациям Росздравнадзора).", 
+              size: 14,
+              color: "333333"
+            }),
+          ],
+          spacing: { before: 200, after: 120 },
+          alignment: AlignmentType.JUSTIFY
         })
       )
 

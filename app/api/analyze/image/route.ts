@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
         const nativeMeta = extractDicomMetadata(buffer);
         if (nativeMeta.modality) dicomContext += formatDicomMetadataForAI(nativeMeta);
         
-        const jsResult = await processDicomJs(buffer);
+        const jsResult = await processDicomJs(buffer, isAnonymous);
         if (jsResult.success && jsResult.image) {
           imagesBase64.push(jsResult.image);
           mimeTypes.push('image/png');
@@ -104,12 +104,12 @@ export async function POST(request: NextRequest) {
           mimeTypes.push(img.type || 'application/dicom');
         }
       } else {
-        // ОБЫЧНОЕ ИЗОБРАЖЕНИЕ: АВТОМАТИЧЕСКАЯ АНОНИМИЗАЦИЯ НА СЕРВЕРЕ
+        // ОБЫЧНОЕ ИЗОБРАЖЕНИЕ: АНОНИМИЗАЦИЯ НА СЕРВЕРЕ (ТОЛЬКО ЕСЛИ ВКЛЮЧЕНО)
         const arrayBuffer = await img.arrayBuffer();
         let buffer = Buffer.from(arrayBuffer);
         
-        // Применяем анонимизацию для всех изображений (JPG, PNG и т.д.)
-        if (img.type.startsWith('image/')) {
+        // Применяем анонимизацию для всех изображений (JPG, PNG и т.д.), если включен режим анонимности
+        if (isAnonymous && img.type.startsWith('image/')) {
           console.log(`🛡️ [Anonymization] Автоматическая анонимизация: ${img.name}`);
           // @ts-expect-error - Несовместимость типов Buffer между canvas и Node.js, но код работает корректно
           buffer = await anonymizeImageBuffer(buffer, img.type);
