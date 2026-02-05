@@ -97,15 +97,18 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       const cleanedLines = result
         .split('\n')
         .filter(line => {
-          const l = line.toLowerCase();
+          const l = line.toLowerCase().trim();
           // Убираем технические статусы, дисклеймеры и мусор
           if (l.includes('дисклеймер') || l.includes('disclaimer')) return false;
+          if (l.includes('юридический статус')) return false;
+          if (l.includes('система предоставляет')) return false;
           if (l.includes('данные приняты') || l.includes('раздел 0 принят')) return false;
           if (l.includes('подготовка к анализу') || l.includes('извлечение данных')) return false;
           if (l.includes('клинический разбор через') || l.includes('профессорский разбор через')) return false;
           if (line.trim() === '.' || line.trim() === '..' || line.trim() === '...') return false;
           if (l.startsWith('>') && l.includes('этап')) return false;
-          if (l.includes('gemini vision') || line.trim().startsWith('🩺')) return false;
+          if (l.includes('gemini vision') || line.trim().startsWith('🩺') || l.includes('быстрый анализ')) return false;
+          if (l.startsWith('---')) return false;
           
           // Определяем начало раздела источников, чтобы отсечь его
           if (l.includes('источники') || l.includes('references') || l.includes('sources')) {
@@ -166,59 +169,82 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
 
       // 3. ОСНОВНОЙ КОНТЕНТ
       let currentSectionText: string[] = [];
+      const sections: Record<string, any[]> = {};
+      let currentSectionName = 'SKIP'; // По умолчанию пропускаем всё до первого важного заголовка
 
       for (let i = 0; i < cleanedLines.length; i++) {
         const line = cleanedLines[i];
         const l = line.toLowerCase();
         
-        // Расширенное определение заголовка
+        // Поиск заголовков
         const isConclusionHeader = l.includes('заключение') || l.includes('impression') || l.includes('впечатление');
+        const isTechnicalHeader = l.includes('технические параметры') || l.includes('параметры записи') || l.includes('протокол описания');
+        
         const isRegularHeader = 
           line.match(/^\d+\.\s+[A-ZА-Я]/) || 
           isConclusionHeader ||
+          isTechnicalHeader ||
           (line === line.toUpperCase() && line.length > 3 && line.length < 50) ||
           l.includes('история /') || l.includes('техника /') || l.includes('находки /') || 
-          l.includes('обзор /') || l.includes('диагноз /') || l.includes('директива /') ||
-          l.includes('описание /');
+          l.includes('директива /') || l.includes('описание /');
 
         if (isRegularHeader) {
-          // Если был накопленный текст предыдущей секции, сбрасываем его
-          if (currentSectionText.length > 0) {
-            paragraphs.push(
+          // Если был накопленный текст предыдущей секции, сохраняем его
+          if (currentSectionText.length > 0 && currentSectionName !== 'SKIP') {
+            if (!sections[currentSectionName]) sections[currentSectionName] = [];
+            sections[currentSectionName].push(
               new Paragraph({
                 children: [new TextRun({ text: currentSectionText.join(' ').replace(/\s+/g, ' '), size: 18 })],
-                spacing: { after: 60, line: 240 },
+                spacing: { after: 120, line: 240 },
                 alignment: AlignmentType.JUSTIFY
               })
             );
-            currentSectionText = [];
+          }
+          currentSectionText = [];
+
+          // Определяем имя новой секции
+          if (isConclusionHeader) {
+            currentSectionName = 'CONCLUSION';
+          } else if (isTechnicalHeader) {
+            currentSectionName = 'TECHNICAL';
+          } else {
+            currentSectionName = 'SKIP';
           }
 
-          const headerText = line.replace(/^\d+\.\s+/, '').toUpperCase();
-          const finalHeader = isConclusionHeader ? "ЗАКЛЮЧЕНИЕ" : headerText;
-          
-          paragraphs.push(
-            new Paragraph({
-              children: [new TextRun({ 
-                text: finalHeader, 
-                bold: true, 
-                size: 18,
-                allCaps: true
-              })],
-              spacing: { before: 120, after: 60 },
-            })
-          )
-        } else {
-          // Накапливаем текст для "плотного потока"
-          // Убираем маркеры списков в начале накопленных строк
+          // Если это нужная секция, добавляем заголовок
+          if (currentSectionName !== 'SKIP') {
+            if (!sections[currentSectionName]) sections[currentSectionName] = [];
+            
+            // Если это ЗАКЛЮЧЕНИЕ и оно уже есть (дубль), очищаем, чтобы оставить только последнее
+            if (currentSectionName === 'CONCLUSION' && sections[currentSectionName].length > 0) {
+              sections[currentSectionName] = [];
+            }
+
+            const headerTitle = isConclusionHeader ? "ЗАКЛЮЧЕНИЕ" : (isTechnicalHeader ? "ТЕХНИЧЕСКИЕ ПАРАМЕТРЫ" : line.toUpperCase());
+
+            sections[currentSectionName].push(
+              new Paragraph({
+                children: [new TextRun({ 
+                  text: headerTitle, 
+                  bold: true, 
+                  size: 18,
+                  allCaps: true
+                })],
+                spacing: { before: 120, after: 60 },
+              })
+            );
+          }
+        } else if (currentSectionName !== 'SKIP') {
+          // Накапливаем текст только для нужных секций
           const cleanBodyLine = line.replace(/^[-*+•]\s+/, '').replace(/^\d+\.\s+/, '');
           currentSectionText.push(cleanBodyLine);
         }
       }
 
       // Сбрасываем последний накопленный текст
-      if (currentSectionText.length > 0) {
-        paragraphs.push(
+      if (currentSectionText.length > 0 && currentSectionName === 'CONCLUSION') {
+        if (!sections[currentSectionName]) sections[currentSectionName] = [];
+        sections[currentSectionName].push(
           new Paragraph({
             children: [new TextRun({ text: currentSectionText.join(' ').replace(/\s+/g, ' '), size: 18 })],
             spacing: { after: 120, line: 240 },
@@ -227,61 +253,30 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         );
       }
 
-      // 4. ВИЗУАЛЬНАЯ ВЕРИФИКАЦИЯ (Если есть снимки)
-      if (images && images.length > 0) {
-        paragraphs.push(
-          new Paragraph({
-            children: [new TextRun({ text: "ВИЗУАЛЬНАЯ ВЕРИФИКАЦИЯ / VISUAL EVIDENCE", bold: true, size: 18, allCaps: true })],
-            spacing: { before: 200, after: 100 },
-          })
-        );
+      // Добавляем секции в нужном порядке: Технические параметры -> Заключение
+      if (sections['TECHNICAL']) paragraphs.push(...sections['TECHNICAL']);
+      if (sections['CONCLUSION']) paragraphs.push(...sections['CONCLUSION']);
 
-        const imageChildren: any[] = [];
-        for (const base64Data of images.slice(0, 4)) { // Ограничиваем до 4 снимков для плотности
-          try {
-            const base64Content = base64Data.split(',')[1] || base64Data;
-            imageChildren.push(
-              new ImageRun({
-                data: Buffer.from(base64Content, 'base64'),
-                transformation: {
-                  width: images.length > 1 ? 250 : 500, // Если снимков много, делаем их меньше
-                  height: images.length > 1 ? 180 : 350,
-                },
-              })
-            );
-            // Добавляем пробел между картинками в ряду
-            imageChildren.push(new TextRun({ text: "   " }));
-          } catch (imgErr) {
-            console.error('Ошибка при вставке изображения в DOCX:', imgErr);
-          }
-        }
 
-        if (imageChildren.length > 0) {
-          paragraphs.push(
-            new Paragraph({
-              children: imageChildren,
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 200 },
-            })
-          );
-        }
-      }
+      // 4. ВИЗУАЛЬНАЯ ВЕРИФИКАЦИЯ (УДАЛЕНО ПО ЗАПРОСУ ПОЛЬЗОВАТЕЛЯ)
+      // Изображения больше не печатаются в DOCX
 
-      // 5. БЛОК ВЕРИФИКАЦИИ (компактно)
+
+      // 4. БЛОК ВЕРИФИКАЦИИ (компактно)
       paragraphs.push(new Paragraph({ 
         border: { top: { color: "000000", space: 1, value: "single", size: 6 } },
         children: [
           new TextRun({ text: "ВЕРИФИЦИРОВАНО ВРАЧОМ / VERIFIED BY PHYSICIAN", bold: true, size: 18 })
         ],
-        spacing: { before: 150, after: 40 },
+        spacing: { before: 300, after: 40 },
       }));
       
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: "Результаты автоматизированного анализа проверены и подтверждены. / Automated analysis results verified and confirmed.", size: 10, italics: true, color: "666666" }),
+            new TextRun({ text: "Данный отчет сформирован системой Doctor Opus и верифицирован врачом. / This report was generated by Doctor Opus and verified by a physician.", size: 10, italics: true, color: "666666" }),
           ],
-          spacing: { after: 80 },
+          spacing: { after: 120 },
         })
       )
 
@@ -299,11 +294,11 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           children: [
             new TextRun({ text: "                                     (подпись / signature)             (ФИО / Full Name)", size: 10, color: "999999" }),
           ],
-          spacing: { after: 120 },
+          spacing: { after: 200 },
         })
       )
 
-      // 6. ЮРИДИЧЕСКИЙ СТАТУС (Обязательный блок)
+      // 5. ЮРИДИЧЕСКИЙ СТАТУС (Обязательный блок в самом низу)
       paragraphs.push(
         new Paragraph({
           children: [
