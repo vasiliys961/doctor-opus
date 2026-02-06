@@ -6,6 +6,7 @@ import AudioUpload from '@/components/AudioUpload'
 import FileUpload from '@/components/FileUpload'
 import AnalysisTips from '@/components/AnalysisTips'
 import ReactMarkdown from 'react-markdown'
+import rehypeSanitize from 'rehype-sanitize'
 import { logUsage } from '@/lib/simple-logger'
 import { ChatSpecialistSelector } from '@/components/ChatSpecialistSelector'
 import { Specialty } from '@/lib/prompts'
@@ -692,6 +693,7 @@ export default function ChatPage() {
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                   ) : (
                     <ReactMarkdown
+                      rehypePlugins={[rehypeSanitize]}
                       components={{
                         h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-3 mb-2" {...props} />,
                         h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-2 mb-1" {...props} />,

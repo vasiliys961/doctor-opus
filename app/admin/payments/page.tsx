@@ -22,6 +22,7 @@ export default function AdminPaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [refunding, setRefunding] = useState<number | null>(null)
 
   const isAdmin = (session?.user as any)?.isAdmin
@@ -36,7 +37,8 @@ export default function AdminPaymentsPage() {
       const res = await fetch('/api/admin/payments')
       const data = await res.json()
       if (data.success) {
-        setPayments(data.payments)
+        setPayments(data.payments || [])
+        if (data.notice) setNotice(data.notice)
       } else {
         setError(data.error || 'Ошибка загрузки')
       }
@@ -144,6 +146,12 @@ export default function AdminPaymentsPage() {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6">
             {error}
+          </div>
+        )}
+
+        {notice && !error && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 p-4 rounded-xl mb-6">
+            ℹ️ {notice}
           </div>
         )}
 

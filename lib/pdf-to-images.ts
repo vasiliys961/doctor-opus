@@ -54,7 +54,7 @@ export async function convertPDFToImages(
         const canvasModule = require('canvas');
         createCanvas = canvasModule.createCanvas;
       } catch (e) {
-        throw new Error('Библиотека canvas недоступна. Установите: npm install canvas. Для работы с PDF на Vercel используйте альтернативный подход (загружайте изображения страниц PDF вместо самого PDF).');
+        throw new Error('Библиотека canvas недоступна. Установите: npm install canvas. Для работы с PDF загружайте изображения страниц PDF вместо самого PDF.');
       }
     }
     

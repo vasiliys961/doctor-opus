@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ [LAB IMAGES] Общая ошибка:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: 'Ошибка анализа лабораторных изображений' },
       { status: 500 }
     );
   }

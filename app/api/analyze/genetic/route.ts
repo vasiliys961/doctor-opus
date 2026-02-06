@@ -321,7 +321,7 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Внутренняя ошибка сервера',
+        error: 'Ошибка генетического анализа',
       },
       { status: 500 }
     );

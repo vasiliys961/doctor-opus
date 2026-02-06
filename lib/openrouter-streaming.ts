@@ -192,9 +192,10 @@ ${directivePrompt}`;
       }
     } catch (error: any) {
       console.error('Fast Stream Error:', error);
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
     } finally {
-      await writer.close();
+      if (heartbeat) clearInterval(heartbeat);
+      try { await writer.close(); } catch {}
     }
   })();
 
@@ -362,10 +363,11 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
 
     } catch (error: any) {
       console.error('Optimized Stream Error:', error);
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
     } finally {
       if (heartbeat) clearInterval(heartbeat);
-      await writer.close();
+      if (loadingInterval) clearInterval(loadingInterval);
+      try { await writer.close(); } catch {}
     }
   })();
 
@@ -526,11 +528,11 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
 
     } catch (error: any) {
       console.error('Multi-Optimized Stream Error:', error);
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       if (loadingInterval) clearInterval(loadingInterval);
-      await writer.close();
+      try { await writer.close(); } catch {};
     }
   })();
 
@@ -682,11 +684,11 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
       }
     } catch (error: any) {
       console.error('Multi-Validated Stream Error:', error);
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       if (loadingInterval) clearInterval(loadingInterval);
-      await writer.close();
+      try { await writer.close(); } catch {};
     }
   })();
 
@@ -859,10 +861,10 @@ export async function sendTextRequestStreaming(
     } catch (error: any) {
       if (heartbeat) clearInterval(heartbeat);
       console.error(`❌ [TEXT STREAM ERROR]:`, error);
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
     } finally {
       if (heartbeat) clearInterval(heartbeat);
-      await writer.close();
+      try { await writer.close(); } catch {}
     }
   })();
 
@@ -963,10 +965,10 @@ export async function analyzeImageStreaming(
       }
     } catch (error: any) {
       console.error(`❌ [IMAGE STREAM ERROR]:`, error);
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
     } finally {
       if (heartbeat) clearInterval(heartbeat);
-      await writer.close();
+      try { await writer.close(); } catch {}
     }
   })();
 
@@ -1066,10 +1068,10 @@ export async function analyzeMultipleImagesStreaming(
       }
     } catch (error: any) {
       console.error(`❌ [MULTI-IMAGE STREAM ERROR]:`, error);
-      await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
+      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
     } finally {
       if (heartbeat) clearInterval(heartbeat);
-      await writer.close();
+      try { await writer.close(); } catch {}
     }
   })();
 

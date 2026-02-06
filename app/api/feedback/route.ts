@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error in feedback API:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: 'Ошибка отправки отзыва' },
       { status: 500 }
     );
   }

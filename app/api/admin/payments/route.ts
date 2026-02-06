@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions, isAdminEmail } from "@/lib/auth";
-import { sql, initDatabase } from '@/lib/database';
 
 /**
  * GET /api/admin/payments — Список всех платежей для админ-панели
@@ -14,7 +13,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    await initDatabase();
+    // Проверяем наличие подключения к БД
+    const dbUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+    if (!dbUrl) {
+      return NextResponse.json({ 
+        success: true, 
+        payments: [],
+        notice: 'База данных не подключена (POSTGRES_URL не задан). Платежи будут доступны после настройки БД.'
+      });
+    }
+
+    const { sql, initDatabase } = await import('@/lib/database');
+    
+    try {
+      await initDatabase();
+    } catch (dbInitError: any) {
+      console.warn('⚠️ [ADMIN PAYMENTS] БД недоступна:', dbInitError.message);
+      return NextResponse.json({ 
+        success: true, 
+        payments: [],
+        notice: 'База данных временно недоступна. Проверьте подключение PostgreSQL.'
+      });
+    }
 
     const { rows } = await sql`
       SELECT 
@@ -37,6 +57,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, payments: rows });
   } catch (error: any) {
     console.error('❌ [ADMIN PAYMENTS] Ошибка:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ 
+      success: true, 
+      payments: [],
+      notice: 'Ошибка загрузки платежей'
+    });
   }
 }

@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ [PAYMENT CREATE] Ошибка:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Ошибка сервера' },
+      { success: false, error: 'Ошибка создания платежа' },
       { status: 500 }
     );
   }

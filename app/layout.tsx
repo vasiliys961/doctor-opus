@@ -4,6 +4,7 @@ import Navigation from '@/components/Navigation'
 import { Providers } from '@/components/Providers'
 import LegalFooter from '@/components/LegalFooter'
 import CookieBanner from '@/components/CookieBanner'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 export const metadata: Metadata = {
   title: 'Медицинский ИИ-Ассистент',
@@ -47,9 +48,11 @@ export default function RootLayout({
             
             {/* Основной контент с адаптивными отступами */}
             <main className="flex-1 flex flex-col pt-16 lg:pt-0 p-4 sm:p-6 lg:p-8">
-              <div className="flex-1">
-                {children}
-              </div>
+              <ErrorBoundary componentName="Основной контент">
+                <div className="flex-1">
+                  {children}
+                </div>
+              </ErrorBoundary>
               <LegalFooter />
             </main>
           </div>

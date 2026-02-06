@@ -28,7 +28,7 @@ function getPool(): Pool {
 }
 
 /**
- * Адаптер для тегированного sql — совместим с API @vercel/postgres.
+ * Адаптер для тегированного sql — совместим с pg (node-postgres).
  * Преобразует шаблон в запрос pg с плейсхолдерами $1, $2, ...
  */
 export function sql(
@@ -196,7 +196,7 @@ export async function savePatientNote(data: {
 
     const result = await sql`
       INSERT INTO patient_notes (patient_id, raw_text, structured_note, gdoc_url, diagnosis)
-      VALUES (${data.patient_id}, ${data.raw_text}, ${JSON.stringify(data.structured_note)}, ${data.gdoc_url}, ${data.diagnosis})
+      VALUES (${data.patient_id}, ${data.raw_text}, ${JSON.stringify(data.structured_note)}::jsonb, ${data.gdoc_url}, ${data.diagnosis})
       RETURNING id;
     `;
     return { success: true, id: result.rows[0].id };
@@ -211,9 +211,16 @@ export async function savePatientNote(data: {
  */
 export async function getPatientNotes(patientId?: string) {
   try {
-    const result = patientId
-      ? await sql`SELECT * FROM patient_notes WHERE patient_id = ${parseInt(patientId)} ORDER BY created_at DESC`
-      : await sql`SELECT * FROM patient_notes ORDER BY created_at DESC LIMIT 100`;
+    let result;
+    if (patientId) {
+      const id = parseInt(patientId, 10);
+      if (isNaN(id) || id <= 0) {
+        return { success: false, error: 'Invalid patient ID', notes: [] };
+      }
+      result = await sql`SELECT * FROM patient_notes WHERE patient_id = ${id} ORDER BY created_at DESC`;
+    } else {
+      result = await sql`SELECT * FROM patient_notes ORDER BY created_at DESC LIMIT 100`;
+    }
     const { rows } = result;
     return { success: true, notes: rows };
   } catch (error) {
@@ -277,18 +284,32 @@ export async function createPayment(data: {
 }
 
 /**
- * Подтверждение платежа и начисление единиц
+ * Подтверждение платежа и начисление единиц.
+ * ИДЕМПОТЕНТНАЯ операция: повторный вызов для уже подтверждённого платежа
+ * не зачислит баланс повторно (WHERE status = 'pending').
  */
 export async function confirmPayment(paymentId: number, transactionId: string) {
   try {
+    // Атомарная операция: обновляем ТОЛЬКО если статус = 'pending'
+    // Это гарантирует идемпотентность — повторный webhook не зачислит дважды
     const { rows } = await sql`
       UPDATE payments 
       SET status = 'completed', transaction_id = ${transactionId}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${paymentId}
+      WHERE id = ${paymentId} AND status = 'pending'
       RETURNING email, units;
     `;
 
-    if (rows.length === 0) throw new Error('Платеж не найден');
+    if (rows.length === 0) {
+      // Проверяем: платеж не найден или уже обработан?
+      const { rows: existing } = await sql`
+        SELECT id, status FROM payments WHERE id = ${paymentId}
+      `;
+      if (existing.length > 0 && existing[0].status === 'completed') {
+        console.log(`ℹ️ [DATABASE] Платеж #${paymentId} уже был подтверждён (идемпотентность)`);
+        return { success: true, alreadyProcessed: true };
+      }
+      throw new Error('Платеж не найден или имеет некорректный статус');
+    }
 
     const { email, units } = rows[0];
 

@@ -79,7 +79,7 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error('Labs analysis error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Ошибка анализа лабораторных данных' }, { status: 500 });
   }
 }
 

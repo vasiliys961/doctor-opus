@@ -24,7 +24,7 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error('Error fetching training stats:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Ошибка загрузки статистики' }, { status: 500 });
   }
 }
 

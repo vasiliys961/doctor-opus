@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { transcribeAudio } from '@/lib/assemblyai';
+import { getSpeechProvider } from '@/lib/speech-provider';
 import { deductBalance } from '@/lib/subscription-manager';
 import { AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE } from '@/lib/cost-calculator';
 
 /**
- * API endpoint для транскрипции аудио через AssemblyAI
+ * API endpoint для транскрипции аудио.
+ * Провайдер выбирается через SPEECH_PROVIDER env (assemblyai | yandex).
+ * По умолчанию — AssemblyAI.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -25,10 +27,10 @@ export async function POST(request: NextRequest) {
       sizeInMB: (file.size / 1024 / 1024).toFixed(2)
     })
 
-    // Проверка размера файла (максимум 2GB для AssemblyAI)
-    if (file.size > 2 * 1024 * 1024 * 1024) {
+    // Проверка размера файла (максимум 500MB)
+    if (file.size > 500 * 1024 * 1024) {
       return NextResponse.json(
-        { success: false, error: 'Файл слишком большой (максимум 2GB)' },
+        { success: false, error: 'Файл слишком большой (максимум 500MB)' },
         { status: 400 }
       );
     }
@@ -50,16 +52,16 @@ export async function POST(request: NextRequest) {
       } else if (extension === 'mp3') {
         mimeType = 'audio/mpeg'
       } else {
-        // Дефолтное значение для WebM
         mimeType = 'audio/webm'
       }
       console.log(`🔧 MIME тип не определен, использую: ${mimeType} (по расширению: ${extension})`)
     }
 
-    console.log('🚀 Отправка в AssemblyAI с MIME:', mimeType)
+    // Получаем провайдер (AssemblyAI или Yandex SpeechKit)
+    const provider = getSpeechProvider();
+    console.log(`🚀 Транскрипция через ${provider.name} с MIME:`, mimeType)
 
-    // Вызов AssemblyAI API
-    const { text, duration } = await transcribeAudio(arrayBuffer, mimeType);
+    const { text, duration } = await provider.transcribe(arrayBuffer, mimeType);
 
     // Расчет стоимости
     const durationMinutes = duration / 60;
@@ -69,24 +71,25 @@ export async function POST(request: NextRequest) {
     deductBalance({
       section: 'audio',
       sectionName: 'Транскрипция аудио',
-      model: 'assemblyai-best',
-      inputTokens: Math.round(duration), // Используем секунды как "входные токены" для логов
+      model: `${provider.name.toLowerCase().replace(/\s+/g, '-')}-best`,
+      inputTokens: Math.round(duration),
       outputTokens: 0,
       operation: 'Audio Transcription'
     });
 
-    console.log('✅ Транскрипция завершена успешно', { duration, cost })
+    console.log(`✅ Транскрипция завершена (${provider.name})`, { duration, cost })
 
     return NextResponse.json({
       success: true,
       transcript: text,
       duration: duration,
-      cost: cost
+      cost: cost,
+      provider: provider.name
     });
   } catch (error: any) {
     console.error('Error transcribing audio:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: 'Ошибка транскрипции аудио' },
       { status: 500 }
     );
   }

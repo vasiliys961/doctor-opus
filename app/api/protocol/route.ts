@@ -68,6 +68,6 @@ ${customTemplate}
     let result = await sendTextRequest(prompt, []);
     return NextResponse.json({ success: true, protocol: result });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Ошибка генерации протокола' }, { status: 500 });
   }
 }

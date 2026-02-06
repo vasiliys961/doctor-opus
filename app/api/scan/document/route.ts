@@ -147,7 +147,7 @@ ${prompt}`;
   } catch (error: any) {
     console.error('Error scanning document:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: 'Ошибка сканирования документа' },
       { status: 500 }
     );
   }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { sql, getDbClient } from '@/lib/database';
+import { checkRateLimit, RATE_LIMIT_BILLING, getRateLimitKey } from '@/lib/rate-limiter';
 
 /**
  * Doctor Opus v3.40.0 - Серверный биллинг с транзакциями
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ [BILLING] Error getting balance:', error);
     return NextResponse.json(
-      { error: 'Failed to get balance', details: error.message },
+      { error: 'Failed to get balance' },
       { status: 500 }
     );
   }
@@ -99,13 +100,33 @@ export async function POST(request: NextRequest) {
     }
 
     const email = session.user.email;
+
+    // Rate limiting
+    const rlKey = getRateLimitKey(request, email);
+    const rl = checkRateLimit(rlKey, RATE_LIMIT_BILLING);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests', message: 'Подождите перед следующей операцией.' },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { amount, operation, metadata = {} } = body;
 
     // Валидация входных данных
+    const MAX_SINGLE_DEDUCTION = 50; // Макс. списание за одну операцию (единицы)
+    
     if (typeof amount !== 'number' || amount <= 0) {
       return NextResponse.json(
         { error: 'Invalid amount', message: 'Amount must be a positive number' },
+        { status: 400 }
+      );
+    }
+
+    if (amount > MAX_SINGLE_DEDUCTION) {
+      return NextResponse.json(
+        { error: 'Amount too large', message: `Максимальное списание: ${MAX_SINGLE_DEDUCTION} ед.` },
         { status: 400 }
       );
     }
@@ -214,8 +235,7 @@ export async function POST(request: NextRequest) {
     console.error('❌ [BILLING] Deduction error:', error);
     return NextResponse.json(
       { 
-        error: 'Failed to deduct credits', 
-        details: error.message 
+        error: 'Failed to deduct credits'
       },
       { status: 500 }
     );

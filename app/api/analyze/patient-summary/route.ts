@@ -52,6 +52,6 @@ ${history.map((h: any) => `[${h.date}] ${h.type.toUpperCase()}: ${h.conclusion.s
 
     return NextResponse.json({ success: true, summary });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Ошибка формирования сводки' }, { status: 500 });
   }
 }

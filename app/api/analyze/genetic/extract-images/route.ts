@@ -337,7 +337,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Внутренняя ошибка сервера',
+        error: 'Ошибка извлечения генетических данных',
       },
       { status: 500 }
     );

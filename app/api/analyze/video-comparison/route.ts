@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ [VIDEO COMPARISON API] Ошибка:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Ошибка сервера' },
+      { success: false, error: 'Ошибка сравнительного анализа видео' },
       { status: 500 }
     );
   }

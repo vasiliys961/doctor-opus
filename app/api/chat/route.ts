@@ -5,6 +5,7 @@ import { sendTextRequestWithFiles, sendTextRequestStreamingWithFiles } from '@/l
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText, anonymizeObject } from '@/lib/anonymization';
+import { checkRateLimit, RATE_LIMIT_CHAT, getRateLimitKey } from '@/lib/rate-limiter';
 
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
@@ -15,16 +16,24 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
+    // Проверка авторизации
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.email) {
       return NextResponse.json(
         { success: false, error: 'Необходима авторизация' },
         { status: 401 }
       );
     }
-    */
+
+    // Rate limiting
+    const rlKey = getRateLimitKey(request, session.user.email);
+    const rl = checkRateLimit(rlKey, RATE_LIMIT_CHAT);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Превышен лимит запросов. Подождите.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
+    }
 
     const contentType = request.headers.get('content-type') || '';
     
@@ -175,10 +184,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('🔴 [CHAT API ERROR]:', error);
-    // Выводим стек ошибки для точного понимания места падения
     console.error('🔴 [STACK]:', error.stack);
+    const { safeErrorMessage } = await import('@/lib/safe-error');
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: safeErrorMessage(error, 'Ошибка обработки запроса') },
       { status: 500 }
     );
   }

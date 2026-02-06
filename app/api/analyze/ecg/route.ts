@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ [ECG ANALYSIS] Ошибка:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: 'Ошибка анализа ЭКГ' },
       { status: 500 }
     );
   }

@@ -175,23 +175,24 @@ export async function extractAndAnonymizeFrames(
   // 4. Создаем video элемент
   const video = document.createElement('video');
   video.preload = 'auto';
-  video.src = URL.createObjectURL(videoFile);
-  
-  await new Promise<void>((resolve, reject) => {
-    video.onloadedmetadata = () => resolve();
-    video.onerror = () => reject(new Error('Ошибка загрузки видео'));
-  });
+  const objectUrl = URL.createObjectURL(videoFile);
+  video.src = objectUrl;
   
   const extractedFrames: ExtractedFrame[] = [];
   
-  // 5. Извлекаем и анонимизируем каждый кадр
-  for (let i = 0; i < frameCount; i++) {
-    const timePercent = positions[i];
-    const timeSeconds = duration * timePercent;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      video.onloadedmetadata = () => resolve();
+      video.onerror = () => reject(new Error('Ошибка загрузки видео'));
+    });
     
-    console.log(`🎞️ [Frame Extractor] Кадр ${i + 1}/${frameCount}: ${timeSeconds.toFixed(1)}с (${(timePercent * 100).toFixed(0)}%)`);
-    
-    try {
+    // 5. Извлекаем и анонимизируем каждый кадр
+    for (let i = 0; i < frameCount; i++) {
+      const timePercent = positions[i];
+      const timeSeconds = duration * timePercent;
+      
+      console.log(`🎞️ [Frame Extractor] Кадр ${i + 1}/${frameCount}: ${timeSeconds.toFixed(1)}с (${(timePercent * 100).toFixed(0)}%)`);
+      
       // Извлекаем кадр
       const canvas = await extractFrameAtTime(video, timeSeconds);
       
@@ -218,19 +219,21 @@ export async function extractAndAnonymizeFrames(
       if (onProgress) {
         onProgress(i + 1, frameCount);
       }
-      
-    } catch (err) {
-      console.error(`❌ [Frame Extractor] Ошибка при обработке кадра ${i + 1}:`, err);
-      throw err;
     }
+    
+    console.log(`✅ [Frame Extractor] Успешно извлечено и анонимизировано ${extractedFrames.length} кадров`);
+    
+    return extractedFrames;
+  } catch (err) {
+    console.error(`❌ [Frame Extractor] Ошибка при извлечении кадров:`, err);
+    throw err;
+  } finally {
+    // Гарантированная очистка ресурсов
+    URL.revokeObjectURL(objectUrl);
+    video.src = '';
+    video.load(); // Сброс буфера видео
+    video.remove();
   }
-  
-  // Очистка
-  URL.revokeObjectURL(video.src);
-  
-  console.log(`✅ [Frame Extractor] Успешно извлечено и анонимизировано ${extractedFrames.length} кадров`);
-  
-  return extractedFrames;
 }
 
 /**

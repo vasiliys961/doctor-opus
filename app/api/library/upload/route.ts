@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     console.error('Upload handler error:', error);
     return NextResponse.json({ 
       success: false, 
-      error: error.message || 'Ошибка сервера' 
+      error: 'Ошибка загрузки в библиотеку' 
     }, { status: 500 });
   } finally {
     // 5. Всегда удаляем временные файлы

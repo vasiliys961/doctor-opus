@@ -1,32 +1,25 @@
-import { Resend } from 'resend';
+/**
+ * Сервис отправки email.
+ * Провайдер выбирается через EMAIL_PROVIDER env (resend | smtp).
+ * По умолчанию — Resend. Для Timeweb SMTP установите EMAIL_PROVIDER=smtp.
+ */
 
-// Не инициализируем сразу, чтобы не ломать сборку на Vercel
-let resendInstance: Resend | null = null;
-
-function getResend() {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return null;
-  if (!resendInstance) {
-    resendInstance = new Resend(apiKey);
-  }
-  return resendInstance;
-}
+import { getEmailProvider } from './email-provider';
 
 /**
  * Отправка приветственного письма врачу
  */
 export async function sendWelcomeEmail(email: string, name: string = 'коллега') {
   try {
-    const resend = getResend();
-    
-    if (!resend) {
-      console.warn('⚠️ [EMAIL] RESEND_API_KEY не настроен или пуст. Письмо не отправлено.');
-      return { success: false, error: 'API Key missing' };
+    const provider = getEmailProvider();
+
+    if (!provider) {
+      console.warn('⚠️ [EMAIL] Провайдер не настроен. Письмо не отправлено.');
+      return { success: false, error: 'Email provider not configured' };
     }
 
-    const { data, error } = await resend.emails.send({
-      from: 'Doctor Opus <onboarding@resend.dev>', // Позже замените на свой домен
-      to: [email],
+    const result = await provider.send({
+      to: email,
       subject: 'Добро пожаловать в Doctor Opus, коллега! 🩺',
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a202c;">
@@ -56,16 +49,15 @@ export async function sendWelcomeEmail(email: string, name: string = 'колле
       `,
     });
 
-    if (error) {
-      console.error('❌ [EMAIL] Ошибка Resend:', error);
-      return { success: false, error };
+    if (!result.success) {
+      console.error('❌ [EMAIL] Ошибка:', result.error);
+      return result;
     }
 
-    console.log('✅ [EMAIL] Приветственное письмо отправлено:', email);
-    return { success: true, data };
+    console.log(`✅ [EMAIL] Приветственное письмо отправлено (${provider.name}):`, email);
+    return result;
   } catch (err) {
     console.error('❌ [EMAIL] Критическая ошибка отправки:', err);
     return { success: false, error: err };
   }
 }
-

@@ -335,7 +335,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Внутренняя ошибка сервера',
+        error: 'Ошибка генетической консультации',
       },
       { status: 500 }
     );

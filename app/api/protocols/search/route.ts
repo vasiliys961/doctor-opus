@@ -306,7 +306,7 @@ ${specialty ? `Специальность: ${specialty}` : ''}
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message || 'Внутренняя ошибка сервера' 
+        error: 'Ошибка поиска протоколов' 
       },
       { status: 500 }
     );

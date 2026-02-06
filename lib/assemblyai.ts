@@ -1,7 +1,11 @@
 /**
  * AssemblyAI клиент для транскрипции аудио
  * Переписанная версия Python логики из assemblyai_transcriber.py
+ * 
+ * Реализует интерфейс SpeechProvider для универсального переключения
  */
+
+import type { SpeechProvider, TranscriptionResult } from './speech-provider';
 
 const ASSEMBLYAI_API_URL = 'https://api.assemblyai.com/v2';
 
@@ -15,6 +19,18 @@ interface TranscriptionConfig {
 }
 
 /**
+ * Провайдер транскрипции через AssemblyAI (США).
+ * Основной провайдер по умолчанию.
+ */
+export class AssemblyAIProvider implements SpeechProvider {
+  readonly name = 'AssemblyAI';
+
+  async transcribe(audioData: ArrayBuffer, mimeType: string = 'audio/webm'): Promise<TranscriptionResult> {
+    return transcribeAudio(audioData, mimeType);
+  }
+}
+
+/**
  * Транскрипция аудио через AssemblyAI
  * Использует ту же логику, что и Python assemblyai_transcriber.py
  */
@@ -23,7 +39,7 @@ export async function transcribeAudio(audioData: ArrayBuffer, mimeType: string =
   
   if (!apiKey) {
     console.error('ASSEMBLYAI_API_KEY не найден в переменных окружения');
-    throw new Error('ASSEMBLYAI_API_KEY не настроен. Проверьте настройки Vercel.');
+    throw new Error('ASSEMBLYAI_API_KEY не настроен. Проверьте переменные окружения.');
   }
 
   try {

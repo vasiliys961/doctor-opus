@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions, isAdminEmail } from "@/lib/auth";
-import { sql, initDatabase } from '@/lib/database';
 
 /**
  * POST /api/admin/payments/refund — Подтверждение возврата средств
@@ -26,6 +25,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Не указан ID платежа' }, { status: 400 });
     }
 
+    const { sql, initDatabase } = await import('@/lib/database');
     await initDatabase();
 
     // 1. Получаем информацию о платеже
@@ -81,6 +81,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('❌ [ADMIN REFUND] Ошибка:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Ошибка обработки возврата' }, { status: 500 });
   }
 }

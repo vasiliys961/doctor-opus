@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Временное хранилище в памяти (работает в режиме разработки и на одном инстансе)
-// Для продакшена на Vercel здесь должна быть база данных (Redis/Vercel KV/Postgres)
+// Для продакшена здесь должна быть база данных (Redis/Postgres)
 const syncSessions: Record<string, { image: string | null, timestamp: number }> = {};
 
 // Очистка старых сессий каждые 10 минут
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: false, error: 'Invalid action or missing data' }, { status: 400 });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Ошибка синхронизации' }, { status: 500 });
   }
 }
 

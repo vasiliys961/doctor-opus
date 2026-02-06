@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
         console.error('Error processing text file:', error);
         return NextResponse.json({
           success: false,
-          error: `Ошибка обработки ${fileType} файла: ${error.message}`,
+          error: `Ошибка обработки ${fileType} файла`,
         }, { status: 500 });
       }
     }
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
         console.error('Error processing VCF.GZ file:', error);
         return NextResponse.json({
           success: false,
-          error: `Ошибка обработки VCF.GZ файла: ${error.message}`,
+          error: 'Ошибка обработки VCF.GZ файла',
         }, { status: 500 });
       }
     }
@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
         console.error('Error processing Excel file:', error);
         return NextResponse.json({
           success: false,
-          error: `Ошибка обработки Excel файла: ${error.message}`,
+          error: 'Ошибка обработки Excel файла',
         }, { status: 500 });
       }
     }
@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
         console.error('Error processing ZIP file:', error);
         return NextResponse.json({
           success: false,
-          error: `Ошибка обработки ZIP архива: ${error.message}`,
+          error: 'Ошибка обработки ZIP архива',
         }, { status: 500 });
       }
     }
@@ -336,7 +336,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error extracting file data:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: 'Ошибка извлечения данных из файла' },
       { status: 500 }
     );
   }

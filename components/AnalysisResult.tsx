@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
-import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer, ImageRun } from 'docx'
-import { saveAs } from 'file-saver'
+import rehypeSanitize from 'rehype-sanitize'
 import { saveAnalysisResult, getAllPatients, Patient } from '@/lib/patient-db'
 import LibrarySearch from './LibrarySearch'
 
@@ -92,6 +91,10 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   const handleDownloadDoc = async () => {
     setDownloading(true)
     try {
+      // Dynamic import тяжёлых библиотек (~500KB) — грузятся только при скачивании
+      const { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer, ImageRun } = await import('docx');
+      const { saveAs } = await import('file-saver');
+
       // Агрессивная очистка текста для чистого клинического экспорта v3.50
       let isSourcesSection = false;
       const cleanedLines = result
@@ -539,15 +542,17 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   }
 
   const handleTransferToConsultant = () => {
-    // Сохраняем результат анализа для ИИ-Ассистента
+    // Передаём только краткую сводку (первые 2000 символов) и метаданные.
+    // Полный результат не сохраняем в sessionStorage для безопасности ПДн.
+    const truncated = result.length > 2000 ? result.substring(0, 2000) + '\n\n[...результат сокращён для передачи]' : result;
     const data = {
-      text: result,
+      text: truncated,
       type: imageType,
       model: model,
       timestamp: new Date().toISOString()
     };
     sessionStorage.setItem('pending_analysis', JSON.stringify(data));
-    router.push('/chat'); // ИИ-Ассистент находится по адресу /chat
+    router.push('/chat');
   };
 
   // Если есть результат, показываем его даже во время загрузки (для streaming)
@@ -718,6 +723,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           }}
         >
           <ReactMarkdown
+            rehypePlugins={[rehypeSanitize]}
             className="[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-6 [&_h1]:mb-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-5 [&_h2]:mb-3 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:mt-4 [&_h3]:mb-2 [&_h4]:text-base [&_h4]:font-semibold [&_h4]:mt-3 [&_h4]:mb-2 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-3 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:mb-3 [&_ol]:space-y-1 [&_li]:mb-1 [&_strong]:font-semibold [&_strong]:text-gray-900 [&_code]:bg-gray-100 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-gray-100 [&_pre]:p-4 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:mb-3 [&_blockquote]:border-l-4 [&_blockquote]:border-gray-300 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-gray-700 [&_table]:w-full [&_table]:border-collapse [&_table]:mb-3 [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-4 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_td]:border [&_td]:border-gray-300 [&_td]:px-4 [&_td]:py-2"
           >
             {result}

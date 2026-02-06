@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ [LAB] Общая ошибка анализа:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: 'Ошибка анализа лабораторных данных' },
       { status: 500 }
     );
   }

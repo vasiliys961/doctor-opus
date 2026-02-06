@@ -20,11 +20,15 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
+import { checkRateLimit, RATE_LIMIT_ANALYSIS, getRateLimitKey } from '@/lib/rate-limiter';
 
 const execPromise = promisify(exec);
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
+
+// Лимит размера файла: 50MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -43,11 +47,30 @@ export async function POST(request: NextRequest) {
   };
 
   try {
+    // Rate limiting
+    const session = await getServerSession(authOptions);
+    const rlKey = getRateLimitKey(request, session?.user?.email);
+    const rl = checkRateLimit(rlKey, RATE_LIMIT_ANALYSIS);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Превышен лимит запросов. Подождите.' },
+        { status: 429 }
+      );
+    }
+
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) return NextResponse.json({ success: false, error: 'OPENROUTER_API_KEY not set' }, { status: 500 });
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
+
+    // Проверка размера файлов
+    if (file && file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { success: false, error: `Файл слишком большой (${(file.size / 1024 / 1024).toFixed(1)}MB). Максимум: 50MB.` },
+        { status: 400 }
+      );
+    }
     const prompt = anonymizeText(formData.get('prompt') as string || 'Проанализируйте медицинское изображение.');
     const clinicalContext = anonymizeText(formData.get('clinicalContext') as string || '');
     const mode = (formData.get('mode') as string) || 'optimized';
@@ -188,6 +211,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: 1.5 });
     }
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    const { safeErrorMessage } = await import('@/lib/safe-error');
+    return NextResponse.json({ success: false, error: safeErrorMessage(error, 'Ошибка анализа изображения') }, { status: 500 });
   }
 }

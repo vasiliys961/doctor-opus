@@ -189,7 +189,7 @@ ${pagePrompt}`;
   } catch (error: any) {
     console.error('❌ [DOC IMAGES] Общая ошибка:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: 'Ошибка обработки изображений документа' },
       { status: 500 }
     );
   }

@@ -10,8 +10,8 @@ import { safeLog, safeError, safeWarn } from './logger';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// В Next.js 14 и Vercel используется встроенный fetch из Node.js 18+
-// fetch доступен глобально в serverless функциях Vercel
+// В Next.js 14 используется встроенный fetch из Node.js 18+
+// fetch доступен глобально на сервере
 
 // Актуальные модели (последние флагманы 2025-2026)
 export const MODELS = {
@@ -96,7 +96,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   
   if (!apiKey) {
     safeError('OPENROUTER_API_KEY не найден в переменных окружения');
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
+    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
   }
 
   // Выбираем модель в зависимости от режима
@@ -244,7 +244,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     }
     
     if (error.message.includes('fetch failed') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
-      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки Vercel.');
+      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки сервера.');
     }
     
     throw new Error(`Ошибка анализа изображения: ${error.message}`);
@@ -706,7 +706,7 @@ export async function analyzeMultipleImages(options: {
   
   if (!apiKey) {
     safeError('OPENROUTER_API_KEY не найден в переменных окружения');
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
+    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
   }
 
   if (options.imagesBase64.length === 0) {
@@ -822,7 +822,7 @@ export async function analyzeMultipleImages(options: {
     }
     
     if (error.message.includes('fetch failed') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
-      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки Vercel.');
+      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки сервера.');
     }
     
     throw new Error(`Ошибка анализа множественных изображений: ${error.message}`);
@@ -843,7 +843,7 @@ export async function sendTextRequest(
   
   if (!apiKey) {
     safeError('OPENROUTER_API_KEY не найден в переменных окружения');
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте настройки Vercel.');
+    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
   }
 
   const selectedModel = model;
@@ -934,7 +934,7 @@ export async function sendTextRequest(
     }
     
     if (error.message.includes('fetch failed') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
-      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки Vercel.');
+      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки сервера.');
     }
     
     throw new Error(`Ошибка запроса: ${error.message}`);

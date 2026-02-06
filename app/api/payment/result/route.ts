@@ -2,8 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { paymentService } from "@/lib/payment/payment-service";
 import { confirmPayment, initDatabase } from "@/lib/database";
 
+// IP-адреса платежных систем (обновите при подключении конкретного провайдера)
+// Robokassa: https://docs.robokassa.ru/pay-interface/#ip-whitelist
+const PAYMENT_IP_WHITELIST = (process.env.PAYMENT_IP_WHITELIST || '')
+  .split(',')
+  .map(ip => ip.trim())
+  .filter(Boolean);
+
+function getClientIP(request: NextRequest): string {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || request.headers.get('x-real-ip')
+    || 'unknown';
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // IP-фильтрация (если whitelist настроен)
+    if (PAYMENT_IP_WHITELIST.length > 0) {
+      const clientIP = getClientIP(request);
+      if (!PAYMENT_IP_WHITELIST.includes(clientIP)) {
+        console.warn(`⚠️ [PAYMENT RESULT] Запрос с неразрешённого IP: ${clientIP}`);
+        return new Response('forbidden', { status: 403 });
+      }
+    }
+
     const data = await request.formData();
     const params: Record<string, string> = {};
     data.forEach((value, key) => {
