@@ -23,11 +23,13 @@ const SPECIALTIES = [
 
 export default function SignIn() {
   const [email, setEmail] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!agreed) return;
     setStatus('loading');
 
     try {
@@ -88,11 +90,30 @@ export default function SignIn() {
             </div>
           </div>
 
+          <div className="flex items-start gap-3 px-1">
+            <div className="flex h-5 items-center">
+              <input
+                id="consent"
+                name="consent"
+                type="checkbox"
+                required
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600 transition-all cursor-pointer"
+              />
+            </div>
+            <div className="text-xs leading-tight text-slate-500">
+              <label htmlFor="consent" className="cursor-pointer">
+                Я даю <a href="/docs/consent" className="text-teal-600 hover:underline">согласие на обработку персональных данных</a> и принимаю условия <a href="/docs/offer" className="text-teal-600 hover:underline">Публичной оферты</a>
+              </label>
+            </div>
+          </div>
+
           <div className="pt-2">
             <button
               type="submit"
-              disabled={status === 'loading'}
-              className="group relative flex w-full justify-center rounded-xl bg-teal-600 px-3 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-200 hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 disabled:opacity-50 transition-all active:scale-[0.98]"
+              disabled={status === 'loading' || !agreed}
+              className="group relative flex w-full justify-center rounded-xl bg-teal-600 px-3 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-200 hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 disabled:opacity-50 disabled:bg-slate-400 disabled:shadow-none transition-all active:scale-[0.98]"
             >
               {status === 'loading' ? (
                 <span className="flex items-center">
@@ -106,11 +127,9 @@ export default function SignIn() {
             </button>
           </div>
 
-          <div className="text-center">
-            <p className="text-[10px] text-slate-400 leading-relaxed px-4">
-              Нажимая кнопку «Начать работу», вы принимаете условия{' '}
-              <a href="/docs/offer" className="text-teal-600 hover:underline">Публичной оферты</a> и{' '}
-              <a href="/docs/privacy" className="text-teal-600 hover:underline">Политики конфиденциальности</a>
+          <div className="text-center pt-2">
+            <p className="text-[10px] text-slate-400">
+              Вход осуществляется по рабочему Email.
             </p>
           </div>
 

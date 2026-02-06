@@ -3,6 +3,7 @@ import './globals.css'
 import Navigation from '@/components/Navigation'
 import { Providers } from '@/components/Providers'
 import LegalFooter from '@/components/LegalFooter'
+import CookieBanner from '@/components/CookieBanner'
 
 export const metadata: Metadata = {
   title: 'Медицинский ИИ-Ассистент',
@@ -52,6 +53,7 @@ export default function RootLayout({
               <LegalFooter />
             </main>
           </div>
+          <CookieBanner />
         </Providers>
       </body>
     </html>

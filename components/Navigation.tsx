@@ -37,6 +37,8 @@ export default function Navigation() {
     { name: '📊 Расход единиц', href: '/statistics' },
   ]
 
+  const isAdmin = (session?.user as any)?.isAdmin
+
   const toggleMenu = () => setIsOpen(!isOpen)
   const closeMenu = () => setIsOpen(false)
 
@@ -164,6 +166,21 @@ export default function Navigation() {
               )
             })}
           </div>
+          {isAdmin && (
+            <div className="mt-4 pt-4 border-t border-primary-700">
+              <Link
+                href="/admin/payments"
+                onClick={closeMenu}
+                className={`block w-full text-left py-2.5 px-4 rounded-lg transition-all touch-manipulation text-sm ${
+                  pathname === '/admin/payments'
+                    ? 'bg-red-600 text-white font-bold shadow-md ring-2 ring-red-300'
+                    : 'bg-red-500/20 text-red-200 hover:bg-red-500/30 border border-red-500/30'
+                }`}
+              >
+                ⚙️ Админ-панель (Платежи)
+              </Link>
+            </div>
+          )}
           <div className="mt-6 p-4 bg-primary-800/50 rounded-lg text-sm border border-primary-700">
             <p className="font-semibold mb-1">Клинический Ассистент v3.50</p>
             <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Clinical Edition</p>

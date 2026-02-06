@@ -38,11 +38,44 @@ export default function PrivacyPage() {
       </section>
       
       <section className="bg-blue-50 p-6 rounded-xl border border-blue-100">
-        <p className="text-blue-900 font-medium">
+        <p className="text-blue-900 font-medium mb-4">
           <strong>Важно:</strong> Мы не получаем и не храним персональную информацию ваших пациентов на наших серверах. 
           Технически база данных пациентов реализована на стороне вашего браузера, что гарантирует максимальную защиту в соответствии с 152-ФЗ.
           При анализе снимков ИИ обрабатывает только анонимизированные пиксели.
         </p>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-xl font-bold text-gray-900 mb-3">4. Использование файлов Cookie</h2>
+        <p className="mb-4">Для корректной работы сервиса и обеспечения безопасности сессий используются следующие технические файлы cookie:</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="border p-2">Название</th>
+                <th className="border p-2">Назначение</th>
+                <th className="border p-2">Срок жизни</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border p-2 font-mono">next-auth.session-token</td>
+                <td className="border p-2">Идентификатор активной сессии врача</td>
+                <td className="border p-2">30 дней</td>
+              </tr>
+              <tr>
+                <td className="border p-2 font-mono">next-auth.callback-url</td>
+                <td className="border p-2">Технический параметр перенаправления</td>
+                <td className="border p-2">Сессия</td>
+              </tr>
+              <tr>
+                <td className="border p-2 font-mono">cookie-consent</td>
+                <td className="border p-2">Хранение выбора пользователя по куки</td>
+                <td className="border p-2">1 год</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </LegalPageLayout>
   )

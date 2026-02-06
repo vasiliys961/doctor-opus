@@ -26,6 +26,18 @@ export interface PaymentProvider {
    * Success response string or object for the payment system's webhook
    */
   getSuccessResponse(orderId: string): string | object;
+
+  /**
+   * Refund a payment (partial or full).
+   * Returns success status. Implementation depends on the provider.
+   */
+  refund?(transactionId: string, amount: number): Promise<{
+    success: boolean;
+    refundId?: string;
+    error?: string;
+  }>;
 }
 
 export type PaymentProviderType = 'robokassa' | 'tinkoff' | 'prodamus' | 'yoomoney' | 'botoplat';
+
+export type RefundStatus = 'pending' | 'approved' | 'completed' | 'rejected';

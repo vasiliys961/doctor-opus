@@ -40,7 +40,7 @@ export async function middleware(request: NextRequest) {
   const publicApiPaths = [
     '/api/auth',           // NextAuth (login, session, providers)
     '/api/payment/result', // КРИТИЧНО: Webhook для платежей Robokassa
-    '/api/admin',          // Миграции БД (защищены MIGRATION_SECRET)
+    '/api/admin/migrate',  // Миграции БД (защищены MIGRATION_SECRET)
   ];
   
   // Проверка публичных путей
@@ -130,5 +130,6 @@ export const config = {
     '/statistics/:path*',
     '/balance/:path*',
     '/subscription/:path*',
+    '/admin/:path*',
   ],
 };

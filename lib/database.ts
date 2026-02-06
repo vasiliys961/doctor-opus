@@ -321,3 +321,25 @@ export async function getUserBalance(email: string) {
     return 0;
   }
 }
+
+/**
+ * Удаление аккаунта пользователя и всех связанных данных (Право на забвение)
+ */
+export async function deleteUserAccount(email: string) {
+  try {
+    // 1. Удаляем баланс
+    await sql`DELETE FROM user_balances WHERE email = ${email}`;
+    
+    // 2. Удаляем платежи
+    await sql`DELETE FROM payments WHERE email = ${email}`;
+    
+    // 3. Удаляем согласия
+    await sql`DELETE FROM consents WHERE email = ${email}`;
+    
+    console.log(`🗑️ [DATABASE] Аккаунт пользователя ${email} полностью удален.`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ [DATABASE] Ошибка при удалении аккаунта:', error);
+    return { success: false, error };
+  }
+}

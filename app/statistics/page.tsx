@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { getUsageBySections, getCurrentMonthName, clearCurrentMonthStats } from '@/lib/simple-logger'
+import { signOut } from 'next-auth/react'
 
 // Цены моделей (для расчета условных единиц за 1M токенов)
 const MODEL_PRICING = {
@@ -158,6 +159,31 @@ export default function StatisticsPage() {
 
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('ru-RU').format(num)
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!confirm('ВНИМАНИЕ! Это действие необратимо. Ваш аккаунт, баланс и все данные в облачной БД будут удалены. Вы уверены?')) {
+      return
+    }
+
+    if (!confirm('Вы подтверждаете удаление всех своих данных согласно 152-ФЗ?')) {
+      return
+    }
+
+    try {
+      const response = await fetch('/api/auth/delete-account', { method: 'POST' })
+      const data = await response.json()
+      
+      if (data.success) {
+        alert('Ваш аккаунт успешно удален. Все данные стерты.')
+        signOut({ callbackUrl: '/auth/signin' })
+      } else {
+        alert('Ошибка при удалении: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Error deleting account:', error)
+      alert('Произошла техническая ошибка при удалении аккаунта.')
+    }
   }
 
   if (loading) {
@@ -476,6 +502,16 @@ export default function StatisticsPage() {
           <strong>ℹ️ Примечание:</strong> Стоимость рассчитывается в условных единицах на основе актуальных цен моделей. 
           Статистика сохраняется локально в браузере.
         </p>
+      </div>
+
+      {/* Удаление аккаунта (Право на забвение) */}
+      <div className="mt-12 pt-8 border-t border-red-100 flex justify-center">
+        <button
+          onClick={handleDeleteAccount}
+          className="text-xs text-red-400 hover:text-red-600 transition-colors flex items-center gap-2 underline"
+        >
+          🗑️ Удалить аккаунт и все персональные данные (Право на забвение)
+        </button>
       </div>
     </div>
   )
