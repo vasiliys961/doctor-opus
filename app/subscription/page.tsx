@@ -86,73 +86,154 @@ export default function SubscriptionPage() {
         <h1 className="text-4xl font-bold text-gray-800 mb-2">
           💎 Пакеты единиц
         </h1>
-        <p className="text-gray-600 mb-8">
+        <p className="text-gray-600 mb-4">
           Единицы используются для оплаты анализов и консультаций. 
           <Link href="/clinic/dashboard" className="ml-2 text-indigo-600 font-bold hover:underline">🏢 Панель для клиник →</Link>
         </p>
 
+        {/* БЕТА-БАННЕР */}
+        <div className="bg-gradient-to-r from-amber-100 via-yellow-50 to-amber-100 border-2 border-amber-300 rounded-xl p-6 mb-8 shadow-lg">
+          <div className="flex items-start gap-4">
+            <div className="text-4xl">🚀</div>
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-amber-900 mb-2">Открытое бета-тестирование до 31 мая 2026</h3>
+              <p className="text-amber-800 mb-3">
+                Сейчас действуют специальные цены от <strong>1.99 ₽/ед.</strong> 
+                После окончания бета-периода базовая цена составит <strong>3 ₽/ед.</strong> Скидки за объём сохранятся.
+              </p>
+              <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
+                💎 Все, кто зарегистрировался до 31 мая, смогут купить ещё <strong>до 2 пакетов по текущим ценам</strong> в течение 3 месяцев после изменения тарифов.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {balanceContent}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto mb-8">
-          {Object.entries(SUBSCRIPTION_PACKAGES).map(([key, pkg]) => {
-            const pricePerCredit = (pkg.priceRub / pkg.credits).toFixed(2)
-            const isSelected = selectedPackage === key
+        {/* Бесплатные функции */}
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-8 flex items-center gap-3">
+          <span className="text-2xl">✅</span>
+          <p className="text-green-800 text-sm">
+            <strong>Бесплатно без списания единиц:</strong> Медицинские калькуляторы и сканирование документов (работают локально в браузере)
+          </p>
+        </div>
 
-            return (
-              <div
-                key={key}
-                onClick={() => setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)}
-                className={`relative bg-white rounded-xl shadow-lg p-8 cursor-pointer transition-all hover:shadow-2xl hover:-translate-y-2 ${
-                  isSelected ? 'ring-4 ring-teal-500' : ''
-                }`}
-              >
-                <div className="text-center">
-                  <h3 className="text-2xl font-bold text-gray-800 mb-4">
-                    {pkg.name}
-                  </h3>
+        {/* ИНДИВИДУАЛЬНЫЕ ПАКЕТЫ */}
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">Для индивидуальных врачей</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto mb-12">
+          {Object.entries(SUBSCRIPTION_PACKAGES)
+            .filter(([_, pkg]) => pkg.category === 'individual')
+            .map(([key, pkg]) => {
+              const pricePerCredit = (pkg.priceRub / pkg.credits).toFixed(2)
+              const isSelected = selectedPackage === key
+              const isRecommended = pkg.recommended
+
+              return (
+                <div
+                  key={key}
+                  onClick={() => setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)}
+                  className={`relative bg-white rounded-xl shadow-lg p-6 cursor-pointer transition-all hover:shadow-2xl hover:-translate-y-2 ${
+                    isSelected ? 'ring-4 ring-teal-500' : ''
+                  } ${isRecommended ? 'ring-4 ring-yellow-400 scale-105' : ''}`}
+                >
+                  {isRecommended && (
+                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                      <span className="bg-gradient-to-r from-yellow-400 to-amber-500 text-white px-4 py-1 rounded-full text-xs font-bold shadow-lg">
+                        ⭐ РЕКОМЕНДУЕМ
+                      </span>
+                    </div>
+                  )}
                   
-                  <div className="mb-6">
-                    <p className="text-5xl font-bold text-teal-600 mb-2">
-                      {pkg.credits}
-                    </p>
-                    <p className="text-sm text-gray-600">единиц</p>
-                  </div>
+                  <div className="text-center">
+                    <h3 className="text-xl font-bold text-gray-800 mb-3">
+                      {pkg.name}
+                    </h3>
+                    
+                    <div className="mb-4">
+                      <p className="text-4xl font-bold text-teal-600 mb-1">
+                        {pkg.credits}
+                      </p>
+                      <p className="text-xs text-gray-600">единиц</p>
+                    </div>
 
-                  <div className="border-t border-gray-200 pt-6 mb-6">
-                    <p className="text-4xl font-bold text-gray-800 mb-2">
-                      {pkg.priceRub.toLocaleString('ru-RU')} ₽
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {pricePerCredit} ₽/ед.
-                    </p>
-                  </div>
+                    <div className="border-t border-gray-200 pt-4 mb-4">
+                      <p className="text-3xl font-bold text-gray-800 mb-1">
+                        {pkg.priceRub.toLocaleString('ru-RU')} ₽
+                      </p>
+                      <p className={`text-sm font-bold ${isRecommended ? 'text-green-600' : 'text-gray-500'}`}>
+                        {pricePerCredit} ₽/ед.
+                        {isRecommended && ' ✨'}
+                      </p>
+                    </div>
 
-                  <div className="text-left space-y-3">
-                    <div className="flex items-start text-sm text-gray-700">
-                      <span className="text-green-500 mr-2 text-lg">✓</span>
-                      <span>Все типы анализов</span>
-                    </div>
-                    <div className="flex items-start text-sm text-gray-700">
-                      <span className="text-green-500 mr-2 text-lg">✓</span>
-                      <span>ЭКГ, МРТ, КТ, Рентген</span>
-                    </div>
-                    <div className="flex items-start text-sm text-gray-700">
-                      <span className="text-green-500 mr-2 text-lg">✓</span>
-                      <span>Лабораторные данные</span>
-                    </div>
-                    <div className="flex items-start text-sm text-gray-700">
-                      <span className="text-green-500 mr-2 text-lg">✓</span>
-                      <span>ИИ-консультации</span>
-                    </div>
-                    <div className="flex items-start text-sm text-gray-700">
-                      <span className="text-green-500 mr-2 text-lg">✓</span>
-                      <span>Протоколы приема</span>
-                    </div>
+                    <p className="text-xs text-gray-600 mb-4 min-h-[40px]">
+                      {pkg.description}
+                    </p>
+
+                    {isRecommended && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-800 mb-3">
+                        <strong>Лучшее соотношение!</strong><br/>
+                        Цена ниже 2 ₽/ед.
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+        </div>
+
+        {/* КОМАНДНЫЕ ПАКЕТЫ */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Для клиник и медицинских центров</h2>
+          <p className="text-sm text-gray-600 mb-6">
+            Командные пакеты включают: общий пул единиц для нескольких врачей, статистику использования по специалистам, 
+            приоритетную техподдержку, возможность выставления счёта для юрлица.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {Object.entries(SUBSCRIPTION_PACKAGES)
+              .filter(([_, pkg]) => pkg.category === 'team')
+              .map(([key, pkg]) => {
+                const pricePerCredit = (pkg.priceRub / pkg.credits).toFixed(2)
+                const isSelected = selectedPackage === key
+
+                return (
+                  <div
+                    key={key}
+                    onClick={() => setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)}
+                    className={`relative bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border-2 border-indigo-200 p-6 cursor-pointer transition-all hover:shadow-xl hover:-translate-y-1 ${
+                      isSelected ? 'ring-4 ring-teal-500' : ''
+                    }`}
+                  >
+                    <div className="text-center">
+                      <h3 className="text-xl font-bold text-indigo-900 mb-3">
+                        {pkg.name}
+                      </h3>
+                      
+                      <div className="mb-4">
+                        <p className="text-4xl font-bold text-indigo-600 mb-1">
+                          {pkg.credits.toLocaleString('ru-RU')}
+                        </p>
+                        <p className="text-xs text-indigo-700">единиц</p>
+                      </div>
+
+                      <div className="border-t border-indigo-200 pt-4 mb-4">
+                        <p className="text-3xl font-bold text-indigo-900 mb-1">
+                          {pkg.priceRub.toLocaleString('ru-RU')} ₽
+                        </p>
+                        <p className="text-sm text-indigo-600">
+                          {pricePerCredit} ₽/ед.
+                        </p>
+                      </div>
+
+                      <p className="text-xs text-indigo-700 min-h-[40px]">
+                        {pkg.description}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+          </div>
         </div>
 
         {selectedPackage && (
@@ -225,21 +306,21 @@ export default function SubscriptionPage() {
             <div className="border border-gray-200 rounded-lg p-4">
               <p className="font-semibold text-gray-800 mb-1">⚡ Быстрый анализ (Gemini)</p>
               <p className="text-teal-600 font-bold">~0.5 - 1.5 ед.</p>
-              <p className="text-[10px] text-gray-500">Примерно 2.5-7.5 руб.</p>
+              <p className="text-[10px] text-gray-500">≈ 1-3 руб. (по бета-цене 2₽/ед.)</p>
             </div>
             <div className="border border-gray-200 rounded-lg p-4">
               <p className="font-semibold text-gray-800 mb-1">⭐ Оптимизированный (Sonnet 4.5)</p>
               <p className="text-teal-600 font-bold">~3 - 7 ед.</p>
-              <p className="text-[10px] text-gray-500">Примерно 15-35 руб.</p>
+              <p className="text-[10px] text-gray-500">≈ 6-14 руб. (по бета-цене 2₽/ед.)</p>
             </div>
             <div className="border border-gray-200 rounded-lg p-4">
-              <p className="font-semibold text-gray-800 mb-1">🧠 Экспертный (Opus 4.5)</p>
+              <p className="font-semibold text-gray-800 mb-1">🧠 Экспертный (Opus 4.6)</p>
               <p className="text-teal-600 font-bold">~8 - 15 ед.</p>
-              <p className="text-[10px] text-gray-500">Примерно 40-75 руб.</p>
+              <p className="text-[10px] text-gray-500">≈ 16-30 руб. (по бета-цене 2₽/ед.)</p>
             </div>
           </div>
           <p className="text-xs text-gray-500 mt-4">
-            * Точная стоимость зависит от размера данных и выбранной модели
+            * Точная стоимость зависит от размера данных и выбранной модели. После 31.05.2026 базовая цена составит 3 ₽/ед.
           </p>
         </div>
       </div>

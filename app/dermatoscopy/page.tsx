@@ -53,7 +53,7 @@ export default function DermatoscopyPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-4.5');
+        formData.append('model', 'anthropic/claude-opus-4.6');
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3-flash-preview');
       }
@@ -76,7 +76,7 @@ export default function DermatoscopyPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
         
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.5';
+                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.6';
 
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
@@ -118,7 +118,7 @@ export default function DermatoscopyPage() {
         if (data.success) {
           setResult(data.result)
           
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5');
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.6');
           const inputTokens = 2000;
           const outputTokens = Math.ceil(data.result.length / 4);
           const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
@@ -162,7 +162,7 @@ export default function DermatoscopyPage() {
         content={{
           fast: "двухэтапный скрининг (сначала структурированное описание структуры и цвета образования, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс точности и качества для дерматоскопии.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества для дерматоскопии.",
             "📸 Вы можете загрузить снимки дерматоскопии, сделать фото или использовать ссылку.",

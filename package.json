@@ -1,6 +1,6 @@
 {
   "name": "medical-assistant3",
-  "version": "3.40.0",
+  "version": "3.41.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -13,6 +13,7 @@
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
     "adm-zip": "^0.5.16",
+    "bcryptjs": "^3.0.3",
     "browser-image-compression": "^2.0.2",
     "canvas": "^3.2.0",
     "cornerstone-core": "^2.6.1",
@@ -39,6 +40,7 @@
   },
   "devDependencies": {
     "@babel/plugin-bugfix-firefox-class-in-computed-class-key": "^7.28.5",
+    "@types/bcryptjs": "^2.4.6",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^20.11.0",
     "@types/nodemailer": "^7.0.9",

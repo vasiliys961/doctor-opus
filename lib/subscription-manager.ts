@@ -14,56 +14,95 @@ export const ANONYMOUS_BALANCE = 10; // 10 ед. анонимно
 export const REGISTERED_BONUS = 20;  // +20 ед. за регистрацию
 export const SOFT_LIMIT = -5;        // Разрешаем уходить в минус до -5 ед.
 
-// VIP пользователи с бесконечным балансом
-// VIP пользователи с бесконечным балансом
-export const VIP_EMAILS = [
-  'support@doctor-opus.ru',
-  'vasiliys@mail.ru',
-  'vasily61@gmail.com',
-  'admin@doctor-opus.ru'
-];
+// VIP-пользователи — из переменной окружения VIP_EMAILS (через запятую)
+function getVipEmails(): string[] {
+  const envVip = typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_VIP_EMAILS || process.env?.VIP_EMAILS : undefined;
+  if (envVip) {
+    return envVip.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  }
+  return [];
+}
+
+export const VIP_EMAILS = getVipEmails();
 
 export function isVIP(email?: string | null): boolean {
   if (!email) return false;
   const emailLower = email.toLowerCase();
-  return VIP_EMAILS.some(v => v.toLowerCase() === emailLower);
+  // Перечитываем при каждом вызове, чтобы подхватить env при SSR
+  return getVipEmails().includes(emailLower);
 }
 
 // Курс конвертации USD -> единицы (настраивается через .env)
 const USD_TO_CREDITS_RATE = parseInt(process.env.NEXT_PUBLIC_USD_TO_CREDITS || '100');
 
-// Пакеты подписки
-// При 5 ₽/ед.: 1250₽ = 250 ед., 2500₽ = 500 ед., 6250₽ = 1250 ед.
+// Пакеты подписки (Бета-тестирование до 31.05.2026)
+// Индивидуальные пакеты: акцент на "Профи" как лучшее соотношение цены/объёма
+// Командные пакеты: дороже за единицу (включают многопользовательский доступ и аналитику)
 export const SUBSCRIPTION_PACKAGES = {
-  trial: { 
-    name: 'Пробный', 
-    credits: 250,
-    priceRub: 1250,
-    bonusPercent: 0
+  // === ИНДИВИДУАЛЬНЫЕ ПАКЕТЫ ===
+  intro: { 
+    name: 'Знакомство', 
+    credits: 150,
+    priceRub: 390,
+    bonusPercent: 0,
+    description: 'Попробовать возможности AI-анализа',
+    recommended: false,
+    category: 'individual'
   },
-  basic: { 
-    name: 'Базовый', 
-    credits: 500,
-    priceRub: 2500,
-    bonusPercent: 0
+  starter: { 
+    name: 'Старт', 
+    credits: 400,
+    priceRub: 890,
+    bonusPercent: 0,
+    description: 'Для первых недель активного использования',
+    recommended: false,
+    category: 'individual'
+  },
+  practice: { 
+    name: 'Практика', 
+    credits: 900,
+    priceRub: 1990,
+    bonusPercent: 0,
+    description: 'Для регулярной работы в течение 2-3 недель',
+    recommended: false,
+    category: 'individual'
   },
   pro: { 
-    name: 'Профессиональный', 
-    credits: 1250,
-    priceRub: 6250,
-    bonusPercent: 0
+    name: 'Профи', 
+    credits: 2000,
+    priceRub: 3990,
+    bonusPercent: 0,
+    description: 'Рабочий инструмент практикующего врача',
+    recommended: true,
+    category: 'individual'
   },
-  clinic_mini: { 
-    name: 'Клиника: Мини', 
-    credits: 5000,
-    priceRub: 10000,
-    bonusPercent: 0
+  // === КОМАНДНЫЕ ПАКЕТЫ (для клиник) ===
+  department: { 
+    name: 'Отделение', 
+    credits: 6000,
+    priceRub: 14490,
+    bonusPercent: 0,
+    description: 'Общий пул для 2-5 врачей с аналитикой',
+    recommended: false,
+    category: 'team'
   },
-  clinic_start: { 
-    name: 'Клиника: Старт', 
-    credits: 10000,
-    priceRub: 20000,
-    bonusPercent: 0
+  clinic: { 
+    name: 'Клиника', 
+    credits: 15000,
+    priceRub: 34990,
+    bonusPercent: 0,
+    description: 'Для команды до 10 врачей с приоритетной поддержкой',
+    recommended: false,
+    category: 'team'
+  },
+  center: { 
+    name: 'Центр', 
+    credits: 30000,
+    priceRub: 64990,
+    bonusPercent: 0,
+    description: 'Для крупного центра до 20 врачей',
+    recommended: false,
+    category: 'team'
   },
 } as const;
 

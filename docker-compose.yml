@@ -25,14 +25,48 @@ services:
     expose:
       - "3000"
     environment:
+      # === ОБЯЗАТЕЛЬНЫЕ ===
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - ASSEMBLYAI_API_KEY=${ASSEMBLYAI_API_KEY}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL}
       - POSTGRES_URL=postgres://${POSTGRES_USER:-neondb_owner}:${POSTGRES_PASSWORD:-password_here}@db:5432/${POSTGRES_DATABASE:-neondb}
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - NEXT_PUBLIC_AUTH_DISABLED=${NEXT_PUBLIC_AUTH_DISABLED}
+      
+      # === АВТОРИЗАЦИЯ И БЕЗОПАСНОСТЬ (v3.41.0) ===
+      - ADMIN_EMAILS=${ADMIN_EMAILS:-}
+      - VIP_EMAILS=${VIP_EMAILS:-}
+      - NEXT_PUBLIC_VIP_EMAILS=${NEXT_PUBLIC_VIP_EMAILS:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - JWT_MAX_AGE_SECONDS=${JWT_MAX_AGE_SECONDS:-86400}
+      - MIGRATION_SECRET=${MIGRATION_SECRET}
+      - ENCRYPTION_SALT=${ENCRYPTION_SALT:-}
+      
+      # === ТРАНСКРИПЦИЯ ===
+      - ASSEMBLYAI_API_KEY=${ASSEMBLYAI_API_KEY:-}
+      - SPEECH_PROVIDER=${SPEECH_PROVIDER:-assemblyai}
+      - YANDEX_SPEECHKIT_API_KEY=${YANDEX_SPEECHKIT_API_KEY:-}
+      - YANDEX_SPEECHKIT_FOLDER_ID=${YANDEX_SPEECHKIT_FOLDER_ID:-}
+      
+      # === EMAIL ===
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-smtp}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      
+      # === ПЛАТЕЖИ ===
+      - ROBOKASSA_LOGIN=${ROBOKASSA_LOGIN:-}
+      - ROBOKASSA_PASS1=${ROBOKASSA_PASS1:-}
+      - ROBOKASSA_PASS2=${ROBOKASSA_PASS2:-}
+      - PAYMENT_IP_WHITELIST=${PAYMENT_IP_WHITELIST:-}
+      
+      # === ПОДПИСКА ===
+      - NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE=${NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE:-false}
+      
+      # === СИСТЕМНЫЕ ===
       - PYTHONUNBUFFERED=1
+      - NODE_ENV=production
     restart: always
     depends_on:
       - db

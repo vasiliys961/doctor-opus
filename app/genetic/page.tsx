@@ -117,21 +117,21 @@ export default function GeneticPage() {
     return markdownLines.join('\n')
   }
 
-  // Загружаем PDF.js с CDN
+  // Загружаем PDF.js v3 из локальных файлов (public/pdfjs/)
   useEffect(() => {
+    setPdfjsReady(false)
     if (typeof window !== 'undefined' && !window.pdfjsLib) {
       const script = document.createElement('script')
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+      script.src = '/pdfjs/pdf.min.js'
       script.onload = () => {
         if (window.pdfjsLib) {
-          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js'
           setPdfjsReady(true)
-          console.log('✅ PDF.js загружен и готов')
+          console.log('✅ PDF.js v3 загружен локально (ручная анонимизация доступна)')
         }
       }
       script.onerror = () => {
-        console.error('❌ Ошибка загрузки PDF.js')
-        setError('Не удалось загрузить библиотеку для обработки PDF')
+        console.warn('⚠️ PDF.js не удалось загрузить')
       }
       document.head.appendChild(script)
     } else if (window.pdfjsLib) {
@@ -222,32 +222,12 @@ export default function GeneticPage() {
     setLoading(true)
 
     try {
-      // Если PDF, конвертируем в изображения на клиенте
+      // PDF — отправляется напрямую на сервер (Gemini Vision API читает PDF нативно)
       if (uploadedFile.type === 'application/pdf' || uploadedFile.name.toLowerCase().endsWith('.pdf')) {
-        console.log('📄 [GENETIC PAGE] PDF обнаружен, конвертируем в изображения...')
-        
-        if (!pdfjsReady) {
-          setError('PDF.js еще не загружен. Подождите несколько секунд и попробуйте снова.')
-          setLoading(false)
-          return
-        }
-
-        setConvertingPDF(true)
-        setConversionProgress({ current: 0, total: 7 })
-
-        try {
-          const base64Images = await convertPDFToImages(uploadedFile)
-          setProcessedImages(base64Images)
-          setConvertingPDF(false)
-          setLoading(false)
-          return
-        } catch (pdfError: any) {
-          console.error('❌ [GENETIC PAGE] Ошибка конвертации PDF:', pdfError)
-          setError(`Ошибка конвертации PDF: ${pdfError.message}`)
-          setLoading(false)
-          setConvertingPDF(false)
-          return
-        }
+        console.log('📄 [GENETIC PAGE] PDF обнаружен — будет отправлен напрямую на сервер')
+        setLoading(false)
+        // processedImages остаётся пустым — отобразится блок «Извлечь данные»
+        return
       }
 
       // Если изображение
@@ -338,7 +318,7 @@ export default function GeneticPage() {
         setExtractedData(extractionData.extractedData || '')
         logUsage({
           section: 'genetic',
-          model: 'google/gemini-2.0-flash-exp:free',
+          model: 'google/gemini-3-flash-preview',
           inputTokens: 3000,
           outputTokens: 2000,
         })
@@ -407,7 +387,7 @@ export default function GeneticPage() {
             setResult(accumulatedText)
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-opus-4.5');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-opus-4.6');
             logUsage({
               section: 'genetic',
               model: model,
@@ -470,7 +450,7 @@ export default function GeneticPage() {
         // Логирование использования (этап консультации)
         logUsage({
           section: 'genetic',
-          model: 'anthropic/claude-opus-4.5',
+          model: 'anthropic/claude-opus-4.6',
           inputTokens: 4000, // примерное значение для консультации
           outputTokens: 3000,
         })
@@ -558,7 +538,7 @@ export default function GeneticPage() {
             })
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-opus-4.5');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-opus-4.6');
             logUsage({
               section: 'chat',
               model: model,
@@ -632,9 +612,9 @@ export default function GeneticPage() {
         title="Как работает генетический анализ"
         content={{
           fast: "первый этап: извлечение данных из сложных отчетов и VCF‑файлов. Мы используем специализированные алгоритмы для корректного чтения rsID и генотипов.",
-          validated: "второй этап: экспертное мнение «Ассистента-генетика» (Claude Opus 4.5) — самый точный клинический разбор рисков; экспертный режим.",
+          validated: "второй этап: экспертное мнение «Ассистента-генетика» (Claude Opus 4.6) — самый точный клинический разбор рисков; экспертный режим.",
           extra: [
-            "⭐ Рекомендуемый режим: «Экспертный» (Opus 4.5) — максимально глубокий анализ генетических данных.",
+            "⭐ Рекомендуемый режим: «Экспертный» (Opus 4.6) — максимально глубокий анализ генетических данных.",
             "🚀 Альтернатива: «GPT-5.2» — отличный баланс скорости, мощности и стоимости.",
             "👤 Рекомендуется добавить клинический контекст для более точной интерпретации результатов.",
             "💬 После получения заключения вы можете продолжить диалог с генетиком для уточнения деталей.",
@@ -650,22 +630,7 @@ export default function GeneticPage() {
         </p>
         <ImageUpload onUpload={handleUpload} accept=".vcf,.pdf,.txt,image/*" maxSize={50} />
         
-        {convertingPDF && (
-          <div className="mt-4 text-blue-600">
-            <div className="flex items-center gap-2 mb-2">
-              <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>Конвертация PDF в изображения...</span>
-            </div>
-            {conversionProgress.total > 0 && (
-              <div className="text-sm">
-                Страница {conversionProgress.current} из {conversionProgress.total}
-              </div>
-            )}
-          </div>
-        )}
+        {/* PDF обрабатывается сервером через Gemini Vision API */}
       </div>
 
       {file && processedImages.length > 0 && !extractedData && (
@@ -741,12 +706,12 @@ export default function GeneticPage() {
         </div>
       )}
 
-      {/* Для VCF/TXT если нет изображений */}
+      {/* Для VCF/TXT/PDF если нет изображений */}
       {file && processedImages.length === 0 && !extractedData && !loading && !convertingPDF && (
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
           <div className="mb-4 text-4xl">📄</div>
           <h3 className="text-lg font-bold mb-2">Файл загружен: {file.name}</h3>
-          <p className="text-sm text-gray-600 mb-6">Готов к извлечению генетических данных</p>
+          <p className="text-sm text-gray-600 mb-4">Готов к извлечению генетических данных</p>
           
           <div className="flex flex-col items-center gap-4">
              <label className="flex items-center space-x-2 cursor-pointer p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-900 w-fit shadow-sm">
@@ -762,18 +727,77 @@ export default function GeneticPage() {
                   🛡️ Анонимный анализ
                 </span>
                 <span className="text-[10px] text-blue-700 font-normal">
-                  Текстовые данные будут анонимизированы.
+                  ФИО, даты рождения, паспорта, телефоны будут удалены из результата.
                 </span>
               </div>
             </label>
 
-            <button
-              onClick={runExtraction}
-              className="px-10 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-lg"
-            >
-              🚀 Извлечь данные
-            </button>
+            {/* PDF: две кнопки — быстрое извлечение и предпросмотр с ручной анонимизацией */}
+            {file?.name.toLowerCase().endsWith('.pdf') ? (
+              <div className="flex flex-col items-center gap-3 w-full max-w-md">
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
+                  <button
+                    onClick={runExtraction}
+                    className="flex-1 px-6 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-lg"
+                  >
+                    <span className="block text-base">🚀 Быстрое извлечение</span>
+                    <span className="block text-[10px] font-normal opacity-80 mt-0.5">PDF → Gemini → данные</span>
+                  </button>
+                  
+                  {pdfjsReady && (
+                    <button
+                      onClick={async () => {
+                        if (!file) return
+                        setConvertingPDF(true)
+                        setError(null)
+                        try {
+                          const images = await convertPDFToImages(file)
+                          setProcessedImages(images)
+                        } catch (err: any) {
+                          setError(err.message || 'Ошибка конвертации PDF')
+                        } finally {
+                          setConvertingPDF(false)
+                        }
+                      }}
+                      className="flex-1 px-6 py-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 transition-all shadow-lg"
+                    >
+                      <span className="block text-base">🎨 Предпросмотр страниц</span>
+                      <span className="block text-[10px] font-normal opacity-80 mt-0.5">Ручная анонимизация ФИО</span>
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-relaxed">
+                  ⚠️ <strong>Быстрое извлечение:</strong> PDF отправляется в AI целиком. Анонимизация — только результата.
+                  {pdfjsReady 
+                    ? <><br /><strong>Предпросмотр:</strong> страницы отобразятся как изображения — можно закрасить ФИО перед отправкой.</>
+                    : <> Для ручной анонимизации загрузите <strong>скриншоты страниц</strong> (JPG/PNG).</>
+                  }
+                </p>
+              </div>
+            ) : (
+              <button
+                onClick={runExtraction}
+                className="px-10 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-lg"
+              >
+                🚀 Извлечь данные
+              </button>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* Спиннер конвертации PDF в изображения */}
+      {convertingPDF && (
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
+          <div className="flex items-center justify-center gap-3 text-blue-600">
+            <svg className="animate-spin h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span className="font-semibold">Конвертация PDF в изображения...</span>
+          </div>
+          <p className="text-sm text-gray-500 mt-2">Подготовка страниц для предпросмотра и анонимизации</p>
         </div>
       )}
 
@@ -913,7 +937,7 @@ export default function GeneticPage() {
                 }`}
               >
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-base">🧠 Opus 4.5</span>
+                  <span className="text-base">🧠 Opus 4.6</span>
                   <span className="text-[10px] uppercase opacity-60 font-bold">Экспертный (Макс. качество)</span>
                 </div>
               </button>
@@ -933,7 +957,7 @@ export default function GeneticPage() {
       <AnalysisResult 
         result={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
         loading={loading} 
-        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-opus-4.5')}
+        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.2-chat' : 'anthropic/claude-opus-4.6')}
         mode="genetic"
         cost={totalCost}
         images={file?.type.startsWith('image/') ? [URL.createObjectURL(file)] : []}

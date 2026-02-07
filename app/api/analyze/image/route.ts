@@ -21,6 +21,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
 import { checkRateLimit, RATE_LIMIT_ANALYSIS, getRateLimitKey } from '@/lib/rate-limiter';
+import { checkAndDeductBalance, getAnalysisCost } from '@/lib/server-billing';
 
 const execPromise = promisify(exec);
 
@@ -62,6 +63,27 @@ export async function POST(request: NextRequest) {
     if (!apiKey) return NextResponse.json({ success: false, error: 'OPENROUTER_API_KEY not set' }, { status: 500 });
 
     const formData = await request.formData();
+    const mode = (formData.get('mode') as string) || 'optimized';
+
+    // Серверное списание юнитов (до выполнения анализа)
+    const userEmail = session?.user?.email;
+    if (userEmail) {
+      // Считаем файлы для оценки стоимости
+      let imgCount = formData.get('file') ? 1 : 0;
+      let fi = 0;
+      while (formData.get(`additionalImage_${fi}`)) { imgCount++; fi++; }
+      
+      const estimatedCost = getAnalysisCost(mode, imgCount);
+      const billing = await checkAndDeductBalance(userEmail, estimatedCost, 'Анализ изображения', { mode, imageCount: imgCount });
+      
+      if (!billing.allowed) {
+        return NextResponse.json(
+          { success: false, error: billing.error || 'Недостаточно средств' },
+          { status: 402 }
+        );
+      }
+    }
+
     const file = formData.get('file') as File;
 
     // Проверка размера файлов
@@ -73,7 +95,6 @@ export async function POST(request: NextRequest) {
     }
     const prompt = anonymizeText(formData.get('prompt') as string || 'Проанализируйте медицинское изображение.');
     const clinicalContext = anonymizeText(formData.get('clinicalContext') as string || '');
-    const mode = (formData.get('mode') as string) || 'optimized';
     const stage = (formData.get('stage') as string) || 'all';
     const imageType = (formData.get('imageType') as string) || 'universal';
     const customModel = formData.get('model') as string | null;
@@ -109,7 +130,8 @@ export async function POST(request: NextRequest) {
         
         // 1. Если анонимно — затираем теги в буфере ПЕРЕД обработкой
         if (isAnonymous) {
-          console.log(`🛡️ [DICOM] Анонимизация буфера для: ${img.name}`);
+          // Логируем без имени файла (может содержать ПДн)
+          // safeLog('🛡️ [DICOM] Анонимизация буфера');
           const { anonymizeDicomBuffer } = await import('@/lib/dicom-processor');
           buffer = anonymizeDicomBuffer(buffer);
         }
@@ -133,7 +155,7 @@ export async function POST(request: NextRequest) {
         
         // Применяем анонимизацию для всех изображений (JPG, PNG и т.д.), если включен режим анонимности
         if (isAnonymous && img.type.startsWith('image/')) {
-          console.log(`🛡️ [Anonymization] Автоматическая анонимизация: ${img.name}`);
+          // Не логируем имя файла — может содержать ПДн
           // @ts-expect-error - Несовместимость типов Buffer между canvas и Node.js, но код работает корректно
           buffer = await anonymizeImageBuffer(buffer, img.type);
         }

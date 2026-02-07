@@ -89,7 +89,7 @@ export default function ComparativeAnalysisPage() {
         ? 'google/gemini-3-flash-preview' 
         : mode === 'optimized' 
           ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') 
-          : 'anthropic/claude-opus-4.5'
+          : 'anthropic/claude-opus-4.6'
       
       const formData = new FormData()
       formData.append('file', images[0].file)
@@ -160,7 +160,7 @@ export default function ComparativeAnalysisPage() {
         content={{
           fast: "быстрое сравнение основных признаков на нескольких изображениях.",
           optimized: "рекомендуемый режим: «Оптимизированный» (Gemini JSON → Sonnet) — оптимально для сравнения 'было/стало'.",
-          validated: "двухэтапный разбор (Gemini JSON → Opus 4.5) — максимально точная оценка динамики HU и структурных изменений.",
+          validated: "двухэтапный разбор (Gemini JSON → Opus 4.6) — максимально точная оценка динамики HU и структурных изменений.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini JSON → Sonnet) — оптимально для сравнения 'было/стало'.",
             "⏰ Используйте режим 'Динамика во времени' для анализа прогрессирования.",

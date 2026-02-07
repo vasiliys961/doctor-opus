@@ -6,7 +6,7 @@
  */
 
 // Используем legacy build pdfjs-dist для работы без worker
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 // Динамический импорт canvas для избежания проблем в serverless функциях
 let createCanvas: any = null;

@@ -71,7 +71,7 @@ export default function CTPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-4.5');
+        formData.append('model', 'anthropic/claude-opus-4.6');
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3-flash-preview');
       }
@@ -93,7 +93,7 @@ export default function CTPage() {
         
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.5';
+                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.6';
 
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
@@ -136,7 +136,7 @@ export default function CTPage() {
         if (data.success) {
           setResult(data.result)
           setAnalysisStep('description_complete')
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5');
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.6');
           setCurrentCost(data.cost || 1.5)
           setModelInfo({ model: modelUsed, mode: analysisMode });
 
@@ -189,11 +189,11 @@ export default function CTPage() {
         content={{
           fast: "двухэтапный скрининг (сначала структурированное описание плотности HU и структур, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс точности и качества для КТ‑исследований.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев.",
           extra: [
             "✅ **GPT-5.2**: ЛУЧШИЙ выбор для 80% исследований (общий анализ, КТ-анатомия).",
             "🦴 **Claude Sonnet 4.5**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах и мелких структурах.",
-            "⚠️ **Claude Opus 4.5**: НЕ рекомендуем для этого раздела (слабая модель для изображений).",
+            "⚠️ **Claude Opus 4.6**: НЕ рекомендуем для этого раздела (слабая модель для изображений).",
             "📸 Вы можете загрузить снимки КТ, сделать фото или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
             "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."

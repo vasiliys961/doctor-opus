@@ -3,6 +3,7 @@
  */
 
 import { Pool, QueryResult } from 'pg';
+import { safeLog, safeError } from '@/lib/logger';
 
 let pool: Pool | null = null;
 
@@ -17,11 +18,16 @@ function getPool(): Pool {
         'Не задана строка подключения к PostgreSQL. Укажите POSTGRES_URL или DATABASE_URL в .env'
       );
     }
+    // Параметры пула из конфигурации (lib/config.ts) или env
+    const poolMax = parseInt(process.env.DB_POOL_MAX || '10', 10);
+    const idleTimeout = parseInt(process.env.DB_IDLE_TIMEOUT_MS || '30000', 10);
+    const connTimeout = parseInt(process.env.DB_CONNECTION_TIMEOUT_MS || '10000', 10);
+    
     pool = new Pool({
       connectionString,
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      max: poolMax,
+      idleTimeoutMillis: idleTimeout,
+      connectionTimeoutMillis: connTimeout,
     });
   }
   return pool;
@@ -115,9 +121,20 @@ export async function initDatabase() {
       );
     `;
 
+    // Таблица пользователей с хэшами паролей (v3.41.0 — безопасная авторизация)
+    await sql`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        name VARCHAR(255) DEFAULT 'Врач',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     return true;
   } catch (error) {
-    console.error('❌ [DATABASE] Ошибка инициализации:', error);
+    safeError('❌ [DATABASE] Ошибка инициализации:', error);
     return false;
   }
 }
@@ -137,10 +154,10 @@ export async function savePaymentConsent(data: {
       INSERT INTO consents (email, package_id, consent_type, ip_address, user_agent)
       VALUES (${data.email}, ${data.package_id}, ${data.consent_type}, ${data.ip_address}, ${data.user_agent});
     `;
-    console.log('📝 [DATABASE] Согласие сохранено для:', data.email);
+    safeLog('📝 [DATABASE] Согласие сохранено для:', data.email);
     return { success: true };
   } catch (error) {
-    console.error('❌ [DATABASE] Ошибка сохранения согласия:', error);
+    safeError('❌ [DATABASE] Ошибка сохранения согласия:', error);
     return { success: false, error };
   }
 }
@@ -163,10 +180,10 @@ export async function saveAnalysisFeedback(data: any) {
       )
       RETURNING id;
     `;
-    console.log('📝 [DATABASE] Отзыв сохранен, ID:', result.rows[0].id);
+    safeLog('📝 [DATABASE] Отзыв сохранен, ID:', result.rows[0].id);
     return { success: true, id: result.rows[0].id };
   } catch (error) {
-    console.error('❌ [DATABASE] Ошибка сохранения отзыва:', error);
+    safeError('❌ [DATABASE] Ошибка сохранения отзыва:', error);
     return { success: false, error };
   }
 }
@@ -201,7 +218,7 @@ export async function savePatientNote(data: {
     `;
     return { success: true, id: result.rows[0].id };
   } catch (error) {
-    console.error('❌ [DATABASE] Ошибка сохранения заметки:', error);
+    safeError('❌ [DATABASE] Ошибка сохранения заметки:', error);
     return { success: false, error };
   }
 }
@@ -224,7 +241,7 @@ export async function getPatientNotes(patientId?: string) {
     const { rows } = result;
     return { success: true, notes: rows };
   } catch (error) {
-    console.error('❌ [DATABASE] Ошибка получения заметок:', error);
+    safeError('❌ [DATABASE] Ошибка получения заметок:', error);
     return { success: false, error, notes: [] };
   }
 }
@@ -256,7 +273,7 @@ export async function getFineTuningStats() {
       stats: stats
     };
   } catch (error) {
-    console.error('❌ [DATABASE] Ошибка получения статистики:', error);
+    safeError('❌ [DATABASE] Ошибка получения статистики:', error);
     return { success: false, error, stats: [] };
   }
 }
@@ -278,55 +295,86 @@ export async function createPayment(data: {
     `;
     return { success: true, paymentId: result.rows[0].id };
   } catch (error) {
-    console.error('❌ [DATABASE] Ошибка создания платежа:', error);
+    safeError('❌ [DATABASE] Ошибка создания платежа:', error);
     return { success: false, error };
   }
 }
 
 /**
  * Подтверждение платежа и начисление единиц.
- * ИДЕМПОТЕНТНАЯ операция: повторный вызов для уже подтверждённого платежа
- * не зачислит баланс повторно (WHERE status = 'pending').
+ * 
+ * БЕЗОПАСНОСТЬ (v3.41.0):
+ * - Полная транзакция PostgreSQL (BEGIN/COMMIT/ROLLBACK)
+ * - FOR UPDATE блокирует строку платежа от race conditions
+ * - Идемпотентность: повторный вызов для уже подтверждённого платежа не зачислит дважды
  */
 export async function confirmPayment(paymentId: number, transactionId: string) {
+  const client = await getDbClient();
+  
   try {
-    // Атомарная операция: обновляем ТОЛЬКО если статус = 'pending'
-    // Это гарантирует идемпотентность — повторный webhook не зачислит дважды
-    const { rows } = await sql`
-      UPDATE payments 
-      SET status = 'completed', transaction_id = ${transactionId}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${paymentId} AND status = 'pending'
-      RETURNING email, units;
-    `;
+    await client.query('BEGIN');
 
-    if (rows.length === 0) {
-      // Проверяем: платеж не найден или уже обработан?
-      const { rows: existing } = await sql`
-        SELECT id, status FROM payments WHERE id = ${paymentId}
-      `;
-      if (existing.length > 0 && existing[0].status === 'completed') {
-        console.log(`ℹ️ [DATABASE] Платеж #${paymentId} уже был подтверждён (идемпотентность)`);
-        return { success: true, alreadyProcessed: true };
-      }
-      throw new Error('Платеж не найден или имеет некорректный статус');
+    // 1. Блокируем строку платежа для эксклюзивного доступа
+    const { rows: paymentRows } = await client.query(
+      `SELECT id, email, units, status FROM payments WHERE id = $1 FOR UPDATE`,
+      [paymentId]
+    );
+
+    if (paymentRows.length === 0) {
+      await client.query('ROLLBACK');
+      throw new Error('Платеж не найден');
     }
 
-    const { email, units } = rows[0];
+    const payment = paymentRows[0];
 
-    await sql`
-      INSERT INTO user_balances (email, balance)
-      VALUES (${email}, ${units})
-      ON CONFLICT (email) 
-      DO UPDATE SET 
-        balance = user_balances.balance + ${units},
-        updated_at = CURRENT_TIMESTAMP;
-    `;
+    // 2. Идемпотентность — если уже обработан, не трогаем
+    if (payment.status === 'completed') {
+      await client.query('ROLLBACK');
+      safeLog(`ℹ️ [DATABASE] Платеж #${paymentId} уже был подтверждён (идемпотентность)`);
+      return { success: true, alreadyProcessed: true };
+    }
 
-    console.log(`💰 [DATABASE] Баланс пользователя ${email} пополнен на ${units} ед.`);
+    if (payment.status !== 'pending') {
+      await client.query('ROLLBACK');
+      throw new Error(`Платеж имеет некорректный статус: ${payment.status}`);
+    }
+
+    // 3. Обновляем статус платежа
+    await client.query(
+      `UPDATE payments SET status = 'completed', transaction_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      [transactionId, paymentId]
+    );
+
+    // 4. Начисляем баланс (с блокировкой строки баланса)
+    const { email, units } = payment;
+    
+    await client.query(
+      `INSERT INTO user_balances (email, balance)
+       VALUES ($1, $2)
+       ON CONFLICT (email) 
+       DO UPDATE SET 
+         balance = user_balances.balance + $2,
+         updated_at = CURRENT_TIMESTAMP`,
+      [email, units]
+    );
+
+    // 5. Логируем транзакцию начисления
+    await client.query(
+      `INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
+       SELECT $1, $2, $3, $4, balance FROM user_balances WHERE email = $1`,
+      [email, units, 'Пополнение баланса (оплата)', JSON.stringify({ paymentId, transactionId })]
+    );
+
+    await client.query('COMMIT');
+
+    safeLog(`💰 [DATABASE] Баланс пользователя ${email} пополнен на ${units} ед. (платеж #${paymentId})`);
     return { success: true };
   } catch (error) {
-    console.error('❌ [DATABASE] Ошибка подтверждения платежа:', error);
+    try { await client.query('ROLLBACK'); } catch {}
+    safeError('❌ [DATABASE] Ошибка подтверждения платежа:', error);
     return { success: false, error };
+  } finally {
+    client.release();
   }
 }
 
@@ -338,7 +386,7 @@ export async function getUserBalance(email: string) {
     const { rows } = await sql`SELECT balance FROM user_balances WHERE email = ${email}`;
     return rows.length > 0 ? parseFloat(rows[0].balance) : 0;
   } catch (error) {
-    console.error('❌ [DATABASE] Ошибка получения баланса:', error);
+    safeError('❌ [DATABASE] Ошибка получения баланса:', error);
     return 0;
   }
 }
@@ -357,10 +405,10 @@ export async function deleteUserAccount(email: string) {
     // 3. Удаляем согласия
     await sql`DELETE FROM consents WHERE email = ${email}`;
     
-    console.log(`🗑️ [DATABASE] Аккаунт пользователя ${email} полностью удален.`);
+    safeLog(`🗑️ [DATABASE] Аккаунт пользователя ${email} полностью удален.`);
     return { success: true };
   } catch (error) {
-    console.error('❌ [DATABASE] Ошибка при удалении аккаунта:', error);
+    safeError('❌ [DATABASE] Ошибка при удалении аккаунта:', error);
     return { success: false, error };
   }
 }

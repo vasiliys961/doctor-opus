@@ -70,7 +70,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
 
   const getModelDisplayName = (modelName?: string) => {
     if (!modelName) return null
-    if (modelName.includes('opus')) return '🧠 Opus 4.5'
+    if (modelName.includes('opus')) return '🧠 Opus 4.6'
     if (modelName.includes('sonnet')) return '🤖 Sonnet 4.5'
     if (modelName.includes('gemini') || modelName.includes('flash')) return '⚡ Gemini Flash'
     return modelName
@@ -92,58 +92,32 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     setDownloading(true)
     try {
       // Dynamic import тяжёлых библиотек (~500KB) — грузятся только при скачивании
-      const { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer, ImageRun } = await import('docx');
-      const { saveAs } = await import('file-saver');
+      const { Document, Paragraph, TextRun, AlignmentType, Packer } = await import('docx');
+      const fileSaver = await import('file-saver');
+      const saveAs = fileSaver.saveAs || fileSaver.default?.saveAs || fileSaver.default;
+      // Хелпер: конвертация plain-объектов в TextRun (docx доступен только после dynamic import)
+      const toRuns = (data: DocRunData[]) => data.map(r => new TextRun({ text: r.text, bold: r.bold, italics: r.italics, font: r.font }));
 
-      // Агрессивная очистка текста для чистого клинического экспорта v3.50
-      let isSourcesSection = false;
-      const cleanedLines = result
-        .split('\n')
-        .filter(line => {
-          const l = line.toLowerCase().trim();
-          // Убираем технические статусы, дисклеймеры и мусор
-          if (l.includes('дисклеймер') || l.includes('disclaimer')) return false;
-          if (l.includes('юридический статус')) return false;
-          if (l.includes('система предоставляет')) return false;
-          if (l.includes('данные приняты') || l.includes('раздел 0 принят')) return false;
-          if (l.includes('подготовка к анализу') || l.includes('извлечение данных')) return false;
-          if (l.includes('клинический разбор через') || l.includes('профессорский разбор через')) return false;
-          if (line.trim() === '.' || line.trim() === '..' || line.trim() === '...') return false;
-          if (l.startsWith('>') && l.includes('этап')) return false;
-          if (l.includes('gemini vision') || line.trim().startsWith('🩺') || l.includes('быстрый анализ')) return false;
-          if (l.startsWith('---')) return false;
-          
-          // Определяем начало раздела источников, чтобы отсечь его
-          if (l.includes('источники') || l.includes('references') || l.includes('sources')) {
-            isSourcesSection = true;
-            return false;
-          }
-          return !isSourcesSection;
-        })
-        .map(line => {
-          // Очистка от маркдауна и табличных символов
-          return line
-            .replace(/[*_~`#]/g, '') // Убираем звездочки, подчеркивания, тильды, решетки
-            .replace(/\|/g, ' ')  // Заменяем разделители таблиц на пробелы
-            .replace(/^[-*+•]\s+/, '') // Убираем маркеры списков в начале строки
-            .replace(/History/i, 'История / History')
-            .replace(/Technique/i, 'Техника / Technique')
-            .replace(/Findings/i, 'Находки / Findings')
-            .replace(/Clinical Review/i, 'Клинический обзор / Clinical Review')
-            .replace(/Differential Diagnosis/i, 'Дифференциальный диагноз / Differential Diagnosis')
-            .replace(/Clinical Considerations/i, 'Клинические рекомендации / Clinical Recommendations')
-            .replace(/Clinical Directive/i, 'Клиническая директива / Clinical Directive')
-            .replace(/Macroscopic Description/i, 'Макроскопическое описание / Macroscopic Description')
-            .replace(/Microscopic Description/i, 'Микроскопическое описание / Microscopic Description')
-            .replace(/Impression/i, 'ЗАКЛЮЧЕНИЕ')
-            .replace(/—/g, '-') // Нормализуем тире
-            .trim();
-        })
-        .filter(line => line.length > 0);
+      // Парсим результат AI и создаем параграфы для DOCX
+      // Убираем только технический мусор стриминга, весь клинический контент сохраняем как есть
+      const lines = result.split('\n').filter(line => {
+        const l = line.toLowerCase().trim();
+        // Убираем только технические строки стриминга
+        if (l.includes('данные приняты') || l.includes('раздел 0 принят')) return false;
+        if (l.includes('подготовка к анализу') || l.includes('извлечение данных')) return false;
+        if (l.includes('клинический разбор через') || l.includes('профессорский разбор через')) return false;
+        if (l.startsWith('>') && l.includes('этап')) return false;
+        if (l.includes('gemini vision') || l.includes('быстрый анализ')) return false;
+        if (line.trim() === '.' || line.trim() === '..' || line.trim() === '...') return false;
+        if (l.startsWith('---') && l.length < 10) return false;
+        // Юридический статус как inline-текст (без заголовка #)
+        if (l.startsWith('юридический статус') || l.startsWith('**юридический статус')) return false;
+        return true;
+      });
 
       const paragraphs: any[] = []
 
-      // 1. ГЛАВНАЯ ШАПКА (UPPERCASE)
+      // 1. Шапка
       paragraphs.push(
         new Paragraph({
           children: [
@@ -154,118 +128,100 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         })
       )
 
-      // 2. ИДЕНТИФИКАЦИЯ (Одна строка)
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: `Ф.И.О. / Full Name: __________________________   Дата / Date: ${new Date().toLocaleDateString('ru-RU')}`, size: 20 }),
+            new TextRun({ text: `Дата: ${new Date().toLocaleDateString('ru-RU')}`, size: 20 }),
           ],
-          spacing: { after: 300 },
+          alignment: AlignmentType.RIGHT,
+          spacing: { after: 400 },
         })
       )
 
-      // Тонкая линия
-      paragraphs.push(new Paragraph({ 
-        border: { bottom: { color: "000000", space: 1, value: "single", size: 6 } },
-        spacing: { after: 240 }
-      }))
+      // 2. ОСНОВНОЙ КОНТЕНТ — исключаем секции "Клинический обзор" и "Дифференциальный диагноз"
+      // Они нужны врачу на экране, но в заключение (DOCX) не входят
+      const excludeSections = [
+        'клинический обзор',
+        'дифференциальный диагноз',
+        'дифференциальная диагностика',
+        'юридический статус',
+      ];
+      let skipSection = false;
+      let skipSectionLevel = 0; // уровень заголовка исключённой секции
 
-      // 3. ОСНОВНОЙ КОНТЕНТ
-      let currentSectionText: string[] = [];
-      const sections: Record<string, any[]> = {};
-      let currentSectionName = 'SKIP'; // По умолчанию пропускаем всё до первого важного заголовка
+      for (let idx = 0; idx < lines.length; idx++) {
+        const line = lines[idx];
+        if (!line.trim()) continue;
 
-      for (let i = 0; i < cleanedLines.length; i++) {
-        const line = cleanedLines[i];
-        const l = line.toLowerCase();
-        
-        // Поиск заголовков
-        const isConclusionHeader = l.includes('заключение') || l.includes('impression') || l.includes('впечатление');
-        const isTechnicalHeader = l.includes('технические параметры') || l.includes('параметры записи') || l.includes('протокол описания');
-        
-        const isRegularHeader = 
-          line.match(/^\d+\.\s+[A-ZА-Я]/) || 
-          isConclusionHeader ||
-          isTechnicalHeader ||
-          (line === line.toUpperCase() && line.length > 3 && line.length < 50) ||
-          l.includes('история /') || l.includes('техника /') || l.includes('находки /') || 
-          l.includes('директива /') || l.includes('описание /');
+        // Определяем уровень заголовка текущей строки
+        const headingMatch = line.match(/^(#{1,4})\s+/);
+        if (headingMatch) {
+          const level = headingMatch[1].length;
+          const headingText = line.replace(/^#{1,4}\s+/, '').replace(/\*\*/g, '').trim().toLowerCase();
+          // Убираем нумерацию вида "1." "2." в начале
+          const cleanHeading = headingText.replace(/^\d+[\.\)]\s*/, '');
 
-        if (isRegularHeader) {
-          // Если был накопленный текст предыдущей секции, сохраняем его
-          if (currentSectionText.length > 0 && currentSectionName !== 'SKIP') {
-            if (!sections[currentSectionName]) sections[currentSectionName] = [];
-            sections[currentSectionName].push(
-              new Paragraph({
-                children: [new TextRun({ text: currentSectionText.join(' ').replace(/\s+/g, ' '), size: 18 })],
-                spacing: { after: 120, line: 240 },
-                alignment: AlignmentType.JUSTIFY
-              })
-            );
-          }
-          currentSectionText = [];
-
-          // Определяем имя новой секции
-          if (isConclusionHeader) {
-            currentSectionName = 'CONCLUSION';
-          } else if (isTechnicalHeader) {
-            currentSectionName = 'TECHNICAL';
-          } else {
-            currentSectionName = 'SKIP';
+          // Проверяем, начинается ли исключаемая секция
+          if (excludeSections.some(s => cleanHeading.includes(s))) {
+            skipSection = true;
+            skipSectionLevel = level;
+            continue;
           }
 
-          // Если это нужная секция, добавляем заголовок
-          if (currentSectionName !== 'SKIP') {
-            if (!sections[currentSectionName]) sections[currentSectionName] = [];
-            
-            // Если это ЗАКЛЮЧЕНИЕ и оно уже есть (дубль), очищаем, чтобы оставить только последнее
-            if (currentSectionName === 'CONCLUSION' && sections[currentSectionName].length > 0) {
-              sections[currentSectionName] = [];
-            }
-
-            const headerTitle = isConclusionHeader ? "ЗАКЛЮЧЕНИЕ" : (isTechnicalHeader ? "ТЕХНИЧЕСКИЕ ПАРАМЕТРЫ" : line.toUpperCase());
-
-            sections[currentSectionName].push(
-              new Paragraph({
-                children: [new TextRun({ 
-                  text: headerTitle, 
-                  bold: true, 
-                  size: 18,
-                  allCaps: true
-                })],
-                spacing: { before: 120, after: 60 },
-              })
-            );
+          // Если встретили заголовок того же или более высокого уровня — секция кончилась
+          if (skipSection && level <= skipSectionLevel) {
+            skipSection = false;
           }
-        } else if (currentSectionName !== 'SKIP') {
-          // Накапливаем текст только для нужных секций
-          const cleanBodyLine = line.replace(/^[-*+•]\s+/, '').replace(/^\d+\.\s+/, '');
-          currentSectionText.push(cleanBodyLine);
+        }
+
+        // Пропускаем контент исключённой секции
+        if (skipSection) continue;
+
+        // Заголовки H1-H4
+        if (line.match(/^####\s+/)) {
+          paragraphs.push(new Paragraph({
+            children: [new TextRun({ text: line.replace(/^####\s+/, ''), bold: true, size: 20 })],
+            spacing: { before: 120, after: 60 },
+          }))
+        } else if (line.match(/^###\s+/)) {
+          paragraphs.push(new Paragraph({
+            children: [new TextRun({ text: line.replace(/^###\s+/, ''), bold: true, size: 22 })],
+            spacing: { before: 160, after: 80 },
+          }))
+        } else if (line.match(/^##\s+/)) {
+          paragraphs.push(new Paragraph({
+            children: [new TextRun({ text: line.replace(/^##\s+/, ''), bold: true, size: 24 })],
+            spacing: { before: 200, after: 100 },
+          }))
+        } else if (line.match(/^#\s+/)) {
+          paragraphs.push(new Paragraph({
+            children: [new TextRun({ text: line.replace(/^#\s+/, ''), bold: true, size: 28 })],
+            spacing: { before: 240, after: 120 },
+          }))
+        }
+        // Маркированный / нумерованный список
+        else if (line.match(/^[-*+•]\s+/) || line.match(/^\d+\.\s+/)) {
+          const text = line.replace(/^[-*+•]\s+/, '').replace(/^\d+\.\s+/, '')
+          paragraphs.push(new Paragraph({
+            children: toRuns(parseMarkdownToRuns(text)),
+            bullet: { level: 0 },
+            spacing: { after: 60 },
+          }))
+        }
+        // Блок кода — пропускаем разделители
+        else if (line.startsWith('```')) {
+          continue
+        }
+        // Обычный текст
+        else {
+          paragraphs.push(new Paragraph({
+            children: toRuns(parseMarkdownToRuns(line)),
+            spacing: { after: 120 },
+          }))
         }
       }
 
-      // Сбрасываем последний накопленный текст
-      if (currentSectionText.length > 0 && currentSectionName === 'CONCLUSION') {
-        if (!sections[currentSectionName]) sections[currentSectionName] = [];
-        sections[currentSectionName].push(
-          new Paragraph({
-            children: [new TextRun({ text: currentSectionText.join(' ').replace(/\s+/g, ' '), size: 18 })],
-            spacing: { after: 120, line: 240 },
-            alignment: AlignmentType.JUSTIFY
-          })
-        );
-      }
-
-      // Добавляем секции в нужном порядке: Технические параметры -> Заключение
-      if (sections['TECHNICAL']) paragraphs.push(...sections['TECHNICAL']);
-      if (sections['CONCLUSION']) paragraphs.push(...sections['CONCLUSION']);
-
-
-      // 4. ВИЗУАЛЬНАЯ ВЕРИФИКАЦИЯ (УДАЛЕНО ПО ЗАПРОСУ ПОЛЬЗОВАТЕЛЯ)
-      // Изображения больше не печатаются в DOCX
-
-
-      // 4. БЛОК ВЕРИФИКАЦИИ (компактно)
+      // 3. БЛОК ВЕРИФИКАЦИИ ВРАЧОМ
       paragraphs.push(new Paragraph({ 
         border: { top: { color: "000000", space: 1, value: "single", size: 6 } },
         children: [
@@ -301,24 +257,18 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         })
       )
 
-      // 5. ЮРИДИЧЕСКИЙ СТАТУС (Обязательный блок в самом низу)
+      // Дисклеймер (компактно, без громоздкого юридического блока)
       paragraphs.push(
         new Paragraph({
           children: [
             new TextRun({ 
-              text: "ЮРИДИЧЕСКИЙ СТАТУС: ", 
-              bold: true, 
+              text: "Результат носит рекомендательный характер. Окончательное клиническое решение принимает врач.", 
               size: 14,
-              color: "333333"
-            }),
-            new TextRun({ 
-              text: "ПО «Doctor Opus» классифицируется как информационная система поддержки принятия клинических решений. Программа не ставит диагнозы и не назначает лечение самостоятельно. Все результаты работы нейросетей являются «вторым мнением» и носят рекомендательный характер. Окончательное клиническое решение принимает врач (согласно 152-ФЗ и рекомендациям Росздравнадзора).", 
-              size: 14,
-              color: "333333"
+              italics: true,
+              color: "999999"
             }),
           ],
           spacing: { before: 200, after: 120 },
-          alignment: AlignmentType.JUSTIFY
         })
       )
 
@@ -354,23 +304,23 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       const blob = await Packer.toBlob(doc)
       const fileName = `Report_${new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')}.docx`;
       saveAs(blob, fileName)
-    } catch (error) {
-      console.error('Ошибка при скачивании документа:', error)
-      alert('Ошибка при скачивании документа. Попробуйте еще раз.')
+    } catch (error: any) {
+      console.error('Ошибка при скачивании документа:', error?.message || error, error?.stack)
+      alert(`Ошибка при скачивании: ${error?.message || 'Неизвестная ошибка'}. Попробуйте обновить страницу.`)
     } finally {
       setDownloading(false)
     }
   }
 
-  const parseMarkdownTextRuns = (text: string): TextRun[] => {
-    if (!text) return [new TextRun({ text: '' })]
-    
-    interface ParsedRun {
-      text: string;
-      bold?: boolean;
-      italics?: boolean;
-      font?: string;
-    }
+  interface DocRunData {
+    text: string;
+    bold?: boolean;
+    italics?: boolean;
+    font?: string;
+  }
+
+  const parseMarkdownToRuns = (text: string): DocRunData[] => {
+    if (!text) return [{ text: '' }]
 
     // Сначала обрабатываем код (он в обратных кавычках и не конфликтует)
     const codeParts: Array<{ start: number; end: number; text: string }> = []
@@ -380,22 +330,19 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       codeParts.push({ start: match.index, end: match.index + match[0].length, text: match[1] })
     }
 
-    const runs: ParsedRun[] = []
+    const runs: DocRunData[] = []
     let lastIndex = 0
     let codeIndex = 0
 
     // Обрабатываем текст по частям
     for (let i = 0; i <= text.length; i++) {
-      // Проверяем, достигли ли мы начала блока кода
       if (codeIndex < codeParts.length && i === codeParts[codeIndex].start) {
-        // Добавляем текст до кода
         if (i > lastIndex) {
           const beforeCode = text.substring(lastIndex, i)
           if (beforeCode) {
             runs.push(...parseBoldItalicParsedRuns(beforeCode))
           }
         }
-        // Добавляем код
         runs.push({ text: codeParts[codeIndex].text, font: 'Courier New' })
         lastIndex = codeParts[codeIndex].end
         i = codeParts[codeIndex].end - 1
@@ -404,7 +351,6 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       }
     }
 
-    // Оставшийся текст после всех блоков кода
     if (lastIndex < text.length) {
       const remainingText = text.substring(lastIndex)
       if (remainingText) {
@@ -412,9 +358,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       }
     }
 
-    return runs.length > 0 
-      ? runs.map(r => new TextRun({ text: r.text, bold: r.bold, italics: r.italics, font: r.font }))
-      : [new TextRun({ text })]
+    return runs.length > 0 ? runs : [{ text }]
   }
 
   const parseBoldItalicParsedRuns = (text: string): Array<{text: string, bold?: boolean, italics?: boolean}> => {
@@ -750,7 +694,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       <div className="mt-8 pt-4 border-t border-gray-100">
         <div className="flex flex-col md:flex-row justify-between gap-4 text-[10px] text-gray-400">
           <div className="space-y-1 max-w-2xl">
-            <p><strong>⚠️ Верификация:</strong> Данное консультативное заключение требует обязательной проверки и подписи лечащего врача. Система Doctor Opus является инструментом поддержки принятия решений (CDSS).</p>
+            <p><strong>⚠️ Верификация:</strong> Данное консультативное заключение требует обязательной проверки и подписи лечащего врача. Doctor Opus — информационно‑аналитический сервис, не являющийся медицинским изделием.</p>
             <p><strong>ℹ️ О тарификации:</strong> Повторные запросы к тем же данным тарифицируются заново, если они не были сохранены в кэше системы.</p>
           </div>
           <div className="text-right">

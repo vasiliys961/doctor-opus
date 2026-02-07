@@ -51,7 +51,7 @@
   - `findings_observed`, `cannot_assess`, `red_flags_visual`
   - `reshoot_instructions`
 
-### Этап 2: Opus 4.5
+### Этап 2: Opus 4.6
 - Получает JSON от Gemini
 - Получает исходное изображение
 - Валидирует JSON по изображению

@@ -76,7 +76,7 @@ export default function VoiceInput({ onTranscript, disabled = false, className =
           ? 'bg-red-500 text-white animate-pulse shadow-lg scale-110' 
           : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'
       } ${className} disabled:opacity-50 disabled:cursor-not-allowed`}
-      title={isListening ? 'Идет запись... Говорите' : (placeholder || 'Нажмите, чтобы продиктовать')}
+      title={isListening ? 'Идет запись... Говорите (не диктуйте ФИО пациента!)' : (placeholder || 'Нажмите, чтобы продиктовать (без ФИО пациента)')}
     >
       {isListening ? (
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

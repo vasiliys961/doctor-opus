@@ -66,7 +66,8 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('❌ [BILLING] Error getting balance:', error);
+    const { safeError } = await import('@/lib/logger');
+    safeError('❌ [BILLING] Error getting balance:', error?.message);
     return NextResponse.json(
       { error: 'Failed to get balance' },
       { status: 500 }
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
  *   "amount": 5.5,
  *   "operation": "Анализ ЭКГ",
  *   "metadata": {
- *     "model": "anthropic/claude-opus-4.5",
+ *     "model": "anthropic/claude-opus-4.6",
  *     "tokens": { "input": 1000, "output": 500 }
  *   }
  * }
@@ -211,10 +212,9 @@ export async function POST(request: NextRequest) {
 
       await client.query('COMMIT');
 
-      console.log(
-        `💰 [BILLING] Deducted ${amount.toFixed(2)} credits from ${email}. ` +
-        `Balance: ${currentBalance.toFixed(2)} → ${newBalance.toFixed(2)}`
-      );
+      // Логируем без раскрытия email
+      const { safeLog: log } = await import('@/lib/logger');
+      log(`💰 [BILLING] Deducted ${amount.toFixed(2)} credits. Balance: ${currentBalance.toFixed(2)} → ${newBalance.toFixed(2)}`);
 
       return NextResponse.json({
         success: true,
@@ -232,7 +232,8 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error: any) {
-    console.error('❌ [BILLING] Deduction error:', error);
+    const { safeError } = await import('@/lib/logger');
+    safeError('❌ [BILLING] Deduction error:', error?.message);
     return NextResponse.json(
       { 
         error: 'Failed to deduct credits'

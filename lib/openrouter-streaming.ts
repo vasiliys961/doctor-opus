@@ -10,7 +10,7 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Актуальные модели (последние флагманы 2025-2026)
 const MODELS = {
-  OPUS: 'anthropic/claude-opus-4.5',                       // Claude Opus 4.5
+  OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6
   SONNET: 'anthropic/claude-sonnet-4.5',                 // Claude Sonnet 4.5
   GPT_5_2: 'openai/gpt-5.2-chat',                        // GPT-5.2 Chat
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
@@ -275,7 +275,7 @@ export async function analyzeImageOpusTwoStageStreaming(
       
       // Обновляем статус перед запуском второй модели
       if (loadingInterval) clearInterval(loadingInterval);
-      const stage2Header = `\n\n> *Этап 2: Клинический разбор через ${model.includes('opus') ? 'Opus 4.5' : 'Sonnet 4.5'}...*\n\n---\n\n`;
+      const stage2Header = `\n\n> *Этап 2: Клинический разбор через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.5'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
@@ -443,7 +443,7 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       const initialUsage = extractionResult.usage;
       
       if (loadingInterval) clearInterval(loadingInterval);
-      const stage2Header = `\n\n> *Этап 2: Детальный клинический разбор и сравнение через ${model.includes('opus') ? 'Opus 4.5' : 'Sonnet 4.5'}...*\n\n---\n\n`;
+      const stage2Header = `\n\n> *Этап 2: Детальный клинический разбор и сравнение через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.5'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
@@ -602,7 +602,7 @@ export async function analyzeMultipleImagesWithJSONStreaming(
       const initialUsage = extractionResult.usage;
       
       if (loadingInterval) clearInterval(loadingInterval);
-      const stage2Header = `\n\n> *Этап 2: Профессорский разбор через Opus 4.5 (максимальная точность)...*\n\n---\n\n`;
+      const stage2Header = `\n\n> *Этап 2: Профессорский разбор через Opus 4.6 (максимальная точность)...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt } = await import('./prompts');

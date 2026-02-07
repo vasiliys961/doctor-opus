@@ -123,7 +123,7 @@ export default function ChatPage() {
 
     try {
       const modelName = model === 'opus' 
-        ? 'anthropic/claude-opus-4.5' 
+        ? 'anthropic/claude-opus-4.6' 
         : model === 'sonnet'
           ? 'anthropic/claude-sonnet-4.5'
           : model === 'gpt52'
@@ -241,7 +241,7 @@ export default function ChatPage() {
 
     try {
       const modelName = model === 'opus' 
-        ? 'anthropic/claude-opus-4.5' 
+        ? 'anthropic/claude-opus-4.6' 
         : model === 'sonnet'
           ? 'anthropic/claude-sonnet-4.5'
           : model === 'gpt52'
@@ -839,7 +839,7 @@ export default function ChatPage() {
               disabled={loading}
             >
               <option value="gpt52">🚀 GPT-5.2</option>
-              <option value="opus">🧠 Opus 4.5</option>
+              <option value="opus">🧠 Opus 4.6</option>
               <option value="sonnet">🤖 Sonnet 4.5</option>
               <option value="gemini">⚡ Gemini 3.0</option>
             </select>

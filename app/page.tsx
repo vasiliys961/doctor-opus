@@ -35,7 +35,7 @@ export default async function HomePage() {
         <div className="lg:col-span-2">
           <div className="py-4 sm:py-6">
             <div className="text-primary-900 font-bold text-sm sm:text-base lg:text-lg uppercase tracking-wider mb-2">
-              Система поддержки принятия клинических решений (CDSS)
+              Информационно‑аналитическая платформа для врачей
             </div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight text-gray-900 mb-3">
               Правильное время<br />
@@ -82,7 +82,7 @@ export default async function HomePage() {
               Для профессионалов здравоохранения
             </h2>
             <p className="text-xs sm:text-sm opacity-90 mb-3 sm:mb-4">
-              doctor-opus.ru — облачная CDSS-платформа для врачей.
+              doctor-opus.ru — облачная платформа клинико‑информационной поддержки для врачей.
             </p>
             <div className="mt-3 sm:mt-4 text-xs sm:text-sm text-left bg-white/10 p-3 rounded-xl space-y-2">
               <p>✔ <strong>Доступ к ИИ-моделям</strong> для получения второго мнения.</p>
@@ -198,7 +198,7 @@ export default async function HomePage() {
           <div className="md:col-span-2 lg:col-span-1">
             <h3 className="text-lg font-bold text-slate-900 mb-4">Doctor Opus</h3>
             <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-              Программное обеспечение для поддержки принятия клинических решений (CDSS). Инструмент автоматизации анализа данных для медицинских специалистов.
+              Информационно‑аналитический SaaS‑сервис для врачей. Инструмент автоматизации обработки и структурирования медицинских данных. Не является медицинским изделием.
             </p>
           </div>
           

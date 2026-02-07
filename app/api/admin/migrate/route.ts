@@ -1,54 +1,54 @@
 import { sql } from '@/lib/database';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
+import { authOptions, isAdminEmail } from '@/lib/auth';
 import { safeLog, safeError } from '@/lib/logger';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 /**
- * Doctor Opus v3.40.0 - Database Migration Endpoint
+ * Doctor Opus v3.41.0 - Database Migration Endpoint
  * 
  * БЕЗОПАСНОСТЬ:
- * - Требует MIGRATION_SECRET из .env
- * - Опционально: проверка NextAuth сессии
+ * - POST: Требует MIGRATION_SECRET из .env (захардкоженные секреты удалены)
+ * - GET: Требует авторизации admin-пользователя ИЛИ MIGRATION_SECRET
  * - Логирование всех попыток миграции
- * 
- * ИСПОЛЬЗОВАНИЕ:
- * POST /api/admin/migrate
- * Body: { "secret": "ваш-секрет-из-env" }
- * 
- * ТАБЛИЦЫ:
- * - user_balances: Баланс пользователей
- * - credit_transactions: История транзакций
  */
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    // 1. Проверка секрета миграции
     const body = await request.json();
     const { secret } = body;
     
-    // ВРЕМЕННО: Жестко прописанный секрет для миграции без настройки окружения
-    const HARDCODED_SECRET = "doctor-opus-prod-k8m2x9p4w7q15n3j6h8v2b9m4x7";
+    // Только секрет из .env — никаких захардкоженных значений
+    const MIGRATION_SECRET = process.env.MIGRATION_SECRET;
     
-    if (!secret || (secret !== process.env.MIGRATION_SECRET && secret !== HARDCODED_SECRET)) {
+    if (!MIGRATION_SECRET) {
+      safeError('❌ [MIGRATION] MIGRATION_SECRET не задан в .env');
+      return NextResponse.json(
+        { error: 'Migration not configured', message: 'Set MIGRATION_SECRET in .env' },
+        { status: 503 }
+      );
+    }
+    
+    if (!secret || secret !== MIGRATION_SECRET) {
       safeError('❌ [MIGRATION] Unauthorized attempt:', {
         ip: request.headers.get('x-forwarded-for') || 'unknown',
         time: new Date().toISOString()
       });
       
       return NextResponse.json(
-        { error: 'Unauthorized', message: 'Invalid migration secret' },
+        { error: 'Unauthorized' },
         { status: 401 }
       );
     }
     
     safeLog('🔄 [MIGRATION] Starting database migration...');
     
-    // 2. Создание таблицы user_balances
+    // Создание таблиц
     safeLog('📊 [MIGRATION] Creating user_balances table...');
     await sql`
       CREATE TABLE IF NOT EXISTS user_balances (
@@ -62,61 +62,28 @@ export async function POST(request: Request) {
       )
     `;
     
-    // 2.1. Обновление существующей таблицы (если нужно)
-    safeLog('🔧 [MIGRATION] Updating user_balances schema...');
-    
-    // Добавляем total_spent (если нет)
+    // Обновления схемы (backwards compatibility)
     try {
-      await sql`
-        ALTER TABLE user_balances 
-        ADD COLUMN IF NOT EXISTS total_spent DECIMAL(10,2) DEFAULT 0.00
-      `;
-    } catch (e: any) {
-      safeLog('ℹ️ [MIGRATION] total_spent already exists or error:', e.message);
-    }
+      await sql`ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS total_spent DECIMAL(10,2) DEFAULT 0.00`;
+    } catch (e: any) { safeLog('ℹ️ total_spent:', e.message); }
     
-    // Добавляем is_test_account (если нет)
     try {
-      await sql`
-        ALTER TABLE user_balances 
-        ADD COLUMN IF NOT EXISTS is_test_account BOOLEAN DEFAULT true
-      `;
-    } catch (e: any) {
-      safeLog('ℹ️ [MIGRATION] is_test_account already exists or error:', e.message);
-    }
+      await sql`ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS is_test_account BOOLEAN DEFAULT true`;
+    } catch (e: any) { safeLog('ℹ️ is_test_account:', e.message); }
     
-    // Переименовываем credits в balance (если нужно)
     try {
-      await sql`
-        ALTER TABLE user_balances 
-        RENAME COLUMN credits TO balance
-      `;
-      safeLog('✅ [MIGRATION] Renamed credits → balance');
-    } catch (e: any) {
-      safeLog('ℹ️ [MIGRATION] Column credits not found or already renamed');
-    }
+      await sql`ALTER TABLE user_balances RENAME COLUMN credits TO balance`;
+      safeLog('✅ Renamed credits → balance');
+    } catch (e: any) { /* already renamed or doesn't exist */ }
     
-    // Обновляем constraint для balance
     try {
-      await sql`
-        ALTER TABLE user_balances 
-        DROP CONSTRAINT IF EXISTS user_balances_balance_check
-      `;
-      await sql`
-        ALTER TABLE user_balances 
-        ADD CONSTRAINT user_balances_balance_check CHECK (balance >= -5.00)
-      `;
-    } catch (e: any) {
-      safeLog('ℹ️ [MIGRATION] Constraint update skipped:', e.message);
-    }
+      await sql`ALTER TABLE user_balances DROP CONSTRAINT IF EXISTS user_balances_balance_check`;
+      await sql`ALTER TABLE user_balances ADD CONSTRAINT user_balances_balance_check CHECK (balance >= -5.00)`;
+    } catch (e: any) { /* constraint update skipped */ }
     
-    // 3. Индекс для user_balances
-    await sql`
-      CREATE INDEX IF NOT EXISTS idx_user_balances_email 
-      ON user_balances(email)
-    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_user_balances_email ON user_balances(email)`;
     
-    // 4. Создание таблицы credit_transactions
+    // credit_transactions
     safeLog('📊 [MIGRATION] Creating credit_transactions table...');
     await sql`
       CREATE TABLE IF NOT EXISTS credit_transactions (
@@ -130,44 +97,36 @@ export async function POST(request: Request) {
       )
     `;
     
-    // 5. Индекс для credit_transactions
+    await sql`CREATE INDEX IF NOT EXISTS idx_transactions_email_date ON credit_transactions(email, created_at DESC)`;
+    
+    // users (v3.41.0 — авторизация с паролями)
+    safeLog('📊 [MIGRATION] Creating users table...');
     await sql`
-      CREATE INDEX IF NOT EXISTS idx_transactions_email_date 
-      ON credit_transactions(email, created_at DESC)
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        name VARCHAR(255) DEFAULT 'Врач',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
     `;
     
-    // 6. Добавление тестовых пользователей (если нужно)
-    const testUsers = [
-      'support@doctor-opus.ru',
-      'test@doctor-opus.ru'
-    ];
+    await sql`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`;
     
-    for (const email of testUsers) {
-      await sql`
-        INSERT INTO user_balances (email, balance, is_test_account)
-        VALUES (${email}, 100.00, true)
-        ON CONFLICT (email) DO NOTHING
-      `;
-    }
-    
-    // 7. Проверка созданных таблиц
+    // Проверка
     const tables = await sql`
-      SELECT 
-        tablename,
-        schemaname
-      FROM pg_tables 
+      SELECT tablename FROM pg_tables 
       WHERE schemaname = 'public' 
-      AND tablename IN ('user_balances', 'credit_transactions')
+      AND tablename IN ('user_balances', 'credit_transactions', 'users', 'payments', 'consents')
       ORDER BY tablename
     `;
     
-    // 8. Подсчет записей
     const balanceCount = await sql`SELECT COUNT(*) as count FROM user_balances`;
-    const transactionCount = await sql`SELECT COUNT(*) as count FROM credit_transactions`;
+    const usersCount = await sql`SELECT COUNT(*) as count FROM users`;
     
     const executionTime = Date.now() - startTime;
     
-    safeLog(`✅ [MIGRATION] Completed successfully in ${executionTime}ms`);
+    safeLog(`✅ [MIGRATION] Completed in ${executionTime}ms`);
     
     return NextResponse.json({
       success: true,
@@ -176,79 +135,79 @@ export async function POST(request: Request) {
       tables: tables.rows.map(t => t.tablename),
       stats: {
         user_balances: parseInt(balanceCount.rows[0].count),
-        credit_transactions: parseInt(transactionCount.rows[0].count)
+        users: parseInt(usersCount.rows[0].count),
       },
-      test_users: testUsers
     });
     
   } catch (error: any) {
-    safeError('❌ [MIGRATION] Migration failed:', {
-      error: error.message,
-      stack: error.stack?.substring(0, 500)
-    });
-    
+    safeError('❌ [MIGRATION] Failed:', error.message);
     return NextResponse.json(
-      { 
-        error: 'Migration failed', 
-        details: error.message,
-        hint: 'Check server logs for details'
-      },
+      { error: safeErrorMessage(error, 'Migration failed') },
       { status: 500 }
     );
   }
 }
 
 /**
- * GET /api/admin/migrate
- * Проверка статуса миграции (без выполнения)
+ * GET /api/admin/migrate — статус миграции
+ * Требует: авторизованный админ ИЛИ ?secret=... из query
  */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    // Проверка существования таблиц
+    // Проверка доступа: admin-сессия ИЛИ секрет в query
+    const url = new URL(request.url);
+    const querySecret = url.searchParams.get('secret');
+    const MIGRATION_SECRET = process.env.MIGRATION_SECRET;
+    
+    let authorized = false;
+    
+    // Способ 1: секрет в query
+    if (MIGRATION_SECRET && querySecret === MIGRATION_SECRET) {
+      authorized = true;
+    }
+    
+    // Способ 2: admin-сессия
+    if (!authorized) {
+      const session = await getServerSession(authOptions);
+      if (session?.user?.email && isAdminEmail(session.user.email)) {
+        authorized = true;
+      }
+    }
+    
+    if (!authorized) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    // Проверка таблиц
     const tables = await sql`
-      SELECT 
-        tablename,
-        schemaname
-      FROM pg_tables 
+      SELECT tablename FROM pg_tables 
       WHERE schemaname = 'public' 
-      AND tablename IN ('user_balances', 'credit_transactions')
+      AND tablename IN ('user_balances', 'credit_transactions', 'users', 'payments', 'consents')
     `;
     
     const existingTables = tables.rows.map(t => t.tablename);
-    const requiredTables = ['user_balances', 'credit_transactions'];
+    const requiredTables = ['user_balances', 'credit_transactions', 'users'];
     const missingTables = requiredTables.filter(t => !existingTables.includes(t));
     
-    // Подсчет записей (если таблицы существуют)
-    let stats: any = {};
+    const stats: Record<string, number> = {};
     
-    if (existingTables.includes('user_balances')) {
-      const count = await sql`SELECT COUNT(*) as count FROM user_balances`;
-      stats.user_balances = parseInt(count.rows[0].count);
-    }
-    
-    if (existingTables.includes('credit_transactions')) {
-      const count = await sql`SELECT COUNT(*) as count FROM credit_transactions`;
-      stats.credit_transactions = parseInt(count.rows[0].count);
+    for (const table of existingTables) {
+      try {
+        const count = await sql`SELECT COUNT(*) as count FROM ${table}`;
+        stats[table] = parseInt(count.rows[0].count);
+      } catch { /* table might not be queryable directly via template */ }
     }
     
     return NextResponse.json({
       status: missingTables.length === 0 ? 'migrated' : 'pending',
       existing_tables: existingTables,
       missing_tables: missingTables,
-      stats,
-      message: missingTables.length === 0 
-        ? 'All tables exist' 
-        : `Missing tables: ${missingTables.join(', ')}`
     });
     
   } catch (error: any) {
-    safeError('❌ [MIGRATION] Status check failed:', error);
-    
+    safeError('❌ [MIGRATION] Status check failed:', error.message);
     return NextResponse.json(
-      { 
-        error: 'Status check failed', 
-        details: error.message 
-      },
+      { error: safeErrorMessage(error, 'Status check failed') },
       { status: 500 }
     );
   }

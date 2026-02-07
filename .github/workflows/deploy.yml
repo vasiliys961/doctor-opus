@@ -22,7 +22,22 @@ jobs:
           echo "📥 Получение изменений с GitHub..."
           git pull origin main
           
-          echo "🚀 Запуск через Docker Compose (сборка и перезапуск)..."
+          echo "🚀 Сборка и перезапуск через Docker Compose..."
           docker compose up -d --build
           
-          echo "✅ Деплой завершен успешно!"
+          echo "⏳ Ожидание запуска приложения (30 сек)..."
+          sleep 30
+          
+          echo "🔄 Запуск миграции БД..."
+          # Миграция через API с секретом из .env
+          MIGRATION_SECRET=$(grep -oP 'MIGRATION_SECRET=\K.*' .env 2>/dev/null || echo "")
+          if [ -n "$MIGRATION_SECRET" ]; then
+            RESULT=$(curl -s -X POST http://localhost:3000/api/admin/migrate \
+              -H "Content-Type: application/json" \
+              -d "{\"secret\": \"$MIGRATION_SECRET\"}" || echo '{"error":"curl failed"}')
+            echo "Миграция: $RESULT"
+          else
+            echo "⚠️ MIGRATION_SECRET не задан в .env, пропускаем миграцию"
+          fi
+          
+          echo "✅ Деплой v3.41.0 завершен!"

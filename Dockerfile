@@ -23,13 +23,15 @@ RUN npm install --frozen-lockfile
 # Копируем исходники и собираем проект
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED 1
+# Увеличиваем лимит памяти для сборки (vtk.js, cornerstone — тяжёлые)
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 
 # Этап 2: Финальный образ с Python и Node.js
 FROM python:3.10-slim
 
 LABEL maintainer="Doctor Opus Team"
-LABEL version="3.39.0"
+LABEL version="3.41.0"
 
 WORKDIR /app
 

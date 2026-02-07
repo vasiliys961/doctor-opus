@@ -58,7 +58,7 @@ export default function ECGPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo(analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.5');
+                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.6');
           return;
         }
         // Сохраняем ключ для записи после завершения
@@ -82,7 +82,7 @@ export default function ECGPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-4.5');
+        formData.append('model', 'anthropic/claude-opus-4.6');
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3-flash-preview');
       }
@@ -108,7 +108,7 @@ export default function ECGPage() {
 
           const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
           const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                          analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.5';
+                          analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.6';
           setModelInfo(modelUsed)
 
           await handleSSEStream(response, {
@@ -183,7 +183,7 @@ export default function ECGPage() {
             saveToCache((window as any)._currentCacheKey, data.result, analysisMode);
           }
 
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5')
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.6')
           setModelInfo(modelUsed)
           
           const cost = data.cost || 1.0;
@@ -233,7 +233,7 @@ export default function ECGPage() {
         content={{
           fast: "двухэтапный скрининг ЭКГ (сначала детализированное, но компактное описание кривой, затем текстовый разбор), даёт краткое заключение и оценку риска, удобно для быстрого первичного просмотра.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс глубины и качества для анализа кривых ЭКГ.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.5) — рекомендуется для критических и сложных случаев.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев.",
           extra: [
             "💡 Рекомендуется GPT-5.2 для быстрых анализов и Opus для сложных случаев.",
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества для анализа кривых ЭКГ.",

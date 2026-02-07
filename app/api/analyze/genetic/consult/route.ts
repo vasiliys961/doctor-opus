@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
 
     const consultModel =
       model === 'gpt52' ? 'openai/gpt-5.2-chat' : 
-      mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.5';
+      mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.6';
 
     const payload: any = {
       model: consultModel,

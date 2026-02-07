@@ -15,7 +15,7 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Актуальные модели (последние флагманы 2025-2026)
 export const MODELS = {
-  OPUS: 'anthropic/claude-opus-4.5',                       // Claude Opus 4.5
+  OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6
   SONNET: 'anthropic/claude-sonnet-4.5',                 // Claude Sonnet 4.5
   GPT_5_2: 'openai/gpt-5.2-chat',                        // GPT-5.2 Chat
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
@@ -60,7 +60,7 @@ interface StreamingOptions {
 /**
  * Вспомогательная функция для fetch с таймаутом
  */
-async function fetchWithTimeout(url: string, options: any, timeout = 120000) {
+async function fetchWithTimeout(url: string, options: any, timeout = 300000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   
@@ -113,7 +113,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
       if (isDocumentScan) {
         model = MODELS.GEMINI_3_FLASH; // Gemini 3 Flash — дешевле и лучше для сканирования
       } else {
-        model = MODELS.OPUS; // Opus 4.5 для точного анализа
+        model = MODELS.OPUS; // Opus 4.6 для точного анализа
       }
     }
   }

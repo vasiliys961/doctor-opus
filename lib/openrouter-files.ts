@@ -41,11 +41,99 @@ function getImageMimeType(file: File): string {
 }
 
 /**
+ * Максимальный размер PDF для отправки как base64 (20 MB)
+ */
+const MAX_PDF_SIZE_BYTES = 20 * 1024 * 1024;
+
+/**
+ * Модели, которые нативно поддерживают PDF как base64 в image_url
+ * Gemini принимает application/pdf, остальные — нет (Azure GPT, Claude Azure)
+ */
+function modelSupportsPDFNatively(model: string): boolean {
+  return model.includes('gemini');
+}
+
+/**
+ * Извлечение текста из PDF через Gemini Flash (Vision API)
+ * Используется как fallback для моделей, не поддерживающих PDF нативно
+ */
+async function extractPDFTextViaGemini(base64PDF: string, fileName: string): Promise<string> {
+  const rawKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = rawKey?.replace(/[\n\r\t]/g, '').trim();
+  if (!apiKey) return '';
+
+  try {
+    const extractionPayload = {
+      model: MODELS.GEMINI_3_FLASH,
+      messages: [
+        {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'text',
+              text: `Извлеки ВЕСЬ текст из этого PDF документа. Сохрани структуру: заголовки, таблицы (в текстовом виде), списки, числовые значения и единицы измерения. Не добавляй своих комментариев — только содержимое документа.`,
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:application/pdf;base64,${base64PDF}`,
+              },
+            },
+          ],
+        },
+      ],
+      max_tokens: 16000,
+      temperature: 0.0,
+    };
+
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://doctor-opus.ru',
+        'X-Title': 'Doctor Opus',
+      },
+      body: JSON.stringify(extractionPayload),
+    });
+
+    if (!response.ok) {
+      console.warn(`⚠️ [PDF→Gemini] Ошибка извлечения текста из "${fileName}": ${response.status}`);
+      return '';
+    }
+
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content || '';
+    const tokens = data.usage?.total_tokens || 0;
+    console.log(`✅ [PDF→Gemini] Извлечён текст из "${fileName}": ${text.length} символов, ${tokens} токенов`);
+    return text;
+  } catch (err: any) {
+    console.warn(`⚠️ [PDF→Gemini] Исключение при извлечении из "${fileName}":`, err.message);
+    return '';
+  }
+}
+
+/**
+ * Чтение текстового файла (txt, csv, json и т.д.)
+ */
+async function readTextFile(file: File): Promise<string> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const text = Buffer.from(arrayBuffer).toString('utf-8');
+    return text.slice(0, 100000); // Ограничиваем 100K символов
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Подготовка контента сообщения с файлами
+ * @param model — идентификатор модели, чтобы выбрать стратегию для PDF
  */
 async function prepareMessageContent(
   message: string,
-  files: File[]
+  files: File[],
+  model: string
 ): Promise<Array<{ type: string; text?: string; image_url?: { url: string } }>> {
   const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
 
@@ -54,10 +142,19 @@ async function prepareMessageContent(
     content.push({ type: 'text', text: message });
   }
 
+  // Вспомогательная функция для добавления текстового блока
+  const appendText = (text: string) => {
+    if (content.length > 0 && content[content.length - 1].type === 'text') {
+      content[content.length - 1].text = (content[content.length - 1].text || '') + '\n\n' + text;
+    } else {
+      content.push({ type: 'text', text });
+    }
+  };
+
   // Обрабатываем файлы
   for (const file of files) {
     if (file.type.startsWith('image/')) {
-      // Для изображений - конвертируем в base64
+      // Для изображений — конвертируем в base64
       const base64 = await fileToBase64(file);
       const mimeType = getImageMimeType(file);
       content.push({
@@ -66,14 +163,48 @@ async function prepareMessageContent(
           url: `data:${mimeType};base64,${base64}`
         }
       });
-    } else {
-      // Для других файлов - добавляем информацию о файле в текст
-      const fileInfo = `[Файл: ${file.name}, размер: ${(file.size / 1024).toFixed(1)} KB, тип: ${file.type || 'неизвестен'}]`;
-      if (content.length === 0 || content[content.length - 1].type !== 'text') {
-        content.push({ type: 'text', text: fileInfo });
+    } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      // === PDF ===
+      if (file.size > MAX_PDF_SIZE_BYTES) {
+        appendText(`[PDF файл "${file.name}" (${(file.size / (1024*1024)).toFixed(1)} MB) — слишком большой. Максимум ${MAX_PDF_SIZE_BYTES / (1024*1024)} MB. Загрузите скриншоты страниц или вставьте текст вручную.]`);
       } else {
-        content[content.length - 1].text = (content[content.length - 1].text || '') + '\n' + fileInfo;
+        const base64 = await fileToBase64(file);
+
+        if (modelSupportsPDFNatively(model)) {
+          // Gemini — отправляем PDF как есть (поддерживает application/pdf)
+          content.push({
+            type: 'image_url',
+            image_url: { url: `data:application/pdf;base64,${base64}` }
+          });
+          console.log(`✅ [PDF→Native] PDF "${file.name}" (${(file.size / 1024).toFixed(0)} KB) отправлен напрямую в ${model}`);
+        } else {
+          // GPT / Claude — не принимают PDF. Извлекаем текст через Gemini Flash
+          console.log(`📄 [PDF→Extract] Модель ${model} не поддерживает PDF. Извлекаем текст через Gemini Flash...`);
+          const extractedText = await extractPDFTextViaGemini(base64, file.name);
+          if (extractedText.length > 50) {
+            const header = `📄 Содержимое файла "${file.name}" (${(file.size / 1024).toFixed(0)} KB):`;
+            appendText(`${header}\n\n${extractedText}`);
+          } else {
+            appendText(`[PDF файл "${file.name}" — не удалось извлечь содержимое. Пожалуйста, загрузите скриншоты страниц или вставьте данные вручную.]`);
+          }
+        }
       }
+    } else if (
+      file.type.startsWith('text/') || 
+      file.type === 'application/json' ||
+      file.name.match(/\.(txt|csv|json|xml|md|log|vcf)$/i)
+    ) {
+      // Текстовые файлы — читаем содержимое
+      const fileText = await readTextFile(file);
+      if (fileText) {
+        appendText(`📄 Содержимое файла "${file.name}":\n\n${fileText}`);
+      } else {
+        content.push({ type: 'text', text: `[Файл: ${file.name} — не удалось прочитать]` });
+      }
+    } else {
+      // Неизвестный тип — добавляем метаданные
+      const fileInfo = `[Файл: ${file.name}, размер: ${(file.size / 1024).toFixed(1)} KB, тип: ${file.type || 'неизвестен'}]`;
+      appendText(fileInfo);
     }
   }
 
@@ -97,8 +228,8 @@ export async function sendTextRequestWithFiles(
     throw new Error('OPENROUTER_API_KEY не настроен');
   }
 
-  // Подготавливаем контент с файлами
-  const messageContent = await prepareMessageContent(prompt, files);
+  // Подготавливаем контент с файлами (передаём модель для выбора стратегии PDF)
+  const messageContent = await prepareMessageContent(prompt, files, model);
 
   // Выбираем системный промпт: Всегда используем полный SYSTEM_PROMPT для глубины аналитики
   const basePrompt = SYSTEM_PROMPT;
@@ -196,8 +327,8 @@ export async function sendTextRequestStreamingWithFiles(
     throw new Error('OPENROUTER_API_KEY не настроен');
   }
 
-  // Подготавливаем контент с файлами
-  const messageContent = await prepareMessageContent(prompt, files);
+  // Подготавливаем контент с файлами (передаём модель для выбора стратегии PDF)
+  const messageContent = await prepareMessageContent(prompt, files, model);
 
   // Выбираем системный промпт: Всегда используем полный SYSTEM_PROMPT для глубины аналитики
   const basePrompt = SYSTEM_PROMPT;
