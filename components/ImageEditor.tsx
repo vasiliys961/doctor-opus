@@ -13,6 +13,7 @@ export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProp
   const [isDrawing, setIsDrawing] = useState(false)
   const [brushSize, setBrushSize] = useState(40)
   const [history, setHistory] = useState<ImageData[]>([])
+  const [isSaving, setIsSaving] = useState(false)
   const imageRef = useRef<HTMLImageElement | null>(null)
 
   useEffect(() => {
@@ -103,8 +104,20 @@ export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProp
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const editedImage = canvas.toDataURL('image/jpeg', 0.9)
-    onSave(editedImage)
+    setIsSaving(true)
+    
+    // Используем setTimeout, чтобы UI успел отобразить состояние загрузки
+    setTimeout(() => {
+      try {
+        const editedImage = canvas.toDataURL('image/jpeg', 0.85) // Чуть ниже качество для скорости и меньшего веса
+        onSave(editedImage)
+      } catch (err) {
+        console.error('Ошибка сохранения изображения:', err)
+        alert('Не удалось сохранить изменения. Попробуйте уменьшить область закрашивания.')
+      } finally {
+        setIsSaving(false)
+      }
+    }, 100)
   }
 
   return (
@@ -167,9 +180,17 @@ export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProp
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 font-medium"
+              disabled={isSaving}
+              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 font-medium disabled:opacity-50 flex items-center gap-2"
             >
-              ✓ Применить и сохранить
+              {isSaving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Сохранение...
+                </>
+              ) : (
+                '✓ Применить и сохранить'
+              )}
             </button>
           </div>
         </div>

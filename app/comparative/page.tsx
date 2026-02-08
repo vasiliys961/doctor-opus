@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
+import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import AnalysisTips from '@/components/AnalysisTips'
@@ -32,6 +33,8 @@ export default function ComparativeAnalysisPage() {
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [accumulatedDescription, setAccumulatedDescription] = useState('')
+  const [showEditor, setShowEditor] = useState(false)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
 
   const handleImageUpload = (file: File) => {
     const reader = new FileReader()
@@ -229,6 +232,15 @@ export default function ComparativeAnalysisPage() {
                     <button onClick={() => removeImage(index)} className="text-red-500 hover:text-red-700 text-sm">✕ Удалить</button>
                   </div>
                   <img src={img.preview} alt="" className="w-full h-48 object-contain rounded-lg mb-2" />
+                  <button
+                    onClick={() => {
+                      setEditingIndex(index)
+                      setShowEditor(true)
+                    }}
+                    className="w-full mb-2 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                  >
+                    🎨 Закрасить данные
+                  </button>
                   <input
                     type="text"
                     placeholder="Описание (необязательно)"
@@ -293,6 +305,27 @@ export default function ComparativeAnalysisPage() {
         cost={currentCost}
         images={images.map(img => img.preview)}
       />
+
+      {showEditor && editingIndex !== null && images[editingIndex] && (
+        <ImageEditor
+          image={images[editingIndex].preview}
+          onSave={(editedImage) => {
+            fetch(editedImage)
+              .then(res => res.blob())
+              .then(blob => {
+                const newImages = [...images]
+                newImages[editingIndex] = {
+                  ...newImages[editingIndex],
+                  preview: editedImage,
+                  file: new File([blob], images[editingIndex].file.name || `edited_${editingIndex}.jpg`, { type: 'image/jpeg' })
+                }
+                setImages(newImages)
+              })
+            setShowEditor(false)
+          }}
+          onCancel={() => setShowEditor(false)}
+        />
+      )}
     </div>
   )
 }

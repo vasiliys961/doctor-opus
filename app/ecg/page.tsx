@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
+import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import PatientSelector from '@/components/PatientSelector'
@@ -32,6 +33,7 @@ export default function ECGPage() {
   const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [showCaliper, setShowCaliper] = useState(false)
+  const [showEditor, setShowEditor] = useState(false)
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -366,16 +368,24 @@ export default function ECGPage() {
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">📷 Загруженное изображение ЭКГ</h2>
-            <button
-              onClick={() => setShowCaliper(!showCaliper)}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
-                showCaliper 
-                  ? 'bg-blue-600 text-white shadow-md' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              📏 {showCaliper ? 'Выключить линейку' : 'Цифровой циркуль (линейка)'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowEditor(true)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
+              >
+                🎨 Закрасить данные
+              </button>
+              <button
+                onClick={() => setShowCaliper(!showCaliper)}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                  showCaliper 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                📏 {showCaliper ? 'Выключить линейку' : 'Цифровой циркуль (линейка)'}
+              </button>
+            </div>
           </div>
           
           <div className="flex justify-center w-full">
@@ -421,6 +431,24 @@ export default function ECGPage() {
           analysisId={analysisId}
           analysisResult={result} 
           inputCase={clinicalContext}
+        />
+      )}
+
+      {showEditor && imagePreview && (
+        <ImageEditor
+          image={imagePreview}
+          onSave={(editedImage) => {
+            setImagePreview(editedImage)
+            // Конвертируем base64 обратно в файл для корректной отправки на сервер
+            fetch(editedImage)
+              .then(res => res.blob())
+              .then(blob => {
+                const editedFile = new File([blob], file?.name || 'ecg_edited.jpg', { type: 'image/jpeg' })
+                setFile(editedFile)
+              })
+            setShowEditor(false)
+          }}
+          onCancel={() => setShowEditor(false)}
         />
       )}
     </div>

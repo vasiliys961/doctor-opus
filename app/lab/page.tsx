@@ -8,6 +8,7 @@ import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
+import ImageEditor from '@/components/ImageEditor'
 import Script from 'next/script'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
@@ -35,6 +36,9 @@ export default function LabPage() {
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
+  const [showEditor, setShowEditor] = useState(false)
+  const [processedImages, setProcessedImages] = useState<string[]>([])
+  const [currentEditorIndex, setCurrentEditorIndex] = useState(0)
 
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
     if (!window.pdfjsLib) {
@@ -107,6 +111,16 @@ export default function LabPage() {
     setFile(uploadedFile)
     setResult('')
     setError(null)
+    setProcessedImages([])
+    
+    if (uploadedFile.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const base64 = (reader.result as string).split(',')[1]
+        setProcessedImages([base64])
+      }
+      reader.readAsDataURL(uploadedFile)
+    }
   }
 
   const handleAnalyze = async () => {
@@ -122,7 +136,78 @@ export default function LabPage() {
     setModelInfo({ model: '', mode: '' })
 
     try {
-      // Если это PDF - конвертируем в изображения на клиенте
+      // Если у нас есть обработанные (анонимизированные) изображения, используем их
+      if (processedImages.length > 0) {
+        console.log(`📄 [LAB] Отправляем ${processedImages.length} анонимизированных изображений...`)
+        
+        const response = await fetch('/api/analyze/lab-images', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            images: processedImages,
+            mode: mode,
+            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.6'),
+            useStreaming: useStreaming,
+            isAnonymous: isAnonymous,
+            prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
+            clinicalContext: clinicalContext
+          }),
+        })
+
+        if (useStreaming) {
+          await handleSSEStream(response, {
+            onChunk: (content, accumulatedText) => {
+              flushSync(() => {
+                setResult(accumulatedText)
+              })
+            },
+            onUsage: (usage) => {
+              console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
+              setCurrentCost(usage.total_cost)
+              
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.6')
+              setModelInfo({ model: usedModel, mode: mode })
+              
+              logUsage({
+                section: 'lab',
+                model: usedModel,
+                inputTokens: usage.prompt_tokens,
+                outputTokens: usage.completion_tokens,
+              })
+            },
+            onError: (err) => {
+              console.error('❌ [STREAMING] Ошибка:', err)
+              setError(`Ошибка стриминга: ${err.message}`)
+            },
+            onComplete: (finalText) => {
+              console.log('✅ [LAB STREAMING] Анализ завершен')
+            }
+          })
+        } else {
+          const data = await response.json()
+          if (data.success) {
+            setResult(data.result)
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.6');
+            setCurrentCost(data.cost || 1.0);
+            setModelInfo({ model: usedModel, mode: mode });
+
+            logUsage({
+              section: 'lab',
+              model: usedModel,
+              inputTokens: 2000,
+              outputTokens: 1000,
+            })
+          } else {
+            setError(data.error || 'Ошибка при анализе')
+          }
+        }
+        setLoading(false)
+        return
+      }
+
+      // Если это PDF и еще не конвертирован - конвертируем и отправляем
       if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
         console.log('📄 [LAB] Обнаружен PDF файл, начинаем конвертацию...')
         setConvertingPDF(true)
@@ -392,6 +477,78 @@ export default function LabPage() {
           </p>
           <ImageUpload onUpload={handleUpload} accept=".pdf,.xlsx,.xls,.csv,image/*" maxSize={50} />
 
+          {file && processedImages.length > 0 && (
+            <div className="mt-6 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-700">📷 Предпросмотр изображения</h3>
+                <div className="text-xs text-gray-500">
+                  {processedImages.length > 1 && `Страница ${currentEditorIndex + 1} из ${processedImages.length}`}
+                </div>
+              </div>
+              
+              <div className="flex flex-col items-center">
+                <img 
+                  src={`data:image/jpeg;base64,${processedImages[currentEditorIndex]}`} 
+                  alt="Предпросмотр" 
+                  className="max-w-full max-h-[400px] rounded-lg shadow-md object-contain mb-4"
+                />
+                
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => setShowEditor(true)}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
+                  >
+                    🎨 Закрасить данные
+                  </button>
+                  
+                  {processedImages.length > 1 && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setCurrentEditorIndex(prev => Math.max(0, prev - 1))}
+                        disabled={currentEditorIndex === 0}
+                        className="px-3 py-1 bg-white border border-gray-300 rounded-md text-xs disabled:opacity-30"
+                      >
+                        ←
+                      </button>
+                      <button
+                        onClick={() => setCurrentEditorIndex(prev => Math.min(processedImages.length - 1, prev + 1))}
+                        disabled={currentEditorIndex === processedImages.length - 1}
+                        className="px-3 py-1 bg-white border border-gray-300 rounded-md text-xs disabled:opacity-30"
+                      >
+                        →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {file && (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) && processedImages.length === 0 && (
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg text-[11px] text-amber-800 w-full max-w-md">
+                ⚠️ <strong>Для ручной анонимизации:</strong> сначала нажмите «Подготовить страницы», чтобы увидеть снимки и закрасить ФИО.
+              </div>
+              <button
+                onClick={async () => {
+                  setConvertingPDF(true)
+                  try {
+                    const images = await convertPDFToImages(file)
+                    setProcessedImages(images)
+                  } catch (err: any) {
+                    setError(err.message)
+                  } finally {
+                    setConvertingPDF(false)
+                  }
+                }}
+                disabled={convertingPDF}
+                className="px-6 py-2 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700 transition-all shadow-md"
+              >
+                {convertingPDF ? '⌛ Обработка...' : '📄 Подготовить страницы для анонимизации'}
+              </button>
+            </div>
+          )}
+
           {file && !loading && (
             <div className="mt-8 flex flex-col items-center border-t pt-6">
               <div className="flex items-center gap-3 mb-4 text-primary-800">
@@ -442,7 +599,7 @@ export default function LabPage() {
           mode={modelInfo.mode || mode}
           cost={currentCost} 
           isAnonymous={isAnonymous}
-          images={file?.type.startsWith('image/') ? [URL.createObjectURL(file)] : []}
+          images={processedImages.length > 0 ? processedImages.map(img => `data:image/jpeg;base64,${img}`) : file?.type.startsWith('image/') ? [URL.createObjectURL(file)] : []}
         />
 
         {result && !loading && (
@@ -450,6 +607,19 @@ export default function LabPage() {
             analysisType="LAB" 
             analysisResult={result} 
             inputCase={clinicalContext}
+          />
+        )}
+
+        {showEditor && processedImages[currentEditorIndex] && (
+          <ImageEditor
+            image={`data:image/jpeg;base64,${processedImages[currentEditorIndex]}`}
+            onSave={(editedImage) => {
+              const newImages = [...processedImages]
+              newImages[currentEditorIndex] = editedImage.split(',')[1]
+              setProcessedImages(newImages)
+              setShowEditor(false)
+            }}
+            onCancel={() => setShowEditor(false)}
           />
         )}
       </div>

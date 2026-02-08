@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
+import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import PatientSelector from '@/components/PatientSelector'
@@ -24,6 +25,7 @@ export default function DermatoscopyPage() {
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [isAnonymous, setIsAnonymous] = useState(false)
+  const [showEditor, setShowEditor] = useState(false)
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -180,12 +182,18 @@ export default function DermatoscopyPage() {
       {file && imagePreview && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">📷 Загруженное изображение</h2>
-          <div className="flex justify-center w-full">
+          <div className="flex flex-col items-center">
             <img 
               src={imagePreview} 
               alt="Загруженное изображение" 
               className="w-full max-h-[800px] rounded-lg shadow-lg object-contain"
             />
+            <button
+              onClick={() => setShowEditor(true)}
+              className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
+            >
+              🎨 Закрасить данные
+            </button>
           </div>
           
           <div className="mt-6 space-y-4">
@@ -307,6 +315,22 @@ export default function DermatoscopyPage() {
           analysisType="DERMATOSCOPY" 
           analysisResult={result} 
           inputCase={clinicalContext}
+        />
+      )}
+
+      {showEditor && imagePreview && (
+        <ImageEditor
+          image={imagePreview}
+          onSave={(editedImage) => {
+            setImagePreview(editedImage)
+            fetch(editedImage)
+              .then(res => res.blob())
+              .then(blob => {
+                setFile(new File([blob], file?.name || 'dermatoscopy_edited.jpg', { type: 'image/jpeg' }))
+              })
+            setShowEditor(false)
+          }}
+          onCancel={() => setShowEditor(false)}
         />
       )}
     </div>

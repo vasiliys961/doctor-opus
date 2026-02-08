@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
+import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import PatientSelector from '@/components/PatientSelector'
@@ -33,6 +34,7 @@ export default function CTPage() {
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
   const [history, setHistory] = useState<Array<{role: string, content: string}>>([])
+  const [showEditor, setShowEditor] = useState(false)
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -215,14 +217,22 @@ export default function CTPage() {
               alt="Загруженное изображение" 
               className="w-full max-h-[800px] rounded-lg shadow-lg object-contain mb-4"
             />
-            {originalDicomStack.length > 0 && (
+            <div className="flex gap-3 mb-4">
               <button
-                onClick={() => setShow3D(true)}
-                className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-all shadow-lg hover:scale-105 active:scale-95"
+                onClick={() => setShowEditor(true)}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-all shadow-lg hover:scale-105 active:scale-95 flex items-center gap-2"
               >
-                <span>🧊 Открыть в 3D (Volume Render)</span>
+                <span>🎨 Закрасить данные</span>
               </button>
-            )}
+              {originalDicomStack.length > 0 && (
+                <button
+                  onClick={() => setShow3D(true)}
+                  className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-all shadow-lg hover:scale-105 active:scale-95"
+                >
+                  <span>🧊 Открыть в 3D (Volume Render)</span>
+                </button>
+              )}
+            </div>
           </div>
           
           <div className="mt-6 space-y-4">
@@ -357,6 +367,22 @@ export default function CTPage() {
         <Dicom3DViewer 
           files={originalDicomStack} 
           onClose={() => setShow3D(false)} 
+        />
+      )}
+
+      {showEditor && imagePreview && (
+        <ImageEditor
+          image={imagePreview}
+          onSave={(editedImage) => {
+            setImagePreview(editedImage)
+            fetch(editedImage)
+              .then(res => res.blob())
+              .then(blob => {
+                setFile(new File([blob], file?.name || 'ct_edited.jpg', { type: 'image/jpeg' }))
+              })
+            setShowEditor(false)
+          }}
+          onCancel={() => setShowEditor(false)}
         />
       )}
     </div>
