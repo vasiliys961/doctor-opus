@@ -19,11 +19,17 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
   const axialRef = useRef<HTMLDivElement>(null)
   const coronalRef = useRef<HTMLDivElement>(null)
   const sagittalRef = useRef<HTMLDivElement>(null)
+  const volumeRef = useRef<HTMLDivElement>(null)
   
   const [loading, setLoading] = useState(true)
   const [decodeProgress, setDecodeProgress] = useState({ current: 0, total: 0 })
   const [error, setError] = useState<string | null>(null)
   const [vtkReady, setVtkReady] = useState(false)
+  const [activePreset, setActivePreset] = useState<'default' | 'bone' | 'brain' | 'mip' | 'glow'>('default')
+
+  // Хранилище для функций передачи (чтобы менять их на лету)
+  const volumePropertyRef = useRef<any>(null)
+  const renderWindowRef = useRef<any>(null)
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.vtk) {
@@ -172,6 +178,76 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
       console.log(`📊 [MPR] Scalar Range: [${scalarArray.getRange()[0]}, ${scalarArray.getRange()[1]}]`);
       console.log(`📊 [MPR] Center: [${imageData.getCenter()}]`);
 
+      // === Новый setupVolumeRendering ===
+      const setupVolumeRendering = (container: HTMLElement) => {
+        const renderWindow = vtk.Rendering.Core.vtkRenderWindow.newInstance();
+        const renderer = vtk.Rendering.Core.vtkRenderer.newInstance();
+        renderWindow.addRenderer(renderer);
+        renderer.setBackground(0.05, 0.05, 0.05);
+
+        const openGLRenderWindow = vtk.Rendering.OpenGL.vtkRenderWindow.newInstance();
+        renderWindow.addView(openGLRenderWindow);
+        openGLRenderWindow.setContainer(container);
+
+        const interactor = vtk.Rendering.Core.vtkRenderWindowInteractor.newInstance();
+        interactor.setView(openGLRenderWindow);
+        interactor.initialize();
+        interactor.bindEvents(container);
+
+        const volume = vtk.Rendering.Core.vtkVolume.newInstance();
+        const mapper = vtk.Rendering.Core.vtkVolumeMapper.newInstance();
+
+        // базовый шаг рейкастинга — баланс качество/скорость для M1
+        mapper.setSampleDistance(0.9);
+        mapper.setInputData(imageData);
+        volume.setMapper(mapper);
+
+        const property = vtk.Rendering.Core.vtkVolumeProperty.newInstance();
+        property.setInterpolationTypeToLinear();
+        property.setShade(true);
+
+        // мягкий, «объёмный» свет по умолчанию
+        property.setAmbient(0.4);
+        property.setDiffuse(0.4);
+        property.setSpecular(0.2);
+        property.setSpecularPower(30);
+
+        const ctfun = vtk.Rendering.Core.vtkColorTransferFunction.newInstance();
+        const ofun = vtk.Common.DataModel.vtkPiecewiseFunction.newInstance();
+
+        const range = scalarArray.getRange();
+        const [min, max] = range;
+        const delta = max - min;
+
+        // Стартовый пресет: мягкие ткани прозрачные, плотное — видно
+        ctfun.addRGBPoint(min, 0, 0, 0);
+        ctfun.addRGBPoint(min + 0.2 * delta, 0.6, 0.4, 0.4);
+        ctfun.addRGBPoint(min + 0.6 * delta, 0.95, 0.85, 0.8);
+        ctfun.addRGBPoint(max, 1, 1, 1);
+
+        ofun.addPoint(min, 0.0);
+        ofun.addPoint(min + 0.2 * delta, 0.01);   // кожа/жир почти прозрачны
+        ofun.addPoint(min + 0.5 * delta, 0.08);   // мягкие ткани очень тонкие
+        ofun.addPoint(min + 0.75 * delta, 0.4);   // кости/контраст
+        ofun.addPoint(max, 0.8);
+
+        property.setRGBTransferFunction(0, ctfun);
+        property.setScalarOpacity(0, ofun);
+
+        volume.setProperty(property);
+        renderer.addVolume(volume);
+        renderer.resetCamera();
+
+        const style = vtk.Interaction.Style.vtkInteractorStyleTrackballCamera.newInstance();
+        interactor.setInteractorStyle(style);
+        renderWindow.render();
+
+        volumePropertyRef.current = property;
+        renderWindowRef.current = renderWindow;
+
+        return { renderWindow, renderer, interactor, volume, property, ctfun, ofun };
+      };
+
       // Настройка вьюпортов
       const setupViewport = (container: HTMLElement, axis: number) => {
         const renderWindow = vtk.Rendering.Core.vtkRenderWindow.newInstance();
@@ -245,7 +321,133 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
         setupViewport(axialRef.current!, 0),
         setupViewport(coronalRef.current!, 1),
         setupViewport(sagittalRef.current!, 2),
+        setupVolumeRendering(volumeRef.current!),
       ];
+
+      // === Новый applyPreset ===
+      const applyPreset = (
+        presetName: 'default' | 'bone' | 'brain' | 'mip' | 'glow'
+      ) => {
+        if (!volumePropertyRef.current || !renderWindowRef.current) return;
+
+        const property = volumePropertyRef.current;
+        const range = scalarArray.getRange();
+        const [min, max] = range;
+        const delta = max - min;
+
+        const vtk = (window as any).vtk;
+        const ctfun = vtk.Rendering.Core.vtkColorTransferFunction.newInstance();
+        const ofun = vtk.Common.DataModel.vtkPiecewiseFunction.newInstance();
+
+        setActivePreset(presetName);
+
+        // базовые значения освещения, дальше меняем по режиму
+        property.setShade(true);
+        property.setAmbient(0.4);
+        property.setDiffuse(0.4);
+        property.setSpecular(0.2);
+        property.setSpecularPower(30);
+
+        switch (presetName) {
+          case 'bone':
+            // кости: почти всё прозрачное, кроме верхних 20–25% диапазона
+            ctfun.addRGBPoint(min, 0, 0, 0);
+            ctfun.addRGBPoint(min + 0.5 * delta, 0.3, 0.2, 0.2);
+            ctfun.addRGBPoint(min + 0.7 * delta, 0.8, 0.7, 0.6);
+            ctfun.addRGBPoint(max, 1, 1, 1);
+
+            ofun.addPoint(min, 0.0);
+            ofun.addPoint(min + 0.5 * delta, 0.0);
+            ofun.addPoint(min + 0.7 * delta, 0.5);
+            ofun.addPoint(max, 0.95);
+            break;
+
+          case 'brain': {
+            // "Рентген": тело ~воздух, видим только плотные структуры
+            const [min, max] = range;
+            const delta = max - min;
+            const low = min + 0.1 * delta;
+            const mid = min + 0.6 * delta;
+            const high = min + 0.85 * delta;
+
+            // Цвета спокойные, клинические
+            ctfun.addRGBPoint(min, 0, 0, 0);
+            ctfun.addRGBPoint(low, 0.2, 0.2, 0.4);
+            ctfun.addRGBPoint(mid, 0.7, 0.7, 0.9);
+            ctfun.addRGBPoint(high, 1.0, 0.4, 0.3);
+            ctfun.addRGBPoint(max, 1.0, 0.9, 0.0);
+
+            // МЯГКИЕ ТКАНИ ≈ 0, только верхний хвост даёт сигнал
+            ofun.addPoint(min, 0.0);
+            ofun.addPoint(low, 0.0);
+            ofun.addPoint(mid, 0.01);   // весь объём почти прозрачный
+            ofun.addPoint(high, 0.25);  // очаги/кости
+            ofun.addPoint(max, 0.7);
+
+            property.setAmbient(0.5);
+            property.setDiffuse(0.3);
+            property.setSpecular(0.2);
+            break;
+          }
+
+          case 'glow': {
+            const [min, max] = range;
+            const delta = max - min;
+            const low = min + 0.2 * delta;
+            const mid = min + 0.6 * delta;
+            const high = min + 0.85 * delta;
+
+            // Неоновая палитра
+            ctfun.addRGBPoint(min, 0, 0, 0);
+            ctfun.addRGBPoint(low, 0.0, 0.15, 0.4);
+            ctfun.addRGBPoint(mid, 0.0, 0.8, 1.0);
+            ctfun.addRGBPoint(high, 0.6, 1.0, 0.8);
+            ctfun.addRGBPoint(max, 1.0, 1.0, 1.0);
+
+            // ЕЩЁ ЖЕСТЧЕ гасим тело
+            ofun.addPoint(min, 0.0);
+            ofun.addPoint(low, 0.0);
+            ofun.addPoint(mid, 0.005);  // тело практически невидимо
+            ofun.addPoint(high, 0.3);   // очаги начинают "гореть"
+            ofun.addPoint(max, 0.9);
+
+            property.setAmbient(0.9);
+            property.setDiffuse(0.2);
+            property.setSpecular(0.4);
+            property.setSpecularPower(50);
+            break;
+          }
+
+          case 'mip':
+            // классический MIP
+            property.setShade(false);
+            ctfun.addRGBPoint(min, 0, 0, 0);
+            ctfun.addRGBPoint(max, 1, 1, 1);
+            ofun.addPoint(min, 0.0);
+            ofun.addPoint(max, 1.0);
+            break;
+
+          default:
+            // мягкие ткани: стандартный клинический вид
+            ctfun.addRGBPoint(min, 0, 0, 0);
+            ctfun.addRGBPoint(min + 0.2 * delta, 0.6, 0.4, 0.4);
+            ctfun.addRGBPoint(min + 0.6 * delta, 0.95, 0.85, 0.8);
+            ctfun.addRGBPoint(max, 1, 1, 1);
+
+            ofun.addPoint(min, 0.0);
+            ofun.addPoint(min + 0.2 * delta, 0.02);
+            ofun.addPoint(min + 0.5 * delta, 0.08);
+            ofun.addPoint(min + 0.75 * delta, 0.4);
+            ofun.addPoint(max, 0.8);
+            break;
+        }
+
+        property.setRGBTransferFunction(0, ctfun);
+        property.setScalarOpacity(0, ofun);
+        renderWindowRef.current.render();
+      };
+
+      (window as any).applyDicomPreset = applyPreset;
 
       // Функция для программного зума
       const adjustZoom = (viewIdx: number, factor: number) => {
@@ -275,8 +477,8 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
       
       const handleWheel = (e: WheelEvent, viewIdx: number) => {
         e.preventDefault();
-        const view = views[viewIdx];
-        if (!view) return;
+        const view: any = views[viewIdx];
+        if (!view || viewIdx >= 3) return; // Только для MPR срезов (Axial, Coronal, Sagittal)
         
         const plane = view.plane;
         const origin = plane.getOrigin();
@@ -366,6 +568,11 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
             ref.current.removeEventListener('wheel', wheelHandlers[idx]);
           }
         });
+        // Очистка vtk объектов для освобождения памяти
+        views.forEach(v => {
+          if (v.interactor) v.interactor.delete();
+          if (v.renderWindow) v.renderWindow.delete();
+        });
       };
     } catch (err: any) {
       setError(err.message);
@@ -407,50 +614,90 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
           </div>
 
           {/* MPR Content */}
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-1 bg-gray-800 relative">
+          <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-px bg-gray-800 relative">
             {loading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-10">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mb-4"></div>
-                <p className="text-white font-medium">Сборка MPR срезов: {decodeProgress.current} из {decodeProgress.total}</p>
+                <p className="text-white font-medium">Сборка 3D модели: {decodeProgress.current} из {decodeProgress.total}</p>
               </div>
             )}
             
             {error ? (
               <div className="absolute inset-0 flex items-center justify-center p-8 z-20 bg-gray-900">
                 <div className="text-red-500 text-center max-w-md">
-                  <p className="text-xl font-bold mb-4">Ошибка MPR</p>
+                  <p className="text-xl font-bold mb-4">Ошибка 3D</p>
                   <p className="text-sm">{error}</p>
                   <button onClick={onClose} className="mt-6 px-6 py-2 bg-red-900 text-white rounded-lg">Закрыть</button>
                 </div>
               </div>
             ) : (
               <>
+                {/* Viewports */}
                 <div className="relative flex flex-col h-full bg-black border border-gray-700 group">
-                  <div className="absolute top-2 left-2 z-10 text-[10px] text-yellow-500 font-bold uppercase">Axial</div>
+                  <div className="absolute top-2 left-2 z-10 text-[10px] text-yellow-500 font-bold uppercase">Axial (Z)</div>
                   <div className="absolute top-2 right-2 z-20 flex flex-col space-y-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => (window as any).mprZoom?.(0, 0.8)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">+</button>
                     <button onClick={() => (window as any).mprZoom?.(0, 1.2)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">−</button>
-                    <button onClick={() => (window as any).mprReset?.(0)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">⟲</button>
                   </div>
                   <div ref={axialRef} className="flex-1 touch-none" />
                 </div>
+
                 <div className="relative flex flex-col h-full bg-black border border-gray-700 group">
-                  <div className="absolute top-2 left-2 z-10 text-[10px] text-blue-500 font-bold uppercase">Coronal</div>
+                  <div className="absolute top-2 left-2 z-10 text-[10px] text-blue-500 font-bold uppercase">Coronal (Y)</div>
                   <div className="absolute top-2 right-2 z-20 flex flex-col space-y-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => (window as any).mprZoom?.(1, 0.8)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">+</button>
                     <button onClick={() => (window as any).mprZoom?.(1, 1.2)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">−</button>
-                    <button onClick={() => (window as any).mprReset?.(1)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">⟲</button>
                   </div>
                   <div ref={coronalRef} className="flex-1 touch-none" />
                 </div>
+
                 <div className="relative flex flex-col h-full bg-black border border-gray-700 group">
-                  <div className="absolute top-2 left-2 z-10 text-[10px] text-green-500 font-bold uppercase">Sagittal</div>
+                  <div className="absolute top-2 left-2 z-10 text-[10px] text-green-500 font-bold uppercase">Sagittal (X)</div>
                   <div className="absolute top-2 right-2 z-20 flex flex-col space-y-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => (window as any).mprZoom?.(2, 0.8)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">+</button>
                     <button onClick={() => (window as any).mprZoom?.(2, 1.2)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">−</button>
-                    <button onClick={() => (window as any).mprReset?.(2)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">⟲</button>
                   </div>
                   <div ref={sagittalRef} className="flex-1 touch-none" />
+                </div>
+
+                <div className="relative flex flex-col h-full bg-black border border-gray-700 group">
+                  <div className="absolute top-2 left-2 z-10 text-[10px] text-purple-500 font-bold uppercase">3D Volume Reconstruction</div>
+                  
+                  {/* Presets Controls inside 3D View */}
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 p-1.5 bg-gray-900/80 backdrop-blur-sm rounded-xl border border-gray-700">
+                    <button 
+                      onClick={() => (window as any).applyDicomPreset?.('default')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${activePreset === 'default' ? 'bg-primary-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                    >
+                      Ткани
+                    </button>
+                    <button 
+                      onClick={() => (window as any).applyDicomPreset?.('bone')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${activePreset === 'bone' ? 'bg-primary-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                    >
+                      Кости
+                    </button>
+                    <button 
+                      onClick={() => (window as any).applyDicomPreset?.('brain')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${activePreset === 'brain' ? 'bg-primary-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                    >
+                      Просвет
+                    </button>
+                    <button 
+                      onClick={() => (window as any).applyDicomPreset?.('glow')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${activePreset === 'glow' ? 'bg-cyan-600 text-white shadow-[0_0_10px_rgba(8,145,178,0.5)]' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                    >
+                      Свечение ✨
+                    </button>
+                    <button 
+                      onClick={() => (window as any).applyDicomPreset?.('mip')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${activePreset === 'mip' ? 'bg-primary-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                    >
+                      MIP
+                    </button>
+                  </div>
+
+                  <div ref={volumeRef} className="flex-1 touch-none" />
                 </div>
               </>
             )}
