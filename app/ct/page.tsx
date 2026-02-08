@@ -163,8 +163,20 @@ export default function CTPage() {
     setFile(uploadedFile)
     if (slices && slices.length > 0) {
       setAdditionalFiles(slices)
+      // Для DICOM используем первый срез как превью
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(slices[0])
     } else {
       setAdditionalFiles([])
+      // Для обычных изображений
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(uploadedFile)
     }
 
     if (originalFiles && originalFiles.length > 0) {
@@ -172,12 +184,6 @@ export default function CTPage() {
     } else {
       setOriginalDicomStack([])
     }
-    
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setImagePreview(reader.result as string)
-    }
-    reader.readAsDataURL(uploadedFile)
     
     setResult('')
     setError(null)

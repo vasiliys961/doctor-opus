@@ -61,7 +61,8 @@ export async function compressMedicalImage(
  * РАСШИРЕННАЯ ВЕРСИЯ: закрашивает верх, низ и боковые края.
  */
 export async function anonymizeMedicalImage(file: File): Promise<File> {
-  if (!file.type.startsWith('image/')) return file;
+  // Пытаемся обработать любой файл как изображение, если браузер сможет его прочитать
+  // (например, rendered slices от DICOM приходят как image/jpeg, но могут иметь другое расширение)
 
   return new Promise((resolve, reject) => {
     const img = new Image();

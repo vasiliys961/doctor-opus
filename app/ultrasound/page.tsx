@@ -157,11 +157,19 @@ export default function UltrasoundPage() {
       setIsVideo(false)
       setFile(uploadedFile)
       setVideoUrl(null)
-      if (slices) setAdditionalFiles(slices)
-      
-      const reader = new FileReader()
-      reader.onloadend = () => setImagePreview(reader.result as string)
-      reader.readAsDataURL(uploadedFile)
+      if (slices && slices.length > 0) {
+        setAdditionalFiles(slices)
+        // Для DICOM используем первый срез как превью
+        const reader = new FileReader()
+        reader.onloadend = () => setImagePreview(reader.result as string)
+        reader.readAsDataURL(slices[0])
+      } else {
+        setAdditionalFiles([])
+        // Для обычных изображений
+        const reader = new FileReader()
+        reader.onloadend = () => setImagePreview(reader.result as string)
+        reader.readAsDataURL(uploadedFile)
+      }
     }
   }
 

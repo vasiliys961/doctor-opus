@@ -20,10 +20,10 @@ export function initCornerstone() {
     (cornerstoneWADOImageLoader as any).external.dicomParser = dicomParser;
 
     const config = {
-      webWorkerPath: 'https://unpkg.com/cornerstone-wado-image-loader@4.1.5/dist/cornerstoneWADOImageLoaderWebWorker.bundle.min.js',
+      webWorkerPath: '/libs/cornerstone/index.worker.bundle.min.worker.js',
       taskConfiguration: {
         decodeTask: {
-          codecsPath: 'https://unpkg.com/cornerstone-wado-image-loader@4.1.5/dist/cornerstoneWADOImageLoaderCodecs.bundle.min.js'
+          codecsPath: '/libs/cornerstone/cornerstoneWADOImageLoader.bundle.min.js'
         }
       }
     };

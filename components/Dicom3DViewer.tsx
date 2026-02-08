@@ -383,7 +383,7 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
   return (
     <>
       <Script 
-        src="https://unpkg.com/vtk.js@32.2.0/vtk.js" 
+        src="/libs/vtk/vtk.js" 
         onLoad={() => setVtkReady(true)}
       />
       

@@ -179,27 +179,41 @@ export default function XRayPage() {
     setFile(uploadedFile)
     if (slices && slices.length > 0) {
       setAdditionalFiles(slices)
+      // Для DICOM используем первый срез как превью
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(slices[0])
     } else {
       setAdditionalFiles([])
+      // Для обычных изображений
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(uploadedFile)
     }
-    
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setImagePreview(reader.result as string)
-    }
-    reader.readAsDataURL(uploadedFile)
     
     setResult('')
     setError(null)
   }
 
-  const handleArchiveUpload = async (uploadedFile: File) => {
+  const handleArchiveUpload = async (uploadedFile: File, slices?: File[]) => {
     setArchiveFile(uploadedFile)
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setArchivePreview(reader.result as string)
+    if (slices && slices.length > 0) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setArchivePreview(reader.result as string)
+      }
+      reader.readAsDataURL(slices[0])
+    } else {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setArchivePreview(reader.result as string)
+      }
+      reader.readAsDataURL(uploadedFile)
     }
-    reader.readAsDataURL(uploadedFile)
     setResult('')
   }
 

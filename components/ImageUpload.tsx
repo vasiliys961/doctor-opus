@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import JSZip from 'jszip'
 import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compression'
 import ImageEditor from './ImageEditor'
 
@@ -67,7 +68,11 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           if (slices && slices.length > 0) {
             onUpload(dicomFiles[0], slices, dicomFiles);
             setCurrentFile(dicomFiles[0]);
-            setPreview(null);
+            
+            // Устанавливаем превью из первого среза
+            const reader = new FileReader();
+            reader.onloadend = () => setPreview(reader.result as string);
+            reader.readAsDataURL(slices[0]);
           } else {
             onUpload(dicomFiles[0], [], dicomFiles);
           }
@@ -129,9 +134,39 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
     }
 
     const fileName = file.name.toLowerCase();
+    const isZip = fileName.endsWith('.zip');
     const isDicom = fileName.endsWith('.dcm') || fileName.endsWith('.dicom') || file.type === 'application/dicom';
     const isVideo = file.type.startsWith('video/');
     const isImage = file.type.startsWith('image/');
+
+    if (isZip) {
+      setIsCompressing(true);
+      try {
+        const zip = new JSZip();
+        const contents = await zip.loadAsync(file);
+        const extractedFiles: File[] = [];
+        
+        const promises = Object.keys(contents.files).map(async (path) => {
+          const zipFile = contents.files[path];
+          if (!zipFile.dir) {
+            const blob = await zipFile.async('blob');
+            const name = path.split('/').pop() || 'file';
+            extractedFiles.push(new File([blob], name));
+          }
+        });
+        
+        await Promise.all(promises);
+        if (extractedFiles.length > 0) {
+          return handleFile(extractedFiles);
+        }
+      } catch (err) {
+        console.error("ZIP processing error:", err);
+        setError("Ошибка при распаковке архива");
+      } finally {
+        setIsCompressing(false);
+      }
+      return;
+    }
 
     if (isImage) {
       setIsCompressing(true);
@@ -151,25 +186,26 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
       }
     } else if (isDicom) {
       setCurrentFile(file);
-      setPreview(null) 
-      if (file.size > 30 * 1024 * 1024) {
-        setIsCompressing(true);
-        try {
-          const { sliceDicomFile } = await import('@/lib/dicom-client-processor');
-          const slices = await sliceDicomFile(file);
-          if (slices && slices.length > 0) {
-            onUpload(file, slices, [file]);
-          } else {
-            onUpload(file, [], [file]);
-          }
-        } catch (err) {
-          console.error("DICOM Slicing error:", err);
+      setIsCompressing(true);
+      try {
+        const { sliceDicomFile } = await import('@/lib/dicom-client-processor');
+        const slices = await sliceDicomFile(file);
+        if (slices && slices.length > 0) {
+          onUpload(file, slices, [file]);
+          // Устанавливаем превью из первого среза
+          const reader = new FileReader();
+          reader.onloadend = () => setPreview(reader.result as string);
+          reader.readAsDataURL(slices[0]);
+        } else {
           onUpload(file, [], [file]);
-        } finally {
-          setIsCompressing(false);
+          setPreview(null);
         }
-      } else {
+      } catch (err) {
+        console.error("DICOM Slicing error:", err);
         onUpload(file, [], [file]);
+        setPreview(null);
+      } finally {
+        setIsCompressing(false);
       }
     } else if (isVideo) {
       setIsCompressing(true);
