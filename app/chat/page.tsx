@@ -11,6 +11,10 @@ import { logUsage } from '@/lib/simple-logger'
 import { ChatSpecialistSelector } from '@/components/ChatSpecialistSelector'
 import { Specialty } from '@/lib/prompts'
 import { searchLibraryLocal } from '@/lib/library-db'
+import ImageEditor from '@/components/ImageEditor'
+import { anonymizeMedicalImage } from '@/lib/image-compression'
+import { anonymizeText } from '@/lib/anonymization'
+import mammoth from 'mammoth'
 
 type ModelType = 'opus' | 'sonnet'
 
@@ -51,6 +55,89 @@ export default function ChatPage() {
   const [isCutOff, setIsCutOff] = useState(false)
   const [lastMessageIndex, setLastMessageIndex] = useState<number | null>(null)
   const [searchingLibrary, setSearchingLibrary] = useState(false)
+  const [showEditor, setShowEditor] = useState(false)
+  const [editingFileIndex, setEditingFileIndex] = useState<number | null>(null)
+  const [autoAnonymize, setAutoAnonymize] = useState(true)
+  const [isProcessingFiles, setIsProcessingFiles] = useState(false)
+  const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
+  const [convertingPDF, setConvertingPDF] = useState(false)
+
+  // Загружаем PDF.js v3 из локальных файлов (public/pdfjs/)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.pdfjsLib) {
+      const script = document.createElement('script')
+      script.src = '/pdfjs/pdf.min.js'
+      script.onload = () => {
+        if (window.pdfjsLib) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js'
+          setPdfJsLoaded(true)
+          console.log('✅ PDF.js v3 загружен локально (Чат)')
+        }
+      }
+      script.onerror = () => {
+        console.warn('⚠️ PDF.js не удалось загрузить в Чате')
+      }
+      document.head.appendChild(script)
+    } else if (window.pdfjsLib) {
+      setPdfJsLoaded(true)
+    }
+  }, [])
+
+  const convertPDFToImages = async (pdfFile: File): Promise<File[]> => {
+    if (!window.pdfjsLib) {
+      throw new Error('PDF.js не загружен. Подождите несколько секунд и попробуйте снова.')
+    }
+
+    const pdfjs = window.pdfjsLib
+    const arrayBuffer = await pdfFile.arrayBuffer()
+    const loadingTask = pdfjs.getDocument({ data: arrayBuffer, verbosity: 0 })
+    const pdf = await loadingTask.promise
+    const totalPages = pdf.numPages
+    const maxPages = Math.min(totalPages, 10) // Ограничиваем 10 страницами для чата
+
+    const imageFiles: File[] = []
+
+    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+      const page = await pdf.getPage(pageNum)
+      const viewport = page.getViewport({ scale: 2.0 })
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d')
+      
+      if (!context) continue
+      
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+
+      await page.render({
+        canvasContext: context,
+        viewport: viewport,
+      }).promise
+
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+      if (blob) {
+        const name = pdfFile.name.replace('.pdf', '') + `_стр_${pageNum}.jpg`
+        imageFiles.push(new File([blob], name, { type: 'image/jpeg' }))
+      }
+    }
+
+    return imageFiles
+  }
+
+  const anonymizeWordFile = async (wordFile: File): Promise<File> => {
+    try {
+      const arrayBuffer = await wordFile.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      const originalText = result.value;
+      const safeText = anonymizeText(originalText);
+      
+      // Создаем новый текстовый файл вместо Word (так ИИ его точно прочитает)
+      const blob = new Blob([safeText], { type: 'text/plain' });
+      return new File([blob], wordFile.name.replace(/\.docx?$/i, '') + '_защищен.txt', { type: 'text/plain' });
+    } catch (err) {
+      console.error('Ошибка анонимизации Word:', err);
+      return wordFile;
+    }
+  }
 
   useEffect(() => {
     // Проверяем наличие переданных данных из анализа изображений
@@ -228,6 +315,35 @@ export default function ChatPage() {
     setMessage('')
     setSelectedFiles([])
     setShowFileUpload(false)
+    
+    // Анонимизируем изображения перед отправкой, если включено
+    let filesToSend = [...selectedFiles];
+    if (autoAnonymize) {
+      setIsProcessingFiles(true);
+      try {
+        const processed = await Promise.all(filesToSend.map(async (f) => {
+          if (f.type.startsWith('image/')) {
+            return await anonymizeMedicalImage(f);
+          }
+          if (f.name.toLowerCase().endsWith('.docx') || f.name.toLowerCase().endsWith('.doc')) {
+            return await anonymizeWordFile(f);
+          }
+          if (f.type.startsWith('text/') || f.name.match(/\.(txt|csv|json)$/i)) {
+            const text = await f.text();
+            const safeText = anonymizeText(text);
+            const blob = new Blob([safeText], { type: f.type });
+            return new File([blob], f.name, { type: f.type });
+          }
+          return f;
+        }));
+        filesToSend = processed;
+      } catch (err) {
+        console.error('Anonymization error in chat:', err);
+      } finally {
+        setIsProcessingFiles(false);
+      }
+    }
+
     setMessages(prev => [...prev, { 
       role: 'user', 
       content: userMessage,
@@ -248,14 +364,14 @@ export default function ChatPage() {
             ? 'openai/gpt-5.2-chat'
             : 'google/gemini-3-flash-preview'
 
-      if (selectedFiles.length > 0) {
+      if (filesToSend.length > 0) {
         const formData = new FormData()
         formData.append('message', userMessage)
         formData.append('history', JSON.stringify(messages))
         formData.append('useStreaming', useStreaming.toString())
         formData.append('model', modelName)
         formData.append('specialty', specialty)
-        selectedFiles.forEach(file => formData.append('files', file))
+        filesToSend.forEach(file => formData.append('files', file))
 
         if (useStreaming) {
           // Streaming режим с файлами
@@ -779,22 +895,122 @@ export default function ChatPage() {
           />
           {selectedFiles.length > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-200">
-              <div className="text-xs sm:text-sm font-medium mb-2">Выбранные файлы ({selectedFiles.length}):</div>
-              <div className="flex flex-wrap gap-1 sm:gap-2">
-                {selectedFiles.map((file, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 rounded text-xs"
-                  >
-                    📎 <span className="max-w-[120px] sm:max-w-[200px] truncate">{file.name}</span>
-                    <button
-                      onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
-                      className="text-red-500 hover:text-red-700 ml-1 touch-manipulation"
+              <div className="text-xs sm:text-sm font-medium mb-3 flex items-center justify-between">
+                <span>Выбранные файлы ({selectedFiles.length}):</span>
+                <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                  💡 Нажмите 🛡️ для удаления ФИО или 🎨 для закрашивания
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2 sm:gap-3">
+                {selectedFiles.map((file, idx) => {
+                  const isImage = file.type.startsWith('image/');
+                  const isPDF = file.type === 'application/pdf';
+                  const isWord = file.name.match(/\.docx?$/i);
+                  const isText = file.type.startsWith('text/') || file.name.match(/\.(txt|csv)$/i);
+
+                  return (
+                    <span
+                      key={idx}
+                      className="inline-flex flex-col sm:flex-row items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-2xl text-xs group transition-all hover:border-primary-400 shadow-sm hover:shadow-md min-w-[150px]"
                     >
-                      ✕
-                    </button>
-                  </span>
-                ))}
+                      <div className="flex items-center gap-2 w-full">
+                        <span className="text-lg">
+                          {isImage ? '🖼️' : isPDF ? '📄' : isWord ? '📝' : '📎'}
+                        </span>
+                        <span className="flex-1 truncate font-semibold text-slate-700 max-w-[150px]">
+                          {file.name}
+                        </span>
+                        <button
+                          onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
+                          className="p-1 hover:bg-red-50 rounded-full text-red-400 hover:text-red-600 transition-colors"
+                          title="Удалить файл"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      
+                      <div className="flex items-center gap-1 w-full mt-1 sm:mt-0 pt-1 sm:pt-0 border-t sm:border-t-0 sm:border-l border-slate-100 sm:pl-2">
+                        {isPDF && (
+                          <button
+                            onClick={async () => {
+                              setConvertingPDF(true);
+                              try {
+                                const images = await convertPDFToImages(file);
+                                setSelectedFiles(prev => {
+                                  const updated = [...prev];
+                                  const currentIdx = updated.indexOf(file);
+                                  if (currentIdx !== -1) {
+                                    updated.splice(currentIdx, 1, ...images);
+                                  }
+                                  return updated;
+                                });
+                              } catch (err: any) {
+                                alert(err.message);
+                              } finally {
+                                setConvertingPDF(false);
+                              }
+                            }}
+                            disabled={convertingPDF}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-2 py-1 bg-teal-50 hover:bg-teal-100 rounded-lg text-teal-700 transition-colors font-bold"
+                            title="Разобрать PDF на страницы для закрашивания ФИО"
+                          >
+                            <span>{convertingPDF ? '⌛' : '🛡️'}</span>
+                            <span className="text-[9px] uppercase tracking-tighter">Аноним.</span>
+                          </button>
+                        )}
+                        
+                        {isImage && (
+                          <button
+                            onClick={() => {
+                              setEditingFileIndex(idx);
+                              setShowEditor(true);
+                            }}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-lg text-indigo-700 transition-colors font-bold"
+                            title="Закрасить данные вручную"
+                          >
+                            <span>🎨</span>
+                            <span className="text-[9px] uppercase tracking-tighter">Правка</span>
+                          </button>
+                        )}
+
+                        {(isWord || isText) && (
+                          <button
+                            onClick={async () => {
+                              setIsProcessingFiles(true);
+                              try {
+                                const currentIdx = selectedFiles.indexOf(file);
+                                if (currentIdx === -1) return;
+
+                                let anonymized;
+                                if (isWord) {
+                                  anonymized = await anonymizeWordFile(file);
+                                } else {
+                                  const text = await file.text();
+                                  const safeText = anonymizeText(text);
+                                  anonymized = new File([new Blob([safeText])], file.name, { type: file.type });
+                                }
+                                setSelectedFiles(prev => {
+                                  const updated = [...prev];
+                                  updated[currentIdx] = anonymized;
+                                  return updated;
+                                });
+                              } catch (err) {
+                                console.error(err);
+                              } finally {
+                                setIsProcessingFiles(false);
+                              }
+                            }}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 rounded-lg text-blue-700 transition-colors font-bold"
+                            title="Автоматически очистить текст от ФИО"
+                          >
+                            <span>🛡️</span>
+                            <span className="text-[9px] uppercase tracking-tighter">Аноним.</span>
+                          </button>
+                        )}
+                      </div>
+                    </span>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -828,6 +1044,16 @@ export default function ChatPage() {
               className="w-5 h-5 sm:w-4 sm:h-4 text-teal-600"
             />
             <span className="text-xs sm:text-sm font-medium text-teal-700">📚 Библиотека (RAG)</span>
+          </label>
+
+          <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
+            <input
+              type="checkbox"
+              checked={autoAnonymize}
+              onChange={(e) => setAutoAnonymize(e.target.checked)}
+              className="w-5 h-5 sm:w-4 sm:h-4 text-blue-600"
+            />
+            <span className="text-xs sm:text-sm font-medium text-blue-700">🛡️ Авто-анонимизация</span>
           </label>
           
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -898,12 +1124,49 @@ export default function ChatPage() {
         />
         <button
           onClick={handleSend}
-          disabled={loading || (!message.trim() && selectedFiles.length === 0)}
-          className="px-6 py-3 sm:py-2 bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-medium touch-manipulation"
+          disabled={loading || isProcessingFiles || (!message.trim() && selectedFiles.length === 0)}
+          className="px-6 py-3 sm:py-2 bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-medium touch-manipulation flex items-center justify-center gap-2"
         >
-          Отправить
+          {isProcessingFiles ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              <span>🛡️ Защита...</span>
+            </>
+          ) : (
+            'Отправить'
+          )}
         </button>
       </div>
+
+      {showEditor && editingFileIndex !== null && selectedFiles[editingFileIndex] && (
+        <ImageEditor
+          image={URL.createObjectURL(selectedFiles[editingFileIndex])}
+          onSave={(editedDataUrl) => {
+            // Мгновенно закрываем редактор и сбрасываем индекс
+            setShowEditor(false);
+            const targetIndex = editingFileIndex;
+            setEditingFileIndex(null);
+
+            // Конвертируем в файл асинхронно
+            fetch(editedDataUrl)
+              .then(res => res.blob())
+              .then(blob => {
+                setSelectedFiles(prev => {
+                  const updated = [...prev];
+                  if (updated[targetIndex]) {
+                    updated[targetIndex] = new File([blob], selectedFiles[targetIndex].name, { type: 'image/jpeg' });
+                  }
+                  return updated;
+                });
+              })
+              .catch(err => console.error('Ошибка сохранения файла в чате:', err));
+          }}
+          onCancel={() => {
+            setShowEditor(false);
+            setEditingFileIndex(null);
+          }}
+        />
+      )}
     </div>
   )
 }

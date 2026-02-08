@@ -6,6 +6,7 @@
 import { MODELS } from './openrouter';
 import { calculateCost, formatCostLog } from './cost-calculator';
 import { Specialty, TITAN_CONTEXTS, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
+import mammoth from 'mammoth';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -114,6 +115,20 @@ async function extractPDFTextViaGemini(base64PDF: string, fileName: string): Pro
 }
 
 /**
+ * Чтение Word файла (.docx)
+ */
+async function readWordFile(file: File): Promise<string> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: Buffer.from(arrayBuffer) });
+    return result.value;
+  } catch (err) {
+    console.warn('⚠️ Ошибка чтения Word файла:', err);
+    return '';
+  }
+}
+
+/**
  * Чтение текстового файла (txt, csv, json и т.д.)
  */
 async function readTextFile(file: File): Promise<string> {
@@ -188,6 +203,17 @@ async function prepareMessageContent(
             appendText(`[PDF файл "${file.name}" — не удалось извлечь содержимое. Пожалуйста, загрузите скриншоты страниц или вставьте данные вручную.]`);
           }
         }
+      }
+    } else if (
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+      file.name.toLowerCase().endsWith('.docx')
+    ) {
+      // === Word (.docx) ===
+      const wordText = await readWordFile(file);
+      if (wordText) {
+        appendText(`📄 Содержимое Word-документа "${file.name}":\n\n${wordText}`);
+      } else {
+        appendText(`[Word файл "${file.name}" — не удалось прочитать содержимое]`);
       }
     } else if (
       file.type.startsWith('text/') || 

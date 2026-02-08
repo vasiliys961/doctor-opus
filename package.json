@@ -26,6 +26,7 @@
     "file-saver": "^2.0.5",
     "hammerjs": "^2.0.8",
     "jszip": "^3.10.1",
+    "mammoth": "^1.11.0",
     "next": "^14.2.0",
     "next-auth": "^4.24.13",
     "nodemailer": "^7.0.13",

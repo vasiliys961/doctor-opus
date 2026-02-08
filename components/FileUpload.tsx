@@ -166,17 +166,26 @@ export default function FileUpload({
 
   const handleEditorSave = (editedFile: File) => {
     if (editingFileIndex === null) return;
+    
+    // Мгновенно закрываем редактор
+    setEditingFileIndex(null);
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      const newPreviewFiles = previewFiles.map((item, idx) =>
-        idx === editingFileIndex
-          ? { file: editedFile, preview: reader.result as string }
-          : item
-      );
-      setPreviewFiles(newPreviewFiles);
-      onUpload(newPreviewFiles.map(item => item.file));
-      setEditingFileIndex(null);
+      const result = reader.result as string;
+      setPreviewFiles(prev => {
+        const newPreviewFiles = [...prev];
+        if (newPreviewFiles[editingFileIndex]) {
+          newPreviewFiles[editingFileIndex] = { file: editedFile, preview: result };
+        }
+        return newPreviewFiles;
+      });
+      
+      // Обновляем родительский компонент после обновления локального стейта
+      setPreviewFiles(prev => {
+        onUpload(prev.map(item => item.file));
+        return prev;
+      });
     };
     reader.readAsDataURL(editedFile);
   };
@@ -340,20 +349,38 @@ export default function FileUpload({
       {editingFileIndex !== null && previewFiles[editingFileIndex] && (
         <ImageEditor
           image={previewFiles[editingFileIndex].preview!}
-          onSave={async (editedDataUrl) => {
-            const response = await fetch(editedDataUrl);
-            const blob = await response.blob();
-            const originalFile = previewFiles[editingFileIndex].file;
-            const editedFile = new File([blob], originalFile.name, { type: 'image/jpeg' });
+          onSave={(editedDataUrl) => {
+            const targetIndex = editingFileIndex;
+            const originalFile = previewFiles[targetIndex].file;
             
-            const newPreviewFiles = previewFiles.map((item, idx) =>
-              idx === editingFileIndex
-                ? { file: editedFile, preview: editedDataUrl }
-                : item
-            );
-            setPreviewFiles(newPreviewFiles);
-            onUpload(newPreviewFiles.map(item => item.file));
+            // Мгновенно закрываем редактор
             setEditingFileIndex(null);
+
+            // Обновляем превью сразу
+            setPreviewFiles(prev => {
+              const updated = [...prev];
+              if (updated[targetIndex]) {
+                updated[targetIndex] = { ...updated[targetIndex], preview: editedDataUrl };
+              }
+              return updated;
+            });
+
+            // Конвертируем в файл асинхронно
+            fetch(editedDataUrl)
+              .then(res => res.blob())
+              .then(blob => {
+                const editedFile = new File([blob], originalFile.name, { type: 'image/jpeg' });
+                setPreviewFiles(prev => {
+                  const updated = [...prev];
+                  if (updated[targetIndex]) {
+                    updated[targetIndex] = { ...updated[targetIndex], file: editedFile };
+                  }
+                  // Оповещаем родителя после обновления файла
+                  onUpload(updated.map(item => item.file));
+                  return updated;
+                });
+              })
+              .catch(err => console.error('Ошибка сохранения файла в FileUpload:', err));
           }}
           onCancel={() => setEditingFileIndex(null)}
         />
