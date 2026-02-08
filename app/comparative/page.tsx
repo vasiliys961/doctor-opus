@@ -310,16 +310,32 @@ export default function ComparativeAnalysisPage() {
         <ImageEditor
           image={images[editingIndex].preview}
           onSave={(editedImage) => {
+            // Обновляем массив изображений
+            setImages(prev => {
+              const newImages = [...prev]
+              if (newImages[editingIndex]) {
+                newImages[editingIndex] = {
+                  ...newImages[editingIndex],
+                  preview: editedImage
+                }
+              }
+              return newImages
+            })
+
+            // Конвертируем в Blob в фоновом режиме
             fetch(editedImage)
               .then(res => res.blob())
               .then(blob => {
-                const newImages = [...images]
-                newImages[editingIndex] = {
-                  ...newImages[editingIndex],
-                  preview: editedImage,
-                  file: new File([blob], images[editingIndex].file.name || `edited_${editingIndex}.jpg`, { type: 'image/jpeg' })
-                }
-                setImages(newImages)
+                setImages(prev => {
+                  const updated = [...prev]
+                  if (updated[editingIndex]) {
+                    updated[editingIndex] = {
+                      ...updated[editingIndex],
+                      file: new File([blob], images[editingIndex].file.name || `edited_${editingIndex}.jpg`, { type: 'image/jpeg' })
+                    }
+                  }
+                  return updated
+                })
               })
             setShowEditor(false)
           }}

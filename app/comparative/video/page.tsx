@@ -812,21 +812,47 @@ export default function VideoComparisonPage() {
             : frames2[editingFrame.frameIndex].preview
           }
           onSave={async (editedDataUrl) => {
-            const response = await fetch(editedDataUrl);
-            const blob = await response.blob();
             const { videoIndex, frameIndex } = editingFrame;
-            const originalFile = videoIndex === 1 ? frames1[frameIndex].file : frames2[frameIndex].file;
-            const editedFile = new File([blob], originalFile.name, { type: 'image/png' });
             
+            // Сначала обновляем превью мгновенно
             if (videoIndex === 1) {
-              const newFrames = [...frames1];
-              newFrames[frameIndex] = { ...newFrames[frameIndex], file: editedFile, preview: editedDataUrl };
-              setFrames1(newFrames);
+              setFrames1(prev => {
+                const updated = [...prev];
+                updated[frameIndex] = { ...updated[frameIndex], preview: editedDataUrl };
+                return updated;
+              });
             } else {
-              const newFrames = [...frames2];
-              newFrames[frameIndex] = { ...newFrames[frameIndex], file: editedFile, preview: editedDataUrl };
-              setFrames2(newFrames);
+              setFrames2(prev => {
+                const updated = [...prev];
+                updated[frameIndex] = { ...updated[frameIndex], preview: editedDataUrl };
+                return updated;
+              });
             }
+
+            // Затем конвертируем в файл
+            try {
+              const response = await fetch(editedDataUrl);
+              const blob = await response.blob();
+              const originalFile = videoIndex === 1 ? frames1[frameIndex].file : frames2[frameIndex].file;
+              const editedFile = new File([blob], originalFile.name, { type: 'image/png' });
+              
+              if (videoIndex === 1) {
+                setFrames1(prev => {
+                  const updated = [...prev];
+                  if (updated[frameIndex]) updated[frameIndex] = { ...updated[frameIndex], file: editedFile };
+                  return updated;
+                });
+              } else {
+                setFrames2(prev => {
+                  const updated = [...prev];
+                  if (updated[frameIndex]) updated[frameIndex] = { ...updated[frameIndex], file: editedFile };
+                  return updated;
+                });
+              }
+            } catch (err) {
+              console.error('Ошибка при сохранении отредактированного кадра:', err);
+            }
+            
             setEditingFrame(null);
           }}
           onCancel={() => setEditingFrame(null)}

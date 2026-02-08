@@ -9,7 +9,6 @@ import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import ImageEditor from '@/components/ImageEditor'
-import Script from 'next/script'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { handleSSEStream } from '@/lib/streaming-utils'
@@ -31,6 +30,28 @@ export default function LabPage() {
   const [convertingPDF, setConvertingPDF] = useState(false)
   const [conversionProgress, setConversionProgress] = useState<{ current: number; total: number } | null>(null)
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
+  
+  // Загружаем PDF.js v3 из локальных файлов (public/pdfjs/)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.pdfjsLib) {
+      const script = document.createElement('script')
+      script.src = '/pdfjs/pdf.min.js'
+      script.onload = () => {
+        if (window.pdfjsLib) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js'
+          setPdfJsLoaded(true)
+          console.log('✅ PDF.js v3 загружен локально (Лаборатория)')
+        }
+      }
+      script.onerror = () => {
+        console.warn('⚠️ PDF.js не удалось загрузить в Лаборатории')
+      }
+      document.head.appendChild(script)
+    } else if (window.pdfjsLib) {
+      setPdfJsLoaded(true)
+    }
+  }, [])
+
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
@@ -364,20 +385,6 @@ export default function LabPage() {
 
   return (
     <>
-      {/* Загрузка PDF.js */}
-      <Script
-        src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.mjs"
-        type="module"
-        onLoad={() => {
-          if (window.pdfjsLib) {
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 
-              'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs'
-            setPdfJsLoaded(true)
-            console.log('✅ PDF.js загружен для лабораторного анализа')
-          }
-        }}
-      />
-
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 Анализ лабораторных данных</h1>
         

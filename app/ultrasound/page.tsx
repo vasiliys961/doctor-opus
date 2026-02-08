@@ -29,6 +29,7 @@ export default function UltrasoundPage() {
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
+  const [showEditor, setShowEditor] = useState(false)
   
   // Видео / Cine-loop стейты
   const [isVideo, setIsVideo] = useState(false)
@@ -294,7 +295,15 @@ export default function UltrasoundPage() {
 
       {!isVideo && imagePreview && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-          <img src={imagePreview} className="w-full max-h-[600px] rounded-lg shadow-lg object-contain" />
+          <div className="flex flex-col items-center">
+            <img src={imagePreview} className="w-full max-h-[600px] rounded-lg shadow-lg object-contain mb-4" />
+            <button
+              onClick={() => setShowEditor(true)}
+              className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
+            >
+              🎨 Закрасить данные
+            </button>
+          </div>
         </div>
       )}
 
@@ -393,6 +402,22 @@ export default function UltrasoundPage() {
             setEditingFrameIndex(null);
           }}
           onCancel={() => setEditingFrameIndex(null)}
+        />
+      )}
+
+      {showEditor && imagePreview && (
+        <ImageEditor
+          image={imagePreview}
+          onSave={(editedImage) => {
+            setImagePreview(editedImage)
+            fetch(editedImage)
+              .then(res => res.blob())
+              .then(blob => {
+                setFile(new File([blob], file?.name || 'ultrasound_edited.jpg', { type: 'image/jpeg' }))
+              })
+            setShowEditor(false)
+          }}
+          onCancel={() => setShowEditor(false)}
         />
       )}
     </div>

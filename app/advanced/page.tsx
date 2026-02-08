@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
+import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import AnalysisTips from '@/components/AnalysisTips'
@@ -23,6 +24,8 @@ export default function AdvancedAnalysisPage() {
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [accumulatedDescription, setAccumulatedDescription] = useState('')
+  const [showEditor, setShowEditor] = useState(false)
+  const [isAnonymous, setIsAnonymous] = useState(false)
 
   const handleMainImageUpload = (file: File) => {
     setMainImage(file)
@@ -143,7 +146,17 @@ export default function AdvancedAnalysisPage() {
         <div className="mb-6">
           <h2 className="text-lg sm:text-xl font-semibold mb-3">📷 Основное изображение</h2>
           <ImageUpload onUpload={handleMainImageUpload} accept="image/*" maxSize={50} />
-          {mainImagePreview && <img src={mainImagePreview} alt="Превью" className="mt-4 max-h-64 rounded-lg mx-auto" />}
+          {mainImagePreview && (
+            <div className="mt-4 flex flex-col items-center">
+              <img src={mainImagePreview} alt="Превью" className="max-h-64 rounded-lg shadow-md" />
+              <button
+                onClick={() => setShowEditor(true)}
+                className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
+              >
+                🎨 Закрасить данные на снимке
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="mb-6">
@@ -156,6 +169,25 @@ export default function AdvancedAnalysisPage() {
             placeholder="Жалобы, анамнез, результаты других анализов..."
             disabled={loading}
           />
+          <div className="mt-4">
+            <label className="flex items-center space-x-2 cursor-pointer p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-900 w-fit shadow-sm">
+              <input
+                type="checkbox"
+                checked={isAnonymous}
+                onChange={(e) => setIsAnonymous(e.target.checked)}
+                disabled={loading}
+                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-blue-900">
+                  🛡️ Анонимный анализ
+                </span>
+                <span className="text-[10px] text-blue-700 font-normal">
+                  ФИО и адрес будут удалены из результата автоматически.
+                </span>
+              </div>
+            </label>
+          </div>
         </div>
 
         <div className="mb-6 p-4 bg-primary-50 rounded-lg border border-primary-200">
@@ -197,6 +229,22 @@ export default function AdvancedAnalysisPage() {
         cost={currentCost}
         images={mainImagePreview ? [mainImagePreview] : []}
       />
+
+      {showEditor && mainImagePreview && (
+        <ImageEditor
+          image={mainImagePreview}
+          onSave={(editedImage) => {
+            setMainImagePreview(editedImage)
+            fetch(editedImage)
+              .then(res => res.blob())
+              .then(blob => {
+                setMainImage(new File([blob], mainImage?.name || 'advanced_edited.jpg', { type: 'image/jpeg' }))
+              })
+            setShowEditor(false)
+          }}
+          onCancel={() => setShowEditor(false)}
+        />
+      )}
     </div>
   )
 }

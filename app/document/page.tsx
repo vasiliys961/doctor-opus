@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisTips from '@/components/AnalysisTips'
-import Script from 'next/script'
 import { logUsage } from '@/lib/simple-logger'
 import { Document, Packer, Paragraph, ImageRun, AlignmentType } from 'docx'
 import { saveAs } from 'file-saver'
@@ -30,6 +29,28 @@ export default function DocumentPage() {
   const [convertingPDF, setConvertingPDF] = useState(false)
   const [conversionProgress, setConversionProgress] = useState<{ current: number; total: number } | null>(null)
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
+  
+  // Загружаем PDF.js v3 из локальных файлов (public/pdfjs/)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.pdfjsLib) {
+      const script = document.createElement('script')
+      script.src = '/pdfjs/pdf.min.js'
+      script.onload = () => {
+        if (window.pdfjsLib) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js'
+          setPdfJsLoaded(true)
+          console.log('✅ PDF.js v3 загружен локально (Сканирование)')
+        }
+      }
+      script.onerror = () => {
+        console.warn('⚠️ PDF.js не удалось загрузить при Сканировании')
+      }
+      document.head.appendChild(script)
+    } else if (window.pdfjsLib) {
+      setPdfJsLoaded(true)
+    }
+  }, [])
+
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [model, setModel] = useState<string>('')
@@ -271,20 +292,6 @@ export default function DocumentPage() {
   return (
     <>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
-      {/* Загрузка PDF.js */}
-      <Script
-        src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.mjs"
-        type="module"
-        onLoad={() => {
-          if (window.pdfjsLib) {
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 
-              'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs'
-            setPdfJsLoaded(true)
-            console.log('✅ PDF.js загружен для сканирования документов')
-          }
-        }}
-      />
-
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-primary-900 mb-6">📄 Сканирование документов</h1>
         
@@ -401,9 +408,16 @@ export default function DocumentPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={handleDownloadWord}
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => setShowEditor(true)}
+                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
+              >
+                <span className="text-xl">🎨</span>
+                Закрасить данные вручную
+              </button>
+              <button
+                onClick={handleDownloadWord}
                   className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-3"
                 >
                   <span className="text-xl">📝</span>
@@ -489,6 +503,10 @@ export default function DocumentPage() {
           image={processedImage || imagePreview!}
           onSave={(editedImage) => {
             setProcessedImage(editedImage)
+            // Если в локальном режиме, обновляем и исходник, чтобы фильтры накладывались на закрашенное
+            if (scanMode === 'local') {
+              setImagePreview(editedImage)
+            }
             setShowEditor(false)
           }}
           onCancel={() => setShowEditor(false)}
