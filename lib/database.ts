@@ -121,7 +121,7 @@ export async function initDatabase() {
       );
     `;
 
-    // Таблица пользователей с хэшами паролей (v3.41.0 — безопасная авторизация)
+    // Таблица пользователей с хэшами паролей (v3.42.0 — безопасная авторизация)
     await sql`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -303,7 +303,7 @@ export async function createPayment(data: {
 /**
  * Подтверждение платежа и начисление единиц.
  * 
- * БЕЗОПАСНОСТЬ (v3.41.0):
+ * БЕЗОПАСНОСТЬ (v3.42.0):
  * - Полная транзакция PostgreSQL (BEGIN/COMMIT/ROLLBACK)
  * - FOR UPDATE блокирует строку платежа от race conditions
  * - Идемпотентность: повторный вызов для уже подтверждённого платежа не зачислит дважды

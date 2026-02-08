@@ -31,7 +31,7 @@ services:
       - NEXTAUTH_URL=${NEXTAUTH_URL}
       - POSTGRES_URL=postgres://${POSTGRES_USER:-neondb_owner}:${POSTGRES_PASSWORD:-password_here}@db:5432/${POSTGRES_DATABASE:-neondb}
       
-      # === АВТОРИЗАЦИЯ И БЕЗОПАСНОСТЬ (v3.41.0) ===
+      # === АВТОРИЗАЦИЯ И БЕЗОПАСНОСТЬ (v3.42.0) ===
       - ADMIN_EMAILS=${ADMIN_EMAILS:-}
       - VIP_EMAILS=${VIP_EMAILS:-}
       - NEXT_PUBLIC_VIP_EMAILS=${NEXT_PUBLIC_VIP_EMAILS:-}

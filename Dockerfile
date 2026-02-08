@@ -31,7 +31,7 @@ RUN npm run build
 FROM python:3.10-slim
 
 LABEL maintainer="Doctor Opus Team"
-LABEL version="3.41.0"
+LABEL version="3.42.0"
 
 WORKDIR /app
 

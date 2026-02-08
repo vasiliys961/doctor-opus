@@ -6,7 +6,7 @@ import { safeLog, safeError } from '@/lib/logger';
 import { safeErrorMessage } from '@/lib/safe-error';
 
 /**
- * Doctor Opus v3.41.0 - Database Migration Endpoint
+ * Doctor Opus v3.42.0 - Database Migration Endpoint
  * 
  * БЕЗОПАСНОСТЬ:
  * - POST: Требует MIGRATION_SECRET из .env (захардкоженные секреты удалены)
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     
     await sql`CREATE INDEX IF NOT EXISTS idx_transactions_email_date ON credit_transactions(email, created_at DESC)`;
     
-    // users (v3.41.0 — авторизация с паролями)
+    // users (v3.42.0 — авторизация с паролями)
     safeLog('📊 [MIGRATION] Creating users table...');
     await sql`
       CREATE TABLE IF NOT EXISTS users (

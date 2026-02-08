@@ -2,7 +2,7 @@ import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
 /**
- * Doctor Opus v3.41.0 — Безопасная авторизация
+ * Doctor Opus v3.42.0 — Безопасная авторизация
  * 
  * Порядок проверки:
  * 1. Ищем пользователя в БД (таблица users) → проверяем bcrypt-хэш
