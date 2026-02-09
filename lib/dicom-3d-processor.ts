@@ -19,9 +19,9 @@ export function estimateVolumeStats(width: number, height: number, depth: number
   const memoryMB = (voxels * 2) / (1024 * 1024); // UInt16 = 2 bytes
   
   // Пороги для M1 и современных браузеров
-  const DOWNSAMPLE_THRESHOLD_VOXELS = 256 * 256 * 256; // ~16.7M вокселей
-  const DOWNSAMPLE_THRESHOLD_MB = 350;
-  const MAX_LIMIT_MB = 600;
+  const DOWNSAMPLE_THRESHOLD_VOXELS = 100 * 1024 * 1024; // ~104M вокселей (было 16.7M)
+  const DOWNSAMPLE_THRESHOLD_MB = 600; // было 350
+  const MAX_LIMIT_MB = 1024; // было 600
 
   return {
     dimensions: [width, height, depth],
@@ -43,9 +43,9 @@ export async function prepareVolumeData(vtk: any, imageData: any, isCinematic: b
   const bytesPerVoxel = 2; // UInt16
   const memoryMB = (voxels * bytesPerVoxel) / (1024 * 1024);
 
-  // Для Cinematic режима мы более строги к ресурсам, чтобы сохранить FPS
-  const voxelLimit = isCinematic ? 256 * 256 * 256 : 512 * 512 * 512;
-  const memoryLimit = isCinematic ? 350 : 600;
+  // Увеличиваем лимиты, чтобы большинство КТ (512x512x300+) проходили без сжатия
+  const voxelLimit = isCinematic ? 150 * 1024 * 1024 : 200 * 1024 * 1024;
+  const memoryLimit = isCinematic ? 600 : 800;
 
   if (voxels > voxelLimit || memoryMB > memoryLimit) {
     console.warn(`⚠️ [3D Processor] Volume is too large (${memoryMB.toFixed(1)} MB). Downsampling...`);

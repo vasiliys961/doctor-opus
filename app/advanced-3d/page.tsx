@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Navigation from '@/components/Navigation'
 import Cinematic3DViewer from '@/components/Cinematic3DViewer'
 import FileUpload from '@/components/FileUpload'
 
@@ -26,11 +25,8 @@ export default function Advanced3DPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <Navigation title="Продвинутая 3D Визуализация" />
-      
-      <div className="max-w-4xl mx-auto px-4 py-12">
-        <div className="text-center mb-12">
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="text-center mb-12">
           <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">
             Advanced 3D Engine <span className="text-primary-600">v2.0</span>
           </h1>
@@ -79,14 +75,13 @@ export default function Advanced3DPage() {
             />
           </div>
         </div>
-      </div>
 
-      {showViewer && (
-        <Cinematic3DViewer 
-          files={files}
-          onClose={() => setShowViewer(false)}
-        />
-      )}
-    </main>
+        {showViewer && (
+          <Cinematic3DViewer 
+            files={files}
+            onClose={() => setShowViewer(false)}
+          />
+        )}
+      </div>
   )
 }

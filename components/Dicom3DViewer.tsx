@@ -25,11 +25,25 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
   const [decodeProgress, setDecodeProgress] = useState({ current: 0, total: 0 })
   const [error, setError] = useState<string | null>(null)
   const [vtkReady, setVtkReady] = useState(false)
-  const [activePreset, setActivePreset] = useState<'default' | 'bone' | 'brain' | 'mip' | 'glow'>('default')
+  const [activePreset, setActivePreset] = useState<'default' | 'bone' | 'brain' | 'mip' | 'glow' | 'xray_light' | 'vessels' | 'organ_lesion'>('default')
 
   // Хранилище для функций передачи (чтобы менять их на лету)
   const volumePropertyRef = useRef<any>(null)
   const renderWindowRef = useRef<any>(null)
+  const mapperRef = useRef<any>(null)
+
+  const getNormalizedRange = (scalarArray: any) => {
+    if (!scalarArray) return { min: 0, max: 1, delta: 1 };
+    const [min, max] = scalarArray.getRange();
+    const delta = max - min || 1;
+    return { min, max, delta };
+  };
+
+  const huWindowToScalarRange = (min: number, max: number, huLow: number, huHigh: number) => {
+    const clampedLow = Math.max(min, Math.min(max, huLow));
+    const clampedHigh = Math.max(min, Math.min(max, huHigh));
+    return { low: clampedLow, high: clampedHigh };
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.vtk) {
@@ -55,8 +69,8 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
       let height = 0;
       let spacing = [1, 1, 1];
 
-      // Лимит срезов для стабильности MPR
-      const limit = 300;
+      // Лимит срезов для стабильности MPR (увеличено для детальности)
+      const limit = 500;
       let filesToProcess = files.length > limit ? files.slice(0, limit) : files;
       
       setDecodeProgress({ current: 0, total: filesToProcess.length });
@@ -240,6 +254,18 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
 
         const style = vtk.Interaction.Style.vtkInteractorStyleTrackballCamera.newInstance();
         interactor.setInteractorStyle(style);
+
+        // Адаптивное качество: снижаем детализацию при вращении для плавности
+        interactor.onStartAnimation(() => {
+          mapper.setSampleDistance(2.5);
+        });
+
+        interactor.onEndAnimation(() => {
+          // Возвращаем идеальное качество (вчерашний "золотой" стандарт)
+          mapper.setSampleDistance(0.9);
+          renderWindow.render();
+        });
+
         renderWindow.render();
 
         volumePropertyRef.current = property;
@@ -326,7 +352,7 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
 
       // === Новый applyPreset ===
       const applyPreset = (
-        presetName: 'default' | 'bone' | 'brain' | 'mip' | 'glow'
+        presetName: 'default' | 'bone' | 'brain' | 'mip' | 'glow' | 'xray_light' | 'vessels' | 'organ_lesion'
       ) => {
         if (!volumePropertyRef.current || !renderWindowRef.current) return;
 
@@ -364,8 +390,6 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
 
           case 'brain': {
             // "Рентген": тело ~воздух, видим только плотные структуры
-            const [min, max] = range;
-            const delta = max - min;
             const low = min + 0.1 * delta;
             const mid = min + 0.6 * delta;
             const high = min + 0.85 * delta;
@@ -391,8 +415,6 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
           }
 
           case 'glow': {
-            const [min, max] = range;
-            const delta = max - min;
             const low = min + 0.2 * delta;
             const mid = min + 0.6 * delta;
             const high = min + 0.85 * delta;
@@ -681,7 +703,7 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
                       onClick={() => (window as any).applyDicomPreset?.('brain')}
                       className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${activePreset === 'brain' ? 'bg-primary-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
                     >
-                      Просвет
+                      Мозг
                     </button>
                     <button 
                       onClick={() => (window as any).applyDicomPreset?.('glow')}
