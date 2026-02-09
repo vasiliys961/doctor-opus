@@ -23,6 +23,7 @@ export default function FileUpload({
   const [isCompressing, setIsCompressing] = useState(false)
   const [editingFileIndex, setEditingFileIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const handleFiles = async (files: FileList | null) => {
@@ -300,6 +301,18 @@ export default function FileUpload({
           onChange={handleChange}
           className="hidden"
         />
+
+        {/* Input для папок */}
+        <input
+          ref={folderInputRef}
+          type="file"
+          webkitdirectory=""
+          mozdirectory=""
+          directory=""
+          onChange={handleChange}
+          className="hidden"
+          multiple={multiple}
+        />
         
         <div className="space-y-3">
           {isCompressing ? (
@@ -319,6 +332,13 @@ export default function FileUpload({
                 >
                   📁 Выбрать файлы
                 </button>
+
+                <button
+                  onClick={() => folderInputRef.current?.click()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-semibold"
+                >
+                  📂 Выбрать папку
+                </button>
                 
                 <button
                   onClick={() => cameraInputRef.current?.click()}
@@ -328,12 +348,12 @@ export default function FileUpload({
                 </button>
               </div>
               
-              <span className="text-gray-600">или перетащите файлы сюда</span>
+              <span className="text-gray-600">или перетащите папку со снимками сюда</span>
             </>
           )}
           
           <p className="text-sm text-gray-500">
-            Поддерживаемые форматы: изображения (JPG, PNG), PDF, документы (DOC, DOCX), текстовые файлы (TXT, CSV)
+            Поддерживаются: DICOM серии (.dcm), изображения (JPG, PNG), PDF, документы
             <br />
             Максимальный размер файла: {maxSize}MB
             {multiple && ' • Можно загрузить несколько файлов'}
