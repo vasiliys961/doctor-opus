@@ -18,7 +18,7 @@ export default function Cinematic3DViewer({ files, onClose }: Cinematic3DViewerP
   const [error, setError] = useState<string | null>(null)
   const [vtkReady, setVtkReady] = useState(false)
   const [renderMode, setRenderMode] = useState<'clinical' | 'cinematic'>('clinical')
-  const [activePreset, setActivePreset] = useState<'default' | 'bone' | 'vessels' | 'mip' | 'xray_light' | 'brain' | 'glow' | 'organ_lesion'>('default')
+  const [activePreset, setActivePreset] = useState<'default' | 'bone' | 'vessels' | 'mip' | 'xray_light' | 'brain' | 'glow' | 'organ_lesion' | 'neon_xray'>('default')
   const [quality, setQuality] = useState<'normal' | 'high'>('normal')
 
   const volumePropertyRef = useRef<any>(null)
@@ -432,6 +432,34 @@ export default function Cinematic3DViewer({ files, onClose }: Cinematic3DViewerP
         break;
       }
 
+      case 'neon_xray': {
+        const { min, max, delta } = getNormalizedRange(scalarArrayRef.current);
+        const mid  = min + 0.5 * delta;
+        const high = min + 0.8 * delta;
+
+        // Цвет: голубой объём, белые кости/сосуды
+        ctfun.addRGBPoint(min,       0.0, 0.0, 0.0);   // фон
+        ctfun.addRGBPoint(mid,       0.3, 0.7, 1.0);   // мягкие ткани — светло‑голубые
+        ctfun.addRGBPoint(high,      0.7, 0.9, 1.0);   // более плотные — ярко‑голубые
+        ctfun.addRGBPoint(max,       1.0, 1.0, 1.0);   // кости/контраст — белые
+
+        // Прозрачность: тело полупрозрачное, кости плотные
+        ofun.addPoint(min,       0.0);   // воздух
+        ofun.addPoint(min + 0.2*delta, 0.0);   // внешний воздух/стол
+        ofun.addPoint(mid,       0.05);  // мягкие ткани — тонкий голубой объём
+        ofun.addPoint(high,      0.30);  // плотные ткани
+        ofun.addPoint(max,       0.85);  // кости/сосуды
+
+        property.setShade(true);
+        property.setAmbient(0.7);   // сильное рассеянное свечение
+        property.setDiffuse(0.3);
+        property.setSpecular(0.4);
+        property.setSpecularPower(50);
+
+        if (mapper.setUseJittering) mapper.setUseJittering(true);
+        break;
+      }
+
       case 'mip':
         property.setShade(false);
         ctfun.addRGBPoint(min, 0, 0, 0);
@@ -548,13 +576,13 @@ export default function Cinematic3DViewer({ files, onClose }: Cinematic3DViewerP
 
             <div className="flex items-center gap-4">
               <div className="bg-black/40 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 flex gap-1">
-                {(['default', 'bone', 'vessels', 'brain', 'glow', 'mip', 'xray_light', 'organ_lesion'] as const).map(p => (
+                {(['default', 'bone', 'vessels', 'brain', 'glow', 'mip', 'xray_light', 'organ_lesion', 'neon_xray'] as const).map(p => (
                   <button
                     key={p}
                     onClick={() => setActivePreset(p)}
                     className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${activePreset === p ? 'bg-primary-600 text-white shadow-lg' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
                   >
-                    {p === 'default' ? 'Tissue' : p === 'xray_light' ? 'X-Ray' : p === 'brain' ? 'Prosve' : p === 'glow' ? 'Glow' : p === 'organ_lesion' ? 'Organ' : p}
+                    {p === 'default' ? 'Tissue' : p === 'xray_light' ? 'X-Ray' : p === 'brain' ? 'Prosve' : p === 'glow' ? 'Glow' : p === 'organ_lesion' ? 'Organ' : p === 'neon_xray' ? 'Neon X-Ray' : p}
                   </button>
                 ))}
               </div>

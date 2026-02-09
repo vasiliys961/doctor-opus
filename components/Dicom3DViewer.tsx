@@ -162,6 +162,15 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
         }
       }
 
+      // Корректный расчет Z-spacing на основе позиции срезов (убирает "вытянутость")
+      if (fileDataList.length > 1 && fileDataList[0].position !== fileDataList[1].position) {
+        const realZSpacing = Math.abs(fileDataList[1].position - fileDataList[0].position);
+        if (realZSpacing > 0.1 && realZSpacing < 20) {
+          console.log(`📏 [MPR] Calculated real Z-spacing: ${realZSpacing.toFixed(3)}mm`);
+          spacing[2] = realZSpacing;
+        }
+      }
+
       if (pixelDataArrays.length < 2) {
         throw new Error('Недостаточно данных для построения 3D срезов. Загрузите серию снимков.');
       }
@@ -240,32 +249,30 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
         ctfun.addRGBPoint(max, 1, 1, 1);
 
         ofun.addPoint(min, 0.0);
-        ofun.addPoint(min + 0.2 * delta, 0.01);   // кожа/жир почти прозрачны
-        ofun.addPoint(min + 0.5 * delta, 0.08);   // мягкие ткани очень тонкие
-        ofun.addPoint(min + 0.75 * delta, 0.4);   // кости/контраст
-        ofun.addPoint(max, 0.8);
+        ofun.addPoint(min + 0.1 * delta, 0.0);   // Жесткая отсечка воздуха (убирает "трубу")
+        ofun.addPoint(min + 0.2 * delta, 0.02);  // Поверхностные ткани (кожа)
+        ofun.addPoint(min + 0.4 * delta, 0.20);  // Внутренние органы - плотнее
+        ofun.addPoint(min + 0.70 * delta, 0.75); // Кости/ребра - стали гораздо четче
+        ofun.addPoint(max, 0.95);
 
         property.setRGBTransferFunction(0, ctfun);
         property.setScalarOpacity(0, ofun);
-
         volume.setProperty(property);
         renderer.addVolume(volume);
         renderer.resetCamera();
-
+        
+        // Освещение для высокой четкости и глубоких теней
+        property.setShade(true);
+        property.setAmbient(0.15);   // Меньше фонового света для контраста
+        property.setDiffuse(0.8);    // Больше направленного света для объема
+        property.setSpecular(0.4);   // Яркие блики на костях/плотных органах
+        property.setSpecularPower(50);
+        
         const style = vtk.Interaction.Style.vtkInteractorStyleTrackballCamera.newInstance();
         interactor.setInteractorStyle(style);
 
-        // Адаптивное качество: снижаем детализацию при вращении для плавности
-        interactor.onStartAnimation(() => {
-          mapper.setSampleDistance(2.5);
-        });
-
-        interactor.onEndAnimation(() => {
-          // Возвращаем идеальное качество (вчерашний "золотой" стандарт)
-          mapper.setSampleDistance(0.9);
-          renderWindow.render();
-        });
-
+        // Постоянное высокое качество (без адаптивного снижения)
+        mapper.setSampleDistance(0.35); 
         renderWindow.render();
 
         volumePropertyRef.current = property;
@@ -376,41 +383,44 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
 
         switch (presetName) {
           case 'bone':
-            // кости: почти всё прозрачное, кроме верхних 20–25% диапазона
+            // кости: теперь максимально четкие и плотные
             ctfun.addRGBPoint(min, 0, 0, 0);
-            ctfun.addRGBPoint(min + 0.5 * delta, 0.3, 0.2, 0.2);
-            ctfun.addRGBPoint(min + 0.7 * delta, 0.8, 0.7, 0.6);
+            ctfun.addRGBPoint(min + 0.5 * delta, 0.4, 0.2, 0.2);
+            ctfun.addRGBPoint(min + 0.6 * delta, 0.9, 0.85, 0.8); // Начало костей раньше
             ctfun.addRGBPoint(max, 1, 1, 1);
 
             ofun.addPoint(min, 0.0);
-            ofun.addPoint(min + 0.5 * delta, 0.0);
-            ofun.addPoint(min + 0.7 * delta, 0.5);
-            ofun.addPoint(max, 0.95);
+            ofun.addPoint(min + 0.50 * delta, 0.0); 
+            ofun.addPoint(min + 0.65 * delta, 0.8); // Резкий взлет плотности для ребер
+            ofun.addPoint(max, 1.0);
+            
+            property.setAmbient(0.1);
+            property.setDiffuse(0.9);
+            property.setSpecular(0.6);
+            property.setSpecularPower(60);
             break;
 
           case 'brain': {
-            // "Рентген": тело ~воздух, видим только плотные структуры
-            const low = min + 0.1 * delta;
+            // "Просвет": увеличиваем контраст
+            const low = min + 0.15 * delta;
             const mid = min + 0.6 * delta;
             const high = min + 0.85 * delta;
 
-            // Цвета спокойные, клинические
             ctfun.addRGBPoint(min, 0, 0, 0);
             ctfun.addRGBPoint(low, 0.2, 0.2, 0.4);
             ctfun.addRGBPoint(mid, 0.7, 0.7, 0.9);
             ctfun.addRGBPoint(high, 1.0, 0.4, 0.3);
             ctfun.addRGBPoint(max, 1.0, 0.9, 0.0);
 
-            // МЯГКИЕ ТКАНИ ≈ 0, только верхний хвост даёт сигнал
             ofun.addPoint(min, 0.0);
             ofun.addPoint(low, 0.0);
-            ofun.addPoint(mid, 0.01);   // весь объём почти прозрачный
-            ofun.addPoint(high, 0.25);  // очаги/кости
-            ofun.addPoint(max, 0.7);
+            ofun.addPoint(mid, 0.02);
+            ofun.addPoint(high, 0.4);
+            ofun.addPoint(max, 0.8);
 
-            property.setAmbient(0.5);
-            property.setDiffuse(0.3);
-            property.setSpecular(0.2);
+            property.setAmbient(0.2);
+            property.setDiffuse(0.7);
+            property.setSpecular(0.3);
             break;
           }
 
@@ -419,29 +429,26 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
             const mid = min + 0.6 * delta;
             const high = min + 0.85 * delta;
 
-            // Неоновая палитра
             ctfun.addRGBPoint(min, 0, 0, 0);
             ctfun.addRGBPoint(low, 0.0, 0.15, 0.4);
             ctfun.addRGBPoint(mid, 0.0, 0.8, 1.0);
             ctfun.addRGBPoint(high, 0.6, 1.0, 0.8);
             ctfun.addRGBPoint(max, 1.0, 1.0, 1.0);
 
-            // ЕЩЁ ЖЕСТЧЕ гасим тело
             ofun.addPoint(min, 0.0);
             ofun.addPoint(low, 0.0);
-            ofun.addPoint(mid, 0.005);  // тело практически невидимо
-            ofun.addPoint(high, 0.3);   // очаги начинают "гореть"
+            ofun.addPoint(mid, 0.01);
+            ofun.addPoint(high, 0.5);
             ofun.addPoint(max, 0.9);
 
-            property.setAmbient(0.9);
-            property.setDiffuse(0.2);
-            property.setSpecular(0.4);
-            property.setSpecularPower(50);
+            property.setAmbient(0.3); // Уменьшил с 0.9 чтобы убрать "туман"
+            property.setDiffuse(0.7);
+            property.setSpecular(0.5);
+            property.setSpecularPower(60);
             break;
           }
 
           case 'mip':
-            // классический MIP
             property.setShade(false);
             ctfun.addRGBPoint(min, 0, 0, 0);
             ctfun.addRGBPoint(max, 1, 1, 1);
@@ -450,17 +457,23 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
             break;
 
           default:
-            // мягкие ткани: стандартный клинический вид
+            // мягкие ткани + четкие кости
             ctfun.addRGBPoint(min, 0, 0, 0);
             ctfun.addRGBPoint(min + 0.2 * delta, 0.6, 0.4, 0.4);
             ctfun.addRGBPoint(min + 0.6 * delta, 0.95, 0.85, 0.8);
             ctfun.addRGBPoint(max, 1, 1, 1);
 
             ofun.addPoint(min, 0.0);
-            ofun.addPoint(min + 0.2 * delta, 0.02);
-            ofun.addPoint(min + 0.5 * delta, 0.08);
-            ofun.addPoint(min + 0.75 * delta, 0.4);
-            ofun.addPoint(max, 0.8);
+            ofun.addPoint(min + 0.1 * delta, 0.0);   
+            ofun.addPoint(min + 0.2 * delta, 0.02);  
+            ofun.addPoint(min + 0.4 * delta, 0.20);  // Органы плотнее
+            ofun.addPoint(min + 0.7 * delta, 0.75);  // Кости/ребра четкие
+            ofun.addPoint(max, 0.95);
+
+            property.setAmbient(0.15);
+            property.setDiffuse(0.8);
+            property.setSpecular(0.4);
+            property.setSpecularPower(50);
             break;
         }
 
