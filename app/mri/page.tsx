@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
@@ -232,12 +233,23 @@ export default function MRIPage() {
                 <span>🎨 Закрасить данные</span>
               </button>
               {originalDicomStack.length > 0 && (
-                <button
-                  onClick={() => setShow3D(true)}
-                  className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-all shadow-lg hover:scale-105 active:scale-95"
-                >
-                  <span>🧊 Открыть в 3D (Volume Render)</span>
-                </button>
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={() => setShow3D(true)}
+                    className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-all shadow-lg hover:scale-105 active:scale-95"
+                  >
+                    <span>🧊 MPR 2x2</span>
+                  </button>
+                  <Link
+                    href="/advanced-3d"
+                    className="flex items-center space-x-2 px-6 py-3 bg-orange-600 text-white rounded-full hover:bg-orange-700 transition-all shadow-lg hover:scale-105 active:scale-95 animate-pulse"
+                  >
+                    <span>✨ Cinematic 3D</span>
+                  </Link>
+                  <p className="text-[10px] text-blue-600 font-medium">
+                    ✨ Доступна 3D-реконструкция и эффект "просвечивания"
+                  </p>
+                </div>
               )}
             </div>
           </div>

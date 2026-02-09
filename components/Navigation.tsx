@@ -26,6 +26,7 @@ export default function Navigation() {
     { name: '🩻 Описание рентгена', href: '/xray' },
     { name: '🧠 Описание МРТ', href: '/mri' },
     { name: '🩻 Описание КТ', href: '/ct' },
+    { name: '🔬 3D Визуализация (Cinematic)', href: '/advanced-3d' },
     { name: '🔊 Описание УЗИ', href: '/ultrasound' },
     { name: '🔬 Оценка дерматоскопии', href: '/dermatoscopy' },
     { name: '🔬 Оценка лабораторных данных', href: '/lab' },
