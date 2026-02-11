@@ -67,14 +67,34 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         // Обработка файла с таймаутом
         const processedFile = await Promise.race([
           (async () => {
-            const bitmap = await createImageBitmap(file);
-            const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-            const ctx = canvas.getContext('2d');
+            // Читаем файл как Data URL
+            const fileDataUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = () => reject(new Error('Ошибка чтения файла'));
+              reader.readAsDataURL(file);
+            });
+
+            // Загружаем изображение
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
             
+            const imgLoaded = await new Promise<HTMLImageElement>((resolve, reject) => {
+              img.onload = () => resolve(img);
+              img.onerror = () => reject(new Error('Ошибка загрузки изображения'));
+              img.src = fileDataUrl;
+            });
+
+            // Создаём обычный Canvas (совместимо везде, включая Safari)
+            const canvas = document.createElement('canvas');
+            canvas.width = imgLoaded.width;
+            canvas.height = imgLoaded.height;
+            
+            const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error('Не удалось получить контекст canvas');
 
             // Рисуем исходное изображение
-            ctx.drawImage(bitmap, 0, 0);
+            ctx.drawImage(imgLoaded, 0, 0);
 
             // Применяем все пути рисования
             for (const path of drawingPaths) {
@@ -95,17 +115,28 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
             }
 
             // Сохраняем результат в файл
-            const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+            const blob = await new Promise<Blob>((resolve) => {
+              canvas.toBlob(
+                (blob) => resolve(blob || new Blob([])),
+                'image/jpeg',
+                0.85
+              );
+            });
+            
             return new File([blob], file.name, { type: 'image/jpeg' });
           })(),
           new Promise<File>((_, reject) =>
-            setTimeout(() => reject(new Error(`Обработка файла ${file.name} заняла слишком много времени`)), timeoutMs)
+            setTimeout(
+              () => reject(new Error(`Обработка файла ${file.name} заняла слишком много времени`)),
+              timeoutMs
+            )
           )
         ]);
         
         processedFiles.push(processedFile);
+        console.log(`✅ Файл обработан: ${file.name}`);
       } catch (err) {
-        console.error(`Ошибка при обработке файла ${file.name}:`, err);
+        console.error(`❌ Ошибка при обработке файла ${file.name}:`, err);
         // Если произошла ошибка, добавляем оригинальный файл
         processedFiles.push(file);
       }
