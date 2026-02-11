@@ -24,6 +24,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([]) // Дополнительные файлы для пакетной анонимизации
+  const additionalFilesRef = useRef<File[]>([]) // Ref для немедленного доступа
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
 
@@ -341,8 +342,10 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         const frameFiles = frames.map(f => f.file);
         console.log('🎬 Кадры готовы:', frameFiles.length);
         if (frameFiles.length > 0) {
-          console.log('🎬 Сохраняю дополнительные файлы (остальные кадры):', frameFiles.slice(1).length);
-          setAdditionalFiles(frameFiles.slice(1)); // Сохраняем остальные кадры для пакетной анонимизации
+          const additionalFrames = frameFiles.slice(1);
+          console.log('🎬 Сохраняю дополнительные файлы (остальные кадры):', additionalFrames.length);
+          setAdditionalFiles(additionalFrames);
+          additionalFilesRef.current = additionalFrames; // Сохраняем в ref для немедленного доступа
           setCurrentFile(file);
           console.log('🎬 Устанавливаю currentFile и дополнительные файлы');
           const reader = new FileReader();
@@ -509,15 +512,16 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
 
       {isEditorOpen && preview && currentFile && (
         <>
-          {console.log('🔴 Редактор открывается. additionalFiles:', additionalFiles.length)}
+          {console.log('🔴 Редактор открывается. additionalFilesRef.current:', additionalFilesRef.current.length)}
           <ImageEditor
             image={preview}
-            hasAdditionalFiles={additionalFiles.length > 0}
+            hasAdditionalFiles={additionalFilesRef.current.length > 0}
             onSave={async (editedDataUrl, drawingPaths) => {
+              const filesCount = additionalFilesRef.current.length;
               console.log('ImageEditor.onSave вызван:', {
                 hasDrawingPaths: drawingPaths ? drawingPaths.length : 0,
-                additionalFilesCount: additionalFiles.length,
-                shouldApplyToAll: drawingPaths && additionalFiles.length > 0
+                additionalFilesCount: filesCount,
+                shouldApplyToAll: drawingPaths && filesCount > 0
               });
               
               setIsCompressing(true);
@@ -530,12 +534,12 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
                 setPreview(editedDataUrl);
                 
                 // Если есть пути рисования и дополнительные файлы, применяем маску ко всем
-                if (drawingPaths && additionalFiles.length > 0) {
-                  console.log(`✅ Начинаю обработку ${additionalFiles.length} файлов...`);
+                if (drawingPaths && filesCount > 0) {
+                  console.log(`✅ Начинаю обработку ${filesCount} файлов...`);
                   const processedFiles = await applyDrawingPathsToAllFiles(
                     editedDataUrl,
                     drawingPaths,
-                    additionalFiles
+                    additionalFilesRef.current
                   );
                   console.log(`✅ Обработано ${processedFiles.length} файлов`);
                   // Добавляем обработанный первый файл в начало
@@ -543,7 +547,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
                   onUpload(editedFile, [], allProcessedFiles);
                 } else {
                   console.log('ℹ️ Применяю только к первому файлу (нет путей или доп. файлов)');
-                  onUpload(editedFile, [], additionalFiles.length > 0 ? [editedFile, ...additionalFiles] : undefined);
+                  onUpload(editedFile, [], filesCount > 0 ? [editedFile, ...additionalFilesRef.current] : undefined);
                 }
               } catch (err) {
                 console.error('❌ Ошибка при обработке файлов:', err);
