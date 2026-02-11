@@ -188,7 +188,9 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           const { sliceDicomFolder } = await import('@/lib/dicom-client-processor');
           const slices = await sliceDicomFolder(dicomFiles);
           if (slices && slices.length > 0) {
-            setAdditionalFiles(slices.slice(1)); // Сохраняем остальные срезы для пакетной анонимизации
+            const additionalSlices = slices.slice(1);
+            setAdditionalFiles(additionalSlices); // Сохраняем остальные срезы для пакетной анонимизации
+            additionalFilesRef.current = additionalSlices; // Синхронный доступ
             onUpload(dicomFiles[0], slices, dicomFiles);
             setCurrentFile(dicomFiles[0]);
             
@@ -216,7 +218,9 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           const frames = await extractAndAnonymizeFrames(videoFiles[0]);
           const frameFiles = frames.map(f => f.file);
           if (frameFiles.length > 0) {
-            setAdditionalFiles(frameFiles.slice(1)); // Сохраняем остальные кадры
+            const additionalFrames = frameFiles.slice(1);
+            setAdditionalFiles(additionalFrames); // Сохраняем остальные кадры
+            additionalFilesRef.current = additionalFrames; // Синхронный доступ
             onUpload(frameFiles[0], [], frameFiles);
             setCurrentFile(videoFiles[0]);
             const reader = new FileReader();
@@ -235,7 +239,9 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         // Если это несколько изображений
         const imageFiles = files.filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name));
         if (imageFiles.length > 0) {
-          setAdditionalFiles(imageFiles.slice(1)); // Сохраняем остальные изображения
+          const additionalImages = imageFiles.slice(1);
+          setAdditionalFiles(additionalImages); // Сохраняем остальные изображения
+          additionalFilesRef.current = additionalImages; // Синхронный доступ
           setCurrentFile(imageFiles[0]);
           const reader = new FileReader();
           reader.onloadend = () => setPreview(reader.result as string);
