@@ -60,108 +60,104 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
     files: File[]
   ): Promise<File[]> => {
     const processedFiles: File[] = [];
-    const timeoutMs = 30000; // 30 секунд максимум на файл
 
     for (const file of files) {
       try {
-        // Обработка файла с таймаутом
-        const processedFile = await Promise.race([
-          (async () => {
-            // Создаём URL для файла
-            const fileUrl = URL.createObjectURL(file);
-            console.log(`📦 Загружаю файл: ${file.name}`);
-            
-            try {
-              // Загружаем изображение
-              const img = new Image();
-              
-              const imgLoaded = await new Promise<HTMLImageElement>((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                  reject(new Error('Таймаут загрузки изображения'));
-                }, 10000);
-                
-                img.onload = () => {
-                  clearTimeout(timeout);
-                  resolve(img);
-                };
-                img.onerror = () => {
-                  clearTimeout(timeout);
-                  reject(new Error('Ошибка загрузки изображения'));
-                };
-                img.src = fileUrl;
-              });
-
-              // Создаём обычный Canvas
-              const canvas = document.createElement('canvas');
-              canvas.width = imgLoaded.width;
-              canvas.height = imgLoaded.height;
-              
-              const ctx = canvas.getContext('2d');
-              if (!ctx) throw new Error('Не удалось получить контекст canvas');
-
-              console.log(`🎨 Рисую на canvas: ${canvas.width}x${canvas.height}`);
-
-              // Рисуем исходное изображение
-              ctx.drawImage(imgLoaded, 0, 0);
-
-              // Применяем все пути рисования
-              for (const path of drawingPaths) {
-                ctx.lineWidth = path.brushSize;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-                ctx.strokeStyle = 'black';
-
-                if (path.points.length > 0) {
-                  ctx.beginPath();
-                  ctx.moveTo(path.points[0].x, path.points[0].y);
-
-                  for (let i = 1; i < path.points.length; i++) {
-                    ctx.lineTo(path.points[i].x, path.points[i].y);
-                  }
-                  ctx.stroke();
-                }
-              }
-
-              console.log(`💾 Сохраняю результат для: ${file.name}`);
-
-              // Сохраняем результат в файл
-              const blob = await new Promise<Blob>((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                  reject(new Error('Таймаут при сохранении blob'));
-                }, 5000);
-                
-                canvas.toBlob(
-                  (blob) => {
-                    clearTimeout(timeout);
-                    if (blob) {
-                      resolve(blob);
-                    } else {
-                      reject(new Error('Не удалось создать blob'));
-                    }
-                  },
-                  'image/jpeg',
-                  0.85
-                );
-              });
-              
-              const resultFile = new File([blob], file.name, { type: 'image/jpeg' });
-              console.log(`✅ Файл обработан: ${file.name} (${(blob.size / 1024).toFixed(2)}KB)`);
-              
-              return resultFile;
-            } finally {
-              // Очищаем URL
-              URL.revokeObjectURL(fileUrl);
-            }
-          })(),
-          new Promise<File>((_, reject) =>
-            setTimeout(
-              () => reject(new Error(`Обработка файла ${file.name} заняла слишком много времени`)),
-              timeoutMs
-            )
-          )
-        ]);
+        console.log(`📦 Начинаю обработку: ${file.name}`);
         
-        processedFiles.push(processedFile);
+        // Читаем файл как Data URL
+        const fileDataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            console.log(`📖 Файл прочитан: ${file.name}`);
+            resolve(reader.result as string);
+          };
+          reader.onerror = () => reject(new Error('Ошибка чтения файла'));
+          reader.readAsDataURL(file);
+        });
+
+        // Загружаем изображение в canvas напрямую
+        const img = new Image();
+        
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Таймаут загрузки изображения'));
+          }, 10000);
+          
+          img.onload = () => {
+            clearTimeout(timeout);
+            console.log(`🖼️ Изображение загружено: ${img.width}x${img.height}`);
+            resolve();
+          };
+          
+          img.onerror = (e) => {
+            clearTimeout(timeout);
+            console.error(`❌ Ошибка загрузки img:`, e);
+            reject(new Error('Ошибка загрузки изображения'));
+          };
+          
+          // Создаём canvas и загружаем сразу туда
+          img.src = fileDataUrl;
+        });
+
+        // Создаём canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Не удалось получить контекст canvas');
+
+        console.log(`🎨 Рисую на canvas: ${canvas.width}x${canvas.height}`);
+
+        // Рисуем исходное изображение
+        ctx.drawImage(img, 0, 0);
+
+        // Применяем все пути рисования
+        for (const path of drawingPaths) {
+          ctx.lineWidth = path.brushSize;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = 'black';
+
+          if (path.points.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(path.points[0].x, path.points[0].y);
+
+            for (let i = 1; i < path.points.length; i++) {
+              ctx.lineTo(path.points[i].x, path.points[i].y);
+            }
+            ctx.stroke();
+          }
+        }
+
+        console.log(`💾 Сохраняю результат для: ${file.name}`);
+
+        // Сохраняем результат в файл
+        const resultBlob = await new Promise<Blob>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Таймаут при сохранении blob'));
+          }, 5000);
+          
+          canvas.toBlob(
+            (blob) => {
+              clearTimeout(timeout);
+              if (blob) {
+                console.log(`✅ Blob создан: ${(blob.size / 1024).toFixed(2)}KB`);
+                resolve(blob);
+              } else {
+                reject(new Error('Не удалось создать blob'));
+              }
+            },
+            'image/jpeg',
+            0.85
+          );
+        });
+        
+        const resultFile = new File([resultBlob], file.name, { type: 'image/jpeg' });
+        processedFiles.push(resultFile);
+        console.log(`✅ Файл успешно обработан: ${file.name}`);
+        
       } catch (err) {
         console.error(`❌ Ошибка при обработке файла ${file.name}:`, err);
         // Если произошла ошибка, добавляем оригинальный файл
@@ -169,7 +165,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
       }
     }
 
-    console.log(`✅ Готово! Обработано ${processedFiles.length}/${files.length} файлов`);
+    console.log(`✅ ГОТОВО! Обработано ${processedFiles.length}/${files.length} файлов`);
     return processedFiles;
   };
 
