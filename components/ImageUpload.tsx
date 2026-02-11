@@ -64,54 +64,30 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
 
     for (const file of files) {
       try {
-        console.log(`📦 Начинаю обработку: ${file.name}`);
-        
         // Читаем файл как Data URL
         const fileDataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = () => {
-            console.log(`📖 Файл прочитан: ${file.name}`);
-            resolve(reader.result as string);
-          };
+          reader.onload = () => resolve(reader.result as string);
           reader.onerror = () => reject(new Error('Ошибка чтения файла'));
           reader.readAsDataURL(file);
         });
 
-        // Загружаем изображение в canvas напрямую
+        // Загружаем изображение
         const img = new Image();
-        
         await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('Таймаут загрузки изображения'));
-          }, 10000);
-          
-          img.onload = () => {
-            clearTimeout(timeout);
-            console.log(`🖼️ Изображение загружено: ${img.width}x${img.height}`);
-            resolve();
-          };
-          
-          img.onerror = (e) => {
-            clearTimeout(timeout);
-            console.error(`❌ Ошибка загрузки img:`, e);
-            reject(new Error('Ошибка загрузки изображения'));
-          };
-          
-          // Создаём canvas и загружаем сразу туда
+          const timeout = setTimeout(() => reject(new Error('Таймаут загрузки')), 10000);
+          img.onload = () => { clearTimeout(timeout); resolve(); };
+          img.onerror = () => { clearTimeout(timeout); reject(new Error('Ошибка загрузки')); };
           img.src = fileDataUrl;
         });
 
-        // Создаём canvas
+        // Рисуем на canvas
         const canvas = document.createElement('canvas');
         canvas.width = img.width;
         canvas.height = img.height;
-        
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Не удалось получить контекст canvas');
 
-        console.log(`🎨 Рисую на canvas: ${canvas.width}x${canvas.height}`);
-
-        // Рисуем исходное изображение
         ctx.drawImage(img, 0, 0);
 
         // Применяем все пути рисования
@@ -120,11 +96,9 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
           ctx.strokeStyle = 'black';
-
           if (path.points.length > 0) {
             ctx.beginPath();
             ctx.moveTo(path.points[0].x, path.points[0].y);
-
             for (let i = 1; i < path.points.length; i++) {
               ctx.lineTo(path.points[i].x, path.points[i].y);
             }
@@ -132,41 +106,21 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           }
         }
 
-        console.log(`💾 Сохраняю результат для: ${file.name}`);
-
-        // Сохраняем результат в файл
+        // Сохраняем результат
         const resultBlob = await new Promise<Blob>((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('Таймаут при сохранении blob'));
-          }, 5000);
-          
           canvas.toBlob(
-            (blob) => {
-              clearTimeout(timeout);
-              if (blob) {
-                console.log(`✅ Blob создан: ${(blob.size / 1024).toFixed(2)}KB`);
-                resolve(blob);
-              } else {
-                reject(new Error('Не удалось создать blob'));
-              }
-            },
-            'image/jpeg',
-            0.85
+            (blob) => blob ? resolve(blob) : reject(new Error('Не удалось создать blob')),
+            'image/jpeg', 0.85
           );
         });
         
-        const resultFile = new File([resultBlob], file.name, { type: 'image/jpeg' });
-        processedFiles.push(resultFile);
-        console.log(`✅ Файл успешно обработан: ${file.name}`);
-        
+        processedFiles.push(new File([resultBlob], file.name, { type: 'image/jpeg' }));
       } catch (err) {
-        console.error(`❌ Ошибка при обработке файла ${file.name}:`, err);
-        // Если произошла ошибка, добавляем оригинальный файл
+        console.error(`Ошибка обработки ${file.name}:`, err);
         processedFiles.push(file);
       }
     }
 
-    console.log(`✅ ГОТОВО! Обработано ${processedFiles.length}/${files.length} файлов`);
     return processedFiles;
   };
 
@@ -191,8 +145,9 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
             const additionalSlices = slices.slice(1);
             setAdditionalFiles(additionalSlices); // Сохраняем остальные срезы для пакетной анонимизации
             additionalFilesRef.current = additionalSlices; // Синхронный доступ
-            onUpload(dicomFiles[0], slices, dicomFiles);
-            setCurrentFile(dicomFiles[0]);
+            // Передаём первый JPEG-срез как основной файл (для превью и анонимизации)
+            onUpload(slices[0], slices, dicomFiles);
+            setCurrentFile(slices[0]); // Устанавливаем конвертированный JPEG, не сырой DICOM
             
             const reader = new FileReader();
             reader.onloadend = () => setPreview(reader.result as string);
@@ -340,30 +295,19 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
       }
     } else if (isVideo) {
       setIsCompressing(true);
-      console.log('🎬 Начинаю обработку видео:', file.name);
       try {
         const { extractAndAnonymizeFrames } = await import('@/lib/video-frame-extractor');
         const frames = await extractAndAnonymizeFrames(file);
-        console.log('🎬 Извлечено кадров:', frames?.length || 0);
         const frameFiles = frames.map(f => f.file);
-        console.log('🎬 Кадры готовы:', frameFiles.length);
         if (frameFiles.length > 0) {
           const additionalFrames = frameFiles.slice(1);
-          console.log('🎬 Сохраняю дополнительные файлы (остальные кадры):', additionalFrames.length);
           setAdditionalFiles(additionalFrames);
-          additionalFilesRef.current = additionalFrames; // Сохраняем в ref для немедленного доступа
+          additionalFilesRef.current = additionalFrames;
           setCurrentFile(file);
-          console.log('🎬 Устанавливаю currentFile и дополнительные файлы');
           const reader = new FileReader();
-          reader.onloadend = () => {
-            setPreview(reader.result as string);
-            console.log('🎬 Превью установлено');
-          };
+          reader.onloadend = () => setPreview(reader.result as string);
           reader.readAsDataURL(frameFiles[0]);
           onUpload(frameFiles[0], [], [file, ...frameFiles]);
-          console.log('🎬 Вызван onUpload');
-        } else {
-          console.warn('🎬 Не извлечено ни одного кадра!');
         }
       } catch (err) {
         console.error("❌ Video processing error:", err);
@@ -517,55 +461,49 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
       )}
 
       {isEditorOpen && preview && currentFile && (
-        <>
-          {console.log('🔴 Редактор открывается. additionalFilesRef.current:', additionalFilesRef.current.length)}
-          <ImageEditor
-            image={preview}
-            hasAdditionalFiles={additionalFilesRef.current.length > 0}
-            onSave={async (editedDataUrl, drawingPaths) => {
-              const filesCount = additionalFilesRef.current.length;
-              console.log('ImageEditor.onSave вызван:', {
-                hasDrawingPaths: drawingPaths ? drawingPaths.length : 0,
-                additionalFilesCount: filesCount,
-                shouldApplyToAll: drawingPaths && filesCount > 0
-              });
-              
-              setIsCompressing(true);
-              try {
-                const response = await fetch(editedDataUrl);
-                const blob = await response.blob();
-                const editedFile = new File([blob], currentFile.name, { type: 'image/jpeg' });
-                
-                setCurrentFile(editedFile);
-                setPreview(editedDataUrl);
-                
-                // Если есть пути рисования и дополнительные файлы, применяем маску ко всем
-                if (drawingPaths && filesCount > 0) {
-                  console.log(`✅ Начинаю обработку ${filesCount} файлов...`);
-                  const processedFiles = await applyDrawingPathsToAllFiles(
-                    editedDataUrl,
-                    drawingPaths,
-                    additionalFilesRef.current
-                  );
-                  console.log(`✅ Обработано ${processedFiles.length} файлов`);
-                  // Добавляем обработанный первый файл в начало
-                  const allProcessedFiles = [editedFile, ...processedFiles];
-                  onUpload(editedFile, [], allProcessedFiles);
-                } else {
-                  console.log('ℹ️ Применяю только к первому файлу (нет путей или доп. файлов)');
-                  onUpload(editedFile, [], filesCount > 0 ? [editedFile, ...additionalFilesRef.current] : undefined);
-                }
-              } catch (err) {
-                console.error('❌ Ошибка при обработке файлов:', err);
-                alert(`Ошибка при сохранении: ${err instanceof Error ? err.message : 'неизвестная ошибка'}`);
-              } finally {
-                setIsCompressing(false);
-                setIsEditorOpen(false);
+        <ImageEditor
+          image={preview}
+          hasAdditionalFiles={additionalFilesRef.current.length > 0}
+          onSave={async (editedDataUrl, drawingPaths) => {
+            const filesCount = additionalFilesRef.current.length;
+            setIsCompressing(true);
+            try {
+              // Конвертация data URL в File без fetch (обход CSP)
+              const byteString = atob(editedDataUrl.split(',')[1]);
+              const mimeString = editedDataUrl.split(',')[0].split(':')[1].split(';')[0];
+              const ab = new ArrayBuffer(byteString.length);
+              const ia = new Uint8Array(ab);
+              for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
               }
-            }}
-            onCancel={() => setIsEditorOpen(false)}
-          />
-        </>
+              const blob = new Blob([ab], { type: mimeString });
+              const editedFile = new File([blob], currentFile.name, { type: 'image/jpeg' });
+              
+              setCurrentFile(editedFile);
+              setPreview(editedDataUrl);
+              
+              // Если есть пути рисования и дополнительные файлы, применяем маску ко всем
+              if (drawingPaths && filesCount > 0) {
+                const processedFiles = await applyDrawingPathsToAllFiles(
+                  editedDataUrl,
+                  drawingPaths,
+                  additionalFilesRef.current
+                );
+                const allProcessedFiles = [editedFile, ...processedFiles];
+                onUpload(editedFile, [], allProcessedFiles);
+              } else {
+                onUpload(editedFile, [], filesCount > 0 ? [editedFile, ...additionalFilesRef.current] : undefined);
+              }
+            } catch (err) {
+              console.error('Ошибка при обработке файлов:', err);
+              alert(`Ошибка при сохранении: ${err instanceof Error ? err.message : 'неизвестная ошибка'}`);
+            } finally {
+              setIsCompressing(false);
+              setIsEditorOpen(false);
+            }
+          }}
+          onCancel={() => setIsEditorOpen(false)}
+        />
       )}
     </div>
   )

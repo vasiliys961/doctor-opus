@@ -221,17 +221,19 @@ export default function CTPage() {
   }
 
   const handleUpload = async (uploadedFile: File, slices?: File[], originalFiles?: File[]) => {
-    setFile(uploadedFile)
     if (slices && slices.length > 0) {
       setAdditionalFiles(slices)
-      // Для DICOM используем первый срез как превью
+      // Для DICOM: основной файл — первый конвертированный JPEG-срез
+      const mainFile = uploadedFile.type.startsWith('image/') ? uploadedFile : slices[0]
+      setFile(mainFile)
       const reader = new FileReader()
       reader.onloadend = () => {
         setImagePreview(reader.result as string)
       }
-      reader.readAsDataURL(slices[0])
+      reader.readAsDataURL(mainFile)
     } else {
       setAdditionalFiles([])
+      setFile(uploadedFile)
       // Для обычных изображений
       const reader = new FileReader()
       reader.onloadend = () => {
