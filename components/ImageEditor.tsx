@@ -98,7 +98,12 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
         saveToHistory(ctx)
         // Сохраняем завершённый путь
         if (currentPath.length > 0) {
-          setDrawingPaths(prev => [...prev, { points: currentPath, brushSize }])
+          const newPath = { points: currentPath, brushSize };
+          setDrawingPaths(prev => {
+            const updated = [...prev, newPath];
+            console.log(`📍 Штрих добавлен! Всего штрихов: ${updated.length}`);
+            return updated;
+          })
         }
         setCurrentPath([])
       }
@@ -181,6 +186,12 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
             >
               ↶ Отменить
             </button>
+
+            {/* Отладочная информация */}
+            <div className="text-xs text-gray-500 ml-auto">
+              Штрихов: <span className="font-bold text-blue-600">{drawingPaths.length}</span>
+              {hasAdditionalFiles && <span className="ml-2">| Готово применить ко всем ✓</span>}
+            </div>
           </div>
 
           {/* Canvas для рисования */}
@@ -201,7 +212,8 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
             <div className="flex gap-3">
               <button
                 onClick={onCancel}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+                disabled={isSaving}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium disabled:opacity-50"
               >
                 Отмена
               </button>
@@ -224,16 +236,16 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
                 title="Применит ту же маску ко всем загруженным кадрам"
               >
                 {isSaving ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Применяю ко всем...
+                    Применяю...
                   </>
                 ) : (
-                  '🔗 Применить ко всем кадрам'
+                  '🔗 Применить ко всем'
                 )}
               </button>
             )}

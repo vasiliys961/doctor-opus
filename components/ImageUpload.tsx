@@ -446,6 +446,12 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           image={preview}
           hasAdditionalFiles={additionalFiles.length > 0}
           onSave={async (editedDataUrl, drawingPaths) => {
+            console.log('ImageEditor.onSave вызван:', {
+              hasDrawingPaths: drawingPaths ? drawingPaths.length : 0,
+              additionalFilesCount: additionalFiles.length,
+              shouldApplyToAll: drawingPaths && additionalFiles.length > 0
+            });
+            
             setIsCompressing(true);
             try {
               const response = await fetch(editedDataUrl);
@@ -457,21 +463,22 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
               
               // Если есть пути рисования и дополнительные файлы, применяем маску ко всем
               if (drawingPaths && additionalFiles.length > 0) {
-                console.log(`Начинаю обработку ${additionalFiles.length} файлов...`);
+                console.log(`✅ Начинаю обработку ${additionalFiles.length} файлов...`);
                 const processedFiles = await applyDrawingPathsToAllFiles(
                   editedDataUrl,
                   drawingPaths,
                   additionalFiles
                 );
-                console.log(`Обработано ${processedFiles.length} файлов`);
+                console.log(`✅ Обработано ${processedFiles.length} файлов`);
                 // Добавляем обработанный первый файл в начало
                 const allProcessedFiles = [editedFile, ...processedFiles];
                 onUpload(editedFile, [], allProcessedFiles);
               } else {
+                console.log('ℹ️ Применяю только к первому файлу (нет путей или доп. файлов)');
                 onUpload(editedFile, [], additionalFiles.length > 0 ? [editedFile, ...additionalFiles] : undefined);
               }
             } catch (err) {
-              console.error('Ошибка при обработке файлов:', err);
+              console.error('❌ Ошибка при обработке файлов:', err);
               alert(`Ошибка при сохранении: ${err instanceof Error ? err.message : 'неизвестная ошибка'}`);
             } finally {
               setIsCompressing(false);
