@@ -940,15 +940,27 @@ export default function VideoPage() {
           image={extractedFrames[editingFrameIndex].preview}
           hasAdditionalFiles={extractedFrames.length > 1}
           onSave={async (editedDataUrl, drawingPaths) => {
-            const response = await fetch(editedDataUrl);
-            const blob = await response.blob();
-            const editedFile = new File([blob], extractedFrames[editingFrameIndex].file.name, { type: extractedFrames[editingFrameIndex].file.type });
-            
-            // Если есть пути рисования и больше 1 кадра — применяем ко всем
-            if (drawingPaths && extractedFrames.length > 1) {
-              await applyMaskToAllFrames(drawingPaths, editedFile);
-            } else {
-              handleFrameEditorSave(editedFile);
+            try {
+              // Конвертируем data URL в blob без fetch (обход CSP)
+              const byteString = atob(editedDataUrl.split(',')[1]);
+              const mimeString = editedDataUrl.split(',')[0].split(':')[1].split(';')[0];
+              const ab = new ArrayBuffer(byteString.length);
+              const ia = new Uint8Array(ab);
+              for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+              }
+              const blob = new Blob([ab], { type: mimeString });
+              const editedFile = new File([blob], extractedFrames[editingFrameIndex].file.name, { type: mimeString });
+              
+              // Если есть пути рисования и больше 1 кадра — применяем ко всем
+              if (drawingPaths && extractedFrames.length > 1) {
+                await applyMaskToAllFrames(drawingPaths, editedFile);
+              } else {
+                handleFrameEditorSave(editedFile);
+              }
+            } catch (err) {
+              console.error('❌ Ошибка сохранения:', err);
+              setEditingFrameIndex(null);
             }
           }}
           onCancel={() => setEditingFrameIndex(null)}
