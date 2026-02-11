@@ -24,15 +24,6 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
   const [currentPath, setCurrentPath] = useState<Array<{ x: number; y: number }>>([])
   const imageRef = useRef<HTMLImageElement | null>(null)
 
-  // Логируем статус при открытии редактора
-  useEffect(() => {
-    console.log('🖼️ ImageEditor открыт:', {
-      hasAdditionalFiles,
-      drawingPathsCount: drawingPaths.length,
-      timestamp: new Date().toLocaleTimeString()
-    });
-  }, [])
-
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -107,12 +98,7 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
         saveToHistory(ctx)
         // Сохраняем завершённый путь
         if (currentPath.length > 0) {
-          const newPath = { points: currentPath, brushSize };
-          setDrawingPaths(prev => {
-            const updated = [...prev, newPath];
-            console.log(`📍 Штрих добавлен! Всего штрихов: ${updated.length}`);
-            return updated;
-          })
+          setDrawingPaths(prev => [...prev, { points: currentPath, brushSize }])
         }
         setCurrentPath([])
       }
@@ -147,7 +133,6 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
         
         // Передаём пути рисования, если они есть и если есть дополнительные файлы
         if (hasAdditionalFiles && drawingPaths.length > 0) {
-          console.log(`Отправляю ${drawingPaths.length} путей рисования...`);
           onSave(editedImage, drawingPaths)
         } else {
           onSave(editedImage)
@@ -168,21 +153,11 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
           <p className="text-sm text-gray-600 mt-1">
             Закрасьте черной кистью области с персональными данными
           </p>
-          {/* Большой статус для отладки */}
-          <div className="mt-3 bg-yellow-50 p-3 rounded-lg border-2 border-yellow-300">
-            <div className="text-sm font-bold text-yellow-900">
-              📊 СТАТУС:
-            </div>
-            <div className="text-base font-bold text-yellow-800 mt-2">
-              🗂️ Файлов доступно: <span className={hasAdditionalFiles ? 'text-green-600' : 'text-red-600'}>{hasAdditionalFiles ? '✓ ДА' : '✗ НЕТ'}</span>
-            </div>
-            <div className="text-base font-bold text-yellow-800 mt-1">
-              ✏️ Штрихов нарисовано: <span className={drawingPaths.length > 0 ? 'text-green-600' : 'text-red-600'}>{drawingPaths.length}</span>
-            </div>
-            {!hasAdditionalFiles && <div className="text-sm text-red-600 mt-2">⚠️ Видео/кадры не загрузились правильно!</div>}
-            {hasAdditionalFiles && drawingPaths.length === 0 && <div className="text-sm text-orange-600 mt-2">⚠️ Нарисуй хотя бы один штрих!</div>}
-            {hasAdditionalFiles && drawingPaths.length > 0 && <div className="text-sm text-green-600 mt-2">✅ Готово! Кнопка "Применить ко всем" должна быть внизу</div>}
-          </div>
+          {hasAdditionalFiles && (
+            <p className="text-xs text-blue-600 mt-1">
+              Доступна пакетная обработка — закрасьте один кадр и нажмите «Применить ко всем»
+            </p>
+          )}
         </div>
 
         <div className="p-4">
@@ -210,12 +185,6 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
             >
               ↶ Отменить
             </button>
-
-            {/* Отладочная информация */}
-            <div className="text-xs text-gray-500 ml-auto">
-              Штрихов: <span className="font-bold text-blue-600">{drawingPaths.length}</span>
-              {hasAdditionalFiles && <span className="ml-2">| Готово применить ко всем ✓</span>}
-            </div>
           </div>
 
           {/* Canvas для рисования */}

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
-import ImageEditor from '@/components/ImageEditor'
+import ImageEditor, { DrawingPath } from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import PatientSelector from '@/components/PatientSelector'
@@ -37,6 +37,66 @@ export default function MRIPage() {
   const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
   const [history, setHistory] = useState<Array<{role: string, content: string}>>([])
   const [showEditor, setShowEditor] = useState(false)
+
+  // Применение маски ко всем срезам/кадрам
+  const applyMaskToAllSlices = async (drawingPaths: DrawingPath[], editedFirstFile: File) => {
+    const newSlices = [...additionalFiles]
+    
+    for (let i = 0; i < newSlices.length; i++) {
+      try {
+        const slice = newSlices[i]
+        const fileDataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = () => reject(new Error('Ошибка чтения'))
+          reader.readAsDataURL(slice)
+        })
+
+        const img = new Image()
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve()
+          img.onerror = () => reject(new Error('Ошибка загрузки'))
+          img.src = fileDataUrl
+        })
+
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) continue
+
+        ctx.drawImage(img, 0, 0)
+
+        for (const path of drawingPaths) {
+          ctx.lineWidth = path.brushSize
+          ctx.lineCap = 'round'
+          ctx.lineJoin = 'round'
+          ctx.strokeStyle = 'black'
+          if (path.points.length > 0) {
+            ctx.beginPath()
+            ctx.moveTo(path.points[0].x, path.points[0].y)
+            for (let j = 1; j < path.points.length; j++) {
+              ctx.lineTo(path.points[j].x, path.points[j].y)
+            }
+            ctx.stroke()
+          }
+        }
+
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob(
+            (b) => b ? resolve(b) : reject(new Error('Blob failed')),
+            'image/jpeg', 0.85
+          )
+        })
+
+        newSlices[i] = new File([blob], slice.name, { type: 'image/jpeg' })
+      } catch (err) {
+        console.error(`Ошибка обработки среза ${i + 1}:`, err)
+      }
+    }
+
+    setAdditionalFiles(newSlices)
+  }
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -392,14 +452,31 @@ export default function MRIPage() {
       {showEditor && imagePreview && (
         <ImageEditor
           image={imagePreview}
-          onSave={(editedImage) => {
-            setImagePreview(editedImage)
-            fetch(editedImage)
-              .then(res => res.blob())
-              .then(blob => {
-                setFile(new File([blob], file?.name || 'mri_edited.jpg', { type: 'image/jpeg' }))
-              })
-            setShowEditor(false)
+          hasAdditionalFiles={additionalFiles.length > 0}
+          onSave={async (editedImage, drawingPaths) => {
+            try {
+              setImagePreview(editedImage)
+              // Конвертация data URL в File без fetch (обход CSP)
+              const byteString = atob(editedImage.split(',')[1])
+              const mimeString = editedImage.split(',')[0].split(':')[1].split(';')[0]
+              const ab = new ArrayBuffer(byteString.length)
+              const ia = new Uint8Array(ab)
+              for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i)
+              }
+              const blob = new Blob([ab], { type: mimeString })
+              const editedFile = new File([blob], file?.name || 'mri_edited.jpg', { type: 'image/jpeg' })
+              setFile(editedFile)
+
+              // Если есть пути рисования и доп. срезы — применяем ко всем
+              if (drawingPaths && additionalFiles.length > 0) {
+                await applyMaskToAllSlices(drawingPaths, editedFile)
+              }
+            } catch (err) {
+              console.error('Ошибка сохранения:', err)
+            } finally {
+              setShowEditor(false)
+            }
           }}
           onCancel={() => setShowEditor(false)}
         />
