@@ -2,18 +2,26 @@
 
 import { useState, useRef, useEffect } from 'react'
 
-interface ImageEditorProps {
-  image: string // Принимает либо URL, либо base64
-  onSave: (editedImage: string) => void // Возвращает base64
-  onCancel: () => void
+interface DrawingPath {
+  points: Array<{ x: number; y: number }>
+  brushSize: number
 }
 
-export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProps) {
+interface ImageEditorProps {
+  image: string // Принимает либо URL, либо base64
+  onSave: (editedImage: string, drawingPaths?: DrawingPath[]) => void // Возвращает base64 и пути
+  onCancel: () => void
+  hasAdditionalFiles?: boolean // Есть ли дополнительные файлы для применения маски
+}
+
+export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFiles = false }: ImageEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [brushSize, setBrushSize] = useState(40)
   const [history, setHistory] = useState<ImageData[]>([])
   const [isSaving, setIsSaving] = useState(false)
+  const [drawingPaths, setDrawingPaths] = useState<DrawingPath[]>([])
+  const [currentPath, setCurrentPath] = useState<Array<{ x: number; y: number }>>([])
   const imageRef = useRef<HTMLImageElement | null>(null)
 
   useEffect(() => {
@@ -46,6 +54,7 @@ export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProp
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setIsDrawing(true)
+    setCurrentPath([]) // Начинаем новый путь
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
     if (ctx) {
@@ -55,6 +64,7 @@ export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProp
       
       ctx.beginPath()
       ctx.moveTo(x, y)
+      setCurrentPath([{ x, y }]) // Записываем первую точку
     }
   }
 
@@ -74,6 +84,9 @@ export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProp
       ctx.strokeStyle = 'black'
       ctx.lineTo(x, y)
       ctx.stroke()
+      
+      // Записываем точку в текущий путь
+      setCurrentPath(prev => [...prev, { x, y }])
     }
   }
 
@@ -83,6 +96,11 @@ export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProp
       const ctx = canvasRef.current?.getContext('2d')
       if (ctx) {
         saveToHistory(ctx)
+        // Сохраняем завершённый путь
+        if (currentPath.length > 0) {
+          setDrawingPaths(prev => [...prev, { points: currentPath, brushSize }])
+        }
+        setCurrentPath([])
       }
     }
   }
@@ -97,6 +115,8 @@ export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProp
       const previousState = newHistory[newHistory.length - 1]
       ctx.putImageData(previousState, 0, 0)
       setHistory(newHistory)
+      // Удаляем последний путь при отмене
+      setDrawingPaths(prev => prev.slice(0, -1))
     }
   }
 
@@ -110,7 +130,12 @@ export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProp
     setTimeout(() => {
       try {
         const editedImage = canvas.toDataURL('image/jpeg', 0.85) // Чуть ниже качество для скорости и меньшего веса
-        onSave(editedImage)
+        // Передаём пути рисования, если они есть и если есть дополнительные файлы
+        if (hasAdditionalFiles && drawingPaths.length > 0) {
+          onSave(editedImage, drawingPaths)
+        } else {
+          onSave(editedImage)
+        }
       } catch (err) {
         console.error('Ошибка сохранения изображения:', err)
         alert('Не удалось сохранить изменения. Попробуйте уменьшить область закрашивания.')
@@ -171,27 +196,46 @@ export default function ImageEditor({ image, onSave, onCancel }: ImageEditorProp
           </div>
 
           {/* Кнопки действий */}
-          <div className="mt-4 flex gap-3 justify-end">
-            <button
-              onClick={onCancel}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
-            >
-              Отмена
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 font-medium disabled:opacity-50 flex items-center gap-2"
-            >
-              {isSaving ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Сохранение...
-                </>
-              ) : (
-                '✓ Применить и сохранить'
-              )}
-            </button>
+          <div className="mt-4 flex gap-3 justify-between flex-wrap">
+            <div className="flex gap-3">
+              <button
+                onClick={onCancel}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 font-medium disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Сохранение...
+                  </>
+                ) : (
+                  '✓ Применить'
+                )}
+              </button>
+            </div>
+            {hasAdditionalFiles && drawingPaths.length > 0 && (
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center gap-2"
+                title="Применит ту же маску ко всем загруженным кадрам"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Применяю ко всем...
+                  </>
+                ) : (
+                  '🔗 Применить ко всем кадрам'
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>

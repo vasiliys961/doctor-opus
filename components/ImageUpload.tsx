@@ -5,6 +5,11 @@ import JSZip from 'jszip'
 import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compression'
 import ImageEditor from './ImageEditor'
 
+interface DrawingPath {
+  points: Array<{ x: number; y: number }>
+  brushSize: number
+}
+
 interface ImageUploadProps {
   onUpload: (file: File, additionalFiles?: File[], originalFiles?: File[]) => void
   accept?: string
@@ -18,6 +23,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
   const [isCompressing, setIsCompressing] = useState(false)
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [isEditorOpen, setIsEditorOpen] = useState(false)
+  const [additionalFiles, setAdditionalFiles] = useState<File[]>([]) // Дополнительные файлы для пакетной анонимизации
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
 
@@ -38,13 +44,63 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
     }
   };
 
-  const handleEditorSave = (editedFile: File) => {
+  const handleEditorSave = async (editedFile: File) => {
     setCurrentFile(editedFile);
     const reader = new FileReader();
     reader.onloadend = () => setPreview(reader.result as string);
     reader.readAsDataURL(editedFile);
-    onUpload(editedFile);
+    onUpload(editedFile, additionalFiles.length > 0 ? additionalFiles : undefined);
     setIsEditorOpen(false);
+  };
+
+  // Применяем пути рисования ко всем дополнительным файлам
+  const applyDrawingPathsToAllFiles = async (
+    originalImage: string,
+    drawingPaths: DrawingPath[],
+    files: File[]
+  ): Promise<File[]> => {
+    const processedFiles: File[] = [];
+
+    for (const file of files) {
+      try {
+        const bitmap = await createImageBitmap(file);
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) continue;
+
+        // Рисуем исходное изображение
+        ctx.drawImage(bitmap, 0, 0);
+
+        // Применяем все пути рисования
+        for (const path of drawingPaths) {
+          ctx.lineWidth = path.brushSize;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = 'black';
+
+          if (path.points.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(path.points[0].x, path.points[0].y);
+
+            for (let i = 1; i < path.points.length; i++) {
+              ctx.lineTo(path.points[i].x, path.points[i].y);
+            }
+            ctx.stroke();
+          }
+        }
+
+        // Сохраняем результат в файл
+        const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+        processedFiles.push(new File([blob], file.name, { type: 'image/jpeg' }));
+      } catch (err) {
+        console.error(`Ошибка при обработке файла ${file.name}:`, err);
+        // Если произошла ошибка, добавляем оригинальный файл
+        processedFiles.push(file);
+      }
+    }
+
+    return processedFiles;
   };
 
   const handleFile = async (input: File | FileList | File[]) => {
@@ -63,13 +119,12 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         setIsCompressing(true);
         try {
           const { sliceDicomFolder } = await import('@/lib/dicom-client-processor');
-          // Берем первый DICOM как основной файл для метаданных, а остальные как срезы
           const slices = await sliceDicomFolder(dicomFiles);
           if (slices && slices.length > 0) {
+            setAdditionalFiles(slices.slice(1)); // Сохраняем остальные срезы для пакетной анонимизации
             onUpload(dicomFiles[0], slices, dicomFiles);
             setCurrentFile(dicomFiles[0]);
             
-            // Устанавливаем превью из первого среза
             const reader = new FileReader();
             reader.onloadend = () => setPreview(reader.result as string);
             reader.readAsDataURL(slices[0]);
@@ -91,11 +146,10 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         setIsCompressing(true);
         try {
           const { extractAndAnonymizeFrames } = await import('@/lib/video-frame-extractor');
-          // Извлекаем кадры из первого видео в папке
           const frames = await extractAndAnonymizeFrames(videoFiles[0]);
           const frameFiles = frames.map(f => f.file);
           if (frameFiles.length > 0) {
-            // Передаем первый кадр как основной, а остальные как дополнительные/оригинальные
+            setAdditionalFiles(frameFiles.slice(1)); // Сохраняем остальные кадры
             onUpload(frameFiles[0], [], frameFiles);
             setCurrentFile(videoFiles[0]);
             const reader = new FileReader();
@@ -111,14 +165,18 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
       }
 
       if (files.length > 1) {
-        // Если это несколько изображений (например, кадры из видео)
+        // Если это несколько изображений
         const imageFiles = files.filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name));
         if (imageFiles.length > 0) {
+          setAdditionalFiles(imageFiles.slice(1)); // Сохраняем остальные изображения
+          setCurrentFile(imageFiles[0]);
+          const reader = new FileReader();
+          reader.onloadend = () => setPreview(reader.result as string);
+          reader.readAsDataURL(imageFiles[0]);
           onUpload(imageFiles[0], [], imageFiles);
-          return handleFile(imageFiles[0]);
+          return;
         }
       } else if (files.length > 0) {
-        // Если это один файл
         return handleFile(files[0]);
       }
       return;
@@ -214,7 +272,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         const frames = await extractAndAnonymizeFrames(file);
         const frameFiles = frames.map(f => f.file);
         if (frameFiles.length > 0) {
-          // ПЕРЕДАЕМ: 1. Первый кадр (для превью), 2. Пусто, 3. Оригинальное видео + кадры
+          setAdditionalFiles(frameFiles.slice(1)); // Сохраняем остальные кадры для пакетной анонимизации
           onUpload(frameFiles[0], [], [file, ...frameFiles]);
           setCurrentFile(file);
           const reader = new FileReader();
@@ -375,15 +433,35 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
       {isEditorOpen && preview && currentFile && (
         <ImageEditor
           image={preview}
-          onSave={async (editedDataUrl) => {
-            const response = await fetch(editedDataUrl);
-            const blob = await response.blob();
-            const editedFile = new File([blob], currentFile.name, { type: 'image/jpeg' });
-            
-            setCurrentFile(editedFile);
-            setPreview(editedDataUrl);
-            onUpload(editedFile);
-            setIsEditorOpen(false);
+          hasAdditionalFiles={additionalFiles.length > 0}
+          onSave={async (editedDataUrl, drawingPaths) => {
+            try {
+              const response = await fetch(editedDataUrl);
+              const blob = await response.blob();
+              const editedFile = new File([blob], currentFile.name, { type: 'image/jpeg' });
+              
+              setCurrentFile(editedFile);
+              setPreview(editedDataUrl);
+              
+              // Если есть пути рисования и дополнительные файлы, применяем маску ко всем
+              if (drawingPaths && additionalFiles.length > 0) {
+                const processedFiles = await applyDrawingPathsToAllFiles(
+                  editedDataUrl,
+                  drawingPaths,
+                  additionalFiles
+                );
+                // Добавляем обработанный первый файл в начало
+                const allProcessedFiles = [editedFile, ...processedFiles];
+                onUpload(editedFile, [], allProcessedFiles);
+              } else {
+                onUpload(editedFile, [], additionalFiles.length > 0 ? [editedFile, ...additionalFiles] : undefined);
+              }
+              
+              setIsEditorOpen(false);
+            } catch (err) {
+              console.error('Ошибка при обработке файлов:', err);
+              alert('Не удалось применить маску ко всем файлам');
+            }
           }}
           onCancel={() => setIsEditorOpen(false)}
         />
