@@ -67,63 +67,91 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         // Обработка файла с таймаутом
         const processedFile = await Promise.race([
           (async () => {
-            // Читаем файл как Data URL
-            const fileDataUrl = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = () => reject(new Error('Ошибка чтения файла'));
-              reader.readAsDataURL(file);
-            });
-
-            // Загружаем изображение
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
+            // Создаём URL для файла
+            const fileUrl = URL.createObjectURL(file);
+            console.log(`📦 Загружаю файл: ${file.name}`);
             
-            const imgLoaded = await new Promise<HTMLImageElement>((resolve, reject) => {
-              img.onload = () => resolve(img);
-              img.onerror = () => reject(new Error('Ошибка загрузки изображения'));
-              img.src = fileDataUrl;
-            });
+            try {
+              // Загружаем изображение
+              const img = new Image();
+              
+              const imgLoaded = await new Promise<HTMLImageElement>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  reject(new Error('Таймаут загрузки изображения'));
+                }, 10000);
+                
+                img.onload = () => {
+                  clearTimeout(timeout);
+                  resolve(img);
+                };
+                img.onerror = () => {
+                  clearTimeout(timeout);
+                  reject(new Error('Ошибка загрузки изображения'));
+                };
+                img.src = fileUrl;
+              });
 
-            // Создаём обычный Canvas (совместимо везде, включая Safari)
-            const canvas = document.createElement('canvas');
-            canvas.width = imgLoaded.width;
-            canvas.height = imgLoaded.height;
-            
-            const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error('Не удалось получить контекст canvas');
+              // Создаём обычный Canvas
+              const canvas = document.createElement('canvas');
+              canvas.width = imgLoaded.width;
+              canvas.height = imgLoaded.height;
+              
+              const ctx = canvas.getContext('2d');
+              if (!ctx) throw new Error('Не удалось получить контекст canvas');
 
-            // Рисуем исходное изображение
-            ctx.drawImage(imgLoaded, 0, 0);
+              console.log(`🎨 Рисую на canvas: ${canvas.width}x${canvas.height}`);
 
-            // Применяем все пути рисования
-            for (const path of drawingPaths) {
-              ctx.lineWidth = path.brushSize;
-              ctx.lineCap = 'round';
-              ctx.lineJoin = 'round';
-              ctx.strokeStyle = 'black';
+              // Рисуем исходное изображение
+              ctx.drawImage(imgLoaded, 0, 0);
 
-              if (path.points.length > 0) {
-                ctx.beginPath();
-                ctx.moveTo(path.points[0].x, path.points[0].y);
+              // Применяем все пути рисования
+              for (const path of drawingPaths) {
+                ctx.lineWidth = path.brushSize;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.strokeStyle = 'black';
 
-                for (let i = 1; i < path.points.length; i++) {
-                  ctx.lineTo(path.points[i].x, path.points[i].y);
+                if (path.points.length > 0) {
+                  ctx.beginPath();
+                  ctx.moveTo(path.points[0].x, path.points[0].y);
+
+                  for (let i = 1; i < path.points.length; i++) {
+                    ctx.lineTo(path.points[i].x, path.points[i].y);
+                  }
+                  ctx.stroke();
                 }
-                ctx.stroke();
               }
-            }
 
-            // Сохраняем результат в файл
-            const blob = await new Promise<Blob>((resolve) => {
-              canvas.toBlob(
-                (blob) => resolve(blob || new Blob([])),
-                'image/jpeg',
-                0.85
-              );
-            });
-            
-            return new File([blob], file.name, { type: 'image/jpeg' });
+              console.log(`💾 Сохраняю результат для: ${file.name}`);
+
+              // Сохраняем результат в файл
+              const blob = await new Promise<Blob>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  reject(new Error('Таймаут при сохранении blob'));
+                }, 5000);
+                
+                canvas.toBlob(
+                  (blob) => {
+                    clearTimeout(timeout);
+                    if (blob) {
+                      resolve(blob);
+                    } else {
+                      reject(new Error('Не удалось создать blob'));
+                    }
+                  },
+                  'image/jpeg',
+                  0.85
+                );
+              });
+              
+              const resultFile = new File([blob], file.name, { type: 'image/jpeg' });
+              console.log(`✅ Файл обработан: ${file.name} (${(blob.size / 1024).toFixed(2)}KB)`);
+              
+              return resultFile;
+            } finally {
+              // Очищаем URL
+              URL.revokeObjectURL(fileUrl);
+            }
           })(),
           new Promise<File>((_, reject) =>
             setTimeout(
@@ -134,7 +162,6 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         ]);
         
         processedFiles.push(processedFile);
-        console.log(`✅ Файл обработан: ${file.name}`);
       } catch (err) {
         console.error(`❌ Ошибка при обработке файла ${file.name}:`, err);
         // Если произошла ошибка, добавляем оригинальный файл
@@ -142,6 +169,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
       }
     }
 
+    console.log(`✅ Готово! Обработано ${processedFiles.length}/${files.length} файлов`);
     return processedFiles;
   };
 
