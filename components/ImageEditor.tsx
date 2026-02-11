@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 
-interface DrawingPath {
+export interface DrawingPath {
   points: Array<{ x: number; y: number }>
   brushSize: number
 }

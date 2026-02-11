@@ -7,7 +7,7 @@ import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import PatientSelector from '@/components/PatientSelector'
 import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
-import ImageEditor from '@/components/ImageEditor'
+import ImageEditor, { DrawingPath } from '@/components/ImageEditor'
 import { 
   extractAndAnonymizeFrames, 
   formatTimestamp, 
@@ -261,6 +261,96 @@ export default function VideoPage() {
     
     setExtractedFrames(newFrames)
     setEditingFrameIndex(null)
+  }
+
+  // Применение маски ко ВСЕМ кадрам
+  const applyMaskToAllFrames = async (drawingPaths: DrawingPath[], editedFirstFile: File) => {
+    if (editingFrameIndex === null) return
+    
+    console.log(`🎨 Применяю маску ко всем ${extractedFrames.length} кадрам...`)
+    
+    const newFrames = [...extractedFrames]
+    
+    // Обновляем текущий кадр
+    newFrames[editingFrameIndex] = {
+      ...newFrames[editingFrameIndex],
+      file: editedFirstFile,
+      preview: URL.createObjectURL(editedFirstFile)
+    }
+    
+    // Обрабатываем остальные кадры
+    for (let i = 0; i < newFrames.length; i++) {
+      if (i === editingFrameIndex) continue // Пропускаем текущий — уже обработан
+      
+      try {
+        const frame = newFrames[i]
+        console.log(`📦 Обработка кадра ${i + 1}/${newFrames.length}: ${frame.file.name}`)
+        
+        // Читаем файл как Data URL
+        const fileDataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = () => reject(new Error('Ошибка чтения'))
+          reader.readAsDataURL(frame.file)
+        })
+
+        // Загружаем изображение
+        const img = new Image()
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve()
+          img.onerror = () => reject(new Error('Ошибка загрузки'))
+          img.src = fileDataUrl
+        })
+
+        // Рисуем на canvas
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) continue
+
+        ctx.drawImage(img, 0, 0)
+
+        // Применяем все пути рисования
+        for (const path of drawingPaths) {
+          ctx.lineWidth = path.brushSize
+          ctx.lineCap = 'round'
+          ctx.lineJoin = 'round'
+          ctx.strokeStyle = 'black'
+          if (path.points.length > 0) {
+            ctx.beginPath()
+            ctx.moveTo(path.points[0].x, path.points[0].y)
+            for (let j = 1; j < path.points.length; j++) {
+              ctx.lineTo(path.points[j].x, path.points[j].y)
+            }
+            ctx.stroke()
+          }
+        }
+
+        // Сохраняем результат
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob(
+            (b) => b ? resolve(b) : reject(new Error('Blob failed')),
+            'image/jpeg',
+            0.85
+          )
+        })
+
+        const newFile = new File([blob], frame.file.name, { type: 'image/jpeg' })
+        newFrames[i] = {
+          ...frame,
+          file: newFile,
+          preview: URL.createObjectURL(newFile)
+        }
+        console.log(`✅ Кадр ${i + 1} обработан`)
+      } catch (err) {
+        console.error(`❌ Ошибка обработки кадра ${i + 1}:`, err)
+      }
+    }
+    
+    setExtractedFrames(newFrames)
+    setEditingFrameIndex(null)
+    console.log(`✅ Все ${newFrames.length} кадров обработаны!`)
   }
 
   // Анализ извлеченных кадров
@@ -848,11 +938,18 @@ export default function VideoPage() {
       {editingFrameIndex !== null && extractedFrames[editingFrameIndex] && (
         <ImageEditor
           image={extractedFrames[editingFrameIndex].preview}
-          onSave={async (editedDataUrl) => {
+          hasAdditionalFiles={extractedFrames.length > 1}
+          onSave={async (editedDataUrl, drawingPaths) => {
             const response = await fetch(editedDataUrl);
             const blob = await response.blob();
             const editedFile = new File([blob], extractedFrames[editingFrameIndex].file.name, { type: extractedFrames[editingFrameIndex].file.type });
-            handleFrameEditorSave(editedFile);
+            
+            // Если есть пути рисования и больше 1 кадра — применяем ко всем
+            if (drawingPaths && extractedFrames.length > 1) {
+              await applyMaskToAllFrames(drawingPaths, editedFile);
+            } else {
+              handleFrameEditorSave(editedFile);
+            }
           }}
           onCancel={() => setEditingFrameIndex(null)}
         />
