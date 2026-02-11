@@ -309,20 +309,31 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
       }
     } else if (isVideo) {
       setIsCompressing(true);
+      console.log('🎬 Начинаю обработку видео:', file.name);
       try {
         const { extractAndAnonymizeFrames } = await import('@/lib/video-frame-extractor');
         const frames = await extractAndAnonymizeFrames(file);
+        console.log('🎬 Извлечено кадров:', frames?.length || 0);
         const frameFiles = frames.map(f => f.file);
+        console.log('🎬 Кадры готовы:', frameFiles.length);
         if (frameFiles.length > 0) {
+          console.log('🎬 Сохраняю дополнительные файлы (остальные кадры):', frameFiles.slice(1).length);
           setAdditionalFiles(frameFiles.slice(1)); // Сохраняем остальные кадры для пакетной анонимизации
-          onUpload(frameFiles[0], [], [file, ...frameFiles]);
           setCurrentFile(file);
+          console.log('🎬 Устанавливаю currentFile и дополнительные файлы');
           const reader = new FileReader();
-          reader.onloadend = () => setPreview(reader.result as string);
+          reader.onloadend = () => {
+            setPreview(reader.result as string);
+            console.log('🎬 Превью установлено');
+          };
           reader.readAsDataURL(frameFiles[0]);
+          onUpload(frameFiles[0], [], [file, ...frameFiles]);
+          console.log('🎬 Вызван onUpload');
+        } else {
+          console.warn('🎬 Не извлечено ни одного кадра!');
         }
       } catch (err) {
-        console.error("Video processing error:", err);
+        console.error("❌ Video processing error:", err);
         onUpload(file, [], [file]);
       } finally {
         setIsCompressing(false);
@@ -473,51 +484,54 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
       )}
 
       {isEditorOpen && preview && currentFile && (
-        <ImageEditor
-          image={preview}
-          hasAdditionalFiles={additionalFiles.length > 0}
-          onSave={async (editedDataUrl, drawingPaths) => {
-            console.log('ImageEditor.onSave вызван:', {
-              hasDrawingPaths: drawingPaths ? drawingPaths.length : 0,
-              additionalFilesCount: additionalFiles.length,
-              shouldApplyToAll: drawingPaths && additionalFiles.length > 0
-            });
-            
-            setIsCompressing(true);
-            try {
-              const response = await fetch(editedDataUrl);
-              const blob = await response.blob();
-              const editedFile = new File([blob], currentFile.name, { type: 'image/jpeg' });
+        <>
+          {console.log('🔴 Редактор открывается. additionalFiles:', additionalFiles.length)}
+          <ImageEditor
+            image={preview}
+            hasAdditionalFiles={additionalFiles.length > 0}
+            onSave={async (editedDataUrl, drawingPaths) => {
+              console.log('ImageEditor.onSave вызван:', {
+                hasDrawingPaths: drawingPaths ? drawingPaths.length : 0,
+                additionalFilesCount: additionalFiles.length,
+                shouldApplyToAll: drawingPaths && additionalFiles.length > 0
+              });
               
-              setCurrentFile(editedFile);
-              setPreview(editedDataUrl);
-              
-              // Если есть пути рисования и дополнительные файлы, применяем маску ко всем
-              if (drawingPaths && additionalFiles.length > 0) {
-                console.log(`✅ Начинаю обработку ${additionalFiles.length} файлов...`);
-                const processedFiles = await applyDrawingPathsToAllFiles(
-                  editedDataUrl,
-                  drawingPaths,
-                  additionalFiles
-                );
-                console.log(`✅ Обработано ${processedFiles.length} файлов`);
-                // Добавляем обработанный первый файл в начало
-                const allProcessedFiles = [editedFile, ...processedFiles];
-                onUpload(editedFile, [], allProcessedFiles);
-              } else {
-                console.log('ℹ️ Применяю только к первому файлу (нет путей или доп. файлов)');
-                onUpload(editedFile, [], additionalFiles.length > 0 ? [editedFile, ...additionalFiles] : undefined);
+              setIsCompressing(true);
+              try {
+                const response = await fetch(editedDataUrl);
+                const blob = await response.blob();
+                const editedFile = new File([blob], currentFile.name, { type: 'image/jpeg' });
+                
+                setCurrentFile(editedFile);
+                setPreview(editedDataUrl);
+                
+                // Если есть пути рисования и дополнительные файлы, применяем маску ко всем
+                if (drawingPaths && additionalFiles.length > 0) {
+                  console.log(`✅ Начинаю обработку ${additionalFiles.length} файлов...`);
+                  const processedFiles = await applyDrawingPathsToAllFiles(
+                    editedDataUrl,
+                    drawingPaths,
+                    additionalFiles
+                  );
+                  console.log(`✅ Обработано ${processedFiles.length} файлов`);
+                  // Добавляем обработанный первый файл в начало
+                  const allProcessedFiles = [editedFile, ...processedFiles];
+                  onUpload(editedFile, [], allProcessedFiles);
+                } else {
+                  console.log('ℹ️ Применяю только к первому файлу (нет путей или доп. файлов)');
+                  onUpload(editedFile, [], additionalFiles.length > 0 ? [editedFile, ...additionalFiles] : undefined);
+                }
+              } catch (err) {
+                console.error('❌ Ошибка при обработке файлов:', err);
+                alert(`Ошибка при сохранении: ${err instanceof Error ? err.message : 'неизвестная ошибка'}`);
+              } finally {
+                setIsCompressing(false);
+                setIsEditorOpen(false);
               }
-            } catch (err) {
-              console.error('❌ Ошибка при обработке файлов:', err);
-              alert(`Ошибка при сохранении: ${err instanceof Error ? err.message : 'неизвестная ошибка'}`);
-            } finally {
-              setIsCompressing(false);
-              setIsEditorOpen(false);
-            }
-          }}
-          onCancel={() => setIsEditorOpen(false)}
-        />
+            }}
+            onCancel={() => setIsEditorOpen(false)}
+          />
+        </>
       )}
     </div>
   )
