@@ -60,39 +60,50 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
     files: File[]
   ): Promise<File[]> => {
     const processedFiles: File[] = [];
+    const timeoutMs = 30000; // 30 секунд максимум на файл
 
     for (const file of files) {
       try {
-        const bitmap = await createImageBitmap(file);
-        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-        const ctx = canvas.getContext('2d');
-        
-        if (!ctx) continue;
+        // Обработка файла с таймаутом
+        const processedFile = await Promise.race([
+          (async () => {
+            const bitmap = await createImageBitmap(file);
+            const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+            const ctx = canvas.getContext('2d');
+            
+            if (!ctx) throw new Error('Не удалось получить контекст canvas');
 
-        // Рисуем исходное изображение
-        ctx.drawImage(bitmap, 0, 0);
+            // Рисуем исходное изображение
+            ctx.drawImage(bitmap, 0, 0);
 
-        // Применяем все пути рисования
-        for (const path of drawingPaths) {
-          ctx.lineWidth = path.brushSize;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-          ctx.strokeStyle = 'black';
+            // Применяем все пути рисования
+            for (const path of drawingPaths) {
+              ctx.lineWidth = path.brushSize;
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              ctx.strokeStyle = 'black';
 
-          if (path.points.length > 0) {
-            ctx.beginPath();
-            ctx.moveTo(path.points[0].x, path.points[0].y);
+              if (path.points.length > 0) {
+                ctx.beginPath();
+                ctx.moveTo(path.points[0].x, path.points[0].y);
 
-            for (let i = 1; i < path.points.length; i++) {
-              ctx.lineTo(path.points[i].x, path.points[i].y);
+                for (let i = 1; i < path.points.length; i++) {
+                  ctx.lineTo(path.points[i].x, path.points[i].y);
+                }
+                ctx.stroke();
+              }
             }
-            ctx.stroke();
-          }
-        }
 
-        // Сохраняем результат в файл
-        const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
-        processedFiles.push(new File([blob], file.name, { type: 'image/jpeg' }));
+            // Сохраняем результат в файл
+            const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+            return new File([blob], file.name, { type: 'image/jpeg' });
+          })(),
+          new Promise<File>((_, reject) =>
+            setTimeout(() => reject(new Error(`Обработка файла ${file.name} заняла слишком много времени`)), timeoutMs)
+          )
+        ]);
+        
+        processedFiles.push(processedFile);
       } catch (err) {
         console.error(`Ошибка при обработке файла ${file.name}:`, err);
         // Если произошла ошибка, добавляем оригинальный файл
@@ -435,6 +446,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           image={preview}
           hasAdditionalFiles={additionalFiles.length > 0}
           onSave={async (editedDataUrl, drawingPaths) => {
+            setIsCompressing(true);
             try {
               const response = await fetch(editedDataUrl);
               const blob = await response.blob();
@@ -445,22 +457,25 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
               
               // Если есть пути рисования и дополнительные файлы, применяем маску ко всем
               if (drawingPaths && additionalFiles.length > 0) {
+                console.log(`Начинаю обработку ${additionalFiles.length} файлов...`);
                 const processedFiles = await applyDrawingPathsToAllFiles(
                   editedDataUrl,
                   drawingPaths,
                   additionalFiles
                 );
+                console.log(`Обработано ${processedFiles.length} файлов`);
                 // Добавляем обработанный первый файл в начало
                 const allProcessedFiles = [editedFile, ...processedFiles];
                 onUpload(editedFile, [], allProcessedFiles);
               } else {
                 onUpload(editedFile, [], additionalFiles.length > 0 ? [editedFile, ...additionalFiles] : undefined);
               }
-              
-              setIsEditorOpen(false);
             } catch (err) {
               console.error('Ошибка при обработке файлов:', err);
-              alert('Не удалось применить маску ко всем файлам');
+              alert(`Ошибка при сохранении: ${err instanceof Error ? err.message : 'неизвестная ошибка'}`);
+            } finally {
+              setIsCompressing(false);
+              setIsEditorOpen(false);
             }
           }}
           onCancel={() => setIsEditorOpen(false)}

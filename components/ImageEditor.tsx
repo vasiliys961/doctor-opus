@@ -130,8 +130,10 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
     setTimeout(() => {
       try {
         const editedImage = canvas.toDataURL('image/jpeg', 0.85) // Чуть ниже качество для скорости и меньшего веса
+        
         // Передаём пути рисования, если они есть и если есть дополнительные файлы
         if (hasAdditionalFiles && drawingPaths.length > 0) {
+          console.log(`Отправляю ${drawingPaths.length} путей рисования...`);
           onSave(editedImage, drawingPaths)
         } else {
           onSave(editedImage)
@@ -139,7 +141,6 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
       } catch (err) {
         console.error('Ошибка сохранения изображения:', err)
         alert('Не удалось сохранить изменения. Попробуйте уменьшить область закрашивания.')
-      } finally {
         setIsSaving(false)
       }
     }, 100)
