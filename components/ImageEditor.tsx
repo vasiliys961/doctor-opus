@@ -24,6 +24,15 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
   const [currentPath, setCurrentPath] = useState<Array<{ x: number; y: number }>>([])
   const imageRef = useRef<HTMLImageElement | null>(null)
 
+  // Логируем статус при открытии редактора
+  useEffect(() => {
+    console.log('🖼️ ImageEditor открыт:', {
+      hasAdditionalFiles,
+      drawingPathsCount: drawingPaths.length,
+      timestamp: new Date().toLocaleTimeString()
+    });
+  }, [])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -159,6 +168,13 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
           <p className="text-sm text-gray-600 mt-1">
             Закрасьте черной кистью области с персональными данными
           </p>
+          {/* Статус для отладки */}
+          <div className="mt-2 text-xs bg-blue-50 p-2 rounded border border-blue-200">
+            <span className="text-blue-700">
+              📊 Статус: Файлов доступно: <strong>{hasAdditionalFiles ? '✓ ДА' : '✗ НЕТ'}</strong>
+              {' | '}Штрихов нарисовано: <strong>{drawingPaths.length}</strong>
+            </span>
+          </div>
         </div>
 
         <div className="p-4">
