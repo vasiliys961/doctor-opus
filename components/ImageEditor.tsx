@@ -168,12 +168,20 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
           <p className="text-sm text-gray-600 mt-1">
             Закрасьте черной кистью области с персональными данными
           </p>
-          {/* Статус для отладки */}
-          <div className="mt-2 text-xs bg-blue-50 p-2 rounded border border-blue-200">
-            <span className="text-blue-700">
-              📊 Статус: Файлов доступно: <strong>{hasAdditionalFiles ? '✓ ДА' : '✗ НЕТ'}</strong>
-              {' | '}Штрихов нарисовано: <strong>{drawingPaths.length}</strong>
-            </span>
+          {/* Большой статус для отладки */}
+          <div className="mt-3 bg-yellow-50 p-3 rounded-lg border-2 border-yellow-300">
+            <div className="text-sm font-bold text-yellow-900">
+              📊 СТАТУС:
+            </div>
+            <div className="text-base font-bold text-yellow-800 mt-2">
+              🗂️ Файлов доступно: <span className={hasAdditionalFiles ? 'text-green-600' : 'text-red-600'}>{hasAdditionalFiles ? '✓ ДА' : '✗ НЕТ'}</span>
+            </div>
+            <div className="text-base font-bold text-yellow-800 mt-1">
+              ✏️ Штрихов нарисовано: <span className={drawingPaths.length > 0 ? 'text-green-600' : 'text-red-600'}>{drawingPaths.length}</span>
+            </div>
+            {!hasAdditionalFiles && <div className="text-sm text-red-600 mt-2">⚠️ Видео/кадры не загрузились правильно!</div>}
+            {hasAdditionalFiles && drawingPaths.length === 0 && <div className="text-sm text-orange-600 mt-2">⚠️ Нарисуй хотя бы один штрих!</div>}
+            {hasAdditionalFiles && drawingPaths.length > 0 && <div className="text-sm text-green-600 mt-2">✅ Готово! Кнопка "Применить ко всем" должна быть внизу</div>}
           </div>
         </div>
 
