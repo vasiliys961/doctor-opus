@@ -425,6 +425,8 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
           }
 
           case 'glow': {
+            const [min, max] = range;
+            const delta = max - min;
             const low = min + 0.2 * delta;
             const mid = min + 0.6 * delta;
             const high = min + 0.85 * delta;
@@ -437,14 +439,14 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
 
             ofun.addPoint(min, 0.0);
             ofun.addPoint(low, 0.0);
-            ofun.addPoint(mid, 0.01);
-            ofun.addPoint(high, 0.5);
+            ofun.addPoint(mid, 0.005);  // тело практически невидимо
+            ofun.addPoint(high, 0.3);   // очаги начинают "гореть"
             ofun.addPoint(max, 0.9);
 
-            property.setAmbient(0.3); // Уменьшил с 0.9 чтобы убрать "туман"
-            property.setDiffuse(0.7);
-            property.setSpecular(0.5);
-            property.setSpecularPower(60);
+            property.setAmbient(0.9);   // возвращаем экстремальное свечение
+            property.setDiffuse(0.2);
+            property.setSpecular(0.4);
+            property.setSpecularPower(50);
             break;
           }
 
@@ -457,23 +459,24 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
             break;
 
           default:
-            // мягкие ткани + четкие кости
+            // настройки кости из МРТ/КТ (перенесены в раздел ткани)
+            const softEnd = min + 0.55 * delta;
+            const boneLow = min + 0.75 * delta;
+
             ctfun.addRGBPoint(min, 0, 0, 0);
-            ctfun.addRGBPoint(min + 0.2 * delta, 0.6, 0.4, 0.4);
-            ctfun.addRGBPoint(min + 0.6 * delta, 0.95, 0.85, 0.8);
-            ctfun.addRGBPoint(max, 1, 1, 1);
+            ctfun.addRGBPoint(softEnd, 0.3, 0.2, 0.2);
+            ctfun.addRGBPoint(boneLow, 0.95, 0.85, 0.8);
+            ctfun.addRGBPoint(max, 1.0, 1.0, 1.0);
 
             ofun.addPoint(min, 0.0);
-            ofun.addPoint(min + 0.1 * delta, 0.0);   
-            ofun.addPoint(min + 0.2 * delta, 0.02);  
-            ofun.addPoint(min + 0.4 * delta, 0.20);  // Органы плотнее
-            ofun.addPoint(min + 0.7 * delta, 0.75);  // Кости/ребра четкие
-            ofun.addPoint(max, 0.95);
+            ofun.addPoint(softEnd, 0.0);
+            ofun.addPoint(boneLow, 0.7);
+            ofun.addPoint(max, 1.0);
 
-            property.setAmbient(0.15);
-            property.setDiffuse(0.8);
-            property.setSpecular(0.4);
-            property.setSpecularPower(50);
+            property.setAmbient(0.4);
+            property.setDiffuse(0.7);
+            property.setSpecular(0.5);
+            property.setSpecularPower(80);
             break;
         }
 
