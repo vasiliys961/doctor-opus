@@ -282,10 +282,20 @@ export async function sendTextRequestWithFiles(
     }
   ];
 
+  // Адаптивный расчёт max_tokens на основе размера файлов
+  const { calculateAdaptiveMaxTokens } = await import('./adaptive-tokens');
+  const adaptiveMaxTokens = calculateAdaptiveMaxTokens({
+    systemPrompt,
+    history,
+    userPrompt: prompt,
+    files,
+    mode: 'file-analysis'
+  });
+
   const payload = {
     model,
     messages,
-    max_tokens: 16000,
+    max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от размера файлов
     temperature: 0.1,
   };
 
@@ -294,7 +304,8 @@ export async function sendTextRequestWithFiles(
       model,
       messageLength: prompt.length,
       filesCount: files.length,
-      fileNames: files.map(f => f.name)
+      fileNames: files.map(f => f.name),
+      adaptiveMaxTokens
     });
 
     const response = await fetch(OPENROUTER_API_URL, {
@@ -381,10 +392,20 @@ export async function sendTextRequestStreamingWithFiles(
     }
   ];
 
+  // Адаптивный расчёт max_tokens на основе размера файлов
+  const { calculateAdaptiveMaxTokens } = await import('./adaptive-tokens');
+  const adaptiveMaxTokens = calculateAdaptiveMaxTokens({
+    systemPrompt,
+    history,
+    userPrompt: prompt,
+    files,
+    mode: 'file-analysis'
+  });
+
   const payload = {
     model,
     messages,
-    max_tokens: 16000,
+    max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от размера файлов
     temperature: 0.1,
     stream: true,
     stream_options: { include_usage: true }

@@ -28,15 +28,19 @@ const withPWA = require('@ducanh2912/next-pwa').default({
 const nextConfig = {
   reactStrictMode: true,
   typescript: {
-    // TODO: Исправить TS-ошибки (RADIOLOGY_PROTOCOL_PROMPT, Buffer типы) и поставить false
-    ignoreBuildErrors: true,
+    // Оставшиеся некритичные ошибки (12):
+    // - webkitdirectory: нестандартный HTML-атрибут (работает в браузерах)
+    // - Buffer типы: внутренние несоответствия Node.js типов
+    // - cornerstoneWADOImageLoader: динамически подключаемая библиотека
+    // - docx/pdf-lib типы: внутренние несоответствия типов библиотек
+    ignoreBuildErrors: false,
   },
   eslint: {
     ignoreDuringBuilds: true,
   },
   experimental: {
     serverActions: {
-      bodySizeLimit: '50mb',
+      bodySizeLimit: '200mb',
     },
   },
   webpack: (config) => {

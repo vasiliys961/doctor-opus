@@ -87,7 +87,8 @@ export default function VideoComparisonPage() {
           index: i,
           timestamp: 0,
           file: f,
-          preview: URL.createObjectURL(f)
+          preview: URL.createObjectURL(f),
+          isAnonymized: false
         }));
         if (index === 1) {
           setFrames1(frames);
@@ -135,7 +136,8 @@ export default function VideoComparisonPage() {
             index: i,
             timestamp: 0,
             file: f,
-            preview: URL.createObjectURL(f)
+            preview: URL.createObjectURL(f),
+            isAnonymized: false
           }));
           if (index === 1) {
             setFrames1(frames);

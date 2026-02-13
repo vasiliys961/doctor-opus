@@ -8,7 +8,7 @@
  * но адаптирована под формат OpenRouter Chat Completions и под TypeScript.
  */
 
-import { getObjectiveDescriptionPrompt, getDirectivePrompt, getVideoComparisonPrompt, ImageType } from './prompts';
+import { getDescriptionPrompt, getDirectivePrompt, getComparisonDescriptionPrompt, ImageType } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -35,6 +35,7 @@ export interface AnalyzeTwoVideosOptions {
   video2Base64: string;
   mimeType1?: string;
   mimeType2?: string;
+  imageType?: ImageType;
   metadata?: Record<string, any> | null;
 }
 
@@ -69,7 +70,7 @@ export async function analyzeVideoTwoStage(
 
   // === ЭТАП 1. Gemini 3.0 Flash — описание видео ===
   // Используем специализированный промпт для описания
-  const descPrompt = getObjectiveDescriptionPrompt(imageType) + 
+  const descPrompt = getDescriptionPrompt(imageType) + 
     (options.prompt ? `\n\nДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ: ${options.prompt}` : '') +
     (options.metadata ? `\n\nМЕТАДАННЫЕ: ${JSON.stringify(options.metadata)}` : '');
 
@@ -94,7 +95,7 @@ export async function analyzeVideoTwoStage(
         content: descriptionContent,
       },
     ],
-    max_tokens: 16000,
+    max_tokens: 10000, // Оптимизировано: описание видео-кадров
     temperature: 0.1,
   };
 
@@ -139,7 +140,7 @@ export async function analyzeVideoTwoStage(
         content: `На основе этого детального описания видео-исследования подготовь финальное заключение:\n\n${description}\n\n${analysisPrompt}`
       },
     ],
-    max_tokens: 16000,
+    max_tokens: 10000, // Оптимизировано: финальное заключение по видео
     temperature: 0.2,
   };
 
@@ -188,11 +189,13 @@ export async function analyzeTwoVideosTwoStage(
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
 
+  const imageType = options.imageType || 'universal';
   let totalPromptTokens = 0;
   let totalCompletionTokens = 0;
 
   // ЭТАП 1: Описание динамики
-  const descPrompt = getVideoComparisonPrompt(options.prompt);
+  const descPrompt = getComparisonDescriptionPrompt(imageType, undefined) + 
+    (options.prompt ? `\n\nКОНТЕКСТ: ${options.prompt}` : '');
   
   const descriptionContent = [
     {
@@ -212,7 +215,7 @@ export async function analyzeTwoVideosTwoStage(
   const descriptionPayload = {
     model: MODELS.GEMINI_3_FLASH,
     messages: [{ role: 'user', content: descriptionContent }],
-    max_tokens: 16000,
+    max_tokens: 12000, // Оптимизировано: сравнительное описание двух видео
     temperature: 0.1,
   };
 
@@ -252,7 +255,7 @@ export async function analyzeTwoVideosTwoStage(
         content: `На основе сравнения двух видео:\n\n${description}\n\nСформулируй краткую и точную клиническую тактику.`
       },
     ],
-    max_tokens: 16000,
+    max_tokens: 10000, // Оптимизировано: клиническая тактика
     temperature: 0.2,
   };
 

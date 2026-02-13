@@ -124,7 +124,7 @@ APOE;rs429358;CC;высокий риск болезни Альцгеймера`;
               ],
             },
           ],
-          max_tokens: 16000,
+          max_tokens: 12000, // Оптимизировано: извлечение генетических данных
           temperature: 0.1,
         };
 
@@ -227,8 +227,8 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
             ],
           },
         ],
-        max_tokens: 15000,
-        temperature: 0.1,
+          max_tokens: 10000, // Оптимизировано: финальный генетический анализ
+          temperature: 0.1,
       };
 
       const extractionResponse = await fetch(OPENROUTER_API_URL, {

@@ -5,7 +5,8 @@ import {
   sendTextRequestStreaming, 
   analyzeMultipleImagesStreaming,
   analyzeMultipleImagesOpusTwoStageStreaming,
-  analyzeMultipleImagesWithJSONStreaming
+  analyzeMultipleImagesWithJSONStreaming,
+  analyzeImageOpusTwoStageStreaming
 } from '@/lib/openrouter-streaming';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";

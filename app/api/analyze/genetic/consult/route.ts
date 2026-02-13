@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
     const payload: any = {
       model: consultModel,
       messages: messages,
-      max_tokens: 16000,
+      max_tokens: 12000, // Оптимизировано: генетическая консультация
       temperature: 0.25,
       stream: useStreaming,
       stream_options: useStreaming ? { include_usage: true } : undefined,

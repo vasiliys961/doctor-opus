@@ -124,7 +124,8 @@ export default function VideoPage() {
           index: i,
           timestamp: 0,
           file: f,
-          preview: URL.createObjectURL(f)
+          preview: URL.createObjectURL(f),
+          isAnonymized: false
         }));
         setExtractedFrames(frames);
         setFile(selectedFile);
@@ -162,7 +163,8 @@ export default function VideoPage() {
             index: i,
             timestamp: 0,
             file: f,
-            preview: URL.createObjectURL(f)
+            preview: URL.createObjectURL(f),
+            isAnonymized: false
           }));
           setExtractedFrames(frames);
           setFile(dicomFiles[0]); // Используем первый как базовый

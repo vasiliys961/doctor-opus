@@ -1,6 +1,6 @@
 {
   "name": "medical-assistant3",
-  "version": "3.42.0",
+  "version": "4.4.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

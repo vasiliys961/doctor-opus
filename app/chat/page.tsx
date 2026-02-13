@@ -165,7 +165,7 @@ export default function ChatPage() {
             'ultrasound': 'УЗИ'
           };
           const typeName = typeNames[type] || 'исследования';
-          initialPrompt = `Проанализируй результат ${typeName} и предложи дальнейшую клиническую тактику:\n\n${text}${initialQuestion ? `\n\nУточняющий вопрос: ${initialQuestion}` : ''}`;
+          initialPrompt = `Ниже приведен готовый диагностический протокол ${typeName}. ПРОТОКОЛ УЖЕ СОСТАВЛЕН. НЕ переписывай его, НЕ дублируй описание находок. Твоя задача — разработать клиническую тактику ведения пациента на основе этого заключения:\n\n${text}${initialQuestion ? `\n\nУточняющий вопрос: ${initialQuestion}` : ''}`;
         }
         
         setMessage(initialPrompt);

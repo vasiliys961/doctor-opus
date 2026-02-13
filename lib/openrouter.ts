@@ -182,7 +182,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   const payload = {
     model,
     messages,
-    max_tokens: options.maxTokens || 16000, // Максимальный лимит для длинных отчетов
+    max_tokens: options.maxTokens || 10000, // Оптимизированный базовый лимит для стандартных отчетов
     temperature: 0.1,
   };
 
@@ -322,7 +322,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
           body: JSON.stringify({
             model: textModel,
             messages: messages,
-            max_tokens: 16000,
+            max_tokens: 10000, // Оптимизировано: текстовый анализ
             temperature: 0.1,
           })
         });
@@ -424,7 +424,7 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
       body: JSON.stringify({
         model: textModel,
         messages: messages,
-        max_tokens: 16000,
+        max_tokens: 10000, // Оптимизировано: двухэтапный анализ
         temperature: 0.1,
       })
     });
@@ -650,7 +650,7 @@ ${directiveCriteria}`;
         { role: 'system' as const, content: basePrompt },
         { role: 'user' as const, content: contextPrompt }
       ],
-      max_tokens: 16000,
+      max_tokens: 12000, // Оптимизировано: множественные изображения
       temperature: 0.1,
     };
 
@@ -760,7 +760,7 @@ export async function analyzeMultipleImages(options: {
   const payload = {
     model,
     messages,
-    max_tokens: options.maxTokens || 16000, // Увеличиваем для сравнительного анализа
+    max_tokens: options.maxTokens || 12000, // Оптимизировано для сравнительного анализа
     temperature: 0.1,
   };
 
@@ -875,7 +875,7 @@ export async function sendTextRequest(
   const payload = {
     model: selectedModel,
     messages,
-    max_tokens: 16000, // Максимальный лимит для сравнительного анализа
+    max_tokens: 10000, // Оптимизировано: текстовый запрос
     temperature: 0.1,
   };
 

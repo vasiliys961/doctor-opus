@@ -77,14 +77,14 @@ ${specialty ? `Специальность: ${specialty}` : ''}
 
     // Выбор модели в зависимости от режима: standard (Gemini), detailed (GPT-4o) или online (Perplexity)
     let MODEL = MODELS.GEMINI_3_FLASH;
-    let MAX_TOKENS = 16000;
+    let MAX_TOKENS = 10000; // Оптимизировано: достаточно для развёрнутого разбора
 
     if (modelMode === 'online') {
       MODEL = 'perplexity/sonar';
       MAX_TOKENS = 4000;
     } else if (modelMode === 'detailed') {
       MODEL = MODELS.GPT_5_2; 
-      MAX_TOKENS = 20000;
+      MAX_TOKENS = 12000; // Оптимизировано: детальный режим
     }
     
     // Динамический системный промпт
