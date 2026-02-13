@@ -25,55 +25,125 @@ const MODELS = {
 function createTransformWithUsage(
   stream: ReadableStream, 
   model: string, 
-  initialUsage?: { prompt_tokens: number, completion_tokens: number }
+  initialUsage?: { prompt_tokens: number, completion_tokens: number },
+  isEstimate: boolean = false
 ): ReadableStream<Uint8Array> {
   const reader = stream.getReader();
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
+  let usageReceived = false;
+  let totalContent = ''; // Собираем весь контент для fallback-расчёта
 
   return new ReadableStream({
     async start(controller) {
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          
+          if (done) {
+            // КРИТИЧНО: Fallback ПЕРЕД закрытием контроллера
+            if (!usageReceived && totalContent) {
+              try {
+                const { calculateCost, formatCostLog } = await import('./cost-calculator');
+                const { estimateTokens } = await import('./adaptive-tokens');
+                
+                const approxOutputTokens = estimateTokens(totalContent);
+                // Если у нас есть оценка или реальные данные из прошлых этапов
+                const approxInputTokens = initialUsage?.prompt_tokens || 0;
+                const totalTokens = approxInputTokens + approxOutputTokens;
+                
+                const costInfo = calculateCost(approxInputTokens, approxOutputTokens, model);
+                
+                console.log(`✅ [STREAMING FALLBACK] Анализ завершен (${model})`);
+                if (initialUsage && initialUsage.prompt_tokens > 0) {
+                  console.log(`   🔸 Входные токены (оценка): ${initialUsage.prompt_tokens}`);
+                }
+                console.log(`   📊 ИТОГО (примерно): ${formatCostLog(model, approxInputTokens, approxOutputTokens, totalTokens)}`);
+                
+                // Отправляем usage клиенту ПЕРЕД завершением
+                const usageUpdate = {
+                  usage: {
+                    prompt_tokens: approxInputTokens,
+                    completion_tokens: approxOutputTokens,
+                    total_tokens: totalTokens,
+                    total_cost: costInfo.totalCostUnits
+                  },
+                  model: model
+                };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(usageUpdate)}\n\n`));
+              } catch (e) {
+                console.error('[USAGE FALLBACK] Ошибка расчёта:', e);
+              }
+            }
+            // Отдаем [DONE] только после отправки usage/fallback
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            break; // Выходим из цикла
+          }
 
           const chunk = decoder.decode(value, { stream: true });
+          
+          // Не пробрасываем provider [DONE] напрямую: иначе UI может завершить чтение
+          // до получения отдельного чанка с usage/cost.
+          const chunkWithoutDone = chunk.replace(/data:\s*\[DONE\]\s*\n\n/g, '');
+          if (chunkWithoutDone) {
+            controller.enqueue(encoder.encode(chunkWithoutDone));
+          }
+          
+          // Обрабатываем контент для fallback и точного usage
           const lines = chunk.split('\n');
-          let modifiedChunk = chunk;
-
           for (const line of lines) {
-            if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6).trim();
+              if (dataStr === '[DONE]') continue;
+              
               try {
-                const data = JSON.parse(line.slice(6));
+                const data = JSON.parse(dataStr);
+                
+                // Собираем текст ответа
+                if (data.choices?.[0]?.delta?.content) {
+                  totalContent += data.choices[0].delta.content;
+                }
+                
                 if (data.usage) {
-                  const { calculateCost, formatCostLog } = await import('./cost-calculator');
+                  usageReceived = true; // Пометили, что usage пришёл
                   
-                  // Суммируем токены (Gemini + Основная модель)
-                  const totalPrompt = (data.usage.prompt_tokens || 0) + (initialUsage?.prompt_tokens || 0);
-                  const totalCompletion = (data.usage.completion_tokens || 0) + (initialUsage?.completion_tokens || 0);
-                  const totalTokens = totalPrompt + totalCompletion;
+                  // МГНОВЕННО рассчитываем и логируем (без таймаутов)
+                  try {
+                    const { calculateCost, formatCostLog } = await import('./cost-calculator');
+                    
+                    // Если это НЕ оценка, а реальные данные из прошлого этапа (Gemini), то суммируем.
+                    // Если это была просто оценка для fallback в чате (isEstimate=true), 
+                    // то НЕ суммируем, так как data.usage уже включает входные токены.
+                    const totalPrompt = data.usage.prompt_tokens + (isEstimate ? 0 : (initialUsage?.prompt_tokens || 0));
+                    const totalCompletion = data.usage.completion_tokens + (isEstimate ? 0 : (initialUsage?.completion_tokens || 0));
+                    const totalTokens = totalPrompt + totalCompletion;
 
-                  const costInfo = calculateCost(totalPrompt, totalCompletion, model);
-                  data.usage.prompt_tokens = totalPrompt;
-                  data.usage.completion_tokens = totalCompletion;
-                  data.usage.total_tokens = totalTokens;
-                  data.usage.total_cost = costInfo.totalCostUnits;
-                  data.model = model;
-                  
-                  // Логирование в терминал для всех стримов
-                  console.log(`✅ [STREAMING] Анализ завершен успешно (${model})`);
-                  if (initialUsage) {
-                    console.log(`   🔸 Этап 0 (Gemini JSON): ${initialUsage.prompt_tokens + initialUsage.completion_tokens} токенов`);
+                    const costInfo = calculateCost(totalPrompt, totalCompletion, model);
+                    
+                    console.log(`✅ [STREAMING] Анализ завершен успешно (${model})`);
+                    if (initialUsage && !isEstimate && (initialUsage.prompt_tokens > 0 || initialUsage.completion_tokens > 0)) {
+                      console.log(`   🔸 Предварительные токены: ${initialUsage.prompt_tokens + initialUsage.completion_tokens}`);
+                    }
+                    console.log(`   📊 ИТОГО: ${formatCostLog(model, totalPrompt, totalCompletion, totalTokens)}`);
+                    
+                    // Отправляем обновленный usage отдельным чанком
+                    const usageUpdate = {
+                      usage: {
+                        prompt_tokens: totalPrompt,
+                        completion_tokens: totalCompletion,
+                        total_tokens: totalTokens,
+                        total_cost: costInfo.totalCostUnits
+                      },
+                      model: model
+                    };
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(usageUpdate)}\n\n`));
+                  } catch (e) {
+                    console.error('[USAGE] Ошибка вычисления:', e);
                   }
-                  console.log(`   📊 ИТОГО: ${formatCostLog(model, totalPrompt, totalCompletion, totalTokens)}`);
-                  
-                  modifiedChunk = modifiedChunk.replace(line, `data: ${JSON.stringify(data)}`);
                 }
               } catch (e) {}
             }
           }
-          controller.enqueue(encoder.encode(modifiedChunk));
         }
       } catch (error) {
         controller.error(error);
@@ -169,7 +239,7 @@ ${directivePrompt}`;
             { role: 'system', content: systemPrompt },
             { role: 'user', content: mainPrompt }
           ],
-          max_tokens: 16000,
+          max_tokens: 8000, // Оптимизировано: быстрый режим Gemini, достаточно для базового протокола
           temperature: 0.1,
           stream: true,
           stream_options: { include_usage: true }
@@ -240,19 +310,26 @@ export async function analyzeImageOpusTwoStageStreaming(
 
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: getLoadingHeader(0) } }] })}\n\n`));
 
-      // 2. Умная индикация загрузки (обновляет текст, чтобы пользователь видел прогресс)
+      // 2. Умная индикация загрузки с ротацией сообщений (каждые 4 секунды)
+      const stage1Messages = [
+        "🔍 Анализ анатомических структур",
+        "📏 Измерение размеров образований",
+        "⚡ Оценка плотности тканей (HU)",
+        "🩺 Проверка контрастного усиления",
+        "🔬 Детализация патологических изменений"
+      ];
+      
       loadingInterval = setInterval(async () => {
         loadingSeconds += 2;
         try {
-          // Отправляем просто точку для визуального прогресса
-          const updateChunk = {
-            choices: [{
-              delta: {
-                content: `.`
-              }
-            }]
-          };
-          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
+          // Каждые 4 секунды меняем сообщение, между ними — точки
+          if (loadingSeconds % 4 === 0) {
+            const msgIndex = Math.floor(loadingSeconds / 4) % stage1Messages.length;
+            const statusMsg = `\n\n> ${stage1Messages[msgIndex]}...`;
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: statusMsg } }] })}\n\n`));
+          } else {
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: `.` } }] })}\n\n`));
+          }
         } catch (e) {
           if (loadingInterval) clearInterval(loadingInterval);
         }
@@ -273,9 +350,17 @@ export async function analyzeImageOpusTwoStageStreaming(
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       
-      // Обновляем статус перед запуском второй модели
+      // Останавливаем индикацию Этапа 1
       if (loadingInterval) clearInterval(loadingInterval);
-      const stage2Header = `\n\n> *Этап 2: Клинический разбор через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.5'}...*\n\n---\n\n`;
+      
+      // Показываем краткую сводку извлеченных данных
+      const findingsCount = jsonExtraction?.findings?.length || 0;
+      const metricsCount = Object.keys(jsonExtraction?.metrics || {}).length || 0;
+      const summaryLine = `\n\n✅ **Данные извлечены:** ${findingsCount} находок, ${metricsCount} метрик\n`;
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
+      
+      // Обновляем статус перед запуском второй модели
+      const stage2Header = `\n> *Этап 2: Клинический разбор через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.5'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
@@ -303,13 +388,26 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 секунд таймаут на запуск модели
 
-      // Запускаем второй интервал для Этапа 2
+      // Запускаем второй интервал для Этапа 2 с ротацией сообщений
+      const stage2Messages = [
+        "📝 Формирование диагностического протокола",
+        "🧠 Построение дифференциальной диагностики",
+        "⚕️ Оценка клинической значимости",
+        "📊 Синтез клинических гипотез"
+      ];
+      
       let stage2Seconds = 0;
       const stage2Interval = setInterval(async () => {
         stage2Seconds += 2;
         try {
-          const updateChunk = { choices: [{ delta: { content: `.` } }] };
-          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
+          // Каждые 4 секунды меняем сообщение
+          if (stage2Seconds % 4 === 0) {
+            const msgIndex = Math.floor(stage2Seconds / 4) % stage2Messages.length;
+            const statusMsg = `\n\n> ${stage2Messages[msgIndex]}...`;
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: statusMsg } }] })}\n\n`));
+          } else {
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: `.` } }] })}\n\n`));
+          }
         } catch (e) {}
       }, 2000);
 
@@ -321,7 +419,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
           'HTTP-Referer': 'https://doctor-opus.ru',
           'X-Title': 'Doctor Opus'
         },
-        body: JSON.stringify({
+        body: JSON.stringify(        {
           model,
           messages: [
             { role: 'system', content: systemPrompt },
@@ -333,7 +431,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
               ]
             }
           ],
-          max_tokens: 16000,
+          max_tokens: 8000, // Оптимизировано: одно изображение, достаточно для экспертного протокола
           temperature: 0.1,
           stream: true,
           stream_options: { include_usage: true }
@@ -412,12 +510,25 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
 
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: getLoadingHeader(0) } }] })}\n\n`));
 
-      // 2. Умная индикация загрузки
+      // 2. Умная индикация загрузки с ротацией сообщений
+      const stage1Messages = [
+        "🔍 Анализ серии изображений",
+        "📏 Сравнение структурных изменений",
+        "⚡ Оценка динамики процесса",
+        "🩺 Выявление новых находок",
+        "🔬 Сопоставление метрических данных"
+      ];
+      
       loadingInterval = setInterval(async () => {
         loadingSeconds += 2;
         try {
-          const updateChunk = { choices: [{ delta: { content: `.` } }] };
-          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
+          if (loadingSeconds % 4 === 0) {
+            const msgIndex = Math.floor(loadingSeconds / 4) % stage1Messages.length;
+            const statusMsg = `\n\n> ${stage1Messages[msgIndex]}...`;
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: statusMsg } }] })}\n\n`));
+          } else {
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: `.` } }] })}\n\n`));
+          }
         } catch (e) {
           if (loadingInterval) clearInterval(loadingInterval);
         }
@@ -442,8 +553,16 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       
+      // Останавливаем индикацию Этапа 1
       if (loadingInterval) clearInterval(loadingInterval);
-      const stage2Header = `\n\n> *Этап 2: Детальный клинический разбор и сравнение через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.5'}...*\n\n---\n\n`;
+      
+      // Показываем краткую сводку
+      const findingsCount = jsonExtraction?.findings?.length || 0;
+      const metricsCount = Object.keys(jsonExtraction?.metrics || {}).length || 0;
+      const summaryLine = `\n\n✅ **Данные извлечены:** ${findingsCount} находок, ${metricsCount} метрик из ${imagesBase64.length} изображений\n`;
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
+      
+      const stage2Header = `\n> *Этап 2: Детальный клинический разбор и сравнение через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.5'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
@@ -467,10 +586,24 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
 
       console.log(`📡 [MULTI-OPTIMIZED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
       
+      const stage2Messages = [
+        "📝 Формирование сравнительного протокола",
+        "🧠 Оценка динамики изменений",
+        "⚕️ Анализ прогрессирования/регрессии",
+        "📊 Синтез клинических выводов"
+      ];
+      
+      let stage2Seconds = 0;
       const stage2Interval = setInterval(async () => {
+        stage2Seconds += 2;
         try {
-          const updateChunk = { choices: [{ delta: { content: `.` } }] };
-          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
+          if (stage2Seconds % 4 === 0) {
+            const msgIndex = Math.floor(stage2Seconds / 4) % stage2Messages.length;
+            const statusMsg = `\n\n> ${stage2Messages[msgIndex]}...`;
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: statusMsg } }] })}\n\n`));
+          } else {
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: `.` } }] })}\n\n`));
+          }
         } catch (e) {}
       }, 2000);
 
@@ -499,7 +632,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
             { role: 'system', content: systemPrompt },
             { role: 'user', content: contentItems }
           ],
-          max_tokens: 16000,
+          max_tokens: 12000, // Оптимизировано: множественные изображения, сравнительный анализ
           temperature: 0.1,
           stream: true,
           stream_options: { include_usage: true }
@@ -576,12 +709,25 @@ export async function analyzeMultipleImagesWithJSONStreaming(
 
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: getLoadingHeader(0) } }] })}\n\n`));
 
-      // 2. Умная индикация загрузки
+      // 2. Умная индикация загрузки с ротацией сообщений
+      const stage1MessagesValidated = [
+        "🔍 Детальный анализ всех изображений",
+        "📏 Прецизионное измерение структур",
+        "⚡ Перекрестная верификация данных",
+        "🩺 Углубленная оценка находок",
+        "🔬 Финальная валидация метрик"
+      ];
+      
       loadingInterval = setInterval(async () => {
         loadingSeconds += 2;
         try {
-          const updateChunk = { choices: [{ delta: { content: `.` } }] };
-          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
+          if (loadingSeconds % 4 === 0) {
+            const msgIndex = Math.floor(loadingSeconds / 4) % stage1MessagesValidated.length;
+            const statusMsg = `\n\n> ${stage1MessagesValidated[msgIndex]}...`;
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: statusMsg } }] })}\n\n`));
+          } else {
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: `.` } }] })}\n\n`));
+          }
         } catch (e) {
           if (loadingInterval) clearInterval(loadingInterval);
         }
@@ -601,8 +747,15 @@ export async function analyzeMultipleImagesWithJSONStreaming(
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       
+      // Останавливаем индикацию и показываем сводку
       if (loadingInterval) clearInterval(loadingInterval);
-      const stage2Header = `\n\n> *Этап 2: Профессорский разбор через Opus 4.6 (максимальная точность)...*\n\n---\n\n`;
+      
+      const findingsCount = jsonExtraction?.findings?.length || 0;
+      const metricsCount = Object.keys(jsonExtraction?.metrics || {}).length || 0;
+      const summaryLine = `\n\n✅ **Данные проверены:** ${findingsCount} находок, ${metricsCount} метрик из ${imagesBase64.length} изображений\n`;
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
+      
+      const stage2Header = `\n> *Этап 2: Профессорский разбор через Opus 4.6 (максимальная точность)...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt } = await import('./prompts');
@@ -625,10 +778,24 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
 
       console.log(`📡 [MULTI-VALIDATED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
       
+      const stage2MessagesValidated = [
+        "📝 Экспертное формирование протокола",
+        "🧠 Глубокий дифференциальный анализ",
+        "⚕️ Критическая оценка находок",
+        "📊 Синтез клинических заключений"
+      ];
+      
+      let stage2SecondsValidated = 0;
       const stage2Interval = setInterval(async () => {
+        stage2SecondsValidated += 2;
         try {
-          const updateChunk = { choices: [{ delta: { content: `.` } }] };
-          await writer.write(encoder.encode(`data: ${JSON.stringify(updateChunk)}\n\n`));
+          if (stage2SecondsValidated % 4 === 0) {
+            const msgIndex = Math.floor(stage2SecondsValidated / 4) % stage2MessagesValidated.length;
+            const statusMsg = `\n\n> ${stage2MessagesValidated[msgIndex]}...`;
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: statusMsg } }] })}\n\n`));
+          } else {
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: `.` } }] })}\n\n`));
+          }
         } catch (e) {}
       }, 2000);
 
@@ -657,7 +824,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
             { role: 'system', content: systemPrompt },
             { role: 'user', content: contentItems }
           ],
-          max_tokens: 16000,
+          max_tokens: 10000, // Оптимизировано: validated режим с JSON-контекстом
           temperature: 0.1,
           stream: true,
           stream_options: { include_usage: true }
@@ -755,7 +922,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
           ]
         }
       ],
-      max_tokens: 16000,
+      max_tokens: 8000, // Оптимизировано: одно изображение, базовый протокол
       temperature: 0.1,
       stream: true,
       stream_options: { include_usage: true }
@@ -806,6 +973,7 @@ export async function sendTextRequestStreaming(
       }, 5000);
 
       const { TITAN_CONTEXTS } = await import('./prompts');
+      const { calculateAdaptiveMaxTokens, estimateTokens } = await import('./adaptive-tokens');
       
       // Выбираем системный промпт: Всегда используем полный SYSTEM_PROMPT для глубины аналитики
       // в ИИ-Ассистенте, если не указано иное
@@ -826,6 +994,14 @@ export async function sendTextRequestStreaming(
         { role: 'user' as const, content: prompt }
       ];
 
+      // Адаптивный расчёт max_tokens на основе длины диалога
+      const adaptiveMaxTokens = calculateAdaptiveMaxTokens({
+        systemPrompt,
+        history,
+        userPrompt: prompt,
+        mode: 'chat'
+      });
+
       const response = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
@@ -837,12 +1013,15 @@ export async function sendTextRequestStreaming(
         body: JSON.stringify({
           model,
           messages,
-          max_tokens: 16000,
+          max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от длины диалога
           temperature: 0.1,
           stream: true,
           stream_options: { include_usage: true }
         })
       });
+
+      const initialPromptTokens = estimateTokens(systemPrompt + prompt + history.map(m => m.content).join(' '));
+      const initialUsage = { prompt_tokens: initialPromptTokens, completion_tokens: 0 };
 
       // Heartbeat остановится в finally
       if (!response.ok) {
@@ -850,7 +1029,7 @@ export async function sendTextRequestStreaming(
         throw new Error(`API error: ${response.status} - ${errorText}`);
       }
 
-      const transformer = createTransformWithUsage(response.body!, model);
+      const transformer = createTransformWithUsage(response.body!, model, initialUsage, true);
       const reader = transformer.getReader();
 
       while (true) {
@@ -943,7 +1122,7 @@ export async function analyzeImageStreaming(
               ] 
             }
           ],
-          max_tokens: 16000,
+          max_tokens: 8000, // Оптимизировано: одно изображение, базовый протокол
           temperature: 0.1,
           stream: true,
           stream_options: { include_usage: true }
@@ -955,7 +1134,12 @@ export async function analyzeImageStreaming(
         throw new Error(`API error: ${response.status} - ${errorText}`);
       }
 
-      const transformer = createTransformWithUsage(response.body!, model);
+      // Оценка входных токенов для корректного отображения стоимости
+      const { estimateTokens } = await import('./adaptive-tokens');
+      const initialPromptTokens = estimateTokens(systemPrompt + (typeof fullPrompt === 'string' ? fullPrompt : '') + history.map(m => m.content).join(' '));
+      const initialUsage = { prompt_tokens: initialPromptTokens, completion_tokens: 0 };
+
+      const transformer = createTransformWithUsage(response.body!, model, initialUsage, true);
       const reader = transformer.getReader();
 
       while (true) {
@@ -1046,7 +1230,7 @@ export async function analyzeMultipleImagesStreaming(
             { role: 'system', content: systemPrompt },
             { role: 'user', content: contentItems }
           ],
-          max_tokens: 16000,
+          max_tokens: 12000, // Оптимизировано: множественные изображения
           temperature: 0.1,
           stream: true,
           stream_options: { include_usage: true }
@@ -1058,7 +1242,12 @@ export async function analyzeMultipleImagesStreaming(
         throw new Error(`API error: ${response.status} - ${errorText}`);
       }
 
-      const transformer = createTransformWithUsage(response.body!, model);
+      // Оценка входных токенов для корректного отображения стоимости
+      const { estimateTokens } = await import('./adaptive-tokens');
+      const initialPromptTokens = estimateTokens(systemPrompt + (typeof fullPrompt === 'string' ? fullPrompt : '') + history.map(m => m.content).join(' '));
+      const initialUsage = { prompt_tokens: initialPromptTokens, completion_tokens: 0 };
+
+      const transformer = createTransformWithUsage(response.body!, model, initialUsage, true);
       const reader = transformer.getReader();
 
       while (true) {
