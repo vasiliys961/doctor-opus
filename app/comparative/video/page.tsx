@@ -6,7 +6,7 @@ import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import PatientSelector from '@/components/PatientSelector'
-import ImageEditor from '@/components/ImageEditor'
+import ImageEditor, { type DrawingPath } from '@/components/ImageEditor'
 import { logUsage } from '@/lib/simple-logger'
 import { 
   extractAndAnonymizeFrames, 
@@ -259,6 +259,115 @@ export default function VideoComparisonPage() {
     }
     
     setEditingFrame(null)
+  }
+
+  const dataUrlToBlob = (dataUrl: string): Blob => {
+    const [header, base64] = dataUrl.split(',')
+    const mimeMatch = header?.match(/data:(.*?);base64/)
+    const mimeType = mimeMatch?.[1] || 'image/png'
+    const byteString = atob(base64 || '')
+    const ab = new ArrayBuffer(byteString.length)
+    const ia = new Uint8Array(ab)
+    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i)
+    return new Blob([ab], { type: mimeType })
+  }
+
+  const loadImage = (src: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      const timeout = setTimeout(() => reject(new Error('Image load timeout')), 15000)
+      img.onload = () => { clearTimeout(timeout); resolve(img) }
+      img.onerror = () => { clearTimeout(timeout); reject(new Error('Image load error')) }
+      img.src = src
+    })
+  }
+
+  const applyMaskToSlotFrames = async (params: {
+    videoIndex: 1 | 2;
+    frameIndex: number;
+    editedDataUrl: string;
+    editedFile: File;
+    drawingPaths: DrawingPath[];
+  }) => {
+    const { videoIndex, frameIndex, editedDataUrl, editedFile, drawingPaths } = params
+    if (!drawingPaths || drawingPaths.length === 0) return
+
+    // Reference size for path scaling (paths are recorded in editor canvas coordinates)
+    const refImg = await loadImage(editedDataUrl)
+    const refW = refImg.width || 1
+    const refH = refImg.height || 1
+
+    const sourceFrames = videoIndex === 1 ? frames1 : frames2
+    const updatedBase = sourceFrames.map((f, i) => {
+      if (i !== frameIndex) return f
+      return {
+        ...f,
+        file: editedFile,
+        preview: editedDataUrl,
+        isAnonymized: true,
+      }
+    })
+
+    const processed: ExtractedFrame[] = []
+    for (let i = 0; i < updatedBase.length; i++) {
+      const frame = updatedBase[i]
+      if (i === frameIndex) {
+        processed.push(frame)
+        continue
+      }
+
+      try {
+        const img = await loadImage(frame.preview)
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          processed.push(frame)
+          continue
+        }
+
+        ctx.drawImage(img, 0, 0)
+
+        const scaleX = (img.width || 1) / refW
+        const scaleY = (img.height || 1) / refH
+        const scaleBrush = (scaleX + scaleY) / 2
+
+        for (const path of drawingPaths) {
+          if (!path.points || path.points.length === 0) continue
+          ctx.beginPath()
+          ctx.lineWidth = Math.max(1, path.brushSize * scaleBrush)
+          ctx.lineCap = 'round'
+          ctx.lineJoin = 'round'
+          ctx.strokeStyle = 'black'
+
+          ctx.moveTo(path.points[0].x * scaleX, path.points[0].y * scaleY)
+          for (let p = 1; p < path.points.length; p++) {
+            ctx.lineTo(path.points[p].x * scaleX, path.points[p].y * scaleY)
+          }
+          ctx.stroke()
+        }
+
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, frame.file.type || 'image/png', 0.9))
+        if (!blob) {
+          processed.push(frame)
+          continue
+        }
+
+        const newFile = new File([blob], frame.file.name, { type: blob.type || frame.file.type || 'image/png' })
+        processed.push({
+          ...frame,
+          file: newFile,
+          preview: URL.createObjectURL(newFile),
+          isAnonymized: true,
+        })
+      } catch (_e) {
+        processed.push(frame)
+      }
+    }
+
+    if (videoIndex === 1) setFrames1(processed)
+    else setFrames2(processed)
   }
 
   // Анализ кадров
@@ -813,7 +922,8 @@ export default function VideoComparisonPage() {
             ? frames1[editingFrame.frameIndex].preview 
             : frames2[editingFrame.frameIndex].preview
           }
-          onSave={async (editedDataUrl) => {
+          hasAdditionalFiles={editingFrame.videoIndex === 1 ? frames1.length > 1 : frames2.length > 1}
+          onSave={async (editedDataUrl, drawingPaths) => {
             const { videoIndex, frameIndex } = editingFrame;
             
             // Сначала обновляем превью мгновенно
@@ -831,25 +941,35 @@ export default function VideoComparisonPage() {
               });
             }
 
-            // Затем конвертируем в файл
+            // Затем конвертируем в файл (без fetch — стабильнее под CSP)
             try {
-              const response = await fetch(editedDataUrl);
-              const blob = await response.blob();
               const originalFile = videoIndex === 1 ? frames1[frameIndex].file : frames2[frameIndex].file;
-              const editedFile = new File([blob], originalFile.name, { type: 'image/png' });
+              const blob = dataUrlToBlob(editedDataUrl);
+              const editedFile = new File([blob], originalFile.name, { type: blob.type || originalFile.type || 'image/png' });
               
               if (videoIndex === 1) {
                 setFrames1(prev => {
                   const updated = [...prev];
-                  if (updated[frameIndex]) updated[frameIndex] = { ...updated[frameIndex], file: editedFile };
+                  if (updated[frameIndex]) updated[frameIndex] = { ...updated[frameIndex], file: editedFile, isAnonymized: true };
                   return updated;
                 });
               } else {
                 setFrames2(prev => {
                   const updated = [...prev];
-                  if (updated[frameIndex]) updated[frameIndex] = { ...updated[frameIndex], file: editedFile };
+                  if (updated[frameIndex]) updated[frameIndex] = { ...updated[frameIndex], file: editedFile, isAnonymized: true };
                   return updated;
                 });
+              }
+
+              // Если пользователь нажал "Применить ко всем" — ImageEditor передаст drawingPaths
+              if (drawingPaths && drawingPaths.length > 0) {
+                await applyMaskToSlotFrames({
+                  videoIndex,
+                  frameIndex,
+                  editedDataUrl,
+                  editedFile,
+                  drawingPaths,
+                })
               }
             } catch (err) {
               console.error('Ошибка при сохранении отредактированного кадра:', err);
