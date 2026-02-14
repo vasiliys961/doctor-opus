@@ -4,7 +4,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   aggressiveFrontEndNavCaching: false,
   reloadOnOnline: true,
   swcMinify: true,
-  disable: process.env.NODE_ENV === 'development',
+  disable: process.env.NODE_ENV === 'development' || process.env.NEXT_DISABLE_PWA === 'true',
   workboxOptions: {
     disableDevLogs: true,
     runtimeCaching: [
@@ -33,7 +33,7 @@ const nextConfig = {
     // - Buffer типы: внутренние несоответствия Node.js типов
     // - cornerstoneWADOImageLoader: динамически подключаемая библиотека
     // - docx/pdf-lib типы: внутренние несоответствия типов библиотек
-    ignoreBuildErrors: false,
+    ignoreBuildErrors: process.env.NEXT_IGNORE_TS_ERRORS === 'true',
   },
   eslint: {
     ignoreDuringBuilds: true,

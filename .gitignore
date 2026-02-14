@@ -2,13 +2,16 @@
 node_modules/
 .next/
 out/
+.npm/
 
 # Environment variables
 .env
+.env.*
 .env.local
 .env.production
 .env.production.local
 .env.development.local
+!.env.example
 
 # Vercel
 .vercel
@@ -39,11 +42,13 @@ cache/
 
 # Uploads
 uploads/
+exports/
 temp/
 
 # IDE
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 
@@ -59,7 +64,11 @@ public/swe-worker-*.js
 .DS_Store
 Thumbs.db
 .streamlit/secrets.toml
-.streamlit/secrets.toml
+
+# Temporary and backup files
+*.tmp
+*.temp
+*.bak
 
 # Nginx SSL
 nginx/ssl/
