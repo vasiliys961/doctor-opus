@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Cinematic3DViewer from '@/components/Cinematic3DViewer'
+import Dicom3DViewer from '@/components/Dicom3DViewer'
 import FileUpload from '@/components/FileUpload'
 
 export default function Advanced3DPage() {
@@ -77,7 +77,7 @@ export default function Advanced3DPage() {
         </div>
 
         {showViewer && (
-          <Cinematic3DViewer 
+          <Dicom3DViewer 
             files={files}
             onClose={() => setShowViewer(false)}
           />
