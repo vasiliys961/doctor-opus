@@ -12,9 +12,11 @@ declare global {
 interface Dicom3DViewerProps {
   files: File[]
   onClose: () => void
+  presentation?: 'modal' | 'fullscreen'
 }
 
-export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
+export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }: Dicom3DViewerProps) {
+  const rootRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const axialRef = useRef<HTMLDivElement>(null)
   const coronalRef = useRef<HTMLDivElement>(null)
@@ -26,6 +28,7 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
   const [error, setError] = useState<string | null>(null)
   const [vtkReady, setVtkReady] = useState(false)
   const [activePreset, setActivePreset] = useState<'default' | 'bone' | 'brain' | 'mip' | 'glow' | 'xray_light' | 'vessels' | 'organ_lesion'>('default')
+  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false)
 
   // Хранилище для функций передачи (чтобы менять их на лету)
   const volumePropertyRef = useRef<any>(null)
@@ -50,6 +53,60 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
       setVtkReady(true);
     }
   }, []);
+
+  const getFullscreenElement = () => {
+    if (typeof document === 'undefined') return null
+    const anyDoc = document as any
+    return document.fullscreenElement || anyDoc.webkitFullscreenElement || anyDoc.webkitCurrentFullScreenElement || null
+  }
+
+  const requestBrowserFullscreen = async (el: HTMLElement) => {
+    const anyEl = el as any
+    if (el.requestFullscreen) return el.requestFullscreen()
+    // Safari (особенно macOS) нередко использует webkit-prefixed API
+    if (anyEl.webkitRequestFullscreen) return anyEl.webkitRequestFullscreen()
+    if (anyEl.webkitRequestFullScreen) return anyEl.webkitRequestFullScreen()
+    throw new Error('Fullscreen API is not supported')
+  }
+
+  const exitBrowserFullscreen = async () => {
+    const anyDoc = document as any
+    if (document.exitFullscreen) return document.exitFullscreen()
+    if (anyDoc.webkitExitFullscreen) return anyDoc.webkitExitFullscreen()
+    if (anyDoc.webkitCancelFullScreen) return anyDoc.webkitCancelFullScreen()
+    throw new Error('Fullscreen API is not supported')
+  }
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const onFsChange = () => setIsBrowserFullscreen(Boolean(getFullscreenElement()))
+    document.addEventListener('fullscreenchange', onFsChange)
+    document.addEventListener('webkitfullscreenchange', onFsChange as EventListener)
+    onFsChange()
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange)
+      document.removeEventListener('webkitfullscreenchange', onFsChange as EventListener)
+    }
+  }, [])
+
+  const toggleBrowserFullscreen = async () => {
+    try {
+      if (typeof document === 'undefined') return
+      if (!getFullscreenElement()) {
+        // 1) Стараемся развернуть именно оверлей (лучше для UI)
+        if (rootRef.current) {
+          await requestBrowserFullscreen(rootRef.current)
+          return
+        }
+        // 2) Фоллбек: весь документ
+        await requestBrowserFullscreen(document.documentElement)
+      } else {
+        await exitBrowserFullscreen()
+      }
+    } catch (e) {
+      console.warn('Fullscreen toggle failed:', e)
+    }
+  }
 
   const initVtk = async () => {
     if (!window.vtk || !axialRef.current || files.length === 0) return
@@ -632,8 +689,19 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
         onLoad={() => setVtkReady(true)}
       />
       
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-95 backdrop-blur-md p-2">
-        <div className="relative w-full h-full max-w-7xl bg-gray-900 rounded-2xl overflow-hidden shadow-2xl flex flex-col border border-gray-700">
+      <div
+        ref={rootRef}
+        className={`fixed inset-0 z-50 flex bg-black bg-opacity-95 backdrop-blur-md ${
+          presentation === 'fullscreen'
+            ? 'p-0 items-stretch justify-stretch w-screen h-screen'
+            : 'p-2 items-center justify-center'
+        }`}
+      >
+        <div
+          className={`relative w-full h-full min-h-0 bg-gray-900 overflow-hidden shadow-2xl flex flex-col border border-gray-700 ${
+            presentation === 'fullscreen' ? 'max-w-none rounded-none border-0' : 'max-w-7xl rounded-2xl'
+          }`}
+        >
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-900">
             <div>
@@ -644,15 +712,24 @@ export default function Dicom3DViewer({ files, onClose }: Dicom3DViewerProps) {
                 Мультипланарная реконструкция: Axial, Coronal, Sagittal
               </p>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleBrowserFullscreen}
+                className="p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white"
+                title={isBrowserFullscreen ? 'Выйти из полноэкранного режима' : 'Полноэкранный режим браузера'}
+              >
+                <span className="text-lg">{isBrowserFullscreen ? '🗗' : '🗖'}</span>
+              </button>
+              <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white" title="Закрыть">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* MPR Content */}
-          <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-px bg-gray-800 relative">
+          <div className="flex-1 min-h-0 grid grid-cols-2 grid-rows-2 gap-px bg-gray-800 relative">
             {loading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-10">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mb-4"></div>

@@ -80,6 +80,7 @@ export default function Advanced3DPage() {
           <Dicom3DViewer 
             files={files}
             onClose={() => setShowViewer(false)}
+            presentation="fullscreen"
           />
         )}
       </div>
