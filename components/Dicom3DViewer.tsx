@@ -29,6 +29,7 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
   const [vtkReady, setVtkReady] = useState(false)
   const [activePreset, setActivePreset] = useState<'default' | 'bone' | 'brain' | 'mip' | 'glow' | 'xray_light' | 'vessels' | 'organ_lesion'>('default')
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false)
+  const [isVolumeOnly, setIsVolumeOnly] = useState(false)
 
   // Хранилище для функций передачи (чтобы менять их на лету)
   const volumePropertyRef = useRef<any>(null)
@@ -88,6 +89,27 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
       document.removeEventListener('webkitfullscreenchange', onFsChange as EventListener)
     }
   }, [])
+
+  useEffect(() => {
+    // При смене раскладки grid размеры контейнеров меняются без window.resize.
+    // Триггерим существующий handleResize (он подписан на window.resize в initVtk).
+    const t = window.setTimeout(() => {
+      window.dispatchEvent(new Event('resize'))
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [isVolumeOnly])
+
+  useEffect(() => {
+    // После первичной загрузки DOM/лейаут может "дотягиваться", из-за чего resetCamera
+    // случается при не финальном размере контейнера. Пинаем resize ещё раз.
+    if (loading || error) return
+    const t1 = window.setTimeout(() => window.dispatchEvent(new Event('resize')), 0)
+    const t2 = window.setTimeout(() => window.dispatchEvent(new Event('resize')), 250)
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+    }
+  }, [loading, error])
 
   const toggleBrowserFullscreen = async () => {
     try {
@@ -638,10 +660,18 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
       // Синхронизация ресайза
       const handleResize = () => {
         views.forEach(v => {
-          if (!v.renderWindow.getViews()[0]) return;
-          const dims = v.renderWindow.getViews()[0].getContainer().getBoundingClientRect();
+          const view = v.renderWindow.getViews?.()?.[0];
+          if (!view) return;
+
+          // В редких случаях (fast refresh/перемонтирование DOM) container может быть null.
+          const container = view.getContainer?.();
+          if (!container) return;
+
+          const dims = container.getBoundingClientRect?.();
+          if (!dims) return;
+
           if (dims.width > 0 && dims.height > 0) {
-            v.renderWindow.getViews()[0].setSize(Math.floor(dims.width), Math.floor(dims.height));
+            view.setSize(Math.floor(dims.width), Math.floor(dims.height));
             v.renderer.resetCamera();
             v.renderWindow.render();
           }
@@ -748,7 +778,7 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
             ) : (
               <>
                 {/* Viewports */}
-                <div className="relative flex flex-col h-full bg-black border border-gray-700 group">
+                <div className={`relative flex flex-col h-full bg-black border border-gray-700 group ${isVolumeOnly ? 'hidden' : ''}`}>
                   <div className="absolute top-2 left-2 z-10 text-[10px] text-yellow-500 font-bold uppercase">Axial (Z)</div>
                   <div className="absolute top-2 right-2 z-20 flex flex-col space-y-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => (window as any).mprZoom?.(0, 0.8)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">+</button>
@@ -757,7 +787,7 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
                   <div ref={axialRef} className="flex-1 touch-none" />
                 </div>
 
-                <div className="relative flex flex-col h-full bg-black border border-gray-700 group">
+                <div className={`relative flex flex-col h-full bg-black border border-gray-700 group ${isVolumeOnly ? 'hidden' : ''}`}>
                   <div className="absolute top-2 left-2 z-10 text-[10px] text-blue-500 font-bold uppercase">Coronal (Y)</div>
                   <div className="absolute top-2 right-2 z-20 flex flex-col space-y-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => (window as any).mprZoom?.(1, 0.8)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">+</button>
@@ -766,7 +796,7 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
                   <div ref={coronalRef} className="flex-1 touch-none" />
                 </div>
 
-                <div className="relative flex flex-col h-full bg-black border border-gray-700 group">
+                <div className={`relative flex flex-col h-full bg-black border border-gray-700 group ${isVolumeOnly ? 'hidden' : ''}`}>
                   <div className="absolute top-2 left-2 z-10 text-[10px] text-green-500 font-bold uppercase">Sagittal (X)</div>
                   <div className="absolute top-2 right-2 z-20 flex flex-col space-y-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => (window as any).mprZoom?.(2, 0.8)} className="w-8 h-8 bg-gray-800 text-white rounded border border-gray-600 hover:bg-primary-600">+</button>
@@ -775,8 +805,21 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
                   <div ref={sagittalRef} className="flex-1 touch-none" />
                 </div>
 
-                <div className="relative flex flex-col h-full bg-black border border-gray-700 group">
+                <div
+                  className={`relative flex flex-col h-full bg-black border border-gray-700 group ${
+                    isVolumeOnly ? 'col-span-2 row-span-2' : ''
+                  }`}
+                >
                   <div className="absolute top-2 left-2 z-10 text-[10px] text-purple-500 font-bold uppercase">3D Volume Reconstruction</div>
+
+                  <button
+                    onClick={() => setIsVolumeOnly(v => !v)}
+                    className="absolute top-2 right-2 z-30 w-12 h-12 flex items-center justify-center text-2xl bg-black/80 hover:bg-black rounded-lg border border-gray-500 text-white shadow-lg transition-colors"
+                    title={isVolumeOnly ? 'Вернуть 4 окна' : 'Только 3D'}
+                    type="button"
+                  >
+                    ⤢
+                  </button>
                   
                   {/* Presets Controls inside 3D View */}
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 p-1.5 bg-gray-900/80 backdrop-blur-sm rounded-xl border border-gray-700">
