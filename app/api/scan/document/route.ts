@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateCost } from '@/lib/cost-calculator';
 import { anonymizeText } from "@/lib/anonymization";
-import { anonymizeImageBuffer } from "@/lib/image-compression";
+import { anonymizeImageBuffer } from "@/lib/server-image-processing";
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 

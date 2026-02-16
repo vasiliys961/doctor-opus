@@ -12,7 +12,7 @@ import {
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
-import { anonymizeImageBuffer } from "@/lib/image-compression";
+import { anonymizeImageBuffer, compressImageBuffer, ensureVisionSupportedImage } from "@/lib/server-image-processing";
 import { extractDicomMetadata, formatDicomMetadataForAI } from '@/lib/dicom-service';
 import { processDicomJs } from "@/lib/dicom-processor";
 import { exec } from 'child_process';
@@ -144,24 +144,64 @@ export async function POST(request: NextRequest) {
           imagesBase64.push(jsResult.image);
           mimeTypes.push('image/png');
         } else {
-          // Если не смогли отрендерить, отправляем буфер (который уже анонимизирован, если флаг стоял)
-          imagesBase64.push(buffer.toString('base64'));
-          mimeTypes.push(img.type || 'application/dicom');
+          // Если JS-рендеринг не удался → пробуем серверный Python fallback
+          console.warn('[DICOM] JS render failed, trying Python fallback...');
+          const tempDir = os.tmpdir();
+          const tempDcm = path.join(tempDir, `${Date.now()}.dcm`);
+          const tempJpg = path.join(tempDir, `${Date.now()}.jpg`);
+          
+          try {
+            await fs.writeFile(tempDcm, buffer);
+            await execPromise(`python3 -m pip show pydicom > /dev/null 2>&1 || python3 -m pip install --user pydicom pillow`);
+            await execPromise(`python3 -c "import pydicom; import PIL.Image; ds=pydicom.dcmread('${tempDcm}'); arr=ds.pixel_array; PIL.Image.fromarray(arr).convert('RGB').save('${tempJpg}')"`);
+            
+            const jpgBuffer = await fs.readFile(tempJpg);
+            imagesBase64.push(jpgBuffer.toString('base64'));
+            mimeTypes.push('image/jpeg');
+            console.log('[DICOM] Python fallback succeeded');
+          } catch (pyError) {
+            console.error('[DICOM] Python fallback failed:', pyError);
+            // Последний fallback: отправляем как есть (Azure скорее всего отклонит)
+            imagesBase64.push(buffer.toString('base64'));
+            mimeTypes.push('application/dicom');
+          } finally {
+            try { await fs.unlink(tempDcm); } catch {}
+            try { await fs.unlink(tempJpg); } catch {}
+          }
         }
       } else {
         // ОБЫЧНОЕ ИЗОБРАЖЕНИЕ: АНОНИМИЗАЦИЯ НА СЕРВЕРЕ (ТОЛЬКО ЕСЛИ ВКЛЮЧЕНО)
         const arrayBuffer = await img.arrayBuffer();
         let buffer = Buffer.from(arrayBuffer);
+        let currentMimeType = img.type;
         
-        // Применяем анонимизацию для всех изображений (JPG, PNG и т.д.), если включен режим анонимности
-        if (isAnonymous && img.type.startsWith('image/')) {
-          // Не логируем имя файла — может содержать ПДн
-          // @ts-expect-error - Несовместимость типов Buffer между canvas и Node.js, но код работает корректно
-          buffer = await anonymizeImageBuffer(buffer, img.type);
+        // 1) Гарантируем формат, который примут vision-провайдеры.
+        // Важно для iPhone HEIC и случаев, когда браузер присылает пустой mimeType.
+        try {
+          const ensured = await ensureVisionSupportedImage(buffer, currentMimeType);
+          buffer = ensured.buffer;
+          currentMimeType = ensured.mimeType;
+        } catch (e: any) {
+          return NextResponse.json(
+            { success: false, error: e?.message || 'Не удалось обработать изображение' },
+            { status: 400 }
+          );
         }
         
+        // 2) Применяем анонимизацию для всех изображений (JPG/PNG и т.д.), если включен режим анонимности
+        if (isAnonymous && currentMimeType.startsWith('image/')) {
+          // Не логируем имя файла — может содержать ПДн
+          // @ts-expect-error - Несовместимость типов Buffer между canvas и Node.js, но код работает корректно
+          buffer = await anonymizeImageBuffer(buffer, currentMimeType);
+        }
+        
+        // 3) КОМПРЕССИЯ: Если изображение > 4 МБ, сжимаем до ~4 МБ для соблюдения лимитов API
+        const compressed = await compressImageBuffer(buffer, currentMimeType, 4.0);
+        buffer = compressed.buffer;
+        currentMimeType = compressed.mimeType;
+        
         imagesBase64.push(buffer.toString('base64'));
-        mimeTypes.push(img.type);
+        mimeTypes.push(currentMimeType);
       }
     }
 

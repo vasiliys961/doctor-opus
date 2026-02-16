@@ -111,6 +111,22 @@ export async function POST(request: NextRequest) {
       )
     `;
     
+    // Обновления схемы users (backwards compatibility)
+    try {
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`;
+      safeLog('✅ Added password_hash column');
+    } catch (e: any) { safeLog('ℹ️ password_hash:', e.message); }
+    
+    try {
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255) DEFAULT 'Врач'`;
+      safeLog('✅ Added name column');
+    } catch (e: any) { safeLog('ℹ️ name:', e.message); }
+    
+    try {
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP`;
+      safeLog('✅ Added created_at column');
+    } catch (e: any) { safeLog('ℹ️ created_at:', e.message); }
+    
     await sql`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`;
     
     // Проверка

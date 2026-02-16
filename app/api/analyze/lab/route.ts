@@ -9,7 +9,7 @@ import { detectFileType } from '@/lib/file-extractor';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
-import { anonymizeImageBuffer } from "@/lib/image-compression";
+import { anonymizeImageBuffer } from "@/lib/server-image-processing";
 import * as XLSX from 'xlsx';
 
 // Максимальное время выполнения (5 минут)
