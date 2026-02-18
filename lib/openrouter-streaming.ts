@@ -360,7 +360,7 @@ export async function analyzeImageOpusTwoStageStreaming(
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
       // Обновляем статус перед запуском второй модели
-      const stage2Header = `\n> *Этап 2: Клинический разбор через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.5'}...*\n\n---\n\n`;
+      const stage2Header = `\n> *Этап 2: Клинический разбор через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
@@ -562,7 +562,7 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       const summaryLine = `\n\n✅ **Данные извлечены:** ${findingsCount} находок, ${metricsCount} метрик из ${imagesBase64.length} изображений\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
-      const stage2Header = `\n> *Этап 2: Детальный клинический разбор и сравнение через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.5'}...*\n\n---\n\n`;
+      const stage2Header = `\n> *Этап 2: Детальный клинический разбор и сравнение через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');

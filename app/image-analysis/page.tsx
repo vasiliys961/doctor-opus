@@ -115,7 +115,7 @@ export default function ImageAnalysisPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo({ 
-            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.6', 
+            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.6', 
             mode: analysisMode + ' (из кэша)' 
           });
           return;
@@ -175,7 +175,7 @@ export default function ImageAnalysisPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.5' : 'openai/gpt-5.2-chat';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-4.6');
@@ -202,7 +202,7 @@ export default function ImageAnalysisPage() {
           // Определяем модель для отображения в UI
           let modelUsed = ''
           if (analysisMode === 'fast') modelUsed = 'google/gemini-3-flash-preview'
-          else if (analysisMode === 'optimized') modelUsed = 'anthropic/claude-sonnet-4.5'
+          else if (analysisMode === 'optimized') modelUsed = 'anthropic/claude-sonnet-4.6'
           else modelUsed = 'anthropic/claude-opus-4.6'
           
           await handleSSEStream(response, {
@@ -216,7 +216,7 @@ export default function ImageAnalysisPage() {
               
               flushSync(() => {
                 setCurrentCost(usage.total_cost)
-                const modelUsed = usage.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.5' : 'anthropic/claude-opus-4.6')
+                const modelUsed = usage.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6')
                 
                 setModelInfo({ model: modelUsed, mode: analysisMode })
                 setLastAnalysisData({ model: modelUsed, mode: analysisMode })
@@ -334,7 +334,7 @@ export default function ImageAnalysisPage() {
       <AnalysisTips 
         content={{
           fast: "двухэтапный скрининг (сначала краткое структурированное описание исследования, затем текстовый разбор), даёт компактное заключение и общий сигнал риска, удобен для первичного просмотра и триажа.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.5) — идеальный баланс точности и цены для большинства медицинских исследований.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и цены для большинства медицинских исследований.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для большинства медицинских изображений.",

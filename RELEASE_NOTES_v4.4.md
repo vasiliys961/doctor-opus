@@ -113,7 +113,7 @@
 - **Node.js:** 18.x и выше
 - **Next.js:** 14.2.35
 - **База данных:** PostgreSQL (Neon, Timeweb, любой хостинг)
-- **API:** OpenRouter (все модели: Opus 4.6, Sonnet 4.5, GPT-5.2, Gemini 3.0)
+- **API:** OpenRouter (все модели: Opus 4.6, Sonnet 4.6, GPT-5.2, Gemini 3.0)
 
 ---
 

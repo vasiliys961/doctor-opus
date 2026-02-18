@@ -99,7 +99,7 @@ export default function AnalysisModeSelector({
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
-                Claude Sonnet 4.5
+                Claude Sonnet 4.6
                 <div className="text-[9px] font-normal opacity-80">Стандарт (90 сек)</div>
               </button>
               <button

@@ -309,7 +309,7 @@ export default function SubscriptionPage() {
               <p className="text-[10px] text-gray-500">≈ 1-3 руб. (по бета-цене 2₽/ед.)</p>
             </div>
             <div className="border border-gray-200 rounded-lg p-4">
-              <p className="font-semibold text-gray-800 mb-1">⭐ Оптимизированный (Sonnet 4.5)</p>
+              <p className="font-semibold text-gray-800 mb-1">⭐ Оптимизированный (Sonnet 4.6)</p>
               <p className="text-teal-600 font-bold">~3 - 7 ед.</p>
               <p className="text-[10px] text-gray-500">≈ 6-14 руб. (по бета-цене 2₽/ед.)</p>
             </div>

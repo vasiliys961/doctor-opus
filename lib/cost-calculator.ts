@@ -7,7 +7,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'anthropic/claude-opus-4.6': { input: 5.0, output: 25.0 },
   'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
   'anthropic/claude-sonnet-4.6': { input: 3.0, output: 15.0 },
-  'openai/gpt-5.2-chat': { input: 2.5, output: 10.0 }, // GPT-5.2 (мощнее и дешевле Sonnet 4.5)
+  'openai/gpt-5.2-chat': { input: 2.5, output: 10.0 }, // GPT-5.2 (мощнее и дешевле Sonnet 4.6)
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
   'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },
   'google/gemini-3-flash-preview': { input: 0.50, output: 3.00 },
