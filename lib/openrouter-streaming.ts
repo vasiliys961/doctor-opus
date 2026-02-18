@@ -11,7 +11,7 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Актуальные модели (последние флагманы 2025-2026)
 const MODELS = {
   OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6
-  SONNET: 'anthropic/claude-sonnet-4.5',                 // Claude Sonnet 4.5
+  SONNET: 'anthropic/claude-sonnet-4.6',                 // Claude Sonnet 4.6
   GPT_5_2: 'openai/gpt-5.2-chat',                        // GPT-5.2 Chat
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
