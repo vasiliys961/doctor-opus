@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     if (session.image) {
       const img = session.image;
       // Очищаем после получения
-      // session.image = null; 
+      session.image = null;
       return NextResponse.json({ success: true, hasImage: true, image: img });
     }
     

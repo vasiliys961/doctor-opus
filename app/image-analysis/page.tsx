@@ -47,6 +47,20 @@ export default function ImageAnalysisPage() {
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
 
+  const dataUrlToFile = (dataUrl: string, filename: string) => {
+    const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/)
+    if (!match) {
+      throw new Error('Некорректный формат изображения (ожидался data URL base64)')
+    }
+    const mime = match[1]
+    const ext = mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'bin'
+    const b64 = match[2]
+    const binary = atob(b64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return new File([bytes], `${filename}.${ext}`, { type: mime })
+  }
+
   const handleLabsFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -319,15 +333,19 @@ export default function ImageAnalysisPage() {
       <DeviceSync 
         currentImage={imagePreview}
         onImageReceived={(base64) => {
-          fetch(base64)
-            .then(res => res.blob())
-            .then(blob => {
-              const syncedFile = new File([blob], "synced_mobile_photo.png", { type: "image/png" });
-              setFile(syncedFile);
-              setImagePreview(base64);
-              setResult('');
-              setError(null);
-            });
+          try {
+            const syncedFile = dataUrlToFile(base64, 'synced_mobile_photo')
+            setFile(syncedFile)
+            setImagePreview(base64)
+            setResult('')
+            setError(null)
+            // Подсказываем глазами, где появилось изображение.
+            window.setTimeout(() => {
+              document.getElementById('synced-image-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }, 50)
+          } catch (_e) {
+            setError('Не удалось принять снимок: некорректный формат данных')
+          }
         }}
       />
 
@@ -564,7 +582,7 @@ export default function ImageAnalysisPage() {
       )}
 
       {file && !isDicom && imagePreview && (
-        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
+        <div id="synced-image-preview" className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">📷 Загруженное изображение</h2>
           <div className="flex flex-col items-center w-full">
             <img 
