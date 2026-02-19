@@ -1,0 +1,2306 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>МедКалькулятор</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React + ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel для JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+  <!-- Иконки -->
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+  <meta name="theme-color" content="#2563eb" />
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; }
+    #root { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root">Загрузка...</div>
+  <script type="text/babel">
+    const { useState } = React;
+    const { createRoot } = ReactDOM;
+    // --- ИМИТАЦИЯ ИКОНОК LUCIDE ---
+    const makeIcon = (d) => (props) => {
+      const size = props.size || 24;
+      const color = props.color || 'currentColor';
+      return React.createElement('svg', {
+        xmlns: 'http://www.w3.org/2000/svg',
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: color,
+        strokeWidth: 2,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+        ...props
+      }, React.createElement('path', { d }));
+    };
+    const IconMap = {
+      Calculator: makeIcon('M4 2v20l16-10L4 2z'),
+      Search: makeIcon('M11 11a8 8 0 1 0 0 0m10 10-4.35-4.35'),
+      Heart: makeIcon('M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z'),
+      Activity: makeIcon('M22 12h-2.44a2 2 0 0 0-1.86 1.16l-2.14 5.14a2 2 0 0 1-1.86 1.16H8.56a2 2 0 0 1-1.86-1.16L4.56 13.16A2 2 0 0 0 2.7 12H2'),
+      Droplet: makeIcon('M12 22a7 7 0 0 1-7-7c0-2 1-3.78 2.29-5.5L12 2l4.71 7.5A5.03 5.03 0 0 1 19 15a7 7 0 0 1-7 7z'),
+      Brain: makeIcon('M12 4.5a7.5 7.5 0 0 0-7.5 7.5c0 2.21 1.79 4 4 4a2.5 2.5 0 1 0 5 0c2.21 0 4-1.79 4-4a7.5 7.5 0 0 0-7.5-7.5z M12 16v4M12 4v4'),
+      Wind: makeIcon('M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H16a2 2 0 0 0-1.4.6l-3.6 3.6a2 2 0 1 1-2.8-2.8l3.6-3.6a2 2 0 0 0 .6-1.4H5.5a2.5 2.5 0 1 1 0-5h13a2.5 2.5 0 0 1 1.8 4.3Z M13 19.7a2.5 2.5 0 1 1 1.8-4.3H12a2 2 0 0 0-1.4-.6l-3.6-3.6a2 2 0 1 1-2.8 2.8l3.6 3.6a2 2 0 0 0 .6 1.4h6.5a2.5 2.5 0 0 1 1.8 4.3Z'),
+      Pill: makeIcon('M4.5 12.75a6.75 6.75 0 1 0 13.5 0 6.75 6.75 0 0 0-13.5 0Z M12 4.5v15'),
+      Users: makeIcon('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 1 0 0 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75'),
+      Stethoscope: makeIcon('M4.5 12.5 6 11c1.5-1.5 3.5-1.5 5 0l1.5 1.5 M12 22s5.5-4 5.5-10V7h-2v5c0 .5-.5 1-1 1H8c-.5 0-1-.5-1-1V7H5v5c0 6 5.5 10 5.5 10Z'),
+      Baby: makeIcon('M9 12h.01 M15 12h.01 M12 12c2.5 0 5-1.9 5-4.5S14.5 3 12 3 7 4.9 7 7.5 9.5 12 12 12Z M20 18h-1.5a.5.5 0 0 0-.49.55c.02.43-.22.82-.6.97a8.5 8.5 0 0 1-6.82 0c-.38-.15-.62-.54-.6-.97A.5.5 0 0 0 10.5 18H4a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2Z')
+    };
+    // --- ВАШ ПОЛНЫЙ CALCULATORS_DB (54 калькулятора + 21 новый) ---
+    const CALCULATORS_DB = {
+      grace: {
+        name: 'GRACE',
+        category: 'Кардиология',
+        desc: 'Оценка риска при ОКС',
+        icon: 'Heart',
+        fields: [
+          { id: 'age', label: 'Возраст', type: 'number', unit: 'лет' },
+          { id: 'hr', label: 'ЧСС', type: 'number', unit: 'уд/мин' },
+          { id: 'sbp', label: 'САД', type: 'number', unit: 'мм рт.ст.' },
+          { id: 'cr', label: 'Креатинин', type: 'number', unit: 'мкмоль/л' },
+          { id: 'killip', label: 'Класс Killip', type: 'select', options: [
+            { value: '1', label: 'I' }, { value: '2', label: 'II' }, { value: '3', label: 'III' }, { value: '4', label: 'IV' }
+          ]},
+          { id: 'arrest', label: 'Остановка сердца', type: 'checkbox' },
+          { id: 'st', label: 'Подъем ST', type: 'checkbox' },
+          { id: 'troponin', label: 'Тропонин', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          const age = parseInt(data.age);
+          if (age < 40) s += 0; else if (age < 50) s += 18; else if (age < 60) s += 36;
+          else if (age < 70) s += 55; else if (age < 80) s += 73; else s += 91;
+          const hr = parseInt(data.hr);
+          if (hr < 70) s += 0; else if (hr < 90) s += 7; else if (hr < 110) s += 13;
+          else if (hr < 150) s += 23; else s += 36;
+          const sbp = parseInt(data.sbp);
+          if (sbp < 80) s += 63; else if (sbp < 100) s += 58; else if (sbp < 120) s += 47;
+          else if (sbp < 140) s += 37; else if (sbp < 160) s += 26; else if (sbp < 200) s += 11;
+          const cr = parseFloat(data.cr);
+          if (cr < 35.3) s += 2; else if (cr < 70.7) s += 5; else if (cr < 106) s += 8;
+          else if (cr < 141.4) s += 11; else s += 14;
+          s += (parseInt(data.killip) - 1) * 20;
+          if (data.arrest) s += 43; if (data.st) s += 30; if (data.troponin) s += 15;
+          let risk = '', color = '', mortality = '';
+          if (s < 109) { risk = 'Низкий'; color = 'green'; mortality = '<1%'; }
+          else if (s < 140) { risk = 'Умеренный'; color = 'yellow'; mortality = '1-3%'; }
+          else { risk = 'Высокий'; color = 'red'; mortality = '>3%'; }
+          return { score: s, result: risk, color, details: `Летальность: ${mortality}` };
+        }
+      },
+      cha2ds2vasc: {
+        name: 'CHA2DS2-VASc',
+        category: 'Кардиология',
+        desc: 'Риск инсульта при ФП',
+        icon: 'Brain',
+        fields: [
+          { id: 'chf', label: 'ХСН', type: 'checkbox' },
+          { id: 'ht', label: 'Гипертензия', type: 'checkbox' },
+          { id: 'age', label: 'Возраст', type: 'select', options: [
+            { value: '0', label: '<65' }, { value: '1', label: '65-74' }, { value: '2', label: '75+' }
+          ]},
+          { id: 'dm', label: 'Диабет', type: 'checkbox' },
+          { id: 'stroke', label: 'Инсульт/ТИА', type: 'checkbox' },
+          { id: 'vasc', label: 'Сосудистые', type: 'checkbox' },
+          { id: 'sex', label: 'Пол', type: 'select', options: [
+            { value: '0', label: 'Мужской' }, { value: '1', label: 'Женский' }
+          ]}
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.chf) s += 1; if (data.ht) s += 1;
+          s += parseInt(data.age);
+          if (data.dm) s += 1; if (data.stroke) s += 2; if (data.vasc) s += 1;
+          s += parseInt(data.sex);
+          let risk = '', color = '', rec = '';
+          if (s === 0) { risk = 'Низкий (0%)'; color = 'green'; rec = 'Без антикоагулянтов'; }
+          else if (s === 1) { risk = 'Умеренный (1.3%)'; color = 'yellow'; rec = 'Рассмотреть'; }
+          else { risk = `Высокий (${(s * 1.5).toFixed(1)}%)`; color = 'red'; rec = 'Антикоагулянты показаны'; }
+          return { score: s, result: risk, color, details: rec };
+        }
+      },
+      glasgow: {
+        name: 'Шкала Глазго',
+        category: 'Неврология',
+        desc: 'Уровень сознания',
+        icon: 'Brain',
+        fields: [
+          { id: 'eye', label: 'Глаза', type: 'select', options: [
+            { value: '4', label: 'Спонтанно (4)' }, { value: '3', label: 'На голос (3)' },
+            { value: '2', label: 'На боль (2)' }, { value: '1', label: 'Нет (1)' }
+          ]},
+          { id: 'verbal', label: 'Речь', type: 'select', options: [
+            { value: '5', label: 'Ориентирован (5)' }, { value: '4', label: 'Спутанная (4)' },
+            { value: '3', label: 'Бессвязная (3)' }, { value: '2', label: 'Звуки (2)' }, { value: '1', label: 'Нет (1)' }
+          ]},
+          { id: 'motor', label: 'Движения', type: 'select', options: [
+            { value: '6', label: 'Команды (6)' }, { value: '5', label: 'Локализует (5)' },
+            { value: '4', label: 'Отдергивание (4)' }, { value: '3', label: 'Сгибание (3)' },
+            { value: '2', label: 'Разгибание (2)' }, { value: '1', label: 'Нет (1)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.eye) + parseInt(data.verbal) + parseInt(data.motor);
+          let severity = '', color = '';
+          if (s >= 13) { severity = 'Легкая ЧМТ'; color = 'green'; }
+          else if (s >= 9) { severity = 'Средняя ЧМТ'; color = 'yellow'; }
+          else { severity = 'Тяжелая ЧМТ'; color = 'red'; }
+          return { score: s, result: severity, color, details: 'из 15' };
+        }
+      },
+      wellspe: {
+        name: 'Wells ТЭЛА',
+        category: 'Пульмонология',
+        desc: 'Вероятность ТЭЛА',
+        icon: 'Wind',
+        fields: [
+          { id: 'dvt', label: 'Признаки ТГВ (+3)', type: 'checkbox' },
+          { id: 'alt', label: 'Альтернатива (-3)', type: 'checkbox' },
+          { id: 'tachy', label: 'ЧСС >100 (+1.5)', type: 'checkbox' },
+          { id: 'immob', label: 'Иммобилизация (+1.5)', type: 'checkbox' },
+          { id: 'prior', label: 'ТГВ/ТЭЛА ранее (+1.5)', type: 'checkbox' },
+          { id: 'hemo', label: 'Кровохарканье (+1)', type: 'checkbox' },
+          { id: 'cancer', label: 'Рак (+1)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.dvt) s += 3; if (data.alt) s -= 3; if (data.tachy) s += 1.5;
+          if (data.immob) s += 1.5; if (data.prior) s += 1.5; if (data.hemo) s += 1;
+          if (data.cancer) s += 1;
+          let risk = '', prob = '', color = '';
+          if (s < 2) { risk = 'Низкий'; prob = '1.3%'; color = 'green'; }
+          else if (s <= 6) { risk = 'Умеренный'; prob = '16%'; color = 'yellow'; }
+          else { risk = 'Высокий'; prob = '41%'; color = 'red'; }
+          return { score: s, result: risk, color, details: `Вероятность: ${prob}` };
+        }
+      },
+      ckdepi: {
+        name: 'СКФ (CKD-EPI)',
+        category: 'Нефрология',
+        desc: 'Функция почек',
+        icon: 'Droplet',
+        fields: [
+          { id: 'creat', label: 'Креатинин', type: 'number', unit: 'мкмоль/л' },
+          { id: 'age', label: 'Возраст', type: 'number', unit: 'лет' },
+          { id: 'sex', label: 'Пол', type: 'select', options: [
+            { value: 'male', label: 'Мужской' }, { value: 'female', label: 'Женский' }
+          ]}
+        ],
+        calculate: (data) => {
+          const cr = parseFloat(data.creat) / 88.4;
+          const age = parseInt(data.age);
+          const k = data.sex === 'female' ? 0.7 : 0.9;
+          const a = data.sex === 'female' ? -0.329 : -0.411;
+          const minVal = Math.min(cr / k, 1);
+          const maxVal = Math.max(cr / k, 1);
+          let gfr = 141 * Math.pow(minVal, a) * Math.pow(maxVal, -1.209) * Math.pow(0.993, age);
+          if (data.sex === 'female') gfr *= 1.018;
+          gfr = Math.round(gfr);
+          let stage = '', color = '';
+          if (gfr >= 90) { stage = 'ХБП 1'; color = 'green'; }
+          else if (gfr >= 60) { stage = 'ХБП 2'; color = 'green'; }
+          else if (gfr >= 45) { stage = 'ХБП 3a'; color = 'yellow'; }
+          else if (gfr >= 30) { stage = 'ХБП 3b'; color = 'orange'; }
+          else if (gfr >= 15) { stage = 'ХБП 4'; color = 'red'; }
+          else { stage = 'ХБП 5'; color = 'red'; }
+          return { score: gfr, result: stage, color, details: 'мл/мин/1.73м²' };
+        }
+      },
+      bmi: {
+        name: 'ИМТ',
+        category: 'Общие',
+        desc: 'Индекс массы тела',
+        icon: 'Activity',
+        fields: [
+          { id: 'height', label: 'Рост', type: 'number', unit: 'см' },
+          { id: 'weight', label: 'Вес', type: 'number', unit: 'кг' }
+        ],
+        calculate: (data) => {
+          const h = parseFloat(data.height) / 100;
+          const w = parseFloat(data.weight);
+          const bmi = (w / (h * h)).toFixed(1);
+          const bsa = Math.sqrt((parseFloat(data.height) * w) / 3600).toFixed(2);
+          let cat = '', color = '';
+          if (bmi < 18.5) { cat = 'Недостаточная'; color = 'blue'; }
+          else if (bmi < 25) { cat = 'Нормальная'; color = 'green'; }
+          else if (bmi < 30) { cat = 'Избыточная'; color = 'yellow'; }
+          else { cat = 'Ожирение'; color = 'red'; }
+          return { score: bmi, result: cat, color, details: `ППТ: ${bsa} м²` };
+        }
+      },
+      curb65: {
+        name: 'CURB-65',
+        category: 'Пульмонология',
+        desc: 'Тяжесть пневмонии',
+        icon: 'Wind',
+        fields: [
+          { id: 'conf', label: 'Спутанность', type: 'checkbox' },
+          { id: 'urea', label: 'Мочевина >7', type: 'checkbox' },
+          { id: 'rr', label: 'ЧД ≥30', type: 'checkbox' },
+          { id: 'bp', label: 'САД <90 или ДАД ≤60', type: 'checkbox' },
+          { id: 'age', label: 'Возраст ≥65', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.conf) s++; if (data.urea) s++; if (data.rr) s++; if (data.bp) s++; if (data.age) s++;
+          let risk = '', mort = '', rec = '', color = '';
+          if (s <= 1) { risk = 'Низкий'; mort = '1.5%'; rec = 'Амбулаторно'; color = 'green'; }
+          else if (s === 2) { risk = 'Умеренный'; mort = '9%'; rec = 'Стационар'; color = 'yellow'; }
+          else { risk = 'Высокий'; mort = '22%'; rec = 'ОИТ'; color = 'red'; }
+          return { score: s, result: risk, color, details: `${mort} • ${rec}` };
+        }
+      },
+      childpugh: {
+        name: 'Child-Pugh',
+        category: 'Гастроэнтерология',
+        desc: 'Цирроз печени',
+        icon: 'Activity',
+        fields: [
+          { id: 'bili', label: 'Билирубин', type: 'select', options: [
+            { value: '1', label: '<34 (1)' }, { value: '2', label: '34-51 (2)' }, { value: '3', label: '>51 (3)' }
+          ]},
+          { id: 'alb', label: 'Альбумин', type: 'select', options: [
+            { value: '1', label: '>35 (1)' }, { value: '2', label: '28-35 (2)' }, { value: '3', label: '<28 (3)' }
+          ]},
+          { id: 'inr', label: 'МНО', type: 'select', options: [
+            { value: '1', label: '<1.7 (1)' }, { value: '2', label: '1.7-2.3 (2)' }, { value: '3', label: '>2.3 (3)' }
+          ]},
+          { id: 'ascites', label: 'Асцит', type: 'select', options: [
+            { value: '1', label: 'Нет (1)' }, { value: '2', label: 'Легкий (2)' }, { value: '3', label: 'Тяжелый (3)' }
+          ]},
+          { id: 'enceph', label: 'Энцефалопатия', type: 'select', options: [
+            { value: '1', label: 'Нет (1)' }, { value: '2', label: '1-2 (2)' }, { value: '3', label: '3-4 (3)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.bili) + parseInt(data.alb) + parseInt(data.inr) + parseInt(data.ascites) + parseInt(data.enceph);
+          let cl = '', surv = '', color = '';
+          if (s <= 6) { cl = 'Класс A'; surv = '85%'; color = 'green'; }
+          else if (s <= 9) { cl = 'Класс B'; surv = '60%'; color = 'yellow'; }
+          else { cl = 'Класс C'; surv = '35%'; color = 'red'; }
+          return { score: s, result: cl, color, details: `2-летняя выживаемость: ${surv}` };
+        }
+      },
+      sofa: {
+        name: 'SOFA',
+        category: 'Интенсивная терапия',
+        desc: 'Органная недостаточность',
+        icon: 'Stethoscope',
+        fields: [
+          { id: 'pao2', label: 'PaO2/FiO2', type: 'select', options: [
+            { value: '0', label: '≥400 (0)' }, { value: '1', label: '<400 (1)' }, { value: '2', label: '<300 (2)' },
+            { value: '3', label: '<200 ИВЛ (3)' }, { value: '4', label: '<100 ИВЛ (4)' }
+          ]},
+          { id: 'plt', label: 'Тромбоциты', type: 'select', options: [
+            { value: '0', label: '≥150 (0)' }, { value: '1', label: '<150 (1)' }, { value: '2', label: '<100 (2)' },
+            { value: '3', label: '<50 (3)' }, { value: '4', label: '<20 (4)' }
+          ]},
+          { id: 'bili', label: 'Билирубин', type: 'select', options: [
+            { value: '0', label: '<1.2 (0)' }, { value: '1', label: '1.2-1.9 (1)' }, { value: '2', label: '2-5.9 (2)' },
+            { value: '3', label: '6-11.9 (3)' }, { value: '4', label: '≥12 (4)' }
+          ]},
+          { id: 'map', label: 'MAP/Вазопрессоры', type: 'select', options: [
+            { value: '0', label: 'MAP ≥70 (0)' }, { value: '1', label: 'MAP <70 (1)' }, { value: '2', label: 'Допамин ≤5 (2)' },
+            { value: '3', label: 'Допамин >5 (3)' }, { value: '4', label: 'Допамин >15 (4)' }
+          ]},
+          { id: 'gcs', label: 'GCS', type: 'select', options: [
+            { value: '0', label: '15 (0)' }, { value: '1', label: '13-14 (1)' }, { value: '2', label: '10-12 (2)' },
+            { value: '3', label: '6-9 (3)' }, { value: '4', label: '<6 (4)' }
+          ]},
+          { id: 'cr', label: 'Креатинин', type: 'select', options: [
+            { value: '0', label: '<1.2 (0)' }, { value: '1', label: '1.2-1.9 (1)' }, { value: '2', label: '2-3.4 (2)' },
+            { value: '3', label: '3.5-4.9 (3)' }, { value: '4', label: '≥5 (4)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.pao2) + parseInt(data.plt) + parseInt(data.bili) + parseInt(data.map) + parseInt(data.gcs) + parseInt(data.cr);
+          let mort = '', color = '';
+          if (s < 2) { mort = '<10%'; color = 'green'; }
+          else if (s < 6) { mort = '15-20%'; color = 'yellow'; }
+          else if (s < 11) { mort = '40-50%'; color = 'orange'; }
+          else { mort = '>80%'; color = 'red'; }
+          return { score: s, result: `${s} баллов`, color, details: `Летальность: ${mort}` };
+        }
+      },
+      apgar: {
+        name: 'Шкала Апгар',
+        category: 'Педиатрия',
+        desc: 'Состояние новорожденного',
+        icon: 'Baby',
+        fields: [
+          { id: 'hr', label: 'ЧСС', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: '<100 (1)' }, { value: '2', label: '≥100 (2)' }
+          ]},
+          { id: 'resp', label: 'Дыхание', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Слабое (1)' }, { value: '2', label: 'Хорошее (2)' }
+          ]},
+          { id: 'muscle', label: 'Тонус', type: 'select', options: [
+            { value: '0', label: 'Вялый (0)' }, { value: '1', label: 'Слабое сгибание (1)' }, { value: '2', label: 'Активные движения (2)' }
+          ]},
+          { id: 'reflex', label: 'Рефлексы', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Гримаса (1)' }, { value: '2', label: 'Крик (2)' }
+          ]},
+          { id: 'color', label: 'Цвет', type: 'select', options: [
+            { value: '0', label: 'Цианоз (0)' }, { value: '1', label: 'Акроцианоз (1)' }, { value: '2', label: 'Розовый (2)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.hr) + parseInt(data.resp) + parseInt(data.muscle) + parseInt(data.reflex) + parseInt(data.color);
+          let st = '', color = '';
+          if (s >= 7) { st = 'Удовлетворительное'; color = 'green'; }
+          else if (s >= 4) { st = 'Умеренная асфиксия'; color = 'yellow'; }
+          else { st = 'Тяжелая асфиксия'; color = 'red'; }
+          return { score: s, result: st, color, details: 'из 10' };
+        }
+      },
+      hasbled: {
+        name: 'HAS-BLED',
+        category: 'Кардиология',
+        desc: 'Риск кровотечения',
+        icon: 'Droplet',
+        fields: [
+          { id: 'ht', label: 'Гипертензия (+1)', type: 'checkbox' },
+          { id: 'renal', label: 'Почечная дисфункция (+1)', type: 'checkbox' },
+          { id: 'liver', label: 'Печеночная дисфункция (+1)', type: 'checkbox' },
+          { id: 'stroke', label: 'Инсульт (+1)', type: 'checkbox' },
+          { id: 'bleeding', label: 'Кровотечение (+1)', type: 'checkbox' },
+          { id: 'inr', label: 'Лабильное МНО (+1)', type: 'checkbox' },
+          { id: 'age', label: 'Возраст >65 (+1)', type: 'checkbox' },
+          { id: 'drugs', label: 'НПВС (+1)', type: 'checkbox' },
+          { id: 'alcohol', label: 'Алкоголь (+1)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.ht) s++; if (data.renal) s++; if (data.liver) s++; if (data.stroke) s++;
+          if (data.bleeding) s++; if (data.inr) s++; if (data.age) s++; if (data.drugs) s++; if (data.alcohol) s++;
+          let risk = '', color = '';
+          if (s <= 1) { risk = 'Низкий (1%)'; color = 'green'; }
+          else if (s === 2) { risk = 'Умеренный (2%)'; color = 'yellow'; }
+          else if (s === 3) { risk = 'Высокий (4%)'; color = 'orange'; }
+          else { risk = 'Очень высокий (9%)'; color = 'red'; }
+          return { score: s, result: risk, color, details: 'Риск кровотечения/год' };
+        }
+      },
+      heart: {
+        name: 'HEART Score',
+        category: 'Кардиология',
+        desc: 'Боль в груди',
+        icon: 'Heart',
+        fields: [
+          { id: 'hist', label: 'История', type: 'select', options: [
+            { value: '0', label: 'Невыраженная (0)' }, { value: '1', label: 'Умеренная (1)' }, { value: '2', label: 'Выраженная (2)' }
+          ]},
+          { id: 'ecg', label: 'ЭКГ', type: 'select', options: [
+            { value: '0', label: 'Норма (0)' }, { value: '1', label: 'Неспецифические (1)' }, { value: '2', label: 'Значимые (2)' }
+          ]},
+          { id: 'age', label: 'Возраст', type: 'select', options: [
+            { value: '0', label: '<45 (0)' }, { value: '1', label: '45-64 (1)' }, { value: '2', label: '≥65 (2)' }
+          ]},
+          { id: 'rf', label: 'Факторы риска', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: '1-2 (1)' }, { value: '2', label: '≥3 (2)' }
+          ]},
+          { id: 'trop', label: 'Тропонин', type: 'select', options: [
+            { value: '0', label: 'Норма (0)' }, { value: '1', label: '1-3x (1)' }, { value: '2', label: '>3x (2)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.hist) + parseInt(data.ecg) + parseInt(data.age) + parseInt(data.rf) + parseInt(data.trop);
+          let risk = '', pct = '', color = '';
+          if (s <= 3) { risk = 'Низкий'; pct = '0.9-1.7%'; color = 'green'; }
+          else if (s <= 6) { risk = 'Умеренный'; pct = '12-16%'; color = 'yellow'; }
+          else { risk = 'Высокий'; pct = '50-65%'; color = 'red'; }
+          return { score: s, result: risk, color, details: `Риск MACE: ${pct}` };
+        }
+      },
+      map: {
+        name: 'MAP',
+        category: 'Кардиология',
+        desc: 'Среднее АД',
+        icon: 'Activity',
+        fields: [
+          { id: 'sbp', label: 'САД', type: 'number', unit: 'мм рт.ст.' },
+          { id: 'dbp', label: 'ДАД', type: 'number', unit: 'мм рт.ст.' }
+        ],
+        calculate: (data) => {
+          const s = parseFloat(data.sbp);
+          const d = parseFloat(data.dbp);
+          const map = Math.round((s + 2 * d) / 3);
+          let st = '', color = '';
+          if (map < 60) { st = 'Низкое'; color = 'red'; }
+          else if (map < 70) { st = 'Пограничное'; color = 'yellow'; }
+          else if (map <= 100) { st = 'Нормальное'; color = 'green'; }
+          else { st = 'Повышенное'; color = 'red'; }
+          return { score: map, result: st, color, details: 'мм рт.ст.' };
+        }
+      },
+      qtc: {
+        name: 'QTc',
+        category: 'Кардиология',
+        desc: 'Корректированный QT',
+        icon: 'Activity',
+        fields: [
+          { id: 'qt', label: 'QT', type: 'number', unit: 'мс' },
+          { id: 'hr', label: 'ЧСС', type: 'number', unit: 'уд/мин' },
+          { id: 'formula', label: 'Формула', type: 'select', options: [
+            { value: 'bazett', label: 'Bazett' }, { value: 'fridericia', label: 'Fridericia' }, { value: 'framingham', label: 'Framingham' }
+          ]}
+        ],
+        calculate: (data) => {
+          const q = parseFloat(data.qt);
+          const h = parseFloat(data.hr);
+          const rr = 60 / h;
+          let qtc = 0;
+          if (data.formula === 'bazett') qtc = q / Math.sqrt(rr);
+          else if (data.formula === 'fridericia') qtc = q / Math.pow(rr, 1/3);
+          else qtc = q + 154 * (1 - rr);
+          qtc = Math.round(qtc);
+          let st = '', color = '';
+          if (qtc < 340) { st = 'Короткий'; color = 'blue'; }
+          else if (qtc < 450) { st = 'Нормальный'; color = 'green'; }
+          else if (qtc < 500) { st = 'Пограничный'; color = 'yellow'; }
+          else { st = 'Удлиненный'; color = 'red'; }
+          return { score: qtc, result: st, color, details: 'мс' };
+        }
+      },
+      wellsdvt: {
+        name: 'Wells ТГВ',
+        category: 'Пульмонология',
+        desc: 'Вероятность ТГВ',
+        icon: 'Activity',
+        fields: [
+          { id: 'cancer', label: 'Рак (+1)', type: 'checkbox' },
+          { id: 'paralysis', label: 'Паралич (+1)', type: 'checkbox' },
+          { id: 'immob', label: 'Иммобилизация (+1)', type: 'checkbox' },
+          { id: 'tender', label: 'Болезненность (+1)', type: 'checkbox' },
+          { id: 'swell', label: 'Отек ноги (+1)', type: 'checkbox' },
+          { id: 'calf', label: 'Отек голени (+1)', type: 'checkbox' },
+          { id: 'pitting', label: 'Ямочный отек (+1)', type: 'checkbox' },
+          { id: 'veins', label: 'Вены (+1)', type: 'checkbox' },
+          { id: 'alt', label: 'Альтернатива (-2)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.cancer) s++; if (data.paralysis) s++; if (data.immob) s++; if (data.tender) s++;
+          if (data.swell) s++; if (data.calf) s++; if (data.pitting) s++; if (data.veins) s++;
+          if (data.alt) s -= 2;
+          let risk = '', prob = '', color = '';
+          if (s <= 0) { risk = 'Низкий'; prob = '5%'; color = 'green'; }
+          else if (s <= 2) { risk = 'Умеренный'; prob = '17%'; color = 'yellow'; }
+          else { risk = 'Высокий'; prob = '53%'; color = 'red'; }
+          return { score: s, result: risk, color, details: `Вероятность: ${prob}` };
+        }
+      },
+      meld: {
+        name: 'MELD',
+        category: 'Гастроэнтерология',
+        desc: 'Терминальная стадия печени',
+        icon: 'Activity',
+        fields: [
+          { id: 'cr', label: 'Креатинин', type: 'number', unit: 'мг/дл' },
+          { id: 'bili', label: 'Билирубин', type: 'number', unit: 'мг/дл' },
+          { id: 'inr', label: 'МНО', type: 'number' }
+        ],
+        calculate: (data) => {
+          const cr = Math.max(1, parseFloat(data.cr));
+          const bili = Math.max(1, parseFloat(data.bili));
+          const inr = Math.max(1, parseFloat(data.inr));
+          let s = Math.round(3.78 * Math.log(bili) + 11.2 * Math.log(inr) + 9.57 * Math.log(cr) + 6.43);
+          s = Math.max(6, Math.min(40, s));
+          let mort = '', color = '';
+          if (s < 10) { mort = '<2%'; color = 'green'; }
+          else if (s < 20) { mort = '6%'; color = 'yellow'; }
+          else if (s < 30) { mort = '20%'; color = 'orange'; }
+          else { mort = '>50%'; color = 'red'; }
+          return { score: s, result: `${s} баллов`, color, details: `3-мес летальность: ${mort}` };
+        }
+      },
+      perc: {
+        name: 'PERC',
+        category: 'Пульмонология',
+        desc: 'Исключение ТЭЛА',
+        icon: 'Wind',
+        fields: [
+          { id: 'age', label: 'Возраст ≥50', type: 'checkbox' },
+          { id: 'hr', label: 'ЧСС ≥100', type: 'checkbox' },
+          { id: 'spo2', label: 'SpO2 <95%', type: 'checkbox' },
+          { id: 'hemo', label: 'Кровохарканье', type: 'checkbox' },
+          { id: 'estrogen', label: 'Эстрогены', type: 'checkbox' },
+          { id: 'surgery', label: 'Операция/травма', type: 'checkbox' },
+          { id: 'prior', label: 'ТГВ/ТЭЛА ранее', type: 'checkbox' },
+          { id: 'swell', label: 'Отек ноги', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let count = 0;
+          if (data.age) count++; if (data.hr) count++; if (data.spo2) count++; if (data.hemo) count++;
+          if (data.estrogen) count++; if (data.surgery) count++; if (data.prior) count++; if (data.swell) count++;
+          let res = '', color = '', rec = '';
+          if (count === 0) { res = 'PERC -'; color = 'green'; rec = 'ТЭЛА исключена (<2%)'; }
+          else { res = 'PERC +'; color = 'red'; rec = 'Необходимо обследование'; }
+          return { score: count, result: res, color, details: rec };
+        }
+      },
+      nihss: {
+        name: 'NIHSS',
+        category: 'Неврология',
+        desc: 'Тяжесть инсульта',
+        icon: 'Brain',
+        fields: [
+          { id: 'loc', label: 'Сознание', type: 'select', options: [
+            { value: '0', label: 'Ясное (0)' }, { value: '1', label: 'Оглушение (1)' }, { value: '2', label: 'Сопор (2)' }, { value: '3', label: 'Кома (3)' }
+          ]},
+          { id: 'locq', label: 'Вопросы', type: 'select', options: [
+            { value: '0', label: 'Оба верно (0)' }, { value: '1', label: 'Один верно (1)' }, { value: '2', label: 'Оба неверно (2)' }
+          ]},
+          { id: 'locc', label: 'Команды', type: 'select', options: [
+            { value: '0', label: 'Обе верно (0)' }, { value: '1', label: 'Одна верно (1)' }, { value: '2', label: 'Обе неверно (2)' }
+          ]},
+          { id: 'gaze', label: 'Взор', type: 'select', options: [
+            { value: '0', label: 'Норма (0)' }, { value: '1', label: 'Частичный парез (1)' }, { value: '2', label: 'Девиация (2)' }
+          ]},
+          { id: 'visual', label: 'Поля зрения', type: 'select', options: [
+            { value: '0', label: 'Норма (0)' }, { value: '1', label: 'Частичная (1)' }, { value: '2', label: 'Полная (2)' }, { value: '3', label: 'Двусторонняя (3)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.loc) + parseInt(data.locq) + parseInt(data.locc) + parseInt(data.gaze) + parseInt(data.visual);
+          let sev = '', color = '';
+          if (s <= 4) { sev = 'Легкий'; color = 'green'; }
+          else if (s <= 15) { sev = 'Умеренный'; color = 'yellow'; }
+          else if (s <= 20) { sev = 'Тяжелый'; color = 'orange'; }
+          else { sev = 'Очень тяжелый'; color = 'red'; }
+          return { score: s, result: sev, color, details: 'Упрощенная версия' };
+        }
+      },
+      rcri: {
+        name: 'RCRI',
+        category: 'Хирургия',
+        desc: 'Сердечный риск',
+        icon: 'Heart',
+        fields: [
+          { id: 'highrisk', label: 'Высокорисковая операция (+1)', type: 'checkbox' },
+          { id: 'ihd', label: 'ИБС (+1)', type: 'checkbox' },
+          { id: 'chf', label: 'ХСН (+1)', type: 'checkbox' },
+          { id: 'cvd', label: 'ЦВБ/ТИА (+1)', type: 'checkbox' },
+          { id: 'dm', label: 'Диабет на инсулине (+1)', type: 'checkbox' },
+          { id: 'renal', label: 'Креатинин >177 (+1)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.highrisk) s++; if (data.ihd) s++; if (data.chf) s++;
+          if (data.cvd) s++; if (data.dm) s++; if (data.renal) s++;
+          let risk = '', rate = '', color = '';
+          if (s === 0) { risk = 'Очень низкий'; rate = '0.4%'; color = 'green'; }
+          else if (s === 1) { risk = 'Низкий'; rate = '0.9%'; color = 'green'; }
+          else if (s === 2) { risk = 'Умеренный'; rate = '6.6%'; color = 'yellow'; }
+          else { risk = 'Высокий'; rate = '>11%'; color = 'red'; }
+          return { score: s, result: risk, color, details: `Риск MACE: ${rate}` };
+        }
+      },
+      centor: {
+        name: 'Centor',
+        category: 'Общие',
+        desc: 'Стрептококковый фарингит',
+        icon: 'Stethoscope',
+        fields: [
+          { id: 'temp', label: 'Температура >38°C (+1)', type: 'checkbox' },
+          { id: 'exudate', label: 'Экссудат (+1)', type: 'checkbox' },
+          { id: 'nodes', label: 'Л/у (+1)', type: 'checkbox' },
+          { id: 'cough', label: 'Нет кашля (+1)', type: 'checkbox' },
+          { id: 'age', label: 'Возраст', type: 'select', options: [
+            { value: '1', label: '3-14 лет (+1)' }, { value: '0', label: '15-44 (0)' }, { value: '-1', label: '≥45 (-1)' }
+          ]}
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.temp) s++; if (data.exudate) s++; if (data.nodes) s++; if (data.cough) s++;
+          s += parseInt(data.age);
+          let prob = '', rec = '', color = '';
+          if (s <= 0) { prob = '1-2.5%'; rec = 'Не тестировать'; color = 'green'; }
+          else if (s <= 2) { prob = '5-10%'; rec = 'Быстрый тест'; color = 'yellow'; }
+          else { prob = '28-35%'; rec = 'Тест + АБ'; color = 'red'; }
+          return { score: s, result: prob, color, details: rec };
+        }
+      },
+      phq9: {
+        name: 'PHQ-9',
+        category: 'Психиатрия',
+        desc: 'Степень депрессии',
+        icon: 'Brain',
+        fields: [
+          { id: 'q1', label: 'Потеря интереса', type: 'select', options: [
+            { value: '0', label: 'Никогда (0)' }, { value: '1', label: 'Несколько дней (1)' },
+            { value: '2', label: 'Часто (2)' }, { value: '3', label: 'Постоянно (3)' }
+          ]},
+          { id: 'q2', label: 'Подавленность', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Иногда (1)' },
+            { value: '2', label: 'Часто (2)' }, { value: '3', label: 'Постоянно (3)' }
+          ]},
+          { id: 'q3', label: 'Проблемы со сном', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Иногда (1)' },
+            { value: '2', label: 'Часто (2)' }, { value: '3', label: 'Постоянно (3)' }
+          ]},
+          { id: 'q4', label: 'Усталость', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Иногда (1)' },
+            { value: '2', label: 'Часто (2)' }, { value: '3', label: 'Постоянно (3)' }
+          ]},
+          { id: 'q5', label: 'Аппетит', type: 'select', options: [
+            { value: '0', label: 'Норма (0)' }, { value: '1', label: 'Снижен (1)' },
+            { value: '2', label: 'Значительно (2)' }, { value: '3', label: 'Критично (3)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.q1) + parseInt(data.q2) + parseInt(data.q3) + parseInt(data.q4) + parseInt(data.q5);
+          let sev = '', color = '', rec = '';
+          if (s < 5) { sev = 'Минимальная'; color = 'green'; rec = 'Наблюдение'; }
+          else if (s < 10) { sev = 'Легкая'; color = 'yellow'; rec = 'Психотерапия'; }
+          else if (s < 15) { sev = 'Умеренная'; color = 'orange'; rec = 'Лечение'; }
+          else { sev = 'Тяжелая'; color = 'red'; rec = 'Медикаменты'; }
+          return { score: s, result: sev, color, details: rec };
+        }
+      },
+      gad7: {
+        name: 'GAD-7',
+        category: 'Психиатрия',
+        desc: 'Тревожное расстройство',
+        icon: 'Brain',
+        fields: [
+          { id: 'nervous', label: 'Нервозность', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Иногда (1)' },
+            { value: '2', label: 'Часто (2)' }, { value: '3', label: 'Постоянно (3)' }
+          ]},
+          { id: 'control', label: 'Неконтролируемое беспокойство', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Редко (1)' },
+            { value: '2', label: 'Часто (2)' }, { value: '3', label: 'Всегда (3)' }
+          ]},
+          { id: 'worry', label: 'Излишнее беспокойство', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Немного (1)' },
+            { value: '2', label: 'Много (2)' }, { value: '3', label: 'Крайне (3)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.nervous) + parseInt(data.control) + parseInt(data.worry);
+          let sev = '', color = '';
+          if (s < 5) { sev = 'Минимальная'; color = 'green'; }
+          else if (s < 10) { sev = 'Легкая'; color = 'yellow'; }
+          else if (s < 15) { sev = 'Умеренная'; color = 'orange'; }
+          else { sev = 'Тяжелая'; color = 'red'; }
+          return { score: s, result: sev, color, details: 'Упрощенная версия' };
+        }
+      },
+      mmse: {
+        name: 'MMSE',
+        category: 'Неврология',
+        desc: 'Психический статус',
+        icon: 'Brain',
+        fields: [
+          { id: 'orientation', label: 'Ориентация (0-10)', type: 'number' },
+          { id: 'registration', label: 'Регистрация (0-3)', type: 'number' },
+          { id: 'attention', label: 'Внимание (0-5)', type: 'number' },
+          { id: 'recall', label: 'Воспроизведение (0-3)', type: 'number' },
+          { id: 'language', label: 'Речь (0-9)', type: 'number' }
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.orientation) + parseInt(data.registration) + parseInt(data.attention) + parseInt(data.recall) + parseInt(data.language);
+          let status = '', color = '';
+          if (s >= 24) { status = 'Норма'; color = 'green'; }
+          else if (s >= 18) { status = 'Легкая деменция'; color = 'yellow'; }
+          else if (s >= 10) { status = 'Умеренная деменция'; color = 'orange'; }
+          else { status = 'Тяжелая деменция'; color = 'red'; }
+          return { score: s, result: status, color, details: 'из 30' };
+        }
+      },
+      fena: {
+        name: 'FENa',
+        category: 'Нефрология',
+        desc: 'Фракционная экскреция Na',
+        icon: 'Droplet',
+        fields: [
+          { id: 'serumNa', label: 'Na сыворотки', type: 'number', unit: 'ммоль/л' },
+          { id: 'urineNa', label: 'Na мочи', type: 'number', unit: 'ммоль/л' },
+          { id: 'serumCr', label: 'Креатинин сыворотки', type: 'number', unit: 'мг/дл' },
+          { id: 'urineCr', label: 'Креатинин мочи', type: 'number', unit: 'мг/дл' }
+        ],
+        calculate: (data) => {
+          const sNa = parseFloat(data.serumNa);
+          const uNa = parseFloat(data.urineNa);
+          const sCr = parseFloat(data.serumCr);
+          const uCr = parseFloat(data.urineCr);
+          const fena = ((uNa / sNa) / (uCr / sCr) * 100).toFixed(2);
+          let interp = '', color = '';
+          if (fena < 1) { interp = 'Преренальная ОПН'; color = 'green'; }
+          else { interp = 'Ренальная ОПН'; color = 'red'; }
+          return { score: fena, result: interp, color, details: '%' };
+        }
+      },
+      aniongap: {
+        name: 'Анионная щель',
+        category: 'Нефрология',
+        desc: 'Анионный разрыв',
+        icon: 'Droplet',
+        fields: [
+          { id: 'na', label: 'Натрий', type: 'number', unit: 'ммоль/л' },
+          { id: 'cl', label: 'Хлор', type: 'number', unit: 'ммоль/л' },
+          { id: 'hco3', label: 'Бикарбонат', type: 'number', unit: 'ммоль/л' }
+        ],
+        calculate: (data) => {
+          const na = parseFloat(data.na);
+          const cl = parseFloat(data.cl);
+          const hco3 = parseFloat(data.hco3);
+          const gap = na - (cl + hco3);
+          let interp = '', color = '';
+          if (gap < 8) { interp = 'Низкая'; color = 'blue'; }
+          else if (gap <= 12) { interp = 'Нормальная'; color = 'green'; }
+          else { interp = 'Высокая'; color = 'red'; }
+          return { score: gap.toFixed(1), result: interp, color, details: 'мэкв/л' };
+        }
+      },
+      bishop: {
+        name: 'Bishop',
+        category: 'Акушерство',
+        desc: 'Зрелость шейки матки',
+        icon: 'Baby',
+        fields: [
+          { id: 'dilation', label: 'Раскрытие', type: 'select', options: [
+            { value: '0', label: '0 см (0)' }, { value: '1', label: '1-2 см (1)' },
+            { value: '2', label: '3-4 см (2)' }, { value: '3', label: '≥5 см (3)' }
+          ]},
+          { id: 'effacement', label: 'Сглаживание', type: 'select', options: [
+            { value: '0', label: '0-30% (0)' }, { value: '1', label: '40-50% (1)' },
+            { value: '2', label: '60-70% (2)' }, { value: '3', label: '≥80% (3)' }
+          ]},
+          { id: 'station', label: 'Высота головки', type: 'select', options: [
+            { value: '0', label: '-3 (0)' }, { value: '1', label: '-2 (1)' },
+            { value: '2', label: '-1,0 (2)' }, { value: '3', label: '+1,+2 (3)' }
+          ]},
+          { id: 'consistency', label: 'Консистенция', type: 'select', options: [
+            { value: '0', label: 'Плотная (0)' }, { value: '1', label: 'Средняя (1)' }, { value: '2', label: 'Мягкая (2)' }
+          ]},
+          { id: 'position', label: 'Положение', type: 'select', options: [
+            { value: '0', label: 'Кзади (0)' }, { value: '1', label: 'Среднее (1)' }, { value: '2', label: 'Кпереди (2)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.dilation) + parseInt(data.effacement) + parseInt(data.station) + parseInt(data.consistency) + parseInt(data.position);
+          let result = '', color = '', rec = '';
+          if (s < 5) { result = 'Незрелая'; color = 'red'; rec = 'Индукция не рекомендуется'; }
+          else if (s < 8) { result = 'Недостаточно зрелая'; color = 'yellow'; rec = 'Индукция с осторожностью'; }
+          else { result = 'Зрелая'; color = 'green'; rec = 'Индукция благоприятна'; }
+          return { score: s, result, color, details: rec };
+        }
+      },
+      ballard: {
+        name: 'Ballard',
+        category: 'Педиатрия',
+        desc: 'Гестационный возраст',
+        icon: 'Baby',
+        fields: [
+          { id: 'skin', label: 'Кожа', type: 'select', options: [
+            { value: '-1', label: 'Прозрачная (-1)' }, { value: '0', label: 'Желатиноподобная (0)' },
+            { value: '1', label: 'Гладкая (1)' }, { value: '2', label: 'Шелушение (2)' },
+            { value: '3', label: 'Растрескивание (3)' }, { value: '4', label: 'Пергаментная (4)' }
+          ]},
+          { id: 'lanugo', label: 'Лануго', type: 'select', options: [
+            { value: '-1', label: 'Нет (-1)' }, { value: '0', label: 'Обильное (0)' },
+            { value: '1', label: 'Редеющее (1)' }, { value: '2', label: 'Лысеющие участки (2)' },
+            { value: '3', label: 'Только плечи (3)' }
+          ]},
+          { id: 'plantar', label: 'Подошвенные складки', type: 'select', options: [
+            { value: '-2', label: '<40мм нет складок (-2)' }, { value: '-1', label: '>40мм красные полосы (-1)' },
+            { value: '0', label: 'Поперечные (0)' }, { value: '1', label: 'Складки 2/3 (1)' }, { value: '2', label: 'Всей стопы (2)' }
+          ]},
+          { id: 'breast', label: 'Молочная железа', type: 'select', options: [
+            { value: '-1', label: 'Незаметна (-1)' }, { value: '0', label: 'Едва заметна (0)' },
+            { value: '1', label: 'Плоская ареола (1)' }, { value: '2', label: 'Выпуклая (2)' }, { value: '3', label: 'Полная (3)' }
+          ]},
+          { id: 'posture', label: 'Поза', type: 'select', options: [
+            { value: '0', label: 'Разогнута (0)' }, { value: '1', label: 'Слабое сгибание (1)' },
+            { value: '2', label: 'Умеренное (2)' }, { value: '3', label: 'Полное (3)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.skin) + parseInt(data.lanugo) + parseInt(data.plantar) + parseInt(data.breast) + parseInt(data.posture);
+          const weeks = 20 + (s * 2);
+          let term = '', color = '';
+          if (weeks < 28) { term = 'Экстремально недоношенный'; color = 'red'; }
+          else if (weeks < 32) { term = 'Очень недоношенный'; color = 'orange'; }
+          else if (weeks < 37) { term = 'Недоношенный'; color = 'yellow'; }
+          else if (weeks <= 42) { term = 'Доношенный'; color = 'green'; }
+          else { term = 'Переношенный'; color = 'yellow'; }
+          return { score: s, result: `${weeks} недель`, color, details: term };
+        }
+      },
+      homa: {
+        name: 'HOMA-IR',
+        category: 'Эндокринология',
+        desc: 'Инсулинорезистентность',
+        icon: 'Activity',
+        fields: [
+          { id: 'glucose', label: 'Глюкоза натощак', type: 'number', unit: 'ммоль/л' },
+          { id: 'insulin', label: 'Инсулин натощак', type: 'number', unit: 'мкЕд/мл' }
+        ],
+        calculate: (data) => {
+          const gluc = parseFloat(data.glucose);
+          const ins = parseFloat(data.insulin);
+          const homa = ((gluc * ins) / 22.5).toFixed(2);
+          let interp = '', color = '';
+          if (homa < 2) { interp = 'Норма'; color = 'green'; }
+          else if (homa < 2.7) { interp = 'Возможная ИР'; color = 'yellow'; }
+          else { interp = 'Инсулинорезистентность'; color = 'red'; }
+          return { score: homa, result: interp, color, details: 'HOMA-IR' };
+        }
+      },
+      sirs: {
+        name: 'SIRS',
+        category: 'Интенсивная терапия',
+        desc: 'Системный воспалительный ответ',
+        icon: 'Stethoscope',
+        fields: [
+          { id: 'temp', label: 'Температура >38 или <36°C', type: 'checkbox' },
+          { id: 'hr', label: 'ЧСС >90', type: 'checkbox' },
+          { id: 'rr', label: 'ЧД >20 или PaCO2 <32', type: 'checkbox' },
+          { id: 'wbc', label: 'Лейкоциты >12 или <4', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.temp) s++; if (data.hr) s++; if (data.rr) s++; if (data.wbc) s++;
+          let res = '', color = '';
+          if (s < 2) { res = 'Нет SIRS'; color = 'green'; }
+          else if (s === 2) { res = 'SIRS'; color = 'yellow'; }
+          else if (s === 3) { res = 'SIRS (высокий риск)'; color = 'orange'; }
+          else { res = 'SIRS (очень высокий)'; color = 'red'; }
+          return { score: s, result: res, color, details: 'из 4 критериев' };
+        }
+      },
+      ranson: {
+        name: 'Ranson',
+        category: 'Гастроэнтерология',
+        desc: 'Тяжесть панкреатита',
+        icon: 'Activity',
+        fields: [
+          { id: 'age', label: 'Возраст >55', type: 'checkbox' },
+          { id: 'wbc', label: 'Лейкоциты >16×10³', type: 'checkbox' },
+          { id: 'glucose', label: 'Глюкоза >11 ммоль/л', type: 'checkbox' },
+          { id: 'ldh', label: 'ЛДГ >350 МЕ/л', type: 'checkbox' },
+          { id: 'ast', label: 'АСТ >250 МЕ/л', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.age) s++; if (data.wbc) s++; if (data.glucose) s++;
+          if (data.ldh) s++; if (data.ast) s++;
+          let sev = '', mort = '', color = '';
+          if (s < 3) { sev = 'Легкий'; mort = '<1%'; color = 'green'; }
+          else if (s < 6) { sev = 'Умеренный'; mort = '10-20%'; color = 'yellow'; }
+          else { sev = 'Тяжелый'; mort = '>50%'; color = 'red'; }
+          return { score: s, result: sev, color, details: `Летальность: ${mort}` };
+        }
+      },
+      asa: {
+        name: 'ASA',
+        category: 'Хирургия',
+        desc: 'Физический статус',
+        icon: 'Users',
+        fields: [
+          { id: 'class', label: 'Класс ASA', type: 'select', options: [
+            { value: '1', label: 'I - Здоровый' },
+            { value: '2', label: 'II - Легкое системное заболевание' },
+            { value: '3', label: 'III - Тяжелое системное заболевание' },
+            { value: '4', label: 'IV - Угроза жизни' },
+            { value: '5', label: 'V - Умирающий' }
+          ]},
+          { id: 'emergency', label: 'Экстренная (+E)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          const c = parseInt(data.class);
+          const e = data.emergency ? 'E' : '';
+          let mort = '', color = '';
+          if (c === 1) { mort = '<0.1%'; color = 'green'; }
+          else if (c === 2) { mort = '0.2%'; color = 'green'; }
+          else if (c === 3) { mort = '1.8%'; color = 'yellow'; }
+          else if (c === 4) { mort = '7.8%'; color = 'orange'; }
+          else { mort = '9.4%'; color = 'red'; }
+          return { score: c + e, result: `ASA ${c}${e}`, color, details: `Летальность: ${mort}` };
+        }
+      },
+      ariscat: {
+        name: 'ARISCAT',
+        category: 'Хирургия',
+        desc: 'Послеоперационные легочные осложнения',
+        icon: 'Wind',
+        fields: [
+          { id: 'age', label: 'Возраст', type: 'select', options: [
+            { value: '0', label: '<50 (0)' },
+            { value: '3', label: '51-80 (3)' },
+            { value: '16', label: '>80 (16)' }
+          ]},
+          { id: 'spo2', label: 'SpO2 <96% (+8)', type: 'checkbox' },
+          { id: 'infection', label: 'Респираторная инфекция (+17)', type: 'checkbox' },
+          { id: 'anemia', label: 'Анемия Hb<100 г/л (+11)', type: 'checkbox' },
+          { id: 'incision', label: 'Тип разреза', type: 'select', options: [
+            { value: '0', label: 'Периферический (0)' },
+            { value: '15', label: 'Верхняя лапаротомия (15)' },
+            { value: '24', label: 'Торако-/лапаротомия (24)' }
+          ]},
+          { id: 'duration', label: 'Длительность >2ч (+16)', type: 'checkbox' },
+          { id: 'emergency', label: 'Экстренная (+8)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = parseInt(data.age) + parseInt(data.incision);
+          if (data.spo2) s += 8;
+          if (data.infection) s += 17;
+          if (data.anemia) s += 11;
+          if (data.duration) s += 16;
+          if (data.emergency) s += 8;
+          let risk = '', rate = '', color = '';
+          if (s < 26) { risk = 'Низкий'; rate = '1.6%'; color = 'green'; }
+          else if (s < 45) { risk = 'Средний'; rate = '13.3%'; color = 'yellow'; }
+          else { risk = 'Высокий'; rate = '42.1%'; color = 'red'; }
+          return { score: s, result: risk, color, details: `Риск осложнений: ${rate}` };
+        }
+      },
+      gupta: {
+        name: 'Gupta MICA',
+        category: 'Хирургия',
+        desc: 'Периоперационный ИМ/остановка',
+        icon: 'Heart',
+        fields: [
+          { id: 'age', label: 'Возраст', type: 'select', options: [
+            { value: '0', label: '<45 (0)' },
+            { value: '3', label: '45-54 (3)' },
+            { value: '6', label: '55-64 (6)' },
+            { value: '9', label: '65-74 (9)' },
+            { value: '12', label: '≥75 (12)' }
+          ]},
+          { id: 'func', label: 'Функциональный статус', type: 'select', options: [
+            { value: '0', label: 'Независимый (0)' },
+            { value: '7', label: 'Частично зависимый (7)' },
+            { value: '14', label: 'Полностью зависимый (14)' }
+          ]},
+          { id: 'creat', label: 'Креатинин >133 мкмоль/л (+6)', type: 'checkbox' },
+          { id: 'asa', label: 'ASA ≥3 (+5)', type: 'checkbox' },
+          { id: 'surgery', label: 'Тип операции', type: 'select', options: [
+            { value: '0', label: 'Другие (0)' },
+            { value: '3', label: 'ЖКТ (3)' },
+            { value: '5', label: 'Ортопедия (5)' },
+            { value: '6', label: 'Торакальная (6)' },
+            { value: '8', label: 'Сосудистая (8)' }
+          ]}
+        ],
+        calculate: (data) => {
+          let s = parseInt(data.age) + parseInt(data.func) + parseInt(data.surgery);
+          if (data.creat) s += 6;
+          if (data.asa) s += 5;
+          let risk = '', rate = '', color = '';
+          if (s < 12) { risk = 'Очень низкий'; rate = '0.14%'; color = 'green'; }
+          else if (s < 21) { risk = 'Низкий'; rate = '0.44%'; color = 'green'; }
+          else if (s < 30) { risk = 'Умеренный'; rate = '1.2%'; color = 'yellow'; }
+          else if (s < 40) { risk = 'Повышенный'; rate = '3.1%'; color = 'orange'; }
+          else { risk = 'Высокий'; rate = '>6%'; color = 'red'; }
+          return { score: s, result: risk, color, details: `Риск MICA: ${rate}` };
+        }
+      },
+      ciwa: {
+        name: 'CIWA-Ar',
+        category: 'Психиатрия',
+        desc: 'Алкогольный абстинентный синдром',
+        icon: 'Activity',
+        fields: [
+          { id: 'nausea', label: 'Тошнота/рвота', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Легкая (1)' },
+            { value: '4', label: 'Умеренная (4)' }, { value: '7', label: 'Тяжелая (7)' }
+          ]},
+          { id: 'tremor', label: 'Тремор', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Незаметен (1)' },
+            { value: '4', label: 'Умеренный (4)' }, { value: '7', label: 'Тяжелый (7)' }
+          ]},
+          { id: 'sweat', label: 'Потливость', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Влажные ладони (1)' },
+            { value: '4', label: 'Капли на лбу (4)' }, { value: '7', label: 'Обильная (7)' }
+          ]},
+          { id: 'anxiety', label: 'Тревога', type: 'select', options: [
+            { value: '0', label: 'Нет (0)' }, { value: '1', label: 'Легкая (1)' },
+            { value: '4', label: 'Умеренная (4)' }, { value: '7', label: 'Паника (7)' }
+          ]},
+          { id: 'agitation', label: 'Возбуждение', type: 'select', options: [
+            { value: '0', label: 'Норма (0)' }, { value: '1', label: 'Беспокойство (1)' },
+            { value: '4', label: 'Умеренное (4)' }, { value: '7', label: 'Выраженное (7)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.nausea) + parseInt(data.tremor) + parseInt(data.sweat) + parseInt(data.anxiety) + parseInt(data.agitation);
+          let sev = '', rec = '', color = '';
+          if (s < 8) { sev = 'Легкий'; rec = 'Поддерживающая терапия'; color = 'green'; }
+          else if (s < 15) { sev = 'Умеренный'; rec = 'Бензодиазепины'; color = 'yellow'; }
+          else { sev = 'Тяжелый'; rec = 'Агрессивная терапия'; color = 'red'; }
+          return { score: s, result: sev, color, details: rec };
+        }
+      },
+      blatchford: {
+        name: 'Glasgow-Blatchford',
+        category: 'Гастроэнтерология',
+        desc: 'Риск при ЖКК',
+        icon: 'Activity',
+        fields: [
+          { id: 'urea', label: 'Мочевина (ммоль/л)', type: 'select', options: [
+            { value: '0', label: '<6.5 (0)' },
+            { value: '2', label: '6.5-8 (2)' },
+            { value: '3', label: '8-10 (3)' },
+            { value: '4', label: '10-25 (4)' },
+            { value: '6', label: '≥25 (6)' }
+          ]},
+          { id: 'hb', label: 'Гемоглобин', type: 'select', options: [
+            { value: '0', label: 'М≥130, Ж≥120 (0)' },
+            { value: '1', label: 'М120-130, Ж100-120 (1)' },
+            { value: '3', label: 'М100-120 (3)' },
+            { value: '6', label: 'М<100, Ж<100 (6)' }
+          ]},
+          { id: 'sbp', label: 'САД <100 (+3)', type: 'checkbox' },
+          { id: 'hr', label: 'ЧСС >100 (+1)', type: 'checkbox' },
+          { id: 'melena', label: 'Мелена (+1)', type: 'checkbox' },
+          { id: 'syncope', label: 'Обморок (+2)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = parseInt(data.urea) + parseInt(data.hb);
+          if (data.sbp) s += 3;
+          if (data.hr) s += 1;
+          if (data.melena) s += 1;
+          if (data.syncope) s += 2;
+          let risk = '', color = '', rec = '';
+          if (s === 0) { risk = 'Низкий'; color = 'green'; rec = 'Амбулаторно'; }
+          else if (s < 6) { risk = 'Средний'; color = 'yellow'; rec = 'Госпитализация'; }
+          else { risk = 'Высокий'; color = 'red'; rec = 'Эндоскопия + ОИТ'; }
+          return { score: s, result: risk, color, details: rec };
+        }
+      },
+      mews: {
+        name: 'MEWS',
+        category: 'Интенсивная терапия',
+        desc: 'Шкала раннего предупреждения',
+        icon: 'Stethoscope',
+        fields: [
+          { id: 'sbp', label: 'САД', type: 'select', options: [
+            { value: '3', label: '<70 (3)' }, { value: '2', label: '71-80 (2)' },
+            { value: '1', label: '81-100 (1)' }, { value: '0', label: '101-199 (0)' }, { value: '2', label: '≥200 (2)' }
+          ]},
+          { id: 'hr', label: 'ЧСС', type: 'select', options: [
+            { value: '2', label: '<40 (2)' }, { value: '1', label: '41-50 (1)' },
+            { value: '0', label: '51-100 (0)' }, { value: '1', label: '101-110 (1)' },
+            { value: '2', label: '111-129 (2)' }, { value: '3', label: '≥130 (3)' }
+          ]},
+          { id: 'rr', label: 'ЧД', type: 'select', options: [
+            { value: '2', label: '<9 (2)' }, { value: '0', label: '9-14 (0)' },
+            { value: '1', label: '15-20 (1)' }, { value: '2', label: '21-29 (2)' }, { value: '3', label: '≥30 (3)' }
+          ]},
+          { id: 'temp', label: 'Температура', type: 'select', options: [
+            { value: '2', label: '<35°C (2)' }, { value: '0', label: '35-38.4°C (0)' }, { value: '2', label: '≥38.5°C (2)' }
+          ]},
+          { id: 'avpu', label: 'AVPU', type: 'select', options: [
+            { value: '0', label: 'Alert (0)' }, { value: '1', label: 'Voice (1)' },
+            { value: '2', label: 'Pain (2)' }, { value: '3', label: 'Unresponsive (3)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.sbp) + parseInt(data.hr) + parseInt(data.rr) + parseInt(data.temp) + parseInt(data.avpu);
+          let risk = '', color = '', action = '';
+          if (s < 2) { risk = 'Низкий'; color = 'green'; action = 'Обычное наблюдение'; }
+          else if (s < 4) { risk = 'Средний'; color = 'yellow'; action = 'Частое наблюдение'; }
+          else { risk = 'Высокий'; color = 'red'; action = 'Интенсивное/ОИТ'; }
+          return { score: s, result: risk, color, details: action };
+        }
+      },
+      maintenance_fluids: {
+        name: 'Поддерживающая инфузия',
+        category: 'Педиатрия',
+        desc: 'Расчет жидкости (4-2-1)',
+        icon: 'Droplet',
+        fields: [
+          { id: 'weight', label: 'Вес', type: 'number', unit: 'кг' }
+        ],
+        calculate: (data) => {
+          const w = parseFloat(data.weight);
+          let rate = 0;
+          if (w <= 10) rate = w * 4;
+          else if (w <= 20) rate = 40 + (w - 10) * 2;
+          else rate = 60 + (w - 20) * 1;
+          const daily = rate * 24;
+          return { score: rate, result: `${rate} мл/ч`, color: 'green', details: `${daily} мл/сут` };
+        }
+      },
+      ideal_weight: {
+        name: 'Идеальная масса тела',
+        category: 'Общие',
+        desc: 'ИМТ по Devine',
+        icon: 'Activity',
+        fields: [
+          { id: 'height', label: 'Рост', type: 'number', unit: 'см' },
+          { id: 'sex', label: 'Пол', type: 'select', options: [
+            { value: 'male', label: 'Мужской' },
+            { value: 'female', label: 'Женский' }
+          ]}
+        ],
+        calculate: (data) => {
+          const h = parseFloat(data.height);
+          const inches = h / 2.54;
+          let ibw = 0;
+          if (data.sex === 'male') ibw = 50 + 2.3 * (inches - 60);
+          else ibw = 45.5 + 2.3 * (inches - 60);
+          ibw = Math.round(ibw * 10) / 10;
+          return { score: ibw, result: `${ibw} кг`, color: 'green', details: 'Формула Devine' };
+        }
+      },
+      corrca: {
+        name: 'Коррекция Ca',
+        category: 'Нефрология',
+        desc: 'Коррекция кальция на альбумин',
+        icon: 'Droplet',
+        fields: [
+          { id: 'ca', label: 'Кальций', type: 'number', unit: 'мг/дл' },
+          { id: 'alb', label: 'Альбумин', type: 'number', unit: 'г/дл' }
+        ],
+        calculate: (data) => {
+          const ca = parseFloat(data.ca);
+          const alb = parseFloat(data.alb);
+          const corrCa = (ca + 0.8 * (4 - alb)).toFixed(2);
+          let interp = '', color = '';
+          if (corrCa < 8.5) { interp = 'Гипокальциемия'; color = 'blue'; }
+          else if (corrCa <= 10.5) { interp = 'Нормокальциемия'; color = 'green'; }
+          else { interp = 'Гиперкальциемия'; color = 'red'; }
+          return { score: corrCa, result: interp, color, details: 'мг/дл' };
+        }
+      },
+      sodium_deficit: {
+        name: 'Дефицит натрия',
+        category: 'Нефрология',
+        desc: 'Расчет дефицита Na',
+        icon: 'Droplet',
+        fields: [
+          { id: 'weight', label: 'Вес', type: 'number', unit: 'кг' },
+          { id: 'currentNa', label: 'Текущий Na', type: 'number', unit: 'ммоль/л' },
+          { id: 'targetNa', label: 'Целевой Na', type: 'number', unit: 'ммоль/л' }
+        ],
+        calculate: (data) => {
+          const w = parseFloat(data.weight);
+          const cur = parseFloat(data.currentNa);
+          const targ = parseFloat(data.targetNa);
+          const tbw = w * 0.6;
+          const deficit = Math.round(tbw * (targ - cur));
+          let status = '', color = '';
+          if (deficit > 0) { status = 'Гипонатриемия'; color = 'blue'; }
+          else if (deficit < 0) { status = 'Гипернатриемия'; color = 'red'; }
+          else { status = 'Норма'; color = 'green'; }
+          return { score: Math.abs(deficit), result: status, color, details: `${Math.abs(deficit)} ммоль Na` };
+        }
+      },
+      apache2: {
+        name: 'APACHE II',
+        category: 'Интенсивная терапия',
+        desc: 'Прогноз в ОИТ',
+        icon: 'Stethoscope',
+        fields: [
+          { id: 'temp', label: 'Температура (°C)', type: 'number' },
+          { id: 'map', label: 'MAP', type: 'number', unit: 'мм рт.ст.' },
+          { id: 'hr', label: 'ЧСС', type: 'number' },
+          { id: 'rr', label: 'ЧД', type: 'number' },
+          { id: 'gcs', label: 'GCS', type: 'number' },
+          { id: 'age', label: 'Возраст', type: 'number' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          const temp = parseFloat(data.temp);
+          if (temp >= 41) s += 4; else if (temp >= 39) s += 3; else if (temp >= 38.5) s += 1;
+          else if (temp < 30) s += 4; else if (temp < 32) s += 3; else if (temp < 34) s += 2; else if (temp < 36) s += 1;
+          const map = parseFloat(data.map);
+          if (map >= 160) s += 4; else if (map >= 130) s += 3; else if (map >= 110) s += 2;
+          else if (map < 50) s += 4; else if (map < 70) s += 2;
+          const hr = parseInt(data.hr);
+          if (hr >= 180) s += 4; else if (hr >= 140) s += 3; else if (hr >= 110) s += 2;
+          else if (hr < 40) s += 4; else if (hr < 55) s += 3; else if (hr < 70) s += 2;
+          const age = parseInt(data.age);
+          if (age >= 75) s += 6; else if (age >= 65) s += 5; else if (age >= 55) s += 3; else if (age >= 45) s += 2;
+          const gcs = parseInt(data.gcs);
+          s += 15 - gcs;
+          let mort = '', color = '';
+          if (s < 10) { mort = '<5%'; color = 'green'; }
+          else if (s < 15) { mort = '8%'; color = 'yellow'; }
+          else if (s < 20) { mort = '15%'; color = 'orange'; }
+          else if (s < 25) { mort = '25%'; color = 'orange'; }
+          else if (s < 30) { mort = '40%'; color = 'red'; }
+          else { mort = '>55%'; color = 'red'; }
+          return { score: s, result: `${s} баллов`, color, details: `Летальность: ${mort}` };
+        }
+      },
+      waterlow: {
+        name: 'Waterlow',
+        category: 'Педиатрия',
+        desc: 'Оценка питания детей',
+        icon: 'Baby',
+        fields: [
+          { id: 'weight', label: 'Вес', type: 'number', unit: 'кг' },
+          { id: 'expectedWeight', label: 'Ожидаемый вес для роста', type: 'number', unit: 'кг' }
+        ],
+        calculate: (data) => {
+          const w = parseFloat(data.weight);
+          const ew = parseFloat(data.expectedWeight);
+          const index = ((w / ew) * 100).toFixed(1);
+          let status = '', color = '';
+          if (index < 70) { status = 'Тяжелая БЭН'; color = 'red'; }
+          else if (index < 80) { status = 'Умеренная БЭН'; color = 'orange'; }
+          else if (index < 90) { status = 'Легкая БЭН'; color = 'yellow'; }
+          else if (index <= 110) { status = 'Нормальное питание'; color = 'green'; }
+          else { status = 'Избыточный вес'; color = 'yellow'; }
+          return { score: index, result: status, color, details: '%' };
+        }
+      },
+      egfr_child: {
+        name: 'СКФ Шварца',
+        category: 'Педиатрия',
+        desc: 'СКФ у детей',
+        icon: 'Droplet',
+        fields: [
+          { id: 'height', label: 'Рост', type: 'number', unit: 'см' },
+          { id: 'creat', label: 'Креатинин', type: 'number', unit: 'мг/дл' }
+        ],
+        calculate: (data) => {
+          const h = parseFloat(data.height);
+          const cr = parseFloat(data.creat);
+          const gfr = Math.round((0.413 * h) / cr);
+          let stage = '', color = '';
+          if (gfr >= 90) { stage = 'Норма'; color = 'green'; }
+          else if (gfr >= 60) { stage = 'ХБП 2'; color = 'green'; }
+          else if (gfr >= 30) { stage = 'ХБП 3'; color = 'yellow'; }
+          else if (gfr >= 15) { stage = 'ХБП 4'; color = 'orange'; }
+          else { stage = 'ХБП 5'; color = 'red'; }
+          return { score: gfr, result: stage, color, details: 'мл/мин/1.73м²' };
+        }
+      },
+      maddreys: {
+        name: 'Maddrey DF',
+        category: 'Гастроэнтерология',
+        desc: 'Алкогольный гепатит',
+        icon: 'Activity',
+        fields: [
+          { id: 'pt', label: 'PT пациента', type: 'number', unit: 'сек' },
+          { id: 'ptControl', label: 'PT контроль', type: 'number', unit: 'сек' },
+          { id: 'bili', label: 'Билирубин', type: 'number', unit: 'мг/дл' }
+        ],
+        calculate: (data) => {
+          const pt = parseFloat(data.pt);
+          const ptc = parseFloat(data.ptControl);
+          const bili = parseFloat(data.bili);
+          const df = (4.6 * (pt - ptc) + bili).toFixed(1);
+          let sev = '', mort = '', color = '';
+          if (df < 32) { sev = 'Легкий'; mort = '15%'; color = 'yellow'; }
+          else { sev = 'Тяжелый'; mort = '35-45%'; color = 'red'; }
+          return { score: df, result: sev, color, details: `30-дневная летальность: ${mort}` };
+        }
+      },
+      possum: {
+        name: 'P-POSSUM',
+        category: 'Хирургия',
+        desc: 'Предоперационная летальность',
+        icon: 'Users',
+        fields: [
+          { id: 'age', label: 'Возраст', type: 'select', options: [
+            { value: '1', label: '≤60 (1)' }, { value: '2', label: '61-70 (2)' }, { value: '4', label: '>70 (4)' }
+          ]},
+          { id: 'cardiac', label: 'Сердце', type: 'select', options: [
+            { value: '1', label: 'Норма (1)' }, { value: '2', label: 'ИБС (2)' },
+            { value: '4', label: 'ХСН/ИМ<6мес (4)' }, { value: '8', label: 'Отек легких (8)' }
+          ]},
+          { id: 'resp', label: 'Дыхание', type: 'select', options: [
+            { value: '1', label: 'Норма (1)' }, { value: '2', label: 'Одышка (2)' },
+            { value: '4', label: 'ХОБЛ (4)' }, { value: '8', label: 'Фиброз (8)' }
+          ]},
+          { id: 'sbp', label: 'САД', type: 'select', options: [
+            { value: '1', label: '110-130 (1)' }, { value: '2', label: '131-170 (2)' }, { value: '4', label: '>170/<90 (4)' }
+          ]},
+          { id: 'hr', label: 'ЧСС', type: 'select', options: [
+            { value: '1', label: '50-80 (1)' }, { value: '2', label: '81-100 (2)' }, { value: '4', label: '<50/>100 (4)' }
+          ]},
+          { id: 'gcs', label: 'GCS', type: 'select', options: [
+            { value: '1', label: '15 (1)' }, { value: '2', label: '12-14 (2)' }, { value: '4', label: '9-11 (4)' }, { value: '8', label: '<9 (8)' }
+          ]},
+          { id: 'surgery', label: 'Тяжесть операции', type: 'select', options: [
+            { value: '2', label: 'Малая (2)' }, { value: '4', label: 'Средняя (4)' },
+            { value: '8', label: 'Большая (8)' }, { value: '16', label: 'Обширная (16)' }
+          ]},
+          { id: 'urgency', label: 'Срочность', type: 'select', options: [
+            { value: '1', label: 'Плановая (1)' }, { value: '4', label: 'Экстренная (4)' }
+          ]}
+        ],
+        calculate: (data) => {
+          const s = parseInt(data.age) + parseInt(data.cardiac) + parseInt(data.resp) + parseInt(data.sbp) + 
+                    parseInt(data.hr) + parseInt(data.gcs) + parseInt(data.surgery) + parseInt(data.urgency);
+          let mort = '', color = '';
+          if (s < 20) { mort = '<5%'; color = 'green'; }
+          else if (s < 30) { mort = '5-15%'; color = 'yellow'; }
+          else if (s < 40) { mort = '15-30%'; color = 'orange'; }
+          else { mort = '>30%'; color = 'red'; }
+          return { score: s, result: `${s} баллов`, color, details: `Летальность: ${mort}` };
+        }
+      },
+      lvef: {
+        name: 'Фракция выброса ЛЖ',
+        category: 'Кардиология',
+        desc: 'Систолическая функция',
+        icon: 'Heart',
+        fields: [
+          { id: 'edv', label: 'КДО', type: 'number', unit: 'мл' },
+          { id: 'esv', label: 'КСО', type: 'number', unit: 'мл' }
+        ],
+        calculate: (data) => {
+          const edv = parseFloat(data.edv);
+          const esv = parseFloat(data.esv);
+          const ef = Math.round(((edv - esv) / edv) * 100);
+          let status = '', color = '';
+          if (ef >= 52) { status = 'Нормальная'; color = 'green'; }
+          else if (ef >= 41) { status = 'Легкая дисфункция'; color = 'yellow'; }
+          else if (ef >= 30) { status = 'Умеренная дисфункция'; color = 'orange'; }
+          else { status = 'Тяжелая дисфункция'; color = 'red'; }
+          return { score: ef, result: status, color, details: '%' };
+        }
+      },
+      ascvd: {
+        name: 'ASCVD Risk',
+        category: 'Кардиология',
+        desc: '10-летний риск ССЗ (упрощенный)',
+        icon: 'Heart',
+        fields: [
+          { id: 'age', label: 'Возраст', type: 'number' },
+          { id: 'sbp', label: 'САД', type: 'number', unit: 'мм рт.ст.' },
+          { id: 'chol', label: 'Общий холестерин', type: 'number', unit: 'мг/дл' },
+          { id: 'hdl', label: 'ЛПВП', type: 'number', unit: 'мг/дл' },
+          { id: 'smoker', label: 'Курение', type: 'checkbox' },
+          { id: 'dm', label: 'Диабет', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let points = 0;
+          const age = parseInt(data.age);
+          if (age < 40) points += 0; else if (age < 50) points += 2; else if (age < 60) points += 4;
+          else if (age < 70) points += 6; else points += 8;
+          if (parseInt(data.sbp) > 140) points += 2;
+          if (parseInt(data.chol) > 200) points += 1;
+          if (parseInt(data.hdl) < 40) points += 1;
+          if (data.smoker) points += 2;
+          if (data.dm) points += 2;
+          let risk = '', rec = '', color = '';
+          if (points < 5) { risk = '<5%'; rec = 'Низкий'; color = 'green'; }
+          else if (points < 10) { risk = '5-7.5%'; rec = 'Пограничный'; color = 'yellow'; }
+          else if (points < 15) { risk = '7.5-20%'; rec = 'Средний - статины'; color = 'orange'; }
+          else { risk = '>20%'; rec = 'Высокий - статины'; color = 'red'; }
+          return { score: points, result: risk, color, details: rec };
+        }
+      },
+      rvsp: {
+        name: 'СДПЖ',
+        category: 'Кардиология',
+        desc: 'Систолическое давление в ПЖ',
+        icon: 'Heart',
+        fields: [
+          { id: 'trVel', label: 'Скорость TR', type: 'number', unit: 'м/с' },
+          { id: 'rap', label: 'Давление в ПП', type: 'number', unit: 'мм рт.ст.' }
+        ],
+        calculate: (data) => {
+          const v = parseFloat(data.trVel);
+          const rap = parseFloat(data.rap);
+          const rvsp = Math.round(4 * v * v + rap);
+          let status = '', color = '';
+          if (rvsp < 36) { status = 'Норма'; color = 'green'; }
+          else if (rvsp < 50) { status = 'Легкая ЛГ'; color = 'yellow'; }
+          else if (rvsp < 70) { status = 'Умеренная ЛГ'; color = 'orange'; }
+          else { status = 'Тяжелая ЛГ'; color = 'red'; }
+          return { score: rvsp, result: status, color, details: 'мм рт.ст.' };
+        }
+      },
+
+      // =============== НОВЫЕ КАЛЬКУЛЯТОРЫ ИЗ MDCALC (21 шт) ===============
+      caprini: {
+        name: 'Caprini',
+        category: 'Хирургия',
+        desc: 'Риск ВТЭО (венозных осложнений)',
+        icon: 'Activity',
+        fields: [
+          { id: 'age40', label: 'Возраст ≥40 лет (+1)', type: 'checkbox' },
+          { id: 'immob', label: 'Постельный режим >72 ч (+1)', type: 'checkbox' },
+          { id: 'plannedSurgery', label: 'Плановая лапароскопическая операция (+1)', type: 'checkbox' },
+          { id: 'majorSurgery60d', label: 'Большая операция в последние 60 дней (+1)', type: 'checkbox' },
+          { id: 'inflammatory', label: 'Острое воспаление вен/инфаркт (+1)', type: 'checkbox' },
+          { id: 'heartFailure', label: 'Сердечная недостаточность (+1)', type: 'checkbox' },
+          { id: 'respFailure', label: 'Дыхательная недостаточность (+1)', type: 'checkbox' },
+          { id: 'infection', label: 'Тяжёлая инфекция (+1)', type: 'checkbox' },
+          { id: 'obesity', label: 'ИМТ ≥25 (+1)', type: 'checkbox' },
+          { id: 'pregnancy', label: 'Беременность/послеродовой период (+1)', type: 'checkbox' },
+          { id: 'ocp', label: 'ОК/ЗГТ (+1)', type: 'checkbox' },
+          { id: 'varicose', label: 'Варикоз (+1)', type: 'checkbox' },
+          { id: 'arthroscopy', label: 'Артроскопия (+2)', type: 'checkbox' },
+          { id: 'cancer', label: 'Активный рак (+2)', type: 'checkbox' },
+          { id: 'previousVTE', label: 'ВТЭО в анамнезе (+2)', type: 'checkbox' },
+          { id: 'familyVTE', label: 'Тромбофилия в семье (+2)', type: 'checkbox' },
+          { id: 'sepsis', label: 'Сепсис (+2)', type: 'checkbox' },
+          { id: 'inflammatoryBowel', label: 'НЯК/БК (+2)', type: 'checkbox' },
+          { id: 'fracture', label: 'Перелом нижней конечности (+3)', type: 'checkbox' },
+          { id: 'stroke', label: 'Острый ишемический инсульт (+3)', type: 'checkbox' },
+          { id: 'dvtHistory30d', label: 'ВТЭО в последние 30 дней (+3)', type: 'checkbox' },
+          { id: 'hipKneeSurgery', label: 'Эндопротезирование ТБ/КС (+5)', type: 'checkbox' },
+          { id: 'majorTrauma', label: 'Тяжёлая травма (+5)', type: 'checkbox' },
+          { id: 'spinalCord', label: 'Спинальная травма (+5)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.age40) s += 1;
+          if (data.immob) s += 1;
+          if (data.plannedSurgery) s += 1;
+          if (data.majorSurgery60d) s += 1;
+          if (data.inflammatory) s += 1;
+          if (data.heartFailure) s += 1;
+          if (data.respFailure) s += 1;
+          if (data.infection) s += 1;
+          if (data.obesity) s += 1;
+          if (data.pregnancy) s += 1;
+          if (data.ocp) s += 1;
+          if (data.varicose) s += 1;
+          if (data.arthroscopy) s += 2;
+          if (data.cancer) s += 2;
+          if (data.previousVTE) s += 2;
+          if (data.familyVTE) s += 2;
+          if (data.sepsis) s += 2;
+          if (data.inflammatoryBowel) s += 2;
+          if (data.fracture) s += 3;
+          if (data.stroke) s += 3;
+          if (data.dvtHistory30d) s += 3;
+          if (data.hipKneeSurgery) s += 5;
+          if (data.majorTrauma) s += 5;
+          if (data.spinalCord) s += 5;
+          let risk = '', color = '', rec = '';
+          if (s <= 1) { risk = 'Очень низкий'; color = 'green'; rec = 'Механическая профилактика'; }
+          else if (s === 2) { risk = 'Низкий'; color = 'green'; rec = 'Механическая или медикаментозная профилактика'; }
+          else if (s <= 4) { risk = 'Умеренный'; color = 'yellow'; rec = 'Медикаментозная профилактика'; }
+          else { risk = 'Высокий'; color = 'red'; rec = 'Интенсивная медикаментозная профилактика'; }
+          return { score: s, result: risk, color, details: rec };
+        }
+      },
+      padua: {
+        name: 'Padua',
+        category: 'Терапия',
+        desc: 'Риск ВТЭО у госпитализированных',
+        icon: 'Users',
+        fields: [
+          { id: 'activeCancer', label: 'Активный рак (+3)', type: 'checkbox' },
+          { id: 'immobility', label: 'Иммобилизация ≥3 дней (+3)', type: 'checkbox' },
+          { id: 'prevVTE', label: 'ВТЭО в анамнезе (+3)', type: 'checkbox' },
+          { id: 'thrombophilia', label: 'Тромбофилия (+3)', type: 'checkbox' },
+          { id: 'traumaSurgery', label: 'Травма/операция (+2)', type: 'checkbox' },
+          { id: 'age70', label: 'Возраст ≥70 (+1)', type: 'checkbox' },
+          { id: 'hf', label: 'ХСН/дыхательная недостаточность (+1)', type: 'checkbox' },
+          { id: 'acuteInf', label: 'Острая инфекция (+1)', type: 'checkbox' },
+          { id: 'acuteMI', label: 'Острый ИМ/инфаркт (+1)', type: 'checkbox' },
+          { id: 'obesity', label: 'ИМТ ≥30 (+1)', type: 'checkbox' },
+          { id: 'pregnancy', label: 'Беременность/ОК (+1)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.activeCancer) s += 3;
+          if (data.immobility) s += 3;
+          if (data.prevVTE) s += 3;
+          if (data.thrombophilia) s += 3;
+          if (data.traumaSurgery) s += 2;
+          if (data.age70) s += 1;
+          if (data.hf) s += 1;
+          if (data.acuteInf) s += 1;
+          if (data.acuteMI) s += 1;
+          if (data.obesity) s += 1;
+          if (data.pregnancy) s += 1;
+          let risk = '', color = '';
+          if (s >= 4) {
+            risk = 'Высокий риск';
+            color = 'red';
+          } else {
+            risk = 'Низкий риск';
+            color = 'green';
+          }
+          return { score: s, result: risk, color, details: s >= 4 ? 'Рассмотреть профилактику' : 'Профилактика не обязательна' };
+        }
+      },
+      abcd2: {
+        name: 'ABCD²',
+        category: 'Неврология',
+        desc: 'Риск инсульта после ТИА',
+        icon: 'Brain',
+        fields: [
+          { id: 'age60', label: 'Возраст ≥60 (+1)', type: 'checkbox' },
+          { id: 'bp140', label: 'САД ≥140 (+1)', type: 'checkbox' },
+          { id: 'clinical', label: 'Клинические признаки', type: 'select', options: [
+            { value: '0', label: 'Другие (0)' },
+            { value: '1', label: 'Речь без слабости (1)' },
+            { value: '2', label: 'Слабость (2)' }
+          ]},
+          { id: 'duration', label: 'Длительность', type: 'select', options: [
+            { value: '0', label: '<10 мин (0)' },
+            { value: '1', label: '10-59 мин (1)' },
+            { value: '2', label: '≥60 мин (2)' }
+          ]},
+          { id: 'diabetes', label: 'Сахарный диабет (+1)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.age60) s++;
+          if (data.bp140) s++;
+          s += parseInt(data.clinical);
+          s += parseInt(data.duration);
+          if (data.diabetes) s++;
+          let risk = '', color = '', strokeRisk = '';
+          if (s < 4) {
+            risk = 'Низкий';
+            strokeRisk = '1.0% (2 дня)';
+            color = 'green';
+          } else if (s < 6) {
+            risk = 'Умеренный';
+            strokeRisk = '4.1% (2 дня)';
+            color = 'yellow';
+          } else {
+            risk = 'Высокий';
+            strokeRisk = '8.1% (2 дня)';
+            color = 'red';
+          }
+          return { score: s, result: risk, color, details: `Риск инсульта: ${strokeRisk}` };
+        }
+      },
+      fib4: {
+        name: 'FIB-4',
+        category: 'Гастроэнтерология',
+        desc: 'Фиброз печени',
+        icon: 'Activity',
+        fields: [
+          { id: 'age', label: 'Возраст', type: 'number', unit: 'лет' },
+          { id: 'ast', label: 'АСТ', type: 'number', unit: 'Ед/л' },
+          { id: 'alt', label: 'АЛТ', type: 'number', unit: 'Ед/л' },
+          { id: 'platelets', label: 'Тромбоциты', type: 'number', unit: '×10⁹/л' }
+        ],
+        calculate: (data) => {
+          const age = parseFloat(data.age);
+          const ast = parseFloat(data.ast);
+          const alt = parseFloat(data.alt);
+          const plt = parseFloat(data.platelets);
+          const fib4 = (age * ast) / (plt * Math.sqrt(alt));
+          let risk = '', color = '';
+          if (fib4 < 1.3) {
+            risk = 'Низкий риск фиброза';
+            color = 'green';
+          } else if (fib4 < 2.67) {
+            risk = 'Промежуточный';
+            color = 'yellow';
+          } else {
+            risk = 'Высокий риск цирроза';
+            color = 'red';
+          }
+          return { score: fib4.toFixed(2), result: risk, color, details: '' };
+        }
+      },
+      cockcroft: {
+        name: 'Клиренс креатинина (Cockcroft-Gault)',
+        category: 'Нефрология',
+        desc: 'Функция почек',
+        icon: 'Droplet',
+        fields: [
+          { id: 'age', label: 'Возраст', type: 'number', unit: 'лет' },
+          { id: 'weight', label: 'Вес', type: 'number', unit: 'кг' },
+          { id: 'creat', label: 'Креатинин', type: 'number', unit: 'мкмоль/л' },
+          { id: 'sex', label: 'Пол', type: 'select', options: [
+            { value: 'male', label: 'Мужской' }, { value: 'female', label: 'Женский' }
+          ]}
+        ],
+        calculate: (data) => {
+          const age = parseFloat(data.age);
+          const w = parseFloat(data.weight);
+          const cr = parseFloat(data.creat) / 88.4;
+          let crcl = ((140 - age) * w) / (72 * cr);
+          if (data.sex === 'female') crcl *= 0.85;
+          crcl = Math.round(crcl);
+          let stage = '', color = '';
+          if (crcl >= 90) { stage = 'Норма'; color = 'green'; }
+          else if (crcl >= 60) { stage = 'ХБП 2'; color = 'green'; }
+          else if (crcl >= 30) { stage = 'ХБП 3'; color = 'yellow'; }
+          else if (crcl >= 15) { stage = 'ХБП 4'; color = 'orange'; }
+          else { stage = 'ХБП 5'; color = 'red'; }
+          return { score: crcl, result: stage, color, details: 'мл/мин' };
+        }
+      },
+      ldl: {
+        name: 'Расчёт ЛПНП',
+        category: 'Кардиология',
+        desc: 'Формула Фридвальда',
+        icon: 'Heart',
+        fields: [
+          { id: 'total', label: 'Общий холестерин', type: 'number', unit: 'мг/дл' },
+          { id: 'hdl', label: 'ЛПВП', type: 'number', unit: 'мг/дл' },
+          { id: 'tg', label: 'Триглицериды', type: 'number', unit: 'мг/дл' }
+        ],
+        calculate: (data) => {
+          const tc = parseFloat(data.total);
+          const hdl = parseFloat(data.hdl);
+          const tg = parseFloat(data.tg);
+          if (tg >= 400) {
+            return { score: '—', result: 'Недостоверно', color: 'red', details: 'ТГ ≥400 мг/дл' };
+          }
+          const ldl = tc - hdl - (tg / 5);
+          let risk = '', color = '';
+          if (ldl < 100) { risk = 'Оптимальный'; color = 'green'; }
+          else if (ldl < 130) { risk = 'Пограничный'; color = 'yellow'; }
+          else if (ldl < 160) { risk = 'Высокий'; color = 'orange'; }
+          else { risk = 'Очень высокий'; color = 'red'; }
+          return { score: ldl.toFixed(1), result: risk, color, details: 'мг/дл' };
+        }
+      },
+      stopbang: {
+        name: 'STOP-BANG',
+        category: 'Пульмонология',
+        desc: 'Скрининг апноэ сна',
+        icon: 'Wind',
+        fields: [
+          { id: 'snore', label: 'Храп (+1)', type: 'checkbox' },
+          { id: 'tired', label: 'Усталость (+1)', type: 'checkbox' },
+          { id: 'observed', label: 'Остановки дыхания (+1)', type: 'checkbox' },
+          { id: 'bp', label: 'АГ (+1)', type: 'checkbox' },
+          { id: 'bmi35', label: 'ИМТ ≥35 (+1)', type: 'checkbox' },
+          { id: 'age50', label: 'Возраст ≥50 (+1)', type: 'checkbox' },
+          { id: 'neck', label: 'Окружность шеи ≥40 см (+1)', type: 'checkbox' },
+          { id: 'male', label: 'Мужской пол (+1)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.snore) s++;
+          if (data.tired) s++;
+          if (data.observed) s++;
+          if (data.bp) s++;
+          if (data.bmi35) s++;
+          if (data.age50) s++;
+          if (data.neck) s++;
+          if (data.male) s++;
+          let risk = '', color = '';
+          if (s >= 5) {
+            risk = 'Высокий риск ОСАС';
+            color = 'red';
+          } else if (s >= 3) {
+            risk = 'Умеренный риск';
+            color = 'yellow';
+          } else {
+            risk = 'Низкий риск';
+            color = 'green';
+          }
+          return { score: s, result: risk, color, details: '≥5 — высокий риск' };
+        }
+      },
+      alvarado: {
+        name: 'Alvarado',
+        category: 'Хирургия',
+        desc: 'Острый аппендицит',
+        icon: 'Activity',
+        fields: [
+          { id: 'migratory', label: 'Мигрирующая боль (+1)', type: 'checkbox' },
+          { id: 'anorexia', label: 'Анорексия (+1)', type: 'checkbox' },
+          { id: 'nausea', label: 'Тошнота/рвота (+1)', type: 'checkbox' },
+          { id: 'tenderness', label: 'Болезненность в правой подвздошной (+2)', type: 'checkbox' },
+          { id: 'rebound', label: 'Симптом Щеткина-Блюмберга (+1)', type: 'checkbox' },
+          { id: 'fever', label: 'Температура >37.3°C (+1)', type: 'checkbox' },
+          { id: 'leukocytosis', label: 'Лейкоцитоз (+2)', type: 'checkbox' },
+          { id: 'shift', label: 'Сдвиг влево (+1)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = 0;
+          if (data.migratory) s++;
+          if (data.anorexia) s++;
+          if (data.nausea) s++;
+          if (data.tenderness) s += 2;
+          if (data.rebound) s++;
+          if (data.fever) s++;
+          if (data.leukocytosis) s += 2;
+          if (data.shift) s++;
+          let prob = '', color = '';
+          if (s < 5) { prob = 'Низкая вероятность'; color = 'green'; }
+          else if (s < 7) { prob = 'Умеренная'; color = 'yellow'; }
+          else if (s < 9) { prob = 'Высокая'; color = 'orange'; }
+          else { prob = 'Очень высокая'; color = 'red'; }
+          return { score: s, result: prob, color, details: '≥7 — КТ/операция' };
+        }
+      },
+      psi: {
+        name: 'PSI/PORT',
+        category: 'Пульмонология',
+        desc: 'Тяжесть пневмонии (точнее CURB-65)',
+        icon: 'Wind',
+        fields: [
+          { id: 'age', label: 'Возраст', type: 'number' },
+          { id: 'male', label: 'Мужской пол (+10)', type: 'checkbox' },
+          { id: 'nursing', label: 'Из дома престарелых (+10)', type: 'checkbox' },
+          { id: 'cancer', label: 'Онкология (+30)', type: 'checkbox' },
+          { id: 'liver', label: 'Болезнь печени (+20)', type: 'checkbox' },
+          { id: 'chf', label: 'ХСН (+10)', type: 'checkbox' },
+          { id: 'renal', label: 'Почечная недостаточность (+10)', type: 'checkbox' },
+          { id: 'stroke', label: 'Инсульт (+10)', type: 'checkbox' },
+          { id: 'altered', label: 'Спутанность (+20)', type: 'checkbox' },
+          { id: 'rr30', label: 'ЧД ≥30 (+20)', type: 'checkbox' },
+          { id: 'sbp90', label: 'САД <90 (+30)', type: 'checkbox' },
+          { id: 'temp35', label: 'Темп <35°C (+15)', type: 'checkbox' },
+          { id: 'bun30', label: 'Мочевина ≥30 мг/дл (+20)', type: 'checkbox' },
+          { id: 'na130', label: 'Na <130 (+10)', type: 'checkbox' },
+          { id: 'glu250', label: 'Глюкоза ≥250 (+10)', type: 'checkbox' },
+          { id: 'pao260', label: 'PaO2 <60 (+10)', type: 'checkbox' },
+          { id: 'ph735', label: 'pH <7.35 (+30)', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let s = parseInt(data.age) || 0;
+          if (data.male) s += 10;
+          if (data.nursing) s += 10;
+          if (data.cancer) s += 30;
+          if (data.liver) s += 20;
+          if (data.chf) s += 10;
+          if (data.renal) s += 10;
+          if (data.stroke) s += 10;
+          if (data.altered) s += 20;
+          if (data.rr30) s += 20;
+          if (data.sbp90) s += 30;
+          if (data.temp35) s += 15;
+          if (data.bun30) s += 20;
+          if (data.na130) s += 10;
+          if (data.glu250) s += 10;
+          if (data.pao260) s += 10;
+          if (data.ph735) s += 30;
+          let classStr = '', color = '', rec = '';
+          if (s <= 70) { classStr = 'Класс I-II'; color = 'green'; rec = 'Амбулаторно'; }
+          else if (s <= 90) { classStr = 'Класс III'; color = 'yellow'; rec = 'Короткая госпитализация'; }
+          else if (s <= 130) { classStr = 'Класс IV'; color = 'orange'; rec = 'Стационар'; }
+          else { classStr = 'Класс V'; color = 'red'; rec = 'ОИТ'; }
+          return { score: s, result: classStr, color, details: rec };
+        }
+      },
+      freeWaterDeficit: {
+        name: 'Дефицит свободной воды',
+        category: 'Нефрология',
+        desc: 'При гипернатриемии',
+        icon: 'Droplet',
+        fields: [
+          { id: 'weight', label: 'Вес', type: 'number', unit: 'кг' },
+          { id: 'na', label: 'Натрий', type: 'number', unit: 'ммоль/л' },
+          { id: 'sex', label: 'Пол', type: 'select', options: [
+            { value: 'male', label: 'Мужской' }, { value: 'female', label: 'Женский' }
+          ]}
+        ],
+        calculate: (data) => {
+          const w = parseFloat(data.weight);
+          const na = parseFloat(data.na);
+          const target = 140;
+          const tbw = w * (data.sex === 'male' ? 0.6 : 0.5);
+          const deficit = tbw * (na - target) / target;
+          deficit = Math.round(deficit);
+          return { score: deficit, result: `${deficit} мл`, color: 'blue', details: 'Дефицит свободной воды' };
+        }
+      },
+      sodiumCorrectionHyperglycemia: {
+        name: 'Коррекция Na при гипергликемии',
+        category: 'Нефрология',
+        desc: 'Истинный натрий',
+        icon: 'Droplet',
+        fields: [
+          { id: 'na', label: 'Натрий', type: 'number', unit: 'ммоль/л' },
+          { id: 'glucose', label: 'Глюкоза', type: 'number', unit: 'мг/дл' }
+        ],
+        calculate: (data) => {
+          const na = parseFloat(data.na);
+          const glu = parseFloat(data.glucose);
+          const corrected = na + 1.6 * (glu - 100) / 100;
+          return { score: corrected.toFixed(1), result: `${corrected.toFixed(1)} ммоль/л`, color: 'green', details: 'Истинный натрий' };
+        }
+      },
+      abg: {
+        name: 'ABG Analyzer',
+        category: 'Интенсивная терапия',
+        desc: 'Интерпретация КЩС',
+        icon: 'Wind',
+        fields: [
+          { id: 'ph', label: 'pH', type: 'number' },
+          { id: 'pco2', label: 'PaCO2', type: 'number', unit: 'мм рт.ст.' },
+          { id: 'hco3', label: 'HCO3', type: 'number', unit: 'ммоль/л' }
+        ],
+        calculate: (data) => {
+          const ph = parseFloat(data.ph);
+          const pco2 = parseFloat(data.pco2);
+          const hco3 = parseFloat(data.hco3);
+          let interpretation = '', color = 'green';
+          if (ph < 7.35) {
+            if (pco2 > 45 && hco3 > 26) interpretation = 'Компенсированный респираторный ацидоз';
+            else if (pco2 > 45) interpretation = 'Респираторный ацидоз';
+            else if (hco3 < 22) interpretation = 'Метаболический ацидоз';
+            else interpretation = 'Смешанный ацидоз';
+            color = 'red';
+          } else if (ph > 7.45) {
+            if (pco2 < 35 && hco3 < 22) interpretation = 'Компенсированный респираторный алкалоз';
+            else if (pco2 < 35) interpretation = 'Респираторный алкалоз';
+            else if (hco3 > 26) interpretation = 'Метаболический алкалоз';
+            else interpretation = 'Смешанный алкалоз';
+            color = 'blue';
+          } else {
+            interpretation = 'Норма';
+            color = 'green';
+          }
+          return { score: ph.toFixed(2), result: interpretation, color, details: `pH: ${ph}, PaCO2: ${pco2}, HCO3: ${hco3}` };
+        }
+      },
+      serumOsmolality: {
+        name: 'Сывороточный осмоляльность',
+        category: 'Нефрология',
+        desc: 'Расчёт осмоляльности',
+        icon: 'Droplet',
+        fields: [
+          { id: 'na', label: 'Натрий', type: 'number', unit: 'ммоль/л' },
+          { id: 'glu', label: 'Глюкоза', type: 'number', unit: 'мг/дл' },
+          { id: 'bun', label: 'Мочевина', type: 'number', unit: 'мг/дл' },
+          { id: 'etoh', label: 'Этанол (опц.)', type: 'number', unit: 'мг/дл' }
+        ],
+        calculate: (data) => {
+          const na = parseFloat(data.na);
+          const glu = parseFloat(data.glu);
+          const bun = parseFloat(data.bun);
+          const etoh = parseFloat(data.etoh) || 0;
+          const osm = 2 * na + glu / 18 + bun / 2.8 + etoh / 4.6;
+          const osmCalc = Math.round(osm);
+          let gap = '', color = 'green';
+          if (osmCalc > 320) { gap = 'Гиперосмолярность'; color = 'red'; }
+          else if (osmCalc < 275) { gap = 'Гипоосмолярность'; color = 'blue'; }
+          else { gap = 'Норма'; }
+          return { score: osmCalc, result: gap, color, details: 'мОсм/кг' };
+        }
+      },
+      steroidConversion: {
+        name: 'Конвертация стероидов',
+        category: 'Эндокринология',
+        desc: 'Эквиваленты глюкокортикоидов',
+        icon: 'Pill',
+        fields: [
+          { id: 'from', label: 'Исходный', type: 'select', options: [
+            { value: 'hydrocortisone', label: 'Гидрокортизон' },
+            { value: 'prednisone', label: 'Преднизон' },
+            { value: 'methylpred', label: 'Метилпреднизолон' },
+            { value: 'dexamethasone', label: 'Дексаметазон' }
+          ]},
+          { id: 'dose', label: 'Доза', type: 'number', unit: 'мг' }
+        ],
+        calculate: (data) => {
+          const dose = parseFloat(data.dose);
+          const factors = {
+            hydrocortisone: 1,
+            prednisone: 4,
+            methylpred: 5,
+            dexamethasone: 25
+          };
+          const hydroEq = dose * factors[data.from];
+          return { score: hydroEq.toFixed(1), result: `${hydroEq.toFixed(1)} мг гидрокортизона`, color: 'green', details: 'Эквивалент' };
+        }
+      },
+      mme: {
+        name: 'Morphine MME',
+        category: 'Анестезиология',
+        desc: 'Морфиновые эквиваленты',
+        icon: 'Pill',
+        fields: [
+          { id: 'drug', label: 'Опиоид', type: 'select', options: [
+            { value: 'morphine', label: 'Морфин' },
+            { value: 'oxycodone', label: 'Оксикодон' },
+            { value: 'hydromorphone', label: 'Гидроморфон' },
+            { value: 'fentanyl', label: 'Фентанил (мкг/сут)' }
+          ]},
+          { id: 'dose', label: 'Суточная доза', type: 'number' }
+        ],
+        calculate: (data) => {
+          const dose = parseFloat(data.dose);
+          const factors = {
+            morphine: 1,
+            oxycodone: 1.5,
+            hydromorphone: 4,
+            fentanyl: 0.1 // мкг/сут → мг морфина
+          };
+          const mme = dose * factors[data.drug];
+          let risk = '', color = 'green';
+          if (mme >= 50) { risk = 'Высокий риск'; color = 'red'; }
+          else if (mme >= 20) { risk = 'Умеренный риск'; color = 'yellow'; }
+          return { score: mme.toFixed(1), result: `${mme.toFixed(1)} MME/сут`, color, details: risk };
+        }
+      },
+      pecarn: {
+        name: 'PECARN (дети)',
+        category: 'Педиатрия',
+        desc: 'Травма головы у детей',
+        icon: 'Baby',
+        fields: [
+          { id: 'age', label: 'Возраст', type: 'select', options: [
+            { value: 'young', label: '<2 лет' }, { value: 'old', label: '≥2 лет' }
+          ]},
+          { id: 'gcs', label: 'GCS <15', type: 'checkbox' },
+          { id: 'scalp', label: 'Гематома скальпа', type: 'checkbox' },
+          { id: 'vomit', label: 'Рвота', type: 'checkbox' },
+          { id: 'seizure', label: 'Судороги', type: 'checkbox' },
+          { id: 'loss', label: 'Потеря сознания', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let highRisk = data.gcs || data.seizure || (data.age === 'young' && data.scalp);
+          let result = highRisk ? 'КТ показана' : 'Низкий риск';
+          let color = highRisk ? 'red' : 'green';
+          return { score: highRisk ? 'Да' : 'Нет', result, color, details: 'Правило PECARN' };
+        }
+      },
+      canadianCT: {
+        name: 'Canadian CT Head Rule',
+        category: 'Неврология',
+        desc: 'Травма головы (взрослые)',
+        icon: 'Brain',
+        fields: [
+          { id: 'gcs', label: 'GCS <15 через 2 ч', type: 'checkbox' },
+          { id: 'suspected', label: 'Подозрение на перелом', type: 'checkbox' },
+          { id: 'vomit', label: 'Рвота ≥2', type: 'checkbox' },
+          { id: 'age65', label: 'Возраст ≥65', type: 'checkbox' },
+          { id: 'headInjury', label: 'Травма выше плеч', type: 'checkbox' },
+          { id: 'anticoag', label: 'Антикоагулянты', type: 'checkbox' }
+        ],
+        calculate: (data) => {
+          let highRisk = data.gcs || data.suspected;
+          let mediumRisk = data.vomit || data.age65 || data.headInjury || data.anticoag;
+          let needCT = highRisk || mediumRisk;
+          return { score: needCT ? 'Да' : 'Нет', result: needCT ? 'КТ показана' : 'КТ не нужна', color: needCT ? 'red' : 'green', details: 'Canadian Rule' };
+        }
+      },
+      mdrd: {
+        name: 'MDRD GFR',
+        category: 'Нефрология',
+        desc: 'Функция почек',
+        icon: 'Droplet',
+        fields: [
+          { id: 'creat', label: 'Креатинин', type: 'number', unit: 'мг/дл' },
+          { id: 'age', label: 'Возраст', type: 'number' },
+          { id: 'sex', label: 'Пол', type: 'select', options: [{ value: 'male', label: 'Мужской' }, { value: 'female', label: 'Женский' }] },
+          { id: 'race', label: 'Раса', type: 'select', options: [{ value: 'black', label: 'Чернокожий' }, { value: 'other', label: 'Другая' }] }
+        ],
+        calculate: (data) => {
+          const cr = parseFloat(data.creat);
+          const age = parseFloat(data.age);
+          const sex = data.sex === 'female' ? 0.742 : 1;
+          const race = data.race === 'black' ? 1.212 : 1;
+          const gfr = 175 * Math.pow(cr, -1.154) * Math.pow(age, -0.203) * sex * race;
+          const gfrRounded = Math.round(gfr);
+          let stage = '', color = '';
+          if (gfrRounded >= 90) { stage = 'ХБП 1'; color = 'green'; }
+          else if (gfrRounded >= 60) { stage = 'ХБП 2'; color = 'green'; }
+          else if (gfrRounded >= 30) { stage = 'ХБП 3'; color = 'yellow'; }
+          else if (gfrRounded >= 15) { stage = 'ХБП 4'; color = 'orange'; }
+          else { stage = 'ХБП 5'; color = 'red'; }
+          return { score: gfrRounded, result: stage, color, details: 'мл/мин/1.73м²' };
+        }
+      },
+      adjBodyWeight: {
+        name: 'Adjusted Body Weight',
+        category: 'Общие',
+        desc: 'Скорректированный вес',
+        icon: 'Activity',
+        fields: [
+          { id: 'height', label: 'Рост', type: 'number', unit: 'см' },
+          { id: 'actual', label: 'Фактический вес', type: 'number', unit: 'кг' },
+          { id: 'sex', label: 'Пол', type: 'select', options: [{ value: 'male', label: 'Мужской' }, { value: 'female', label: 'Женский' }] }
+        ],
+        calculate: (data) => {
+          const h = parseFloat(data.height);
+          const actual = parseFloat(data.actual);
+          const inches = h / 2.54;
+          let ibw = data.sex === 'male' ? 50 + 2.3 * (inches - 60) : 45.5 + 2.3 * (inches - 60);
+          ibw = Math.max(ibw, 0);
+          const adj = ibw + 0.4 * (actual - ibw);
+          return { score: adj.toFixed(1), result: `${adj.toFixed(1)} кг`, color: 'green', details: 'Скорректированный вес' };
+        }
+      },
+      sodiumCorrectionRate: {
+        name: 'Скорость коррекции Na',
+        category: 'Нефрология',
+        desc: 'Гипо-/гипернатриемия',
+        icon: 'Droplet',
+        fields: [
+          { id: 'current', label: 'Текущий Na', type: 'number', unit: 'ммоль/л' },
+          { id: 'target', label: 'Целевой Na', type: 'number', unit: 'ммоль/л' },
+          { id: 'hours', label: 'Часы', type: 'number', unit: 'ч' }
+        ],
+        calculate: (data) => {
+          const cur = parseFloat(data.current);
+          const targ = parseFloat(data.target);
+          const hrs = parseFloat(data.hours);
+          const rate = Math.abs(targ - cur) / hrs;
+          let safe = '', color = 'green';
+          if (rate > 8) { safe = 'Опасно быстро!'; color = 'red'; }
+          else if (rate > 6) { safe = 'Быстро (осторожно)'; color = 'orange'; }
+          else { safe = 'Безопасно'; }
+          return { score: rate.toFixed(1), result: safe, color, details: `ммоль/л/ч` };
+        }
+      },
+      pregnancyDueDate: {
+        name: 'Срок родов',
+        category: 'Акушерство',
+        desc: 'Дата родов по Негеле',
+        icon: 'Baby',
+        fields: [
+          { id: 'lmp', label: 'Первый день последней менструации', type: 'date' }
+        ],
+        calculate: (data) => {
+          if (!data.lmp) return { score: '—', result: 'Укажите дату', color: 'gray', details: '' };
+          const lmp = new Date(data.lmp);
+          lmp.setDate(lmp.getDate() + 280);
+          const options = { year: 'numeric', month: 'long', day: 'numeric' };
+          const due = lmp.toLocaleDateString('ru-RU', options);
+          return { score: due, result: due, color: 'green', details: 'Предполагаемая дата родов' };
+        }
+      }
+    };
+    // --- ОСНОВНОЙ КОМПОНЕНТ ---
+    const MedicalCalculators = () => {
+      const [activeCalc, setActiveCalc] = useState(null);
+      const [searchTerm, setSearchTerm] = useState('');
+      const [category, setCategory] = useState('all');
+      const [formData, setFormData] = useState({});
+      const [result, setResult] = useState(null);
+      const categories = ['all', ...new Set(Object.values(CALCULATORS_DB).map(c => c.category))];
+      const filteredCalcs = Object.entries(CALCULATORS_DB).filter(([id, calc]) => {
+        const matchesSearch = calc.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                             calc.desc.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesCategory = category === 'all' || calc.category === category;
+        return matchesSearch && matchesCategory;
+      });
+      const handleInputChange = (fieldId, value) => {
+        setFormData(prev => ({ ...prev, [fieldId]: value }));
+        setResult(null);
+      };
+      const handleCalculate = () => {
+        const calc = CALCULATORS_DB[activeCalc];
+        if (calc) {
+          const res = calc.calculate(formData);
+          setResult(res);
+        }
+      };
+      const handleReset = () => {
+        setFormData({});
+        setResult(null);
+      };
+      const renderField = (field) => {
+        if (field.type === 'number') {
+          return (
+            <div key={field.id}>
+              <label className="block text-sm font-medium mb-1">
+                {field.label} {field.unit && <span className="text-gray-500">({field.unit})</span>}
+              </label>
+              <input
+                type="number"
+                value={formData[field.id] || ''}
+                onChange={(e) => handleInputChange(field.id, e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+          );
+        }
+        if (field.type === 'select') {
+          return (
+            <div key={field.id}>
+              <label className="block text-sm font-medium mb-1">{field.label}</label>
+              <select
+                value={formData[field.id] || field.options[0].value}
+                onChange={(e) => handleInputChange(field.id, e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                {field.options.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+          );
+        }
+        if (field.type === 'checkbox') {
+          return (
+            <label key={field.id} className="flex items-center">
+              <input
+                type="checkbox"
+                checked={formData[field.id] || false}
+                onChange={(e) => handleInputChange(field.id, e.target.checked)}
+                className="mr-2"
+              />
+              <span className="text-sm">{field.label}</span>
+            </label>
+          );
+        }
+        if (field.type === 'date') {
+          return (
+            <div key={field.id}>
+              <label className="block text-sm font-medium mb-1">{field.label}</label>
+              <input
+                type="date"
+                value={formData[field.id] || ''}
+                onChange={(e) => handleInputChange(field.id, e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+          );
+        }
+      };
+      const colorMap = {
+        green: 'text-green-600',
+        yellow: 'text-yellow-600',
+        orange: 'text-orange-600',
+        red: 'text-red-600',
+        blue: 'text-blue-600',
+        gray: 'text-gray-600'
+      };
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+          <div className="max-w-6xl mx-auto p-6">
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-8 text-white">
+                <div className="flex items-center gap-3 mb-2">
+                  <IconMap.Calculator size={40} />
+                  <h1 className="text-4xl font-bold">МедКалькулятор</h1>
+                </div>
+                <p className="text-blue-100">Медицинские калькуляторы и шкалы (75 калькуляторов)</p>
+              </div>
+              <div className="p-6">
+                {!activeCalc ? (
+                  <>
+                    <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
+                      {categories.map(cat => (
+                        <button
+                          key={cat}
+                          onClick={() => setCategory(cat)}
+                          className={`px-4 py-2 rounded-lg whitespace-nowrap ${
+                            category === cat ? 'bg-blue-600 text-white' : 'bg-gray-200'
+                          }`}
+                        >
+                          {cat === 'all' ? 'Все' : cat}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mb-6 relative">
+                      <IconMap.Search className="absolute left-3 top-3 text-gray-400" size={20} />
+                      <input
+                        type="text"
+                        placeholder="Поиск калькулятора..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredCalcs.map(([id, calc]) => {
+                        const Icon = IconMap[calc.icon] || IconMap.Calculator;
+                        return (
+                          <button
+                            key={id}
+                            onClick={() => {
+                              setActiveCalc(id);
+                              setFormData({});
+                              setResult(null);
+                            }}
+                            className="p-6 border-2 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all text-left group"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="p-3 bg-blue-50 rounded-lg group-hover:bg-blue-100">
+                                <Icon className="text-blue-600" size={24} />
+                              </div>
+                              <div className="flex-1">
+                                <div className="text-xs text-gray-500 mb-1">{calc.category}</div>
+                                <h3 className="font-semibold text-gray-800 mb-1">{calc.name}</h3>
+                                <p className="text-sm text-gray-600">{calc.desc}</p>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <button
+                      onClick={() => {
+                        setActiveCalc(null);
+                        handleReset();
+                      }}
+                      className="mb-4 text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      ← Назад к списку
+                    </button>
+                    <div className="bg-white rounded-xl border-2 p-6">
+                      <div className="mb-6">
+                        <div className="text-xs text-gray-500 mb-1">
+                          {CALCULATORS_DB[activeCalc].category}
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-800">
+                          {CALCULATORS_DB[activeCalc].name}
+                        </h2>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {CALCULATORS_DB[activeCalc].desc}
+                        </p>
+                      </div>
+                      <div className="space-y-4">
+                        {CALCULATORS_DB[activeCalc].fields.map(field => renderField(field))}
+                      </div>
+                      <div className="flex gap-3 mt-6">
+                        <button
+                          onClick={handleCalculate}
+                          className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
+                        >
+                          Рассчитать
+                        </button>
+                        <button
+                          onClick={handleReset}
+                          className="px-6 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300"
+                        >
+                          Сбросить
+                        </button>
+                      </div>
+                      {result && (
+                        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                          <div className="text-3xl font-bold text-gray-800">{result.score}</div>
+                          <div className={`text-lg ${colorMap[result.color]} font-medium mt-2`}>
+                            {result.result}
+                          </div>
+                          {result.details && (
+                            <div className="text-sm text-gray-600 mt-2">{result.details}</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="text-center mt-6 text-sm text-gray-600">
+              <p>⚠️ Только для образовательных целей • Не заменяет клиническую оценку</p>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    // --- ЗАПУСК ---
+    const root = createRoot(document.getElementById('root'));
+    root.render(<MedicalCalculators />);
+  </script>
+  <!-- Service Worker для PWA -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('SW registered:', reg))
+          .catch(err => console.log('SW registration failed:', err));
+      });
+    }
+  </script>
+</body>
+</html>

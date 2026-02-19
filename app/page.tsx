@@ -150,7 +150,7 @@ export default async function HomePage() {
             🎬 Анализ видео
           </Link>
           <a
-            href="https://medcalculator.vercel.app"
+            href="/calculators"
             target="_blank"
             rel="noopener noreferrer"
             className="bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 border-2 border-indigo-200 hover:border-indigo-400 text-indigo-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"

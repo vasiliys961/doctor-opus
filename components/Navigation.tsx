@@ -17,7 +17,7 @@ export default function Navigation() {
     { name: '🤖 ИИ-Ассистент', href: '/chat' },
     { name: '📚 Персональная библиотека', href: '/library' },
     { name: '📝 Протокол приёма', href: '/protocol' },
-    { name: '🧮 Мед. калькуляторы', href: 'https://medcalculator.vercel.app', isExternal: true },
+    { name: '🧮 Мед. калькуляторы', href: '/calculators' },
     { name: '📚 Клинические рекомендации', href: '/protocols' },
     { name: '📈 Оценка ЭКГ', href: '/ecg' },
     { name: '🔍 Изображение+синхронизация', href: '/image-analysis' },

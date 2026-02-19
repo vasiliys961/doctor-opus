@@ -439,7 +439,7 @@ export default function ProtocolPage() {
               )}
               <div className="mt-2">
                 <a 
-                  href="https://medcalculator.vercel.app" 
+                  href="/calculators"
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded-md transition-colors"
