@@ -52,16 +52,25 @@ export default function RootLayout({
   return (
     <html lang="ru" className={inter.variable}>
       <body className="antialiased">
-        <div className="fixed top-0 left-0 right-0 z-[9999] bg-amber-50 border-b border-amber-100 py-1 px-4 text-[10px] sm:text-xs text-amber-800 text-center leading-tight">
-          ⚠️ <strong>doctor-opus.ru</strong> — программный инструмент для медицинских специалистов. Не является медицинской организацией, не оказывает медицинских услуг и не заменяет консультацию.
+        {/* 
+          iOS/Safari: фиксированные баннеры легко перекрывают мобильную шапку и "крадут" тапы/скролл.
+          Держим дисклеймер ниже мобильной шапки (<lg) и увеличиваем top padding основного контента.
+        */}
+        <div className="fixed left-0 right-0 top-14 lg:top-0 z-40 pointer-events-none bg-amber-50 border-b border-amber-100 py-1 px-4 text-[10px] sm:text-xs text-amber-800 text-center leading-tight">
+          <span className="sm:hidden">
+            ⚠️ Не мед. организация. Требуется верификация врачом.
+          </span>
+          <span className="hidden sm:inline">
+            ⚠️ <strong>doctor-opus.ru</strong> — программный инструмент для медицинских специалистов. Не является медицинской организацией, не оказывает медицинских услуг и не заменяет консультацию.
+          </span>
         </div>
         <Providers>
-          <div className="flex min-h-screen pt-6 sm:pt-4">
+          <div className="flex min-h-screen">
             {/* Навигация - адаптивная для всех устройств */}
             <Navigation />
             
             {/* Основной контент с адаптивными отступами */}
-            <main className="flex-1 flex flex-col pt-16 lg:pt-0 p-4 sm:p-6 lg:p-8">
+            <main className="flex-1 flex flex-col pt-24 sm:pt-20 lg:pt-0 p-4 sm:p-6 lg:p-8">
               <ErrorBoundary componentName="Основной контент">
                 <div className="flex-1">
                   {children}
