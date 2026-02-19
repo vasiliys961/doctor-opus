@@ -16,6 +16,34 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
 
   const normalizeCode = (raw: string) => raw.replace(/\D/g, '')
 
+  const getDataUrlMime = (dataUrl: string): string | null => {
+    const m = dataUrl.match(/^data:([^;]+);base64,/)
+    return m ? m[1] : null
+  }
+
+  const convertDataUrlToJpeg = async (dataUrl: string, quality: number = 0.9): Promise<string> => {
+    // iPhone часто отдает HEIC, а на десктопе (и особенно в PWA) это может не отрисоваться.
+    // Конвертируем на устройстве-источнике в JPEG, если браузер способен декодировать изображение.
+    const img = new Image()
+    img.decoding = 'async'
+
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error('decode_failed'))
+      img.src = dataUrl
+    })
+
+    const canvas = document.createElement('canvas')
+    canvas.width = img.naturalWidth || img.width
+    canvas.height = img.naturalHeight || img.height
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('no_canvas_context')
+    ctx.drawImage(img, 0, 0)
+
+    return canvas.toDataURL('image/jpeg', quality)
+  }
+
   // Инициализация режима приема (для десктопа)
   const initReceiveMode = async () => {
     setIsLoading(true)
@@ -40,15 +68,31 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
     if (!code || !currentImage) return
     
     setIsLoading(true)
-    setStatus('Отправка...')
+    setStatus('Подготовка изображения...')
     try {
+      const mime = getDataUrlMime(currentImage)
+      let imageToSend = currentImage
+
+      // Конвертируем в JPEG только когда есть риск несовместимости.
+      if (mime && mime !== 'image/jpeg' && mime !== 'image/png') {
+        setStatus('Конвертация в JPEG...')
+        try {
+          imageToSend = await convertDataUrlToJpeg(currentImage, 0.9)
+        } catch (_e) {
+          // Если конвертация не удалась (например, браузер не декодирует источник),
+          // все равно попробуем отправить исходные данные.
+          imageToSend = currentImage
+        }
+      }
+
+      setStatus('Отправка...')
       const response = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'send',
           code,
-          image: currentImage
+          image: imageToSend
         })
       })
       const data = await response.json()
