@@ -335,6 +335,12 @@ export default function ImageAnalysisPage() {
         onImageReceived={(base64) => {
           try {
             const syncedFile = dataUrlToFile(base64, 'synced_mobile_photo')
+            // Важно: если до этого пользователь открывал DICOM, UI мог остаться в DICOM-режиме
+            // и не показать обычный preview. При синхронизации со смартфона ожидаем обычное фото.
+            setIsDicom(false)
+            setDicomAnalysisImage(null)
+            setValidation(null)
+            setAdditionalFiles([])
             setFile(syncedFile)
             setImagePreview(base64)
             setResult('')
