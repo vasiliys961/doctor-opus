@@ -1,23 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Временное хранилище в памяти (работает в режиме разработки и на одном инстансе)
-// Для продакшена здесь должна быть база данных (Redis/Postgres)
-const syncSessions: Record<string, { image: string | null, timestamp: number }> = {};
+type SyncSession = { image: string | null; timestamp: number };
 
-// Очистка старых сессий каждые 10 минут
-setInterval(() => {
-  const now = Date.now();
-  Object.keys(syncSessions).forEach(id => {
-    if (now - syncSessions[id].timestamp > 10 * 60 * 1000) {
-      delete syncSessions[id];
+function normalizeCode(raw: unknown): string {
+  // Пользователи часто вводят код с пробелами ("123 456") или вставляют с мусором.
+  // Делаем максимально толерантно: оставляем только цифры.
+  return String(raw ?? '').replace(/\D/g, '');
+}
+
+// Временное хранилище в памяти (работает в режиме разработки и на одном инстансе).
+// Важно: в dev модуль может переинициализироваться — сохраняем ссылку в globalThis.
+// Для продакшена правильнее использовать Redis/Postgres.
+const globalForSync = globalThis as unknown as { __doctorOpusSyncSessions?: Record<string, SyncSession>; __doctorOpusSyncCleaner?: NodeJS.Timeout };
+const syncSessions: Record<string, SyncSession> = globalForSync.__doctorOpusSyncSessions || {};
+globalForSync.__doctorOpusSyncSessions = syncSessions;
+
+// Очистка старых сессий (защищаемся от повторной установки таймера при HMR)
+if (!globalForSync.__doctorOpusSyncCleaner) {
+  globalForSync.__doctorOpusSyncCleaner = setInterval(() => {
+    const now = Date.now();
+    for (const id of Object.keys(syncSessions)) {
+      if (now - syncSessions[id].timestamp > 10 * 60 * 1000) {
+        delete syncSessions[id];
+      }
     }
-  });
-}, 5 * 60 * 1000);
+  }, 5 * 60 * 1000);
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
-  const code = searchParams.get('code');
+  const code = normalizeCode(searchParams.get('code'));
 
   if (action === 'init') {
     // Генерация нового кода синхронизации
@@ -48,7 +61,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, code, image } = body;
+    const { action, image } = body;
+    const code = normalizeCode(body?.code);
 
     if (action === 'send' && code && image) {
       if (!syncSessions[code]) {

@@ -14,6 +14,8 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
   const [status, setStatus] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
+  const normalizeCode = (raw: string) => raw.replace(/\D/g, '')
+
   // Инициализация режима приема (для десктопа)
   const initReceiveMode = async () => {
     setIsLoading(true)
@@ -34,7 +36,8 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
 
   // Отправка изображения (со смартфона)
   const sendImage = async () => {
-    if (!inputCode || !currentImage) return
+    const code = normalizeCode(inputCode)
+    if (!code || !currentImage) return
     
     setIsLoading(true)
     setStatus('Отправка...')
@@ -44,7 +47,7 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'send',
-          code: inputCode,
+          code,
           image: currentImage
         })
       })
@@ -146,6 +149,8 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
             <input
               type="text"
               value={inputCode}
+              inputMode="numeric"
+              autoComplete="one-time-code"
               onChange={(e) => setInputCode(e.target.value)}
               placeholder="Напр: 452 981"
               className="w-full px-4 py-3 text-center text-2xl font-mono tracking-widest border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -154,9 +159,9 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
           
           <button
             onClick={sendImage}
-            disabled={!currentImage || !inputCode || isLoading}
+            disabled={!currentImage || !normalizeCode(inputCode) || isLoading}
             className={`w-full py-3 rounded-lg font-bold text-white transition-all shadow-md ${
-              !currentImage || !inputCode || isLoading
+              !currentImage || !normalizeCode(inputCode) || isLoading
                 ? 'bg-gray-400 cursor-not-allowed'
                 : 'bg-blue-600 hover:bg-blue-700 active:transform active:scale-95'
             }`}
