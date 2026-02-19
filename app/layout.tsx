@@ -18,6 +18,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Медицинский ИИ-Ассистент',
   description: 'Единый ИИ-центр для анализа медицинских изображений, ЭКГ, лабораторных данных и генетики',
+  verification: {
+    other: {
+      enot: '2873357f',
+    },
+  },
   icons: {
     icon: '/icon-192.png', 
   },

@@ -28,6 +28,9 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   const [sessionId, setSessionId] = useState('')
   const [showLibrarySearch, setShowLibrarySearch] = useState(false)
 
+  const PROTOCOL_DRAFT_KEY = 'protocol_draft'
+  const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
+
   useEffect(() => {
     if (showPatientSelector) {
       loadPatients()
@@ -509,6 +512,89 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     router.push('/chat');
   };
 
+  const buildProtocolDraftFromResult = (fullText: string) => {
+    // Берем только "сухую" клиническую часть (протокол описания + заключение),
+    // отбрасывая технический мусор стриминга и секции с гипотезами/тактикой.
+    const lines = fullText.split('\n').filter(line => {
+      const l = line.toLowerCase().trim();
+      if (!l) return true;
+      // Убираем только технические строки стриминга
+      if (l.includes('данные приняты') || l.includes('раздел 0 принят')) return false;
+      if (l.includes('подготовка к анализу') || l.includes('извлечение данных')) return false;
+      if (l.includes('клинический разбор через') || l.includes('профессорский разбор через')) return false;
+      if (l.startsWith('>') && l.includes('этап')) return false;
+      if (l.includes('gemini vision') || l.includes('быстрый анализ')) return false;
+      if (line.trim() === '.' || line.trim() === '..' || line.trim() === '...') return false;
+      if (l.startsWith('---') && l.length < 10) return false;
+      return true;
+    });
+
+    const excludeSections = [
+      'клинический обзор',
+      'ведущий синдром',
+      'клинический сценарий',
+      'оценка рисков',
+      'ориентировочная тактика',
+      'тактика ведения',
+      'противоречия и ограничения',
+      'юридический статус',
+      'интегрированная сводка',
+      'технические параметры',
+      'клинические гипотезы',
+      'differential diagnosis',
+      'дифференциальная диагностика',
+      'дифференциальный диагноз',
+    ];
+
+    let skipSection = false;
+    let skipSectionLevel = 0;
+    const out: string[] = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (!skipSection) out.push('');
+        continue;
+      }
+
+      const headingMatch = line.match(/^(#{1,4})\s+/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const headingText = line.replace(/^#{1,4}\s+/, '').replace(/\*\*/g, '').trim().toLowerCase();
+        const cleanHeading = headingText.replace(/^\d+[\.\)]\s*/, '');
+
+        if (excludeSections.some(s => cleanHeading.includes(s))) {
+          skipSection = true;
+          skipSectionLevel = level;
+          continue;
+        }
+
+        if (skipSection && level <= skipSectionLevel) {
+          skipSection = false;
+        }
+      }
+
+      if (skipSection) continue;
+      if (line.startsWith('```')) continue;
+      out.push(line);
+    }
+
+    return out.join('\n').trim();
+  };
+
+  const handleTransferToEcgProtocol = () => {
+    const draftText = buildProtocolDraftFromResult(result);
+    const payload = {
+      kind: 'ecg',
+      templateId: ECG_FUNCTIONAL_TEMPLATE_ID,
+      rawText: draftText,
+      timestamp: new Date().toISOString(),
+    };
+
+    localStorage.setItem(PROTOCOL_DRAFT_KEY, JSON.stringify(payload));
+    router.push('/protocol');
+  };
+
   // Если есть результат, показываем его даже во время загрузки (для streaming)
   if (!result) {
     if (loading) {
@@ -581,6 +667,15 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           >
             {copied ? '✓ Скопировано' : '📋 Копировать'}
           </button>
+          {!loading && result && imageType === 'ecg' && (
+            <button
+              onClick={handleTransferToEcgProtocol}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
+              title="Оформить короткое заключение функционалиста по шаблону"
+            >
+              🫀 В протокол ЭКГ
+            </button>
+          )}
           <button
             onClick={handleDownloadDoc}
             disabled={downloading}

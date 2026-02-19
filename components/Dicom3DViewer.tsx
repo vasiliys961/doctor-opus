@@ -357,7 +357,7 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
         volumePropertyRef.current = property;
         renderWindowRef.current = renderWindow;
 
-        return { renderWindow, renderer, interactor, volume, property, ctfun, ofun };
+        return { kind: 'volume' as const, renderWindow, renderer, openGLRenderWindow, interactor, volume, property, ctfun, ofun };
       };
 
       // Настройка вьюпортов
@@ -426,7 +426,7 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
         interactor.setInteractorStyle(style);
 
         renderWindow.render();
-        return { renderWindow, renderer, imageResliceMapper, interactor, axis, plane };
+        return { kind: 'mpr' as const, renderWindow, renderer, openGLRenderWindow, imageResliceMapper, interactor, axis, plane };
       };
 
       const views = [
@@ -658,29 +658,86 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
       });
 
       // Синхронизация ресайза
+      const bounds = imageData.getBounds(); // world-space bounds in mm
+      const center = imageData.getCenter();
+      const worldX = Math.abs(bounds[1] - bounds[0]);
+      const worldY = Math.abs(bounds[3] - bounds[2]);
+      const worldZ = Math.abs(bounds[5] - bounds[4]);
+      const baseDistance = Math.max(worldX, worldY, worldZ, 1000) * 2;
+
+      const fitMprToContainer = (view: any, containerWidth: number, containerHeight: number) => {
+        const camera = view.renderer.getActiveCamera();
+        camera.setParallelProjection(true);
+
+        // Keep the slice centered around the volume center.
+        camera.setFocalPoint(center[0], center[1], center[2]);
+
+        // Plane-size in world units (mm) depends on axis.
+        let planeW = worldX;
+        let planeH = worldY;
+        if (view.axis === 1) { // Coronal: X/Z
+          planeW = worldX;
+          planeH = worldZ;
+          camera.setPosition(center[0], center[1] + baseDistance, center[2]);
+          camera.setViewUp(0, 0, 1);
+        } else if (view.axis === 2) { // Sagittal: Y/Z
+          planeW = worldY;
+          planeH = worldZ;
+          camera.setPosition(center[0] + baseDistance, center[1], center[2]);
+          camera.setViewUp(0, 0, 1);
+        } else { // Axial: X/Y
+          planeW = worldX;
+          planeH = worldY;
+          camera.setPosition(center[0], center[1], center[2] + baseDistance);
+          camera.setViewUp(0, -1, 0);
+        }
+
+        const aspect = containerWidth / Math.max(1, containerHeight);
+        const halfW = planeW / 2;
+        const halfH = planeH / 2;
+        const parallelScale = Math.max(halfH, halfW / Math.max(0.0001, aspect)) * 1.03; // tiny padding
+        camera.setParallelScale(parallelScale);
+
+        view.renderer.resetCameraClippingRange?.();
+      };
+
+      let didInitialVolumeFit = false;
       const handleResize = () => {
         views.forEach(v => {
-          const view = v.renderWindow.getViews?.()?.[0];
-          if (!view) return;
+          const glView = v.openGLRenderWindow || v.renderWindow.getViews?.()?.[0];
+          if (!glView) return;
 
           // В редких случаях (fast refresh/перемонтирование DOM) container может быть null.
-          const container = view.getContainer?.();
+          const container = glView.getContainer?.();
           if (!container) return;
 
           const dims = container.getBoundingClientRect?.();
           if (!dims) return;
 
           if (dims.width > 0 && dims.height > 0) {
-            view.setSize(Math.floor(dims.width), Math.floor(dims.height));
-            v.renderer.resetCamera();
+            glView.setSize(Math.floor(dims.width), Math.floor(dims.height));
+
+            if (v.kind === 'mpr') {
+              fitMprToContainer(v, dims.width, dims.height);
+            } else {
+              // Volume: center once when we first get a real container size.
+              if (!didInitialVolumeFit) {
+                v.renderer.resetCamera();
+                didInitialVolumeFit = true;
+              } else {
+                v.renderer.resetCameraClippingRange?.();
+              }
+            }
             v.renderWindow.render();
           }
         });
       };
       window.addEventListener('resize', handleResize);
       
-      // Форсируем начальный рендеринг через паузу, чтобы контейнеры успели обрести размер
-      setTimeout(() => {
+      // Форсируем начальную подгонку: пробуем сразу, затем после layout-паузы.
+      // Это убирает "прилипание" картинки к краю при первом открытии/уменьшении окна.
+      const r0 = window.setTimeout(() => handleResize(), 0);
+      const r1 = window.setTimeout(() => {
         handleResize();
         console.log('✅ [MPR] Views initialized and rendered');
       }, 300);
@@ -688,6 +745,8 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
       setLoading(false);
       return () => {
         window.removeEventListener('resize', handleResize);
+        window.clearTimeout(r0);
+        window.clearTimeout(r1);
         [axialRef, coronalRef, sagittalRef].forEach((ref, idx) => {
           if (ref.current && wheelHandlers[idx]) {
             ref.current.removeEventListener('wheel', wheelHandlers[idx]);

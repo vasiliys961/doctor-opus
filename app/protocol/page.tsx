@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import AudioUpload from '@/components/AudioUpload'
 
@@ -16,6 +15,9 @@ import { MODELS } from '@/lib/openrouter'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
+
+const PROTOCOL_DRAFT_KEY = 'protocol_draft'
+const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
 
 export default function ProtocolPage() {
   const [rawText, setRawText] = useState('')
@@ -34,7 +36,7 @@ export default function ProtocolPage() {
 
   // Универсальные промпты
   const [selectedUniversalKey, setSelectedUniversalKey] = useState<string>('')
-  const [universalPrompt, setUniversalUniversalPrompt] = useState<string>('')
+  const [universalPrompt, setUniversalPrompt] = useState<string>('')
   
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -51,11 +53,34 @@ export default function ProtocolPage() {
     }
   }, [])
 
+  // Импорт черновика протокола (например, из анализа ЭКГ)
+  useEffect(() => {
+    const raw = localStorage.getItem(PROTOCOL_DRAFT_KEY)
+    if (!raw) return
+
+    try {
+      const parsed = JSON.parse(raw) as { kind?: string; rawText?: string; templateId?: string }
+      if (!parsed?.rawText) return
+
+      // Сразу подставляем текст и нужный шаблон, затем очищаем черновик,
+      // чтобы повторно не подставлялся при обновлении страницы.
+      setRawText(parsed.rawText)
+      const tpl = DEFAULT_TEMPLATES.find(t => t.id === (parsed.templateId || ''))
+      if (tpl) {
+        applyTemplate(tpl)
+      }
+    } catch (e) {
+      // ignore
+    } finally {
+      localStorage.removeItem(PROTOCOL_DRAFT_KEY)
+    }
+  }, [])
+
   const handleUniversalSelect = (key: string) => {
     setSelectedUniversalKey(key)
     if (key && UNIVERSAL_SPECIALIST_TEMPLATES[key]) {
       const tpl = UNIVERSAL_SPECIALIST_TEMPLATES[key]
-      setUniversalUniversalPrompt(tpl.prompt)
+      setUniversalPrompt(tpl.prompt)
       setSpecialistName(tpl.name)
       
       // Если у специалиста есть своя структура, подставляем её
@@ -63,7 +88,7 @@ export default function ProtocolPage() {
         setCustomTemplate(tpl.structure)
       }
     } else {
-      setUniversalUniversalPrompt('')
+      setUniversalPrompt('')
     }
   }
 
@@ -188,6 +213,9 @@ export default function ProtocolPage() {
     setSelectedTemplateId(tpl.id)
     setSpecialistName(tpl.specialist)
     setCustomTemplate(tpl.content)
+    // Не смешиваем универсальные директивы с выбранным шаблоном
+    setSelectedUniversalKey('')
+    setUniversalPrompt('')
   }
 
   const handleExportToDocx = async () => {
@@ -222,7 +250,9 @@ export default function ProtocolPage() {
       }
       const doc = new Document({ sections: [{ properties: {}, children: paragraphs }] })
       const blob = await Packer.toBlob(doc)
-      saveAs(blob, `Протокол_приема_${new Date().toISOString().split('T')[0]}.docx`)
+      const datePart = new Date().toISOString().split('T')[0]
+      const filePrefix = selectedTemplateId === ECG_FUNCTIONAL_TEMPLATE_ID ? 'Протокол_ЭКГ' : 'Протокол_приема'
+      saveAs(blob, `${filePrefix}_${datePart}.docx`)
     } catch (err: any) {
       alert('Ошибка экспорта: ' + err.message)
     }
@@ -230,7 +260,9 @@ export default function ProtocolPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">📝 Протокол приёма</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">
+        {selectedTemplateId === ECG_FUNCTIONAL_TEMPLATE_ID ? '🫀 Протокол ЭКГ' : '📝 Протокол приёма'}
+      </h1>
       
       {showAudioUpload && (
         <div className="mb-4 bg-white rounded-lg shadow-lg p-4">
@@ -285,7 +317,7 @@ export default function ProtocolPage() {
                 </div>
                 <textarea
                   value={universalPrompt}
-                  onChange={(e) => setUniversalUniversalPrompt(e.target.value)}
+                  onChange={(e) => setUniversalPrompt(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none min-h-[60px] bg-indigo-50/30 font-medium leading-relaxed"
                   placeholder="Специфические инструкции для этого врача..."
                 />
