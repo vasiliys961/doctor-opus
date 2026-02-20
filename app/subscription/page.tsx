@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Script from 'next/script'
 import { SUBSCRIPTION_PACKAGES, getBalance, isSubscriptionEnabled } from '@/lib/subscription-manager'
 import type { SubscriptionBalance } from '@/lib/subscription-manager'
 import Link from 'next/link'
@@ -78,23 +77,22 @@ export default function SubscriptionPage() {
           </p>
         </div>
 
-        {/* ВИТРИНА PAYANYWAY */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 mb-10">
-          <h2 className="text-xl font-bold text-gray-800 mb-1">💳 Оплата через PayAnyWay</h2>
-          <p className="text-sm text-gray-500 mb-4">
-            Безопасная оплата картой. Введите ваш email из Doctor Opus — единицы зачислятся автоматически.
-          </p>
-          <div id="payanyway-widget">
-            <Script
-              src="https://www.payanyway.ru/assistant-builder"
-              strategy="afterInteractive"
-            />
-            <Script
-              src="https://self.payanyway.ru/instaforms/500000021493/17715342661162/start.js"
-              data-paw-form="true"
-              strategy="afterInteractive"
-            />
+        {/* КНОПКА ПЕРЕХОДА К ОПЛАТЕ */}
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 mb-10 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800 mb-1">💳 Готовы пополнить баланс?</h2>
+            <p className="text-sm text-gray-500">
+              Безопасная оплата картой. Введите ваш email из Doctor Opus — единицы зачислятся автоматически.
+            </p>
           </div>
+          <a
+            href="https://self.payanyway.ru/17715342661162"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 bg-gradient-to-r from-teal-500 to-emerald-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-teal-600 hover:to-emerald-700 transition shadow-lg text-center"
+          >
+            Перейти к оплате →
+          </a>
         </div>
 
         {/* ИНДИВИДУАЛЬНЫЕ ПАКЕТЫ */}
