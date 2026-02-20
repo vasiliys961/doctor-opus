@@ -74,7 +74,8 @@ export class PayanywayProvider implements PaymentProvider {
       MNT_SIGNATURE,
     } = data;
 
-    const str = `${MNT_ID}${MNT_TRANSACTION_ID}${MNT_OPERATION_ID}${MNT_AMOUNT}${MNT_CURRENCY_CODE}${MNT_TEST_MODE}${this.secret}`;
+    const MNT_SUBSCRIBER_ID = data.MNT_SUBSCRIBER_ID || '';
+    const str = `${MNT_ID}${MNT_TRANSACTION_ID}${MNT_OPERATION_ID}${MNT_AMOUNT}${MNT_CURRENCY_CODE}${MNT_SUBSCRIBER_ID}${MNT_TEST_MODE}${this.secret}`;
     const mySignature = crypto.createHash('md5').update(str).digest('hex');
     const isValid = mySignature.toLowerCase() === (MNT_SIGNATURE as string || '').toLowerCase();
 

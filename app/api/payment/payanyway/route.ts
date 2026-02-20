@@ -33,7 +33,10 @@ function findPackageByAmount(amount: number): {
   return null;
 }
 
-/** Проверяет MD5-подпись уведомления от Moneta.ru */
+/** Проверяет MD5-подпись уведомления от Moneta.ru
+ * Формула: MD5(MNT_ID + MNT_TRANSACTION_ID + MNT_OPERATION_ID + MNT_AMOUNT + MNT_CURRENCY_CODE + MNT_SUBSCRIBER_ID + MNT_TEST_MODE + SECRET)
+ * Если MNT_SUBSCRIBER_ID отсутствует — используется пустая строка
+ */
 function validateSignature(data: Record<string, string>): boolean {
   const {
     MNT_ID: id,
@@ -41,11 +44,12 @@ function validateSignature(data: Record<string, string>): boolean {
     MNT_OPERATION_ID,
     MNT_AMOUNT,
     MNT_CURRENCY_CODE,
+    MNT_SUBSCRIBER_ID = '',
     MNT_TEST_MODE,
     MNT_SIGNATURE,
   } = data;
 
-  const str = `${id}${MNT_TRANSACTION_ID}${MNT_OPERATION_ID}${MNT_AMOUNT}${MNT_CURRENCY_CODE}${MNT_TEST_MODE}${MNT_SECRET}`;
+  const str = `${id}${MNT_TRANSACTION_ID}${MNT_OPERATION_ID}${MNT_AMOUNT}${MNT_CURRENCY_CODE}${MNT_SUBSCRIBER_ID}${MNT_TEST_MODE}${MNT_SECRET}`;
   const expected = crypto.createHash('md5').update(str).digest('hex');
   return expected.toLowerCase() === (MNT_SIGNATURE || '').toLowerCase();
 }
@@ -97,24 +101,14 @@ export async function POST(request: NextRequest) {
     const amount = parseFloat(data.MNT_AMOUNT || '0');
     const operationId = data.MNT_OPERATION_ID || '';
 
-    // PayAnyWay может передавать email в разных полях
-    const email = (
-      data.MNT_SUBSCRIBER_ID ||
-      data.payerEmail ||
-      data.email ||
-      data.MNT_CORRACCOUNT ||
-      data.userAccount ||
-      ''
-    ).toLowerCase().trim();
+    // По документации Moneta.ru email покупателя передаётся в MNT_SUBSCRIBER_ID
+    const email = (data.MNT_SUBSCRIBER_ID || '').toLowerCase().trim();
 
-    // Логируем все поля для диагностики
-    safeLog(`💳 [PAYANYWAY] Все поля:`, JSON.stringify(Object.keys(data)));
+    safeLog(`💳 [PAYANYWAY] Все поля: ${JSON.stringify(Object.keys(data))}`);
 
     if (!email) {
-      safeWarn(`⚠️ [PAYANYWAY] Email не найден. Поля: ${JSON.stringify(data)}`);
-      // Не блокируем — отвечаем SUCCESS чтобы PayAnyWay не повторял
-      // Деньги зачтём вручную по operationId если нужно
-      return new Response('SUCCESS', { status: 200 });
+      safeWarn(`⚠️ [PAYANYWAY] MNT_SUBSCRIBER_ID пуст. Все данные: ${JSON.stringify(data)}`);
+      return new Response('FAIL', { status: 200 });
     }
 
     // Определяем пакет по сумме
