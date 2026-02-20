@@ -50,15 +50,36 @@ function validateSignature(data: Record<string, string>): boolean {
   return expected.toLowerCase() === (MNT_SIGNATURE || '').toLowerCase();
 }
 
+/** Парсит тело запроса независимо от Content-Type */
+async function parseBody(request: NextRequest): Promise<Record<string, string>> {
+  const contentType = request.headers.get('content-type') || '';
+  const data: Record<string, string> = {};
+
+  try {
+    if (contentType.includes('application/json')) {
+      const json = await request.json();
+      Object.entries(json).forEach(([k, v]) => { data[k] = String(v); });
+    } else if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      formData.forEach((value, key) => { data[key] = value.toString(); });
+    } else {
+      // Fallback: пробуем как urlencoded текст
+      const text = await request.text();
+      new URLSearchParams(text).forEach((value, key) => { data[key] = value; });
+    }
+  } catch {
+    // Если всё упало — возвращаем пустой объект
+  }
+
+  return data;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    // Разбираем тело запроса (PayAnyWay шлет application/x-www-form-urlencoded)
-    const formData = await request.formData();
-    const data: Record<string, string> = {};
-    formData.forEach((value, key) => {
-      data[key] = value.toString();
-    });
+    const data = await parseBody(request);
 
+    const contentType = request.headers.get('content-type') || 'unknown';
+    safeLog(`💳 [PAYANYWAY] Content-Type: ${contentType}`);
     safeLog(`💳 [PAYANYWAY] Получено уведомление:`, JSON.stringify(data));
 
     // Проверяем, что MNT_ID совпадает (базовая защита)
