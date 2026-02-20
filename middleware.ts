@@ -38,8 +38,8 @@ export async function middleware(request: NextRequest) {
   
   // Публичные API (без токена)
   const publicApiPaths = [
-    '/api/auth',           // NextAuth (login, session, providers) + /api/auth/register
-    '/api/payment/result', // КРИТИЧНО: Webhook для платежей Robokassa
+    '/api/auth',              // NextAuth (login, session, providers) + /api/auth/register
+    '/api/payment/payanyway', // Webhook для платежей PayAnyWay (Moneta.ru)
   ];
   
   // Проверка публичных путей

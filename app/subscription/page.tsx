@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Script from 'next/script'
 import { SUBSCRIPTION_PACKAGES, initializeBalance, getBalance, isSubscriptionEnabled } from '@/lib/subscription-manager'
 import type { SubscriptionBalance } from '@/lib/subscription-manager'
 import { useRouter } from 'next/navigation'
@@ -116,6 +117,25 @@ export default function SubscriptionPage() {
           <p className="text-green-800 text-sm">
             <strong>Бесплатно без списания единиц:</strong> Медицинские калькуляторы и сканирование документов (работают локально в браузере)
           </p>
+        </div>
+
+        {/* ВИТРИНА PAYANYWAY */}
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 mb-10">
+          <h2 className="text-xl font-bold text-gray-800 mb-1">💳 Оплата через PayAnyWay</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Безопасная оплата картой. Введите ваш email из Doctor Opus — единицы зачислятся автоматически.
+          </p>
+          <div id="payanyway-widget">
+            <Script
+              src="https://www.payanyway.ru/assistant-builder"
+              strategy="afterInteractive"
+            />
+            <Script
+              src="https://self.payanyway.ru/instaforms/500000021493/17715342661162/start.js"
+              data-paw-form="true"
+              strategy="afterInteractive"
+            />
+          </div>
         </div>
 
         {/* ИНДИВИДУАЛЬНЫЕ ПАКЕТЫ */}

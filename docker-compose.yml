@@ -53,11 +53,11 @@ services:
       - SMTP_PASS=${SMTP_PASS:-}
       - SMTP_FROM=${SMTP_FROM:-}
       
-      # === ПЛАТЕЖИ ===
-      - ROBOKASSA_LOGIN=${ROBOKASSA_LOGIN:-}
-      - ROBOKASSA_PASS1=${ROBOKASSA_PASS1:-}
-      - ROBOKASSA_PASS2=${ROBOKASSA_PASS2:-}
-      - PAYMENT_IP_WHITELIST=${PAYMENT_IP_WHITELIST:-}
+      # === ПЛАТЕЖИ (PayAnyWay) ===
+      - PAYMENT_PROVIDER=payanyway
+      - PAYANYWAY_MNT_ID=${PAYANYWAY_MNT_ID:-}
+      - PAYANYWAY_SECRET=${PAYANYWAY_SECRET:-}
+      - PAYANYWAY_TEST_MODE=${PAYANYWAY_TEST_MODE:-0}
       
       # === ПОДПИСКА ===
       - NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE=${NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE:-false}

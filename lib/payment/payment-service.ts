@@ -1,25 +1,5 @@
 import { PaymentProvider, PaymentProviderType } from './types';
-import { RobokassaProvider } from './providers/robokassa';
-import { BotoplatProvider } from './providers/botoplat';
-
-// Placeholder classes for other providers
-class TinkoffProvider implements PaymentProvider {
-  async generatePaymentUrl() { return '#'; }
-  async validateNotification() { return { isValid: false, orderId: '', amount: 0 }; }
-  getSuccessResponse() { return 'OK'; }
-}
-
-class ProdamusProvider implements PaymentProvider {
-  async generatePaymentUrl() { return '#'; }
-  async validateNotification() { return { isValid: false, orderId: '', amount: 0 }; }
-  getSuccessResponse() { return 'OK'; }
-}
-
-class YooMoneyProvider implements PaymentProvider {
-  async generatePaymentUrl() { return '#'; }
-  async validateNotification() { return { isValid: false, orderId: '', amount: 0 }; }
-  getSuccessResponse() { return 'OK'; }
-}
+import { PayanywayProvider } from './providers/payanyway';
 
 class PaymentService {
   private providers: Record<PaymentProviderType, PaymentProvider>;
@@ -27,15 +7,10 @@ class PaymentService {
 
   constructor() {
     this.providers = {
-      robokassa: new RobokassaProvider(),
-      tinkoff: new TinkoffProvider(),
-      prodamus: new ProdamusProvider(),
-      yoomoney: new YooMoneyProvider(),
-      botoplat: new BotoplatProvider()
+      payanyway: new PayanywayProvider(),
     };
-    
-    // Set active provider from env, default to robokassa for now
-    this.activeProvider = (process.env.PAYMENT_PROVIDER as PaymentProviderType) || 'robokassa';
+
+    this.activeProvider = (process.env.PAYMENT_PROVIDER as PaymentProviderType) || 'payanyway';
   }
 
   getProvider(): PaymentProvider {

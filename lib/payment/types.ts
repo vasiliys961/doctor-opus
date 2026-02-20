@@ -38,6 +38,6 @@ export interface PaymentProvider {
   }>;
 }
 
-export type PaymentProviderType = 'robokassa' | 'tinkoff' | 'prodamus' | 'yoomoney' | 'botoplat';
+export type PaymentProviderType = 'payanyway';
 
 export type RefundStatus = 'pending' | 'approved' | 'completed' | 'rejected';
