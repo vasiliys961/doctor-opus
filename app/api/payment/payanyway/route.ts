@@ -96,11 +96,25 @@ export async function POST(request: NextRequest) {
 
     const amount = parseFloat(data.MNT_AMOUNT || '0');
     const operationId = data.MNT_OPERATION_ID || '';
-    const email = (data.MNT_SUBSCRIBER_ID || data.payerEmail || '').toLowerCase().trim();
+
+    // PayAnyWay может передавать email в разных полях
+    const email = (
+      data.MNT_SUBSCRIBER_ID ||
+      data.payerEmail ||
+      data.email ||
+      data.MNT_CORRACCOUNT ||
+      data.userAccount ||
+      ''
+    ).toLowerCase().trim();
+
+    // Логируем все поля для диагностики
+    safeLog(`💳 [PAYANYWAY] Все поля:`, JSON.stringify(Object.keys(data)));
 
     if (!email) {
-      safeError('❌ [PAYANYWAY] Email покупателя не получен');
-      return new Response('FAIL', { status: 200 });
+      safeWarn(`⚠️ [PAYANYWAY] Email не найден. Поля: ${JSON.stringify(data)}`);
+      // Не блокируем — отвечаем SUCCESS чтобы PayAnyWay не повторял
+      // Деньги зачтём вручную по operationId если нужно
+      return new Response('SUCCESS', { status: 200 });
     }
 
     // Определяем пакет по сумме
