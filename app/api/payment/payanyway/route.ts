@@ -330,9 +330,15 @@ async function applyCompletedPayment(args: {
     try {
       await client.query(
         `INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
-         SELECT $1, $2, $3, $4, balance
-         FROM user_balances WHERE email = $1`,
-        [args.email, args.units, args.operationLabel, JSON.stringify(args.metadata || {})]
+         SELECT $1::varchar, $2::numeric, $3::text, $4::jsonb, balance
+         FROM user_balances WHERE email = $5::varchar`,
+        [
+          args.email,
+          args.units,
+          args.operationLabel,
+          JSON.stringify(args.metadata || {}),
+          args.email,
+        ]
       );
     } catch (logErr: any) {
       safeWarn(`⚠️ [PAYANYWAY] Не удалось записать credit_transactions: ${logErr?.message}`);
