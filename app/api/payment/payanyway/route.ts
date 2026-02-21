@@ -55,20 +55,33 @@ async function parseBody(request: NextRequest): Promise<{
 
   try {
     const text = await request.text();
-    text.split('&').forEach(pair => {
-      const eqIdx = pair.indexOf('=');
-      if (eqIdx === -1) return;
-      const rawKey = pair.slice(0, eqIdx);
-      const rawVal = pair.slice(eqIdx + 1);
-      const key = decodeURIComponent(rawKey);
-      raw[key] = rawVal;
-      decoded[key] = decodeURIComponent(rawVal);
-    });
+    parseEncodedPairs(text, raw, decoded);
   } catch {
     // возвращаем пустые объекты
   }
 
   return { raw, decoded };
+}
+
+function decodeFormComponent(value: string): string {
+  return decodeURIComponent(value.replace(/\+/g, ' '));
+}
+
+function parseEncodedPairs(
+  encoded: string,
+  raw: Record<string, string>,
+  decoded: Record<string, string>
+): void {
+  if (!encoded) return;
+  encoded.split('&').forEach(pair => {
+    const eqIdx = pair.indexOf('=');
+    if (eqIdx === -1) return;
+    const rawKey = pair.slice(0, eqIdx);
+    const rawVal = pair.slice(eqIdx + 1);
+    const key = decodeFormComponent(rawKey);
+    raw[key] = rawVal;
+    decoded[key] = decodeFormComponent(rawVal);
+  });
 }
 
 /** Проверяет MD5-подпись входящего запроса используя raw значения */
@@ -183,11 +196,8 @@ function buildCheckUrlJson(txId: string, amount: number, email: string, pkg: Pac
   };
 }
 
-export async function POST(request: NextRequest) {
+async function handlePayanyway(raw: Record<string, string>, decoded: Record<string, string>, contentType: string) {
   try {
-    const { raw, decoded } = await parseBody(request);
-
-    const contentType = request.headers.get('content-type') || 'unknown';
     safeLog(`💳 [PAYANYWAY] Content-Type: ${contentType}`);
     safeLog(`💳 [PAYANYWAY] Raw данные: ${JSON.stringify(raw)}`);
     safeLog(`💳 [PAYANYWAY] Decoded данные: ${JSON.stringify(decoded)}`);
@@ -297,9 +307,34 @@ export async function POST(request: NextRequest) {
       status: 200,
       headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
     });
-
   } catch (error: any) {
     safeError('❌ [PAYANYWAY] Ошибка обработки webhook:', error?.message);
+    return new Response('FAIL', { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const { raw, decoded } = await parseBody(request);
+    const contentType = request.headers.get('content-type') || 'application/x-www-form-urlencoded';
+    return handlePayanyway(raw, decoded, contentType);
+  } catch (error: any) {
+    safeError('❌ [PAYANYWAY] Ошибка parse POST:', error?.message);
+    return new Response('FAIL', { status: 500 });
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const raw: Record<string, string> = {};
+    const decoded: Record<string, string> = {};
+    const query = request.nextUrl.search.startsWith('?')
+      ? request.nextUrl.search.slice(1)
+      : request.nextUrl.search;
+    parseEncodedPairs(query, raw, decoded);
+    return handlePayanyway(raw, decoded, 'application/x-www-form-urlencoded (query)');
+  } catch (error: any) {
+    safeError('❌ [PAYANYWAY] Ошибка parse GET:', error?.message);
     return new Response('FAIL', { status: 500 });
   }
 }
