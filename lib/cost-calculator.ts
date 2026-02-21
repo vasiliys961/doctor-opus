@@ -11,6 +11,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
   'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },
   'google/gemini-3-flash-preview': { input: 0.50, output: 3.00 },
+  'google/gemini-3.1-pro-preview': { input: 2.00, output: 12.00 },
   'perplexity/sonar': { input: 1.0, output: 1.0 },
 };
 
@@ -53,6 +54,8 @@ function getModelPricing(model: string): { input: number; output: number } {
     return { input: 3.0, output: 15.0 };
   } else if (modelLower.includes('haiku')) {
     return { input: 0.25, output: 1.25 };
+  } else if (modelLower.includes('gemini-3.1-pro')) {
+    return { input: 2.00, output: 12.00 };
   } else if (modelLower.includes('gemini-3-pro')) {
     return { input: 1.25, output: 5.00 };
   } else if (modelLower.includes('gemini-3-flash')) {

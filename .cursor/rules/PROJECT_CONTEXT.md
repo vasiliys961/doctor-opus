@@ -36,7 +36,7 @@ MODELS.SONNET = 'anthropic/claude-sonnet-4.5'
 MODELS.GPT_5_2 = 'openai/gpt-5.2-chat'
 MODELS.HAIKU = 'anthropic/claude-haiku-4.5'
 MODELS.GEMINI_3_FLASH = 'google/gemini-3-flash-preview'
-MODELS.GEMINI_3_PRO = 'google/gemini-3-pro-preview'
+MODELS.GEMINI_3_PRO = 'google/gemini-3.1-pro-preview'
 ```
 
 ## Обработка PDF в чате (lib/openrouter-files.ts)
