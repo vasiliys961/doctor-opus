@@ -33,58 +33,71 @@ function findPackageByAmount(amount: number): {
   return null;
 }
 
-/** Проверяет MD5-подпись уведомления от Moneta.ru
- * Формула: MD5(MNT_ID + MNT_TRANSACTION_ID + MNT_OPERATION_ID + MNT_AMOUNT + MNT_CURRENCY_CODE + MNT_SUBSCRIBER_ID + MNT_TEST_MODE + SECRET)
- * Если MNT_SUBSCRIBER_ID отсутствует — используется пустая строка
+
+/**
+ * Парсит тело запроса и возвращает два объекта:
+ * - raw: значения как есть (для проверки подписи)
+ * - decoded: URL-decoded значения (для использования в логике)
  */
-function validateSignature(data: Record<string, string>): boolean {
-  const {
-    MNT_ID: id,
-    MNT_TRANSACTION_ID,
-    MNT_OPERATION_ID,
-    MNT_AMOUNT,
-    MNT_CURRENCY_CODE,
-    MNT_SUBSCRIBER_ID = '',
-    MNT_TEST_MODE,
-    MNT_SIGNATURE,
-  } = data;
-
-  const str = `${id}${MNT_TRANSACTION_ID}${MNT_OPERATION_ID}${MNT_AMOUNT}${MNT_CURRENCY_CODE}${MNT_SUBSCRIBER_ID}${MNT_TEST_MODE}${MNT_SECRET}`;
-  const expected = crypto.createHash('md5').update(str).digest('hex');
-  return expected.toLowerCase() === (MNT_SIGNATURE || '').toLowerCase();
-}
-
-/** Парсит тело запроса независимо от Content-Type */
-async function parseBody(request: NextRequest): Promise<Record<string, string>> {
-  const contentType = request.headers.get('content-type') || '';
-  const data: Record<string, string> = {};
+async function parseBody(request: NextRequest): Promise<{
+  raw: Record<string, string>;
+  decoded: Record<string, string>;
+}> {
+  const raw: Record<string, string> = {};
+  const decoded: Record<string, string> = {};
 
   try {
-    if (contentType.includes('application/json')) {
-      const json = await request.json();
-      Object.entries(json).forEach(([k, v]) => { data[k] = String(v); });
-    } else if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
-      const formData = await request.formData();
-      formData.forEach((value, key) => { data[key] = value.toString(); });
-    } else {
-      // Fallback: пробуем как urlencoded текст
-      const text = await request.text();
-      new URLSearchParams(text).forEach((value, key) => { data[key] = value; });
-    }
+    const text = await request.text();
+
+    // Парсим как urlencoded — получаем и raw и decoded
+    text.split('&').forEach(pair => {
+      const eqIdx = pair.indexOf('=');
+      if (eqIdx === -1) return;
+      const rawKey = pair.slice(0, eqIdx);
+      const rawVal = pair.slice(eqIdx + 1);
+      const key = decodeURIComponent(rawKey);
+      raw[key] = rawVal;                          // сырое значение (для подписи)
+      decoded[key] = decodeURIComponent(rawVal);  // декодированное (для логики)
+    });
   } catch {
-    // Если всё упало — возвращаем пустой объект
+    // Если всё упало — возвращаем пустые объекты
   }
 
-  return data;
+  return { raw, decoded };
+}
+
+/** Проверяет MD5-подпись используя raw (не декодированные) значения */
+function validateSignatureRaw(raw: Record<string, string>): boolean {
+  const id = raw.MNT_ID || '';
+  const txId = raw.MNT_TRANSACTION_ID || '';
+  const opId = raw.MNT_OPERATION_ID || '';
+  const amount = raw.MNT_AMOUNT || '';
+  const currency = raw.MNT_CURRENCY_CODE || '';
+  const subscriberId = raw.MNT_SUBSCRIBER_ID || '';
+  const testMode = raw.MNT_TEST_MODE || '';
+  const signature = raw.MNT_SIGNATURE || '';
+
+  const str = `${id}${txId}${opId}${amount}${currency}${subscriberId}${testMode}${MNT_SECRET}`;
+  const expected = crypto.createHash('md5').update(str).digest('hex');
+
+  safeLog(`💳 [PAYANYWAY] Строка для подписи: ${str}`);
+  safeLog(`💳 [PAYANYWAY] Ожидаемая подпись: ${expected}`);
+  safeLog(`💳 [PAYANYWAY] Полученная подпись: ${signature}`);
+
+  return expected.toLowerCase() === signature.toLowerCase();
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const data = await parseBody(request);
+    const { raw, decoded } = await parseBody(request);
 
     const contentType = request.headers.get('content-type') || 'unknown';
     safeLog(`💳 [PAYANYWAY] Content-Type: ${contentType}`);
-    safeLog(`💳 [PAYANYWAY] Получено уведомление:`, JSON.stringify(data));
+    safeLog(`💳 [PAYANYWAY] Raw данные: ${JSON.stringify(raw)}`);
+    safeLog(`💳 [PAYANYWAY] Decoded данные: ${JSON.stringify(decoded)}`);
+
+    // Используем decoded для бизнес-логики, raw для подписи
+    const data = decoded;
 
     // Проверяем, что MNT_ID совпадает (базовая защита)
     if (data.MNT_ID !== MNT_ID) {
@@ -92,8 +105,8 @@ export async function POST(request: NextRequest) {
       return new Response('FAIL', { status: 200 });
     }
 
-    // Проверяем подпись
-    if (!validateSignature(data)) {
+    // Проверяем подпись используя raw значения (как их считает PayAnyWay)
+    if (!validateSignatureRaw(raw)) {
       safeError('❌ [PAYANYWAY] Неверная подпись!');
       return new Response('FAIL', { status: 200 });
     }
