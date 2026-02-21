@@ -132,6 +132,19 @@ export async function initDatabase() {
       );
     `;
 
+    // Таблица логов транзакций баланса (используется в webhook/биллинге)
+    await sql`
+      CREATE TABLE IF NOT EXISTS credit_transactions (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL,
+        operation TEXT NOT NULL,
+        metadata JSONB,
+        balance_after DECIMAL(10, 2) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     return true;
   } catch (error) {
     safeError('❌ [DATABASE] Ошибка инициализации:', error);

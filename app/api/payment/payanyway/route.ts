@@ -29,6 +29,7 @@ const MNT_SECRET = process.env.PAYANYWAY_SECRET || '';
 const PAYANYWAY_AGENT_TYPE = process.env.PAYANYWAY_AGENT_TYPE || 'commission';
 const PAYANYWAY_SUPPLIER_NAME = process.env.PAYANYWAY_SUPPLIER_NAME || '';
 const PAYANYWAY_SUPPLIER_INN = process.env.PAYANYWAY_SUPPLIER_INN || '';
+const PAYANYWAY_STOREFRONT_TOKEN = process.env.PAYANYWAY_STOREFRONT_TOKEN || '';
 const PAYANYWAY_SUPPLIER_PHONES = (process.env.PAYANYWAY_SUPPLIER_PHONES || '')
   .split(',')
   .map(v => v.trim())
@@ -184,6 +185,25 @@ function parsePositiveInt(value?: string, fallback = 1): number {
   return parsed;
 }
 
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function secureEquals(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
+
+function isStorefrontAuthorized(data: Record<string, string>): boolean {
+  // Опциональный секрет для витринного callback. Если не задан — режим совместимости.
+  if (!PAYANYWAY_STOREFRONT_TOKEN) return true;
+  const token = (data.token || data.secret || data.sig || '').trim();
+  if (!token) return false;
+  return secureEquals(token, PAYANYWAY_STOREFRONT_TOKEN);
+}
+
 function buildInventoryItem(itemName: string, itemPrice: string) {
   const name = sanitizeReceiptValue(itemName);
   const item: Record<string, any> = {
@@ -298,6 +318,8 @@ async function applyCompletedPayment(args: {
   const client = await getDbClient();
   try {
     await client.query('BEGIN');
+    // Блокируем обработку конкретного transactionId в рамках транзакции.
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [args.transactionId]);
 
     const existing = await client.query(
       `SELECT id FROM payments WHERE transaction_id = $1 AND status = 'completed' FOR UPDATE`,
@@ -359,6 +381,16 @@ async function handleStorefrontCallback(
   payload: StorefrontPayload,
   raw: Record<string, string>
 ): Promise<Response> {
+  if (!isStorefrontAuthorized(raw)) {
+    safeWarn(`⚠️ [PAYANYWAY STOREFRONT] Отклонён callback: неверный токен`);
+    return new Response('FAIL', { status: 200 });
+  }
+
+  if (!isValidEmail(payload.customerEmail)) {
+    safeWarn(`⚠️ [PAYANYWAY STOREFRONT] Некорректный email: ${payload.customerEmail}`);
+    return new Response('FAIL', { status: 200 });
+  }
+
   const quantity = parsePositiveInt(payload.productQuantity, 1);
   const price =
     parsePositiveNumber(payload.productPriceWithDiscount) ??
