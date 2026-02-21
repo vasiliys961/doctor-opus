@@ -49,6 +49,15 @@ type ReceiptContext = {
   delivery?: number;
 };
 
+type StorefrontPayload = {
+  action: string;
+  customerEmail: string;
+  productCode?: string;
+  productPrice?: string;
+  productPriceWithDiscount?: string;
+  productQuantity?: string;
+};
+
 /** Находит пакет по сумме платежа (с допуском ±1 рубль) */
 function findPackageByAmount(amount: number): Package | null {
   for (const [key, pkg] of Object.entries(SUBSCRIPTION_PACKAGES)) {
@@ -161,6 +170,20 @@ function parseDelivery(value?: string): number | undefined {
   return Number(parsed.toFixed(2));
 }
 
+function parsePositiveNumber(value?: string): number | null {
+  if (!value) return null;
+  const parsed = parseFloat(value.replace(',', '.'));
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function parsePositiveInt(value?: string, fallback = 1): number {
+  if (!value) return fallback;
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
 function buildInventoryItem(itemName: string, itemPrice: string) {
   const name = sanitizeReceiptValue(itemName);
   const item: Record<string, any> = {
@@ -220,6 +243,164 @@ function extractReceiptContext(data: Record<string, string>, email: string): Rec
     clientInn: data.CLIENT_INN || data.MNT_CLIENT_INN || '',
     delivery: parseDelivery(data.DELIVERY || data.MNT_DELIVERY || data.DELIVERY_AMOUNT),
   };
+}
+
+function extractStorefrontPayload(data: Record<string, string>): StorefrontPayload | null {
+  const action = (data.action || '').toLowerCase().trim();
+  const customerEmail = (data.customerEmail || '').toLowerCase().trim();
+  if (action !== 'purchased' || !customerEmail) return null;
+
+  return {
+    action,
+    customerEmail,
+    productCode: data.productCode || '',
+    productPrice: data.productPrice || '',
+    productPriceWithDiscount: data.productPriceWithDiscount || '',
+    productQuantity: data.productQuantity || '1',
+  };
+}
+
+function buildStorefrontTransactionId(
+  payload: StorefrontPayload,
+  raw: Record<string, string>
+): string {
+  const explicitId =
+    raw.transactionId ||
+    raw.operationId ||
+    raw.orderId ||
+    raw.paymentId ||
+    raw.invoiceId ||
+    raw.id ||
+    '';
+
+  if (explicitId) {
+    return `storefront:${sanitizeReceiptValue(explicitId)}`;
+  }
+
+  // Для ретраев одного и того же callback получаем одинаковый ID и не начисляем дубли.
+  const canonical = Object.keys(raw)
+    .sort()
+    .map((k) => `${k}=${raw[k]}`)
+    .join('&');
+  const hash = crypto.createHash('sha256').update(canonical).digest('hex').slice(0, 20);
+  return `storefront:${payload.customerEmail}:${hash}`;
+}
+
+async function applyCompletedPayment(args: {
+  email: string;
+  amount: number;
+  units: number;
+  packageId: string;
+  transactionId: string;
+  operationLabel: string;
+  metadata?: Record<string, unknown>;
+}): Promise<{ success: boolean; alreadyProcessed?: boolean; paymentId?: number }> {
+  const client = await getDbClient();
+  try {
+    await client.query('BEGIN');
+
+    const existing = await client.query(
+      `SELECT id FROM payments WHERE transaction_id = $1 AND status = 'completed' FOR UPDATE`,
+      [args.transactionId]
+    );
+    if (existing.rows.length > 0) {
+      await client.query('COMMIT');
+      return { success: true, alreadyProcessed: true, paymentId: existing.rows[0].id };
+    }
+
+    const paymentRows = await client.query(
+      `INSERT INTO payments (email, amount, units, package_id, status, transaction_id)
+       VALUES ($1, $2, $3, $4, 'completed', $5)
+       RETURNING id`,
+      [args.email, args.amount, args.units, args.packageId, args.transactionId]
+    );
+    const paymentId = paymentRows.rows[0]?.id ?? null;
+
+    await client.query(
+      `INSERT INTO user_balances (email, balance, is_test_account)
+       VALUES ($1, $2, false)
+       ON CONFLICT (email)
+       DO UPDATE SET
+         balance = user_balances.balance + $2,
+         is_test_account = false,
+         updated_at = CURRENT_TIMESTAMP`,
+      [args.email, args.units]
+    );
+
+    try {
+      await client.query(
+        `INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
+         SELECT $1, $2, $3, $4, balance
+         FROM user_balances WHERE email = $1`,
+        [args.email, args.units, args.operationLabel, JSON.stringify(args.metadata || {})]
+      );
+    } catch (logErr: any) {
+      safeWarn(`⚠️ [PAYANYWAY] Не удалось записать credit_transactions: ${logErr?.message}`);
+    }
+
+    await client.query('COMMIT');
+    return { success: true, paymentId: paymentId ?? undefined };
+  } catch (error: any) {
+    try { await client.query('ROLLBACK'); } catch {}
+    safeError('❌ [PAYANYWAY] Ошибка транзакции платежа:', error?.message);
+    return { success: false };
+  } finally {
+    client.release();
+  }
+}
+
+async function handleStorefrontCallback(
+  payload: StorefrontPayload,
+  raw: Record<string, string>
+): Promise<Response> {
+  const quantity = parsePositiveInt(payload.productQuantity, 1);
+  const price =
+    parsePositiveNumber(payload.productPriceWithDiscount) ??
+    parsePositiveNumber(payload.productPrice);
+
+  if (!price) {
+    safeError(`❌ [PAYANYWAY STOREFRONT] Некорректная цена: ${payload.productPrice}`);
+    return new Response('FAIL', { status: 200 });
+  }
+
+  const totalAmount = Number((price * quantity).toFixed(2));
+  const pkg = findPackageByAmount(totalAmount);
+  if (!pkg) {
+    safeError(`❌ [PAYANYWAY STOREFRONT] Не найден пакет для суммы ${totalAmount} руб.`);
+    return new Response('FAIL', { status: 200 });
+  }
+
+  const transactionId = buildStorefrontTransactionId(payload, raw);
+  safeLog(`💳 [PAYANYWAY STOREFRONT] Callback purchased: email=${payload.customerEmail}, amount=${totalAmount}, tx=${transactionId}`);
+
+  await initDatabase();
+  const result = await applyCompletedPayment({
+    email: payload.customerEmail,
+    amount: totalAmount,
+    units: pkg.units,
+    packageId: pkg.packageId,
+    transactionId,
+    operationLabel: 'Пополнение (PayAnyWay Storefront)',
+    metadata: {
+      productCode: payload.productCode || null,
+      productPrice: payload.productPrice || null,
+      productPriceWithDiscount: payload.productPriceWithDiscount || null,
+      productQuantity: quantity,
+      action: payload.action,
+      source: 'payanyway_storefront',
+    },
+  });
+
+  if (!result.success) {
+    return new Response('FAIL', { status: 200 });
+  }
+  if (result.alreadyProcessed) {
+    safeLog(`ℹ️ [PAYANYWAY STOREFRONT] Операция уже обработана: ${transactionId}`);
+  } else {
+    safeLog(`✅ [PAYANYWAY STOREFRONT] Зачислено: ${payload.customerEmail}, +${pkg.units} ед., paymentId=${result.paymentId}`);
+  }
+
+  return new Response('SUCCESS', { status: 200 });
 }
 
 /**
@@ -284,6 +465,10 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
     safeLog(`💳 [PAYANYWAY] Decoded данные: ${JSON.stringify(decoded)}`);
 
     const data = decoded;
+    const storefrontPayload = extractStorefrontPayload(data);
+    if (storefrontPayload) {
+      return handleStorefrontCallback(storefrontPayload, data);
+    }
 
     // Базовая защита: проверяем MNT_ID
     if (data.MNT_ID !== MNT_ID) {
@@ -351,65 +536,25 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
 
     await initDatabase();
 
-    const client = await getDbClient();
-    let paymentId: number | null = null;
-    let alreadyProcessed = false;
+    const result = await applyCompletedPayment({
+      email,
+      amount,
+      units: pkg.units,
+      packageId: pkg.packageId,
+      transactionId: operationId,
+      operationLabel: 'Пополнение (PayAnyWay)',
+      metadata: { operationId, packageId: pkg.packageId, source: 'payanyway_assistant' },
+    });
 
-    try {
-      await client.query('BEGIN');
-
-      // Идемпотентность в транзакции: не обрабатываем дважды
-      const existing = await client.query(
-        `SELECT id FROM payments WHERE transaction_id = $1 AND status = 'completed' FOR UPDATE`,
-        [operationId]
-      );
-      if (existing.rows.length > 0) {
-        alreadyProcessed = true;
-        await client.query('COMMIT');
-      } else {
-        // Сохраняем платёж
-        const paymentRows = await client.query(
-          `INSERT INTO payments (email, amount, units, package_id, status, transaction_id)
-           VALUES ($1, $2, $3, $4, 'completed', $5)
-           RETURNING id`,
-          [email, amount, pkg.units, pkg.packageId, operationId]
-        );
-        paymentId = paymentRows.rows[0]?.id ?? null;
-
-        // Начисляем единицы на баланс
-        await client.query(
-          `INSERT INTO user_balances (email, balance, is_test_account)
-           VALUES ($1, $2, false)
-           ON CONFLICT (email)
-           DO UPDATE SET
-             balance = user_balances.balance + $2,
-             is_test_account = false,
-             updated_at = CURRENT_TIMESTAMP`,
-          [email, pkg.units]
-        );
-
-        // Логируем транзакцию (некритично для платежа)
-        try {
-          await client.query(
-            `INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
-             SELECT $1, $2, $3, $4, balance
-             FROM user_balances WHERE email = $1`,
-            [email, pkg.units, 'Пополнение (PayAnyWay)', JSON.stringify({ paymentId, operationId, packageId: pkg.packageId })]
-          );
-        } catch (logErr: any) {
-          safeWarn(`⚠️ [PAYANYWAY] Не удалось записать credit_transactions: ${logErr?.message}`);
-        }
-
-        await client.query('COMMIT');
-      }
-    } catch (transactionError: any) {
-      try { await client.query('ROLLBACK'); } catch {}
-      throw transactionError;
-    } finally {
-      client.release();
+    if (!result.success) {
+      const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
+      return new Response(xml, {
+        status: 200,
+        headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
+      });
     }
 
-    if (alreadyProcessed) {
+    if (result.alreadyProcessed) {
       safeLog(`ℹ️ [PAYANYWAY] Операция ${operationId} уже обработана`);
       const xml = buildPayUrlXml(txId, '200', receiptContext, pkg);
       return new Response(xml, {
@@ -418,7 +563,7 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
       });
     }
 
-    safeLog(`💰 [PAYANYWAY] Баланс ${email} пополнен на ${pkg.units} ед. (платёж #${paymentId})`);
+    safeLog(`💰 [PAYANYWAY] Баланс ${email} пополнен на ${pkg.units} ед. (платёж #${result.paymentId})`);
 
     const xml = buildPayUrlXml(txId, '200', receiptContext, pkg);
     return new Response(xml, {
