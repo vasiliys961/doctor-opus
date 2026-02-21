@@ -163,12 +163,16 @@ export async function POST(request: NextRequest) {
         updated_at = CURRENT_TIMESTAMP
     `;
 
-    // Логируем транзакцию
-    await sql`
-      INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
-      SELECT ${email}, ${pkg.units}, ${'Пополнение (PayAnyWay)'}, ${JSON.stringify({ paymentId, operationId, packageId: pkg.packageId })}::jsonb, balance
-      FROM user_balances WHERE email = ${email}
-    `;
+    // Логируем транзакцию (некритично — не роняем webhook если таблицы нет)
+    try {
+      await sql`
+        INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
+        SELECT ${email}, ${pkg.units}, ${'Пополнение (PayAnyWay)'}, ${JSON.stringify({ paymentId, operationId, packageId: pkg.packageId })}::jsonb, balance
+        FROM user_balances WHERE email = ${email}
+      `;
+    } catch (logErr: any) {
+      safeWarn(`⚠️ [PAYANYWAY] Не удалось записать credit_transactions: ${logErr?.message}`);
+    }
 
     safeLog(`💰 [PAYANYWAY] Баланс ${email} пополнен на ${pkg.units} ед. (платёж #${paymentId})`);
 
