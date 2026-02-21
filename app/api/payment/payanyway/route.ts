@@ -9,13 +9,16 @@ import { SUBSCRIPTION_PACKAGES } from '@/lib/subscription-manager';
  * URL: POST /api/payment/payanyway
  *
  * Обрабатывает два типа запросов:
- * 1. Check URL (проверочный) — приходит ДО оплаты, MNT_OPERATION_ID отсутствует.
- *    Ответ: JSON с данными о товаре для фискализации чека.
+ * 1. Check URL (проверочный) — приходит ДО оплаты, обычно с MNT_COMMAND=CHECK.
+ *    Ответ: XML (по спецификации MONETA.Assistant).
  * 2. Pay URL (уведомление об оплате) — MNT_OPERATION_ID присутствует.
  *    Ответ: XML с кодом 200 и номенклатурой.
  *
- * Подпись входящего запроса:
+ * Подпись входящего Pay URL:
  *   MD5(MNT_ID + MNT_TRANSACTION_ID + MNT_OPERATION_ID + MNT_AMOUNT + MNT_CURRENCY_CODE + MNT_SUBSCRIBER_ID + MNT_TEST_MODE + SECRET)
+ *
+ * Подпись входящего Check URL:
+ *   MD5(MNT_COMMAND + MNT_ID + MNT_TRANSACTION_ID + MNT_OPERATION_ID + MNT_AMOUNT + MNT_CURRENCY_CODE + MNT_SUBSCRIBER_ID + MNT_TEST_MODE + SECRET)
  *
  * Подпись ответа:
  *   MD5(resultCode + MNT_ID + MNT_TRANSACTION_ID + SECRET)
@@ -85,7 +88,8 @@ function parseEncodedPairs(
 }
 
 /** Проверяет MD5-подпись входящего запроса используя raw значения */
-function validateSignatureRaw(raw: Record<string, string>): boolean {
+function validateSignatureRaw(raw: Record<string, string>, isCheck: boolean): boolean {
+  const command = raw.MNT_COMMAND || '';
   const id = raw.MNT_ID || '';
   const txId = raw.MNT_TRANSACTION_ID || '';
   const opId = raw.MNT_OPERATION_ID || '';
@@ -95,7 +99,9 @@ function validateSignatureRaw(raw: Record<string, string>): boolean {
   const testMode = raw.MNT_TEST_MODE || '';
   const signature = raw.MNT_SIGNATURE || '';
 
-  const str = `${id}${txId}${opId}${amount}${currency}${subscriberId}${testMode}${MNT_SECRET}`;
+  const str = isCheck
+    ? `${command}${id}${txId}${opId}${amount}${currency}${subscriberId}${testMode}${MNT_SECRET}`
+    : `${id}${txId}${opId}${amount}${currency}${subscriberId}${testMode}${MNT_SECRET}`;
   const expected = crypto.createHash('md5').update(str).digest('hex');
 
   safeLog(`💳 [PAYANYWAY] Строка для подписи: ${str.replace(MNT_SECRET, '***')}`);
@@ -162,38 +168,42 @@ function buildPayUrlXml(txId: string, resultCode: string, email: string, pkg: Pa
 }
 
 /**
- * JSON-ответ на Check URL (проверочный запрос до оплаты).
+ * XML-ответ на Check URL (проверочный запрос до оплаты).
  * resultCode 402 = заказ готов к оплате.
  */
-function buildCheckUrlJson(txId: string, amount: number, email: string, pkg: Package | null): object {
+function buildCheckUrlXml(txId: string, amount: number, email: string, pkg: Package | null): string {
   const resultCode = '402';
   const signature = buildResponseSignature(resultCode, txId);
-  const itemName = pkg ? pkg.name : 'Пакет единиц Doctor Opus';
   const itemPrice = pkg ? pkg.priceRub : amount;
-
-  return {
-    id: MNT_ID,
-    transactionId: txId,
-    amount: itemPrice.toFixed(2),
-    signature,
-    resultCode,
-    description: 'Заказ создан и готов к оплате',
-    receipt: {
-      client: {
-        email,
-      },
-      items: [
-        {
-          name: itemName,
-          price: itemPrice,
-          quantity: 1,
-          paymentMethod: 'full_payment',
-          paymentObject: 'service',
-          vat: 'none',
-        },
-      ],
-    },
+  const inventoryItem = {
+    name: (pkg?.name || 'Пакет единиц Doctor Opus').replace(/[&"'<>#$\\\/]/g, ' '),
+    price: itemPrice.toFixed(2),
+    quantity: '1',
+    vatTag: '1105',
+    pm: 'full_payment',
+    po: 'service',
   };
+  const inventoryJson = escapeXml(JSON.stringify([inventoryItem]));
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<mnt_response>
+  <mnt_id>${MNT_ID}</mnt_id>
+  <mnt_transaction_id>${escapeXml(txId)}</mnt_transaction_id>
+  <mnt_result_code>${resultCode}</mnt_result_code>
+  <mnt_description>Order created, but not paid</mnt_description>
+  <mnt_amount>${itemPrice.toFixed(2)}</mnt_amount>
+  <mnt_signature>${signature}</mnt_signature>
+  <mnt_attributes>
+    <attribute>
+      <key>CUSTOMER</key>
+      <value>${escapeXml(email)}</value>
+    </attribute>
+    <attribute>
+      <key>INVENTORY</key>
+      <value>${inventoryJson}</value>
+    </attribute>
+  </mnt_attributes>
+</mnt_response>`;
 }
 
 async function handlePayanyway(raw: Record<string, string>, decoded: Record<string, string>, contentType: string) {
@@ -210,24 +220,27 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
       return new Response('FAIL', { status: 200 });
     }
 
-    // Проверяем подпись по raw значениям
-    if (!validateSignatureRaw(raw)) {
-      safeError('❌ [PAYANYWAY] Неверная подпись!');
-      return new Response('FAIL', { status: 200 });
-    }
-
     const txId = data.MNT_TRANSACTION_ID || '';
     const amount = parseFloat(data.MNT_AMOUNT || '0');
     const email = (data.MNT_SUBSCRIBER_ID || '').toLowerCase().trim();
     const pkg = findPackageByAmount(amount);
 
-    // Check URL: MNT_OPERATION_ID отсутствует — запрос ДО оплаты
-    if (!data.MNT_OPERATION_ID) {
+    // Check URL: по спецификации определяется MNT_COMMAND=CHECK
+    // (добавлен fallback по отсутствию MNT_OPERATION_ID для совместимости)
+    const isCheck = (data.MNT_COMMAND || '').toUpperCase() === 'CHECK' || !data.MNT_OPERATION_ID;
+
+    // Проверяем подпись с учетом типа запроса (Check/Pay)
+    if (!validateSignatureRaw(raw, isCheck)) {
+      safeError('❌ [PAYANYWAY] Неверная подпись!');
+      return new Response('FAIL', { status: 200 });
+    }
+
+    if (isCheck) {
       safeLog(`🔍 [PAYANYWAY] Check URL: txId=${txId}, amount=${amount}, email=${email}`);
-      const response = buildCheckUrlJson(txId, amount, email, pkg);
-      return new Response(JSON.stringify(response), {
+      const xml = buildCheckUrlXml(txId, amount, email, pkg);
+      return new Response(xml, {
         status: 200,
-        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
       });
     }
 
