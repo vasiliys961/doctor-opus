@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
-import { initDatabase, sql } from '@/lib/database';
+import { getDbClient, initDatabase } from '@/lib/database';
 import { safeLog, safeError, safeWarn } from '@/lib/logger';
 import { SUBSCRIPTION_PACKAGES } from '@/lib/subscription-manager';
 
@@ -26,12 +26,27 @@ import { SUBSCRIPTION_PACKAGES } from '@/lib/subscription-manager';
 
 const MNT_ID = process.env.PAYANYWAY_MNT_ID || '';
 const MNT_SECRET = process.env.PAYANYWAY_SECRET || '';
+const PAYANYWAY_AGENT_TYPE = process.env.PAYANYWAY_AGENT_TYPE || 'commission';
+const PAYANYWAY_SUPPLIER_NAME = process.env.PAYANYWAY_SUPPLIER_NAME || '';
+const PAYANYWAY_SUPPLIER_INN = process.env.PAYANYWAY_SUPPLIER_INN || '';
+const PAYANYWAY_SUPPLIER_PHONES = (process.env.PAYANYWAY_SUPPLIER_PHONES || '')
+  .split(',')
+  .map(v => v.trim())
+  .filter(Boolean);
 
 type Package = {
   packageId: string;
   units: number;
   priceRub: number;
   name: string;
+};
+
+type ReceiptContext = {
+  customerEmail: string;
+  phone?: string;
+  clientName?: string;
+  clientInn?: string;
+  delivery?: number;
 };
 
 /** Находит пакет по сумме платежа (с допуском ±1 рубль) */
@@ -126,84 +141,140 @@ function escapeXml(str: string): string {
     .replace(/'/g, '&apos;');
 }
 
-/**
- * XML-ответ на Pay URL уведомление.
- * resultCode: 200 = успех, 500 = ошибка/отмена
- */
-function buildPayUrlXml(txId: string, resultCode: string, email: string, pkg: Package | null): string {
-  const signature = buildResponseSignature(resultCode, txId);
-  const itemName = pkg
-    ? pkg.name.replace(/[&"'<>#$\\\/]/g, ' ')
-    : 'Пакет единиц Doctor Opus';
-  const itemPrice = pkg ? pkg.priceRub.toFixed(2) : '0.00';
+/** Убираем символы, которые PayAnyWay не рекомендует передавать в значениях. */
+function sanitizeReceiptValue(value: string): string {
+  return value.replace(/["'&$#\\\/<>]/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
-  const inventoryItem = {
-    name: itemName,
+function sanitizePhone(value: string): string {
+  return value.replace(/\D/g, '').slice(0, 13);
+}
+
+function sanitizeInn(value: string): string {
+  return value.replace(/\D/g, '').slice(0, 12);
+}
+
+function parseDelivery(value?: string): number | undefined {
+  if (!value) return undefined;
+  const parsed = parseFloat(value.replace(',', '.'));
+  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+  return Number(parsed.toFixed(2));
+}
+
+function buildInventoryItem(itemName: string, itemPrice: string) {
+  const name = sanitizeReceiptValue(itemName);
+  const item: Record<string, any> = {
+    name,
     price: itemPrice,
     quantity: '1',
     vatTag: '1105',       // без НДС (самозанятые)
     pm: 'full_payment',   // полный расчёт
     po: 'service',        // услуга
+    agent_info: { type: PAYANYWAY_AGENT_TYPE },
   };
 
-  const inventoryJson = escapeXml(JSON.stringify([inventoryItem]));
+  if (PAYANYWAY_SUPPLIER_NAME && PAYANYWAY_SUPPLIER_INN) {
+    item.supplier_info = {
+      phones: PAYANYWAY_SUPPLIER_PHONES,
+      name: sanitizeReceiptValue(PAYANYWAY_SUPPLIER_NAME),
+      inn: sanitizeInn(PAYANYWAY_SUPPLIER_INN),
+    };
+  }
+
+  return item;
+}
+
+function buildMntAttributesXml(inventoryJson: string, context: ReceiptContext): string {
+  const attributes: Array<{ key: string; value: string }> = [
+    { key: 'INVENTORY', value: inventoryJson },
+    { key: 'CUSTOMER', value: sanitizeReceiptValue(context.customerEmail) },
+  ];
+
+  if (context.clientName || context.clientInn) {
+    const client = [{
+      ...(context.clientName ? { name: sanitizeReceiptValue(context.clientName) } : {}),
+      ...(context.clientInn ? { inn: sanitizeInn(context.clientInn) } : {}),
+    }];
+    attributes.push({ key: 'CLIENT', value: JSON.stringify(client) });
+  }
+
+  if (context.phone) {
+    attributes.push({ key: 'PHONE', value: sanitizePhone(context.phone) });
+  }
+
+  if (typeof context.delivery === 'number') {
+    attributes.push({ key: 'DELIVERY', value: context.delivery.toFixed(2) });
+  }
+
+  return attributes.map(({ key, value }) => `    <ATTRIBUTE>
+      <KEY>${key}</KEY>
+      <VALUE>${escapeXml(value)}</VALUE>
+    </ATTRIBUTE>`).join('\n');
+}
+
+function extractReceiptContext(data: Record<string, string>, email: string): ReceiptContext {
+  return {
+    customerEmail: email,
+    phone: data.PHONE || data.MNT_PHONE || data.CUSTOMER_PHONE || '',
+    clientName: data.CLIENT_NAME || data.MNT_CLIENT_NAME || '',
+    clientInn: data.CLIENT_INN || data.MNT_CLIENT_INN || '',
+    delivery: parseDelivery(data.DELIVERY || data.MNT_DELIVERY || data.DELIVERY_AMOUNT),
+  };
+}
+
+/**
+ * XML-ответ на Pay URL уведомление.
+ * resultCode: 200 = успех, 500 = ошибка/отмена
+ */
+function buildPayUrlXml(txId: string, resultCode: string, context: ReceiptContext, pkg: Package | null): string {
+  const signature = buildResponseSignature(resultCode, txId);
+  const itemName = pkg
+    ? pkg.name.replace(/[&"'<>#$\\\/]/g, ' ')
+    : 'Пакет единиц Doctor Opus';
+  const itemPrice = pkg ? pkg.priceRub.toFixed(2) : '0.00';
+  const inventoryItem = buildInventoryItem(itemName, itemPrice);
+  const inventoryJson = JSON.stringify([inventoryItem]);
+  const attributesXml = buildMntAttributesXml(inventoryJson, context);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<mnt_response>
-  <mnt_id>${MNT_ID}</mnt_id>
-  <mnt_transaction_id>${escapeXml(txId)}</mnt_transaction_id>
-  <mnt_result_code>${resultCode}</mnt_result_code>
-  <mnt_signature>${signature}</mnt_signature>
-  <mnt_attributes>
-    <attribute>
-      <key>CUSTOMER</key>
-      <value>${escapeXml(email)}</value>
-    </attribute>
-    <attribute>
-      <key>INVENTORY</key>
-      <value>${inventoryJson}</value>
-    </attribute>
-  </mnt_attributes>
-</mnt_response>`;
+<MNT_RESPONSE>
+  <MNT_ID>${MNT_ID}</MNT_ID>
+  <MNT_TRANSACTION_ID>${escapeXml(txId)}</MNT_TRANSACTION_ID>
+  <MNT_RESULT_CODE>${resultCode}</MNT_RESULT_CODE>
+  <MNT_SIGNATURE>${signature}</MNT_SIGNATURE>
+  <MNT_ATTRIBUTES>
+${attributesXml}
+  </MNT_ATTRIBUTES>
+</MNT_RESPONSE>`;
 }
 
 /**
  * XML-ответ на Check URL (проверочный запрос до оплаты).
  * resultCode 402 = заказ готов к оплате.
  */
-function buildCheckUrlXml(txId: string, amount: number, email: string, pkg: Package | null): string {
+function buildCheckUrlXml(txId: string, amount: number, context: ReceiptContext, pkg: Package | null): string {
   const resultCode = '402';
   const signature = buildResponseSignature(resultCode, txId);
   const itemPrice = pkg ? pkg.priceRub : amount;
-  const inventoryItem = {
-    name: (pkg?.name || 'Пакет единиц Doctor Opus').replace(/[&"'<>#$\\\/]/g, ' '),
-    price: itemPrice.toFixed(2),
-    quantity: '1',
-    vatTag: '1105',
-    pm: 'full_payment',
-    po: 'service',
-  };
-  const inventoryJson = escapeXml(JSON.stringify([inventoryItem]));
+  const inventoryItem = buildInventoryItem(
+    (pkg?.name || 'Пакет единиц Doctor Opus').replace(/[&"'<>#$\\\/]/g, ' '),
+    itemPrice.toFixed(2)
+  );
+  const inventoryJson = JSON.stringify([inventoryItem]);
+  const attributesXml = buildMntAttributesXml(inventoryJson, context);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<mnt_response>
-  <mnt_id>${MNT_ID}</mnt_id>
-  <mnt_transaction_id>${escapeXml(txId)}</mnt_transaction_id>
-  <mnt_result_code>${resultCode}</mnt_result_code>
-  <mnt_description>Order created, but not paid</mnt_description>
-  <mnt_amount>${itemPrice.toFixed(2)}</mnt_amount>
-  <mnt_signature>${signature}</mnt_signature>
-  <mnt_attributes>
-    <attribute>
-      <key>CUSTOMER</key>
-      <value>${escapeXml(email)}</value>
-    </attribute>
-    <attribute>
-      <key>INVENTORY</key>
-      <value>${inventoryJson}</value>
-    </attribute>
-  </mnt_attributes>
-</mnt_response>`;
+<MNT_RESPONSE>
+  <MNT_ID>${MNT_ID}</MNT_ID>
+  <MNT_TRANSACTION_ID>${escapeXml(txId)}</MNT_TRANSACTION_ID>
+  <MNT_RESULT_CODE>${resultCode}</MNT_RESULT_CODE>
+  <MNT_DESCRIPTION>Order created, but not paid</MNT_DESCRIPTION>
+  <MNT_AMOUNT>${itemPrice.toFixed(2)}</MNT_AMOUNT>
+  <MNT_SIGNATURE>${signature}</MNT_SIGNATURE>
+  <MNT_ATTRIBUTES>
+${attributesXml}
+  </MNT_ATTRIBUTES>
+</MNT_RESPONSE>`;
 }
 
 async function handlePayanyway(raw: Record<string, string>, decoded: Record<string, string>, contentType: string) {
@@ -223,6 +294,7 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
     const txId = data.MNT_TRANSACTION_ID || '';
     const amount = parseFloat(data.MNT_AMOUNT || '0');
     const email = (data.MNT_SUBSCRIBER_ID || '').toLowerCase().trim();
+    const receiptContext = extractReceiptContext(data, email);
     const pkg = findPackageByAmount(amount);
 
     // Check URL: по спецификации определяется MNT_COMMAND=CHECK
@@ -237,7 +309,7 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
 
     if (isCheck) {
       safeLog(`🔍 [PAYANYWAY] Check URL: txId=${txId}, amount=${amount}, email=${email}`);
-      const xml = buildCheckUrlXml(txId, amount, email, pkg);
+      const xml = buildCheckUrlXml(txId, amount, receiptContext, pkg);
       return new Response(xml, {
         status: 200,
         headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
@@ -248,9 +320,18 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
     const operationId = data.MNT_OPERATION_ID;
     safeLog(`💳 [PAYANYWAY] Pay URL: txId=${txId}, operationId=${operationId}, email=${email}`);
 
+    if (!operationId) {
+      safeError('❌ [PAYANYWAY] Отсутствует MNT_OPERATION_ID');
+      const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
+      return new Response(xml, {
+        status: 200,
+        headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
+      });
+    }
+
     if (!email) {
       safeWarn(`⚠️ [PAYANYWAY] MNT_SUBSCRIBER_ID пуст`);
-      const xml = buildPayUrlXml(txId, '500', '', null);
+      const xml = buildPayUrlXml(txId, '500', receiptContext, null);
       return new Response(xml, {
         status: 200,
         headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
@@ -259,7 +340,7 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
 
     if (!pkg) {
       safeError(`❌ [PAYANYWAY] Не найден пакет для суммы ${amount} руб.`);
-      const xml = buildPayUrlXml(txId, '500', email, null);
+      const xml = buildPayUrlXml(txId, '500', receiptContext, null);
       return new Response(xml, {
         status: 200,
         headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
@@ -270,52 +351,76 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
 
     await initDatabase();
 
-    // Идемпотентность: не обрабатываем дважды
-    const { rows: existing } = await sql`
-      SELECT id FROM payments WHERE transaction_id = ${operationId} AND status = 'completed'
-    `;
-    if (existing.length > 0) {
+    const client = await getDbClient();
+    let paymentId: number | null = null;
+    let alreadyProcessed = false;
+
+    try {
+      await client.query('BEGIN');
+
+      // Идемпотентность в транзакции: не обрабатываем дважды
+      const existing = await client.query(
+        `SELECT id FROM payments WHERE transaction_id = $1 AND status = 'completed' FOR UPDATE`,
+        [operationId]
+      );
+      if (existing.rows.length > 0) {
+        alreadyProcessed = true;
+        await client.query('COMMIT');
+      } else {
+        // Сохраняем платёж
+        const paymentRows = await client.query(
+          `INSERT INTO payments (email, amount, units, package_id, status, transaction_id)
+           VALUES ($1, $2, $3, $4, 'completed', $5)
+           RETURNING id`,
+          [email, amount, pkg.units, pkg.packageId, operationId]
+        );
+        paymentId = paymentRows.rows[0]?.id ?? null;
+
+        // Начисляем единицы на баланс
+        await client.query(
+          `INSERT INTO user_balances (email, balance, is_test_account)
+           VALUES ($1, $2, false)
+           ON CONFLICT (email)
+           DO UPDATE SET
+             balance = user_balances.balance + $2,
+             is_test_account = false,
+             updated_at = CURRENT_TIMESTAMP`,
+          [email, pkg.units]
+        );
+
+        // Логируем транзакцию (некритично для платежа)
+        try {
+          await client.query(
+            `INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
+             SELECT $1, $2, $3, $4, balance
+             FROM user_balances WHERE email = $1`,
+            [email, pkg.units, 'Пополнение (PayAnyWay)', JSON.stringify({ paymentId, operationId, packageId: pkg.packageId })]
+          );
+        } catch (logErr: any) {
+          safeWarn(`⚠️ [PAYANYWAY] Не удалось записать credit_transactions: ${logErr?.message}`);
+        }
+
+        await client.query('COMMIT');
+      }
+    } catch (transactionError: any) {
+      try { await client.query('ROLLBACK'); } catch {}
+      throw transactionError;
+    } finally {
+      client.release();
+    }
+
+    if (alreadyProcessed) {
       safeLog(`ℹ️ [PAYANYWAY] Операция ${operationId} уже обработана`);
-      const xml = buildPayUrlXml(txId, '200', email, pkg);
+      const xml = buildPayUrlXml(txId, '200', receiptContext, pkg);
       return new Response(xml, {
         status: 200,
         headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
       });
     }
 
-    // Сохраняем платёж
-    const { rows: paymentRows } = await sql`
-      INSERT INTO payments (email, amount, units, package_id, status, transaction_id)
-      VALUES (${email}, ${amount}, ${pkg.units}, ${pkg.packageId}, 'completed', ${operationId})
-      RETURNING id
-    `;
-    const paymentId = paymentRows[0]?.id;
-
-    // Начисляем единицы на баланс
-    await sql`
-      INSERT INTO user_balances (email, balance, is_test_account)
-      VALUES (${email}, ${pkg.units}, false)
-      ON CONFLICT (email)
-      DO UPDATE SET
-        balance = user_balances.balance + ${pkg.units},
-        is_test_account = false,
-        updated_at = CURRENT_TIMESTAMP
-    `;
-
-    // Логируем транзакцию (некритично)
-    try {
-      await sql`
-        INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
-        SELECT ${email}, ${pkg.units}, ${'Пополнение (PayAnyWay)'}, ${JSON.stringify({ paymentId, operationId, packageId: pkg.packageId })}::jsonb, balance
-        FROM user_balances WHERE email = ${email}
-      `;
-    } catch (logErr: any) {
-      safeWarn(`⚠️ [PAYANYWAY] Не удалось записать credit_transactions: ${logErr?.message}`);
-    }
-
     safeLog(`💰 [PAYANYWAY] Баланс ${email} пополнен на ${pkg.units} ед. (платёж #${paymentId})`);
 
-    const xml = buildPayUrlXml(txId, '200', email, pkg);
+    const xml = buildPayUrlXml(txId, '200', receiptContext, pkg);
     return new Response(xml, {
       status: 200,
       headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
