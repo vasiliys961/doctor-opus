@@ -6,6 +6,7 @@ import AudioUpload from '@/components/AudioUpload'
 import FileUpload from '@/components/FileUpload'
 import AnalysisTips from '@/components/AnalysisTips'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import { logUsage } from '@/lib/simple-logger'
 import { ChatSpecialistSelector } from '@/components/ChatSpecialistSelector'
@@ -802,6 +803,7 @@ export default function ChatPage() {
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                   ) : (
                     <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
                       rehypePlugins={[rehypeSanitize]}
                       components={{
                         h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-3 mb-2" {...props} />,
@@ -812,6 +814,16 @@ export default function ChatPage() {
                         ul: ({node, ...props}) => <ul className="list-disc ml-6 mb-2" {...props} />,
                         ol: ({node, ...props}) => <ol className="list-decimal ml-6 mb-2" {...props} />,
                         li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                        table: ({node, ...props}) => (
+                          <div className="my-3 overflow-x-auto">
+                            <table className="min-w-full border border-gray-300 text-sm" {...props} />
+                          </div>
+                        ),
+                        thead: ({node, ...props}) => <thead className="bg-gray-100" {...props} />,
+                        tbody: ({node, ...props}) => <tbody {...props} />,
+                        tr: ({node, ...props}) => <tr className="border-b border-gray-200" {...props} />,
+                        th: ({node, ...props}) => <th className="border border-gray-300 px-2 py-1 text-left font-semibold" {...props} />,
+                        td: ({node, ...props}) => <td className="border border-gray-300 px-2 py-1 align-top" {...props} />,
                         code: ({node, inline, ...props}: any) => 
                           inline ? (
                             <code className="bg-gray-200 px-1 rounded text-sm" {...props} />

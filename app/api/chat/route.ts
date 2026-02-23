@@ -83,6 +83,19 @@ export async function POST(request: NextRequest) {
           ? MODELS.GEMINI_3_FLASH
           : MODELS.OPUS;
 
+    const isClaudeAssistantModel = selectedModel === MODELS.SONNET || selectedModel === MODELS.OPUS;
+    const assistantFormattingInstruction = `
+ФОРМАТ ОТВЕТА:
+- Пиши в чистом Markdown, структурно и читаемо.
+- Если есть табличные данные, оформляй только стандартной Markdown-таблицей с символом | и строкой разделителей |---|.
+- Не используй псевдо-таблицы в одну строку с двойными вертикальными чертами ||.
+- Не помещай таблицы в блоки кода.
+- Перед и после таблицы оставляй пустую строку.
+`;
+    const preparedMessage = isClaudeAssistantModel
+      ? `${message}\n\n${assistantFormattingInstruction}`
+      : message;
+
     if (!message && files.length === 0) {
       return NextResponse.json(
         { success: false, error: 'No message or files provided' },
@@ -146,10 +159,10 @@ export async function POST(request: NextRequest) {
     // Если есть файлы, используем функции с поддержкой файлов
     if (files.length > 0) {
       if (useStreaming) {
-        const stream = await sendTextRequestStreamingWithFiles(message, formattedHistory, files, selectedModel, specialty as any);
+        const stream = await sendTextRequestStreamingWithFiles(preparedMessage, formattedHistory, files, selectedModel, specialty as any);
         return handleStreaming(stream);
       } else {
-        const result = await sendTextRequestWithFiles(message, formattedHistory, files, selectedModel, specialty as any);
+        const result = await sendTextRequestWithFiles(preparedMessage, formattedHistory, files, selectedModel, specialty as any);
         const { calculateCost } = await import('@/lib/cost-calculator');
         const costInfo = calculateCost(2000, 1500, selectedModel); // Оценочно для non-streaming
         
@@ -164,13 +177,13 @@ export async function POST(request: NextRequest) {
 
     // Если запрошен streaming без файлов, возвращаем поток
     if (useStreaming) {
-      const stream = await sendTextRequestStreaming(message, formattedHistory, selectedModel, specialty as any, systemPrompt);
+      const stream = await sendTextRequestStreaming(preparedMessage, formattedHistory, selectedModel, specialty as any, systemPrompt);
       return handleStreaming(stream);
     }
 
     // Обычный режим - полный ответ
     console.log('🚀 [CHAT API] Начало запроса к OpenRouter...');
-    const result = await sendTextRequest(message, formattedHistory, selectedModel, specialty as any);
+    const result = await sendTextRequest(preparedMessage, formattedHistory, selectedModel, specialty as any);
     console.log('✅ [CHAT API] Ответ от OpenRouter получен успешно.');
     
     const { calculateCost } = await import('@/lib/cost-calculator');
