@@ -1060,7 +1060,7 @@ export default function ChatPage() {
               <option value="gpt52">🚀 GPT-5.2</option>
               <option value="opus">🧠 Opus 4.6</option>
               <option value="sonnet">🤖 Sonnet 4.6</option>
-              <option value="gemini">⚡ Gemini 3.0</option>
+              <option value="gemini">⚡ Gemini 3.1</option>
             </select>
           </div>
         </div>

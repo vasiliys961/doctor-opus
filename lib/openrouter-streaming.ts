@@ -3,7 +3,7 @@
  * Реализует Server-Sent Events (SSE) для постепенного получения ответов и двухэтапный анализ
  */
 
-import { calculateCost, formatCostLog } from './cost-calculator';
+import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
 import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -25,7 +25,7 @@ const MODELS = {
 function createTransformWithUsage(
   stream: ReadableStream, 
   model: string, 
-  initialUsage?: { prompt_tokens: number, completion_tokens: number },
+  initialUsage?: { prompt_tokens: number, completion_tokens: number, model?: string, total_cost?: number, stages?: Array<{ model: string; prompt_tokens: number; completion_tokens: number }> },
   isEstimate: boolean = false
 ): ReadableStream<Uint8Array> {
   const reader = stream.getReader();
@@ -52,13 +52,27 @@ function createTransformWithUsage(
                 const approxInputTokens = initialUsage?.prompt_tokens || 0;
                 const totalTokens = approxInputTokens + approxOutputTokens;
                 
-                const costInfo = calculateCost(approxInputTokens, approxOutputTokens, model);
+                const stageTwoCost = calculateCost(0, approxOutputTokens, model);
+                const stageOneCostUnits = isEstimate
+                  ? 0
+                  : (typeof initialUsage?.total_cost === 'number'
+                    ? initialUsage.total_cost
+                    : (Array.isArray(initialUsage?.stages) && initialUsage.stages.length > 0
+                      ? calculateCombinedCost(initialUsage.stages).totalCostUnits
+                      : (initialUsage?.model
+                        ? calculateCost(initialUsage.prompt_tokens || 0, initialUsage.completion_tokens || 0, initialUsage.model).totalCostUnits
+                        : 0)));
+                const totalCostUnits = stageOneCostUnits + stageTwoCost.totalCostUnits;
                 
                 console.log(`✅ [STREAMING FALLBACK] Анализ завершен (${model})`);
                 if (initialUsage && initialUsage.prompt_tokens > 0) {
                   console.log(`   🔸 Входные токены (оценка): ${initialUsage.prompt_tokens}`);
                 }
-                console.log(`   📊 ИТОГО (примерно): ${formatCostLog(model, approxInputTokens, approxOutputTokens, totalTokens)}`);
+                if (!isEstimate && (typeof initialUsage?.total_cost === 'number' || (Array.isArray(initialUsage?.stages) && initialUsage.stages.length > 0))) {
+                  console.log(`   📊 ИТОГО (примерно, комбинированно): ${totalTokens.toLocaleString('ru-RU')} токенов, ${totalCostUnits.toFixed(2)} ед.`);
+                } else {
+                  console.log(`   📊 ИТОГО (примерно): ${formatCostLog(model, approxInputTokens, approxOutputTokens, totalTokens)}`);
+                }
                 
                 // Отправляем usage клиенту ПЕРЕД завершением
                 const usageUpdate = {
@@ -66,7 +80,7 @@ function createTransformWithUsage(
                     prompt_tokens: approxInputTokens,
                     completion_tokens: approxOutputTokens,
                     total_tokens: totalTokens,
-                    total_cost: costInfo.totalCostUnits
+                    total_cost: totalCostUnits
                   },
                   model: model
                 };
@@ -118,13 +132,29 @@ function createTransformWithUsage(
                     const totalCompletion = data.usage.completion_tokens + (isEstimate ? 0 : (initialUsage?.completion_tokens || 0));
                     const totalTokens = totalPrompt + totalCompletion;
 
-                    const costInfo = calculateCost(totalPrompt, totalCompletion, model);
+                    const stageTwoPrompt = data.usage.prompt_tokens || 0;
+                    const stageTwoCompletion = data.usage.completion_tokens || 0;
+                    const stageTwoCost = calculateCost(stageTwoPrompt, stageTwoCompletion, model);
+                    const stageOneCostUnits = isEstimate
+                      ? 0
+                      : (typeof initialUsage?.total_cost === 'number'
+                        ? initialUsage.total_cost
+                        : (Array.isArray(initialUsage?.stages) && initialUsage.stages.length > 0
+                          ? calculateCombinedCost(initialUsage.stages).totalCostUnits
+                          : (initialUsage?.model
+                            ? calculateCost(initialUsage.prompt_tokens || 0, initialUsage.completion_tokens || 0, initialUsage.model).totalCostUnits
+                            : 0)));
+                    const totalCostUnits = stageOneCostUnits + stageTwoCost.totalCostUnits;
                     
                     console.log(`✅ [STREAMING] Анализ завершен успешно (${model})`);
                     if (initialUsage && !isEstimate && (initialUsage.prompt_tokens > 0 || initialUsage.completion_tokens > 0)) {
                       console.log(`   🔸 Предварительные токены: ${initialUsage.prompt_tokens + initialUsage.completion_tokens}`);
                     }
-                    console.log(`   📊 ИТОГО: ${formatCostLog(model, totalPrompt, totalCompletion, totalTokens)}`);
+                    if (!isEstimate && (typeof initialUsage?.total_cost === 'number' || (Array.isArray(initialUsage?.stages) && initialUsage.stages.length > 0))) {
+                      console.log(`   📊 ИТОГО (комбинированно): ${totalTokens.toLocaleString('ru-RU')} токенов, ${totalCostUnits.toFixed(2)} ед.`);
+                    } else {
+                      console.log(`   📊 ИТОГО: ${formatCostLog(model, totalPrompt, totalCompletion, totalTokens)}`);
+                    }
                     
                     // Отправляем обновленный usage отдельным чанком
                     const usageUpdate = {
@@ -132,7 +162,7 @@ function createTransformWithUsage(
                         prompt_tokens: totalPrompt,
                         completion_tokens: totalCompletion,
                         total_tokens: totalTokens,
-                        total_cost: costInfo.totalCostUnits
+                        total_cost: totalCostUnits
                       },
                       model: model
                     };
@@ -165,7 +195,8 @@ export async function analyzeImageFastStreaming(
   clinicalContext?: string,
   specialty?: Specialty,
   history: any[] = [],
-  isRadiologyOnly: boolean = false
+  isRadiologyOnly: boolean = false,
+  isComparative: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -200,7 +231,10 @@ export async function analyzeImageFastStreaming(
       const extractionResult = await extractImageJSON({
         imagesBase64: allImages,
         modality: imageType || 'unknown',
-        specialty: specialty
+        specialty: specialty,
+        enableSmartRouting: false,
+        preferModel: MODELS.GEMINI_3_FLASH,
+        isComparative
       });
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
@@ -346,7 +380,7 @@ export async function analyzeImageOpusTwoStageStreaming(
 
       console.log(`🚀 [OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
       const { extractImageJSON } = await import('./openrouter');
-      const extractionResult = await extractImageJSON({ imageBase64, modality: imageType || 'unknown', specialty });
+      const extractionResult = await extractImageJSON({ imageBase64, modality: imageType || 'unknown', specialty, enableSmartRouting: true });
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       
@@ -484,7 +518,8 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
   model: string = MODELS.SONNET,
   specialty?: Specialty,
   history: any[] = [],
-  isRadiologyOnly: boolean = false
+  isRadiologyOnly: boolean = false,
+  isComparative: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -505,7 +540,9 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       let loadingSeconds = 0;
       const getLoadingHeader = (sec: number) => {
         const dots = '.'.repeat((sec % 3) + 1);
-        return `## 🩺 ПОДГОТОВКА К СРАВНИТЕЛЬНОМУ АНАЛИЗУ${dots}\n\n> *Этап 1: Сбор и анализ данных из нескольких изображений через Gemini Vision... (${sec}с)*\n\n---\n\n`;
+        return isComparative
+          ? `## 🩺 ПОДГОТОВКА К СРАВНИТЕЛЬНОМУ АНАЛИЗУ${dots}\n\n> *Этап 1: Сбор и анализ данных из нескольких изображений через Gemini Vision... (${sec}с)*\n\n---\n\n`
+          : `## 🩺 ПОДГОТОВКА К АНАЛИЗУ СЕРИИ СРЕЗОВ${dots}\n\n> *Этап 1: Сбор и анализ данных из нескольких изображений одного исследования... (${sec}с)*\n\n---\n\n`;
       };
 
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: getLoadingHeader(0) } }] })}\n\n`));
@@ -548,7 +585,9 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       const extractionResult = await extractImageJSON({
         imagesBase64,
         modality: imageType || 'unknown',
-        specialty: specialty
+        specialty: specialty,
+        enableSmartRouting: true,
+        isComparative
       });
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
@@ -562,7 +601,9 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       const summaryLine = `\n\n✅ **Данные извлечены:** ${findingsCount} находок, ${metricsCount} метрик из ${imagesBase64.length} изображений\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
-      const stage2Header = `\n> *Этап 2: Детальный клинический разбор и сравнение через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
+      const stage2Header = isComparative
+        ? `\n> *Этап 2: Детальный клинический разбор и сравнение через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`
+        : `\n> *Этап 2: Детальный клинический разбор серии через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
@@ -570,7 +611,7 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
 
       const mainPrompt = `ИНСТРУКЦИЯ: ${directivePrompt}
 
-### СРАВНИТЕЛЬНЫЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЙ (JSON):
+### ${isComparative ? 'СРАВНИТЕЛЬНЫЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЙ' : 'ДАННЫЕ ИЗ НЕСКОЛЬКИХ ИЗОБРАЖЕНИЙ ОДНОГО ИССЛЕДОВАНИЯ'} (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
 ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.`;
@@ -743,7 +784,7 @@ export async function analyzeMultipleImagesWithJSONStreaming(
       }, 5000);
 
       const { extractImageJSON } = await import('./openrouter');
-      const extractionResult = await extractImageJSON({ imagesBase64, modality: imageType || 'unknown', specialty });
+      const extractionResult = await extractImageJSON({ imagesBase64, modality: imageType || 'unknown', specialty, enableSmartRouting: true });
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       

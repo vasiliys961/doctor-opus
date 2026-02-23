@@ -430,6 +430,7 @@ ${specialtyContext}
 ### КРИТЕРИИ АНАЛИЗА:
 - **Требования:** ${criteria.requirements}
 - **Искать признаки:** ${criteria.pathologies}
+- **КАЧЕСТВО ИЗОБРАЖЕНИЯ:** отдельно оцени качество входа (резкость, экспозиция, шум, артефакты смартфона) и укажи в поле routing.
 
 ### СТРОГИЙ JSON-ФОРМАТ (ВЫХОД):
 {
@@ -449,6 +450,13 @@ ${specialtyContext}
   "metrics": {
     "key": "numeric_value_with_units"
   },
+  "routing": {
+    "self_confidence": 0.0,
+    "difficulty_level": 1,
+    "image_quality": "good",
+    "ambiguous_findings": false,
+    "needs_second_read": false
+  },
   "technical_summary": "Краткое техническое описание ключевых находок без интерпретации."
 }`;
 }
@@ -462,6 +470,7 @@ export function getComparisonDescriptionPrompt(modality: ImageType, specialty?: 
 1. Четко фиксируй: появление новых очагов, исчезновение старых, изменение размеров (рост/регресс в %), изменение интенсивности/плотности.
 2. Оценивай стабильность признаков.
 3. Ответ только в формате JSON.
+4. Обязательно оцени надежность сравнения и качество входных изображений в поле routing.
 
 ### СТРОГИЙ JSON-ФОРМАТ:
 {
@@ -480,6 +489,13 @@ export function getComparisonDescriptionPrompt(modality: ImageType, specialty?: 
   ],
   "delta_metrics": {
     "metric_name": "изменение значения"
+  },
+  "routing": {
+    "self_confidence": 0.0,
+    "difficulty_level": 1,
+    "image_quality": "good",
+    "ambiguous_findings": false,
+    "needs_second_read": false
   }
 }`;
 }

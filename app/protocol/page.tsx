@@ -419,7 +419,7 @@ export default function ProtocolPage() {
               <option value="sonnet">🤖 Sonnet 4.6</option>
               <option value="gpt52">🚀 GPT-5.2</option>
               <option value="opus">🧠 Opus 4.6</option>
-              <option value="gemini">⚡ Gemini 3.0</option>
+              <option value="gemini">⚡ Gemini 3.1</option>
             </select>
           </div>
 
@@ -434,7 +434,7 @@ export default function ProtocolPage() {
               <h2 className="text-xl font-semibold">Сгенерированный протокол</h2>
               {currentCost > 0 && (
                 <div className="mt-1 bg-teal-50 text-teal-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-teal-200 inline-block shadow-sm">
-                  💰 Списано: {currentCost.toFixed(2)} ед.
+                  💰 Стоимость сервиса: {currentCost.toFixed(2)} ед.
                 </div>
               )}
               <div className="mt-2">

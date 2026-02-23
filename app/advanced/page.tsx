@@ -6,6 +6,7 @@ import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
+import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
@@ -16,6 +17,7 @@ export default function AdvancedAnalysisPage() {
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [mode, setMode] = useState<AnalysisMode>('optimized')
   const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>('sonnet')
+  const [imageType, setImageType] = useState<ImageModality>('universal')
   const [additionalContext, setAdditionalContext] = useState<string>('')
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
@@ -70,11 +72,16 @@ export default function AdvancedAnalysisPage() {
       
       const formData = new FormData()
       formData.append('file', mainImage)
+      additionalFiles.forEach((file, index) => {
+        formData.append(`additionalImage_${index}`, file)
+      })
       formData.append('prompt', prompt)
       formData.append('mode', mode)
       formData.append('model', modelToUse)
+      formData.append('imageType', imageType)
       formData.append('stage', targetStage)
       formData.append('useStreaming', 'true')
+      formData.append('isAnonymous', isAnonymous.toString())
       
       if (targetStage === 'directive') {
         formData.append('description', accumulatedDescription)
@@ -190,7 +197,41 @@ export default function AdvancedAnalysisPage() {
           </div>
         </div>
 
+        <div className="mb-6">
+          <h2 className="text-lg sm:text-xl font-semibold mb-3">📎 Дополнительные изображения</h2>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleAdditionalFileUpload}
+            disabled={loading}
+            className="block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-primary-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-700"
+          />
+          {additionalFiles.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {additionalFiles.map((file, index) => (
+                <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                  <span className="truncate pr-3">{file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAdditionalFiles(prev => prev.filter((_, i) => i !== index))}
+                    disabled={loading}
+                    className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                  >
+                    Удалить
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="mb-6 p-4 bg-primary-50 rounded-lg border border-primary-200">
+          <ModalitySelector
+            value={imageType}
+            onChange={setImageType}
+            disabled={loading}
+          />
           <AnalysisModeSelector 
             value={mode} 
             onChange={setMode} 

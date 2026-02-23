@@ -6,6 +6,7 @@ import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
+import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
@@ -25,6 +26,7 @@ export default function ComparativeAnalysisPage() {
   const [comparisonMode, setComparisonMode] = useState<ComparisonMode>('general')
   const [mode, setMode] = useState<AnalysisMode>('optimized')
   const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>('sonnet')
+  const [imageType, setImageType] = useState<ImageModality>('universal')
   const [additionalContext, setAdditionalContext] = useState<string>('')
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
@@ -103,8 +105,10 @@ export default function ComparativeAnalysisPage() {
       formData.append('prompt', comparisonPrompt)
       formData.append('mode', mode)
       formData.append('model', modelToUse)
+      formData.append('imageType', imageType)
       formData.append('stage', targetStage)
       formData.append('useStreaming', 'true')
+      formData.append('isComparative', 'true')
       
       if (targetStage === 'directive') {
         formData.append('description', accumulatedDescription)
@@ -267,6 +271,11 @@ export default function ComparativeAnalysisPage() {
         </div>
 
         <div className="mb-6 p-4 bg-primary-50 rounded-lg border border-primary-200">
+          <ModalitySelector
+            value={imageType}
+            onChange={setImageType}
+            disabled={loading}
+          />
           <AnalysisModeSelector 
             value={mode} 
             onChange={setMode} 

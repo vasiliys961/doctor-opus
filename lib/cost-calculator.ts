@@ -29,6 +29,12 @@ export interface CostInfo {
   totalCostUnits: number;
 }
 
+export interface UsageStage {
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+}
+
 /**
  * Получить цены для модели
  */
@@ -88,6 +94,35 @@ export function calculateCost(
   return {
     inputCostUsd,
     outputCostUsd,
+    totalCostUsd,
+    totalCostUnits,
+  };
+}
+
+/**
+ * Рассчитать суммарную стоимость нескольких этапов (разные модели).
+ */
+export function calculateCombinedCost(stages: UsageStage[]) {
+  let totalPromptTokens = 0;
+  let totalCompletionTokens = 0;
+  let totalCostUsd = 0;
+  let totalCostUnits = 0;
+
+  for (const stage of stages) {
+    const prompt = stage.prompt_tokens || 0;
+    const completion = stage.completion_tokens || 0;
+    const stageCost = calculateCost(prompt, completion, stage.model);
+
+    totalPromptTokens += prompt;
+    totalCompletionTokens += completion;
+    totalCostUsd += stageCost.totalCostUsd;
+    totalCostUnits += stageCost.totalCostUnits;
+  }
+
+  return {
+    totalPromptTokens,
+    totalCompletionTokens,
+    totalTokens: totalPromptTokens + totalCompletionTokens,
     totalCostUsd,
     totalCostUnits,
   };

@@ -117,6 +117,35 @@ export async function convertHeicToJpeg(
 }
 
 /**
+ * Легкое авто-улучшение медицинского фото (смартфон): normalize + gentle sharpen.
+ * По умолчанию отключено; включается через IMAGE_AUTO_ENHANCE_ENABLED=true.
+ */
+export async function enhanceMedicalImageBuffer(
+  buffer: Buffer,
+  mimeType: string
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const enabled = (process.env.IMAGE_AUTO_ENHANCE_ENABLED || 'false').toLowerCase() === 'true';
+  if (!enabled || !normalizeMimeType(mimeType).startsWith('image/')) {
+    return { buffer, mimeType };
+  }
+
+  try {
+    const sharp = (await import('sharp')).default;
+    const normalizedMimeType = normalizeMimeType(mimeType);
+
+    let pipeline = sharp(buffer, { failOnError: false }).rotate().normalize().sharpen({ sigma: 1.1 });
+    if (normalizedMimeType === 'image/png') {
+      return { buffer: await pipeline.png({ compressionLevel: 9 }).toBuffer(), mimeType: 'image/png' };
+    }
+
+    return { buffer: await pipeline.jpeg({ quality: 90, mozjpeg: true }).toBuffer(), mimeType: 'image/jpeg' };
+  } catch (error) {
+    console.error('❌ Ошибка авто-улучшения изображения:', error);
+    return { buffer, mimeType };
+  }
+}
+
+/**
  * СЕРВЕРНАЯ компрессия изображений для соблюдения лимитов API (5 МБ).
  */
 export async function compressImageBuffer(

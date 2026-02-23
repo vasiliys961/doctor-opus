@@ -4,7 +4,7 @@
  * Сохраняет всю диагностическую логику без изменений
  */
 
-import { calculateCost, formatCostLog } from './cost-calculator';
+import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
 import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
 import { safeLog, safeError, safeWarn } from './logger';
 
@@ -83,6 +83,53 @@ function isRateLimit(status: number, errorText?: string) {
   if (status === 429) return true;
   const text = (errorText || '').toLowerCase();
   return text.includes('rate-limited') || text.includes('rate limited');
+}
+
+type RoutingImageQuality = 'good' | 'moderate' | 'poor';
+
+interface RoutingMetadata {
+  self_confidence?: number;
+  difficulty_level?: number;
+  image_quality?: RoutingImageQuality;
+  ambiguous_findings?: boolean;
+  needs_second_read?: boolean;
+}
+
+function isTruthyEnv(value: string | undefined, defaultValue: boolean = false): boolean {
+  if (!value) return defaultValue;
+  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+}
+
+function extractRoutingMetadata(payload: any): RoutingMetadata {
+  return payload?.routing || payload?.quality_routing || {};
+}
+
+function shouldUseProByRouting(modality: string, routing: RoutingMetadata): { escalate: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  const normalizedModality = (modality || '').toLowerCase();
+  const highRiskModalities = new Set(['ct', 'mri', 'histology', 'mammography']);
+  const forceProHighRisk = isTruthyEnv(process.env.SMART_ROUTING_FORCE_PRO_HIGH_RISK, true);
+
+  if (forceProHighRisk && highRiskModalities.has(normalizedModality)) {
+    reasons.push('high_risk_modality');
+  }
+  if (typeof routing.self_confidence === 'number' && routing.self_confidence < 0.75) {
+    reasons.push('low_self_confidence');
+  }
+  if (typeof routing.difficulty_level === 'number' && routing.difficulty_level >= 4) {
+    reasons.push('high_difficulty');
+  }
+  if (routing.image_quality === 'poor') {
+    reasons.push('poor_image_quality');
+  }
+  if (routing.ambiguous_findings) {
+    reasons.push('ambiguous_findings');
+  }
+  if (routing.needs_second_read) {
+    reasons.push('second_read_requested');
+  }
+
+  return { escalate: reasons.length > 0, reasons };
 }
 
 /**
@@ -262,6 +309,7 @@ export async function analyzeImageFast(options: {
   imageType?: ImageType;
   specialty?: Specialty;
   clinicalContext?: string;
+  isComparative?: boolean;
 }): Promise<string> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -278,7 +326,10 @@ export async function analyzeImageFast(options: {
     safeLog(`🚀 [FAST] Шаг 1: Извлечение JSON через Gemini 3.0 (${allImages.length} изображений)...`);
     const jsonExtractionResult = await extractImageJSON({
       imagesBase64: allImages,
-      modality: imageType
+      modality: imageType,
+      enableSmartRouting: false,
+      preferModel: MODELS.GEMINI_3_FLASH,
+      isComparative: options.isComparative === true
     });
     const jsonExtraction = jsonExtractionResult.data;
     
@@ -385,7 +436,8 @@ export async function analyzeImageOpusTwoStage(options: {
     const extractionResult = await extractImageJSON({
       imageBase64: options.imageBase64,
       modality: imageType,
-      specialty: specialty
+      specialty: specialty,
+      enableSmartRouting: true
     });
     const jsonExtraction = extractionResult.data;
     const initialUsage = extractionResult.usage;
@@ -442,13 +494,22 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
     const textInputTokens = textData.usage?.prompt_tokens || 0;
     const textOutputTokens = textData.usage?.completion_tokens || 0;
 
-    const totalInput = textInputTokens + (initialUsage?.prompt_tokens || 0);
-    const totalOutput = textOutputTokens + (initialUsage?.completion_tokens || 0);
-    const totalTokens = textTokensUsed + (initialUsage?.total_tokens || 0);
+    const combinedCost = calculateCombinedCost([
+      {
+        model: initialUsage?.model || MODELS.GEMINI_3_FLASH,
+        prompt_tokens: initialUsage?.prompt_tokens || 0,
+        completion_tokens: initialUsage?.completion_tokens || 0,
+      },
+      {
+        model: textModel,
+        prompt_tokens: textInputTokens,
+        completion_tokens: textOutputTokens,
+      }
+    ]);
     
     safeLog('✅ [TWO-STAGE] Анализ завершен');
-    if (totalTokens > 0) {
-      safeLog(`   📊 ИТОГО: ${formatCostLog(textModel, totalInput, totalOutput, totalTokens)}`);
+    if (combinedCost.totalTokens > 0) {
+      safeLog(`   📊 ИТОГО (комбинированно): ${combinedCost.totalTokens.toLocaleString('ru-RU')} токенов, ${combinedCost.totalCostUnits.toFixed(2)} ед. ($${combinedCost.totalCostUsd.toFixed(4)})`);
     }
     
     return result;
@@ -467,6 +528,9 @@ export async function extractImageJSON(options: {
   imagesBase64?: string[]; 
   modality?: string;
   specialty?: Specialty;
+  enableSmartRouting?: boolean;
+  preferModel?: string;
+  isComparative?: boolean;
 }): Promise<any> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -483,18 +547,12 @@ export async function extractImageJSON(options: {
     throw new Error('Не предоставлено ни одного изображения для извлечения JSON');
   }
   
-  // Используем Gemini 3 Flash для извлечения JSON
-  const modelsToTry = [
-    MODELS.GEMINI_3_FLASH,
-    MODELS.GEMINI_3_PRO,
-    'google/gemini-2.0-flash-001',
-    'google/gemini-flash-1.5',
-    'google/gemini-pro-1.5'
-  ];
+  const smartRoutingEnabled = (options.enableSmartRouting ?? true) && isTruthyEnv(process.env.SMART_ROUTING_ENABLED, false);
+  const preferModel = options.preferModel || MODELS.GEMINI_3_FLASH;
 
   // Получаем детальные инструкции специалиста для этого типа исследования
   const { getDescriptionPrompt, getComparisonDescriptionPrompt } = await import('./prompts');
-  const jsonPrompt = allImages.length > 1 
+  const jsonPrompt = options.isComparative
     ? getComparisonDescriptionPrompt(modality as any, specialty)
     : getDescriptionPrompt(modality as any, specialty);
 
@@ -515,83 +573,136 @@ export async function extractImageJSON(options: {
     });
   });
 
-  for (const model of modelsToTry) {
-    try {
-      safeLog(`📡 [GEMINI JSON] Пробую модель: ${model}`);
-      
-      const payload = {
+  const callModel = async (model: string, timeoutMs: number = 60000) => {
+    safeLog(`📡 [GEMINI JSON] Пробую модель: ${model}`);
+
+    const payload = {
+      model,
+      messages: [{ role: 'user', content }],
+      max_tokens: 16000,
+      temperature: 0.1,
+    };
+
+    const response = await fetchWithTimeout(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }, timeoutMs);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`[${response.status}] ${errorText.substring(0, 200)}`);
+    }
+
+    const resultData = await response.json();
+    const resultText = resultData?.choices?.[0]?.message?.content || '';
+    const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+    const jsonStr = jsonMatch ? jsonMatch[0] : resultText;
+    const parsed = JSON.parse(jsonStr);
+
+    const tokensUsed = resultData.usage?.total_tokens || 0;
+    const inputTokens = resultData.usage?.prompt_tokens || Math.floor(tokensUsed / 2);
+    const outputTokens = resultData.usage?.completion_tokens || Math.floor(tokensUsed / 2);
+
+    safeLog(`✅ [GEMINI JSON] JSON извлечен успешно через ${model}`);
+    if (tokensUsed > 0) {
+      safeLog(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
+    }
+
+    const callCost = calculateCost(inputTokens, outputTokens, model);
+
+    return {
+      data: parsed,
+      usage: {
+        prompt_tokens: inputTokens,
+        completion_tokens: outputTokens,
+        total_tokens: tokensUsed,
         model,
-        messages: [
-          { role: 'user', content: content }
-        ],
-        max_tokens: 16000,
-        temperature: 0.1,
-      };
-
-      const response = await fetchWithTimeout(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      }, 60000); // Таймаут 60 сек на извлечение JSON
-
-      if (response.ok) {
-        const resultData = await response.json();
-        const resultText = resultData.choices[0].message.content;
-        
-        // Извлекаем JSON из ответа (может быть обернут в markdown код блоки)
-        const jsonMatch = resultText.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? jsonMatch[0] : resultText;
-        
-        try {
-          const jsonExtraction = JSON.parse(jsonStr);
-          
-          // Логирование токенов и стоимости
-          const tokensUsed = resultData.usage?.total_tokens || 0;
-          const inputTokens = resultData.usage?.prompt_tokens || Math.floor(tokensUsed / 2);
-          const outputTokens = resultData.usage?.completion_tokens || Math.floor(tokensUsed / 2);
-          
-          safeLog(`✅ [GEMINI JSON] JSON извлечен успешно через ${model}`);
-          if (tokensUsed > 0) {
-            safeLog(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
+        total_cost: callCost.totalCostUnits,
+        stages: [
+          {
+            model,
+            prompt_tokens: inputTokens,
+            completion_tokens: outputTokens,
           }
-          
-          // Возвращаем и данные, и usage для корректного учета стоимости
-          return {
-            data: jsonExtraction,
-            usage: {
-              prompt_tokens: inputTokens,
-              completion_tokens: outputTokens,
-              total_tokens: tokensUsed,
-              model: model
-            }
-          };
-        } catch (e) {
-          safeWarn(`⚠️ [GEMINI JSON] Ошибка парсинга JSON от ${model}, пробую следующую модель...`);
-          continue;
-        }
-      } else if (response.status === 404) {
-        safeWarn(`⚠️ [GEMINI JSON] Модель ${model} недоступна, пробую следующую...`);
-        continue;
-      } else if (response.status === 429) {
-        const errorText = await response.text();
-        safeWarn(`⚠️ [GEMINI JSON] 429 от ${model}: ${errorText.substring(0, 200)}`);
-        await sleep(1500);
-        continue;
-      } else {
-        const errorText = await response.text();
-        safeWarn(`⚠️ [GEMINI JSON] Ошибка ${response.status} от ${model}: ${errorText.substring(0, 200)}`);
+        ]
+      }
+    };
+  };
+
+  // Быстрый путь для fast-режима и принудительного выбора модели
+  if (!smartRoutingEnabled || preferModel !== MODELS.GEMINI_3_FLASH) {
+    const orderedModels = [
+      preferModel,
+      MODELS.GEMINI_3_FLASH,
+      MODELS.GEMINI_3_PRO,
+      'google/gemini-2.0-flash-001',
+      'google/gemini-flash-1.5',
+      'google/gemini-pro-1.5'
+    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
+
+    for (const model of orderedModels) {
+      try {
+        return await callModel(model, model === MODELS.GEMINI_3_PRO ? 90000 : 60000);
+      } catch (error: any) {
+        safeWarn(`⚠️ [GEMINI JSON] Ошибка с ${model}: ${error.message}, пробую следующую модель...`);
+        if (String(error.message).includes('[429]')) await sleep(1500);
         continue;
       }
-    } catch (error: any) {
-      safeWarn(`⚠️ [GEMINI JSON] Ошибка с ${model}: ${error.message}, пробую следующую модель...`);
-      continue;
     }
+    throw new Error('Не удалось извлечь JSON ни через одну модель Gemini');
   }
 
-  throw new Error('Не удалось извлечь JSON ни через одну модель Gemini Flash');
+  // Smart-routing: сначала Flash, потом условная эскалация до Pro 3.1.
+  let flashResult: any;
+  try {
+    flashResult = await callModel(MODELS.GEMINI_3_FLASH, 60000);
+  } catch (error: any) {
+    safeWarn(`⚠️ [SMART ROUTER] Flash недоступен, fallback на Pro: ${error.message}`);
+    return await callModel(MODELS.GEMINI_3_PRO, 90000);
+  }
+
+  const routing = extractRoutingMetadata(flashResult.data);
+  const decision = shouldUseProByRouting(modality, routing);
+  safeLog(`🧭 [SMART ROUTER] modality=${modality}; escalate=${decision.escalate}; reasons=${decision.reasons.join(',') || 'none'}`);
+
+  if (!decision.escalate) {
+    return flashResult;
+  }
+
+  try {
+    const proResult = await callModel(MODELS.GEMINI_3_PRO, 90000);
+    const flashUsage = flashResult?.usage || {};
+    const proUsage = proResult?.usage || {};
+    const mergedStages = [
+      ...(Array.isArray(flashUsage.stages) ? flashUsage.stages : []),
+      ...(Array.isArray(proUsage.stages) ? proUsage.stages : [])
+    ];
+
+    const mergedUsage = {
+      prompt_tokens: (flashUsage.prompt_tokens || 0) + (proUsage.prompt_tokens || 0),
+      completion_tokens: (flashUsage.completion_tokens || 0) + (proUsage.completion_tokens || 0),
+      total_tokens: (flashUsage.total_tokens || 0) + (proUsage.total_tokens || 0),
+      model: MODELS.GEMINI_3_PRO,
+      total_cost: (flashUsage.total_cost || 0) + (proUsage.total_cost || 0),
+      stages: mergedStages
+    };
+
+    return {
+      ...proResult,
+      usage: mergedUsage,
+      router: { decision: 'pro', reasons: decision.reasons, fallback_model: MODELS.GEMINI_3_FLASH }
+    };
+  } catch (error: any) {
+    safeWarn(`⚠️ [SMART ROUTER] Pro недоступен, используем Flash: ${error.message}`);
+    return {
+      ...flashResult,
+      router: { decision: 'flash_fallback', reasons: decision.reasons }
+    };
+  }
 }
 
 /**
@@ -609,6 +720,7 @@ export async function analyzeMultipleImagesTwoStage(options: {
   clinicalContext?: string;
   targetModel?: string;
   isRadiologyOnly?: boolean;
+  isComparative?: boolean;
 }): Promise<string> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -623,7 +735,9 @@ export async function analyzeMultipleImagesTwoStage(options: {
     const extractionResult = await extractImageJSON({
       imagesBase64: options.imagesBase64,
       modality: imageType,
-      specialty: specialty
+      specialty: specialty,
+      enableSmartRouting: true,
+      isComparative: options.isComparative === true
     });
     const jsonExtraction = extractionResult.data;
     const initialUsage = extractionResult.usage;
@@ -633,7 +747,9 @@ export async function analyzeMultipleImagesTwoStage(options: {
     
     const textModel = options.targetModel || MODELS.SONNET;
     
-    const contextPrompt = `Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. Проведи сравнительную клиническую интерпретацию данных по НЕСКОЛЬКИМ изображениям, полученных от Специалиста. ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
+    const contextPrompt = `${options.isComparative
+      ? 'Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. Проведи сравнительную клиническую интерпретацию данных по НЕСКОЛЬКИМ изображениям, полученных от Специалиста.'
+      : 'Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. Проведи единый клинический анализ набора изображений одного исследования, без трактовки динамики во времени.'} ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
 
 ### ДАННЫЕ ОТ СПЕЦИАЛИСТА (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
@@ -671,13 +787,22 @@ ${directiveCriteria}`;
     const result = textData.choices[0].message.content || '';
 
     // Логирование токенов и стоимости
-    const totalInput = (textData.usage?.prompt_tokens || 0) + (initialUsage?.prompt_tokens || 0);
-    const totalOutput = (textData.usage?.completion_tokens || 0) + (initialUsage?.completion_tokens || 0);
-    const totalTokens = totalInput + totalOutput;
+    const combinedCost = calculateCombinedCost([
+      {
+        model: initialUsage?.model || MODELS.GEMINI_3_FLASH,
+        prompt_tokens: initialUsage?.prompt_tokens || 0,
+        completion_tokens: initialUsage?.completion_tokens || 0,
+      },
+      {
+        model: textModel,
+        prompt_tokens: textData.usage?.prompt_tokens || 0,
+        completion_tokens: textData.usage?.completion_tokens || 0,
+      }
+    ]);
 
     safeLog('✅ [MULTI-TWO-STAGE] Анализ завершен');
-    if (totalTokens > 0) {
-      safeLog(`   📊 ИТОГО: ${formatCostLog(textModel, totalInput, totalOutput, totalTokens)}`);
+    if (combinedCost.totalTokens > 0) {
+      safeLog(`   📊 ИТОГО (комбинированно): ${combinedCost.totalTokens.toLocaleString('ru-RU')} токенов, ${combinedCost.totalCostUnits.toFixed(2)} ед. ($${combinedCost.totalCostUsd.toFixed(4)})`);
     }
 
     return result;

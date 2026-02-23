@@ -12,7 +12,7 @@ import {
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
-import { anonymizeImageBuffer, compressImageBuffer, ensureVisionSupportedImage } from "@/lib/server-image-processing";
+import { anonymizeImageBuffer, compressImageBuffer, ensureVisionSupportedImage, enhanceMedicalImageBuffer } from "@/lib/server-image-processing";
 import { extractDicomMetadata, formatDicomMetadataForAI } from '@/lib/dicom-service';
 import { processDicomJs } from "@/lib/dicom-processor";
 import { exec } from 'child_process';
@@ -33,9 +33,126 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  let billingContext: { email: string; estimatedCost: number } | null = null;
   
   const handleStreamingResponse = async (stream: ReadableStream, modelName: string) => {
-    return new Response(stream, {
+    const wrapStreamWithBillingReconcile = (
+      source: ReadableStream,
+      context: { email: string; estimatedCost: number }
+    ) => {
+      const reader = source.getReader();
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+      let sseBuffer = '';
+      let finalUsageCost: number | null = null;
+      let reconciled = false;
+
+      const reconcile = async () => {
+        if (reconciled) return;
+        reconciled = true;
+
+        try {
+          const estimated = context.estimatedCost;
+          const actual = finalUsageCost;
+          if (typeof actual !== 'number' || !Number.isFinite(actual) || actual < 0) {
+            return;
+          }
+
+          // Политика доверия: никогда не доначисляем сверх резерва.
+          // Если фактическая стоимость ниже — автоматически возвращаем разницу.
+          const charged = Math.min(estimated, actual);
+          const refund = estimated - charged;
+
+          if (refund > 0.01) {
+            await checkAndDeductBalance(
+              context.email,
+              -refund,
+              'Корректировка стоимости анализа (возврат)',
+              {
+                analysisId,
+                estimatedCost: estimated,
+                actualCost: actual,
+                chargedCost: charged,
+                refund,
+              }
+            );
+
+            const refundEvent = {
+              billing: {
+                estimated_cost: estimated,
+                actual_cost: actual,
+                charged_cost: charged,
+                refund,
+              },
+            };
+            // Отправляем прозрачную информацию в поток для UI (игнорируется, если клиент не обрабатывает).
+            // Это помогает в дебаге и будущей визуализации.
+            // Формат совместим с SSE data.
+            // Не блокируем ответ при ошибках сериализации.
+            try {
+              return encoder.encode(`data: ${JSON.stringify(refundEvent)}\n\n`);
+            } catch {
+              return undefined;
+            }
+          }
+        } catch (e) {
+          console.error('[BILLING RECONCILE] Ошибка корректировки:', e);
+        }
+        return undefined;
+      };
+
+      return new ReadableStream({
+        async start(controller) {
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              // Пробуем извлечь usage.total_cost из SSE, не нарушая исходный поток.
+              const chunkText = decoder.decode(value, { stream: true });
+              sseBuffer += chunkText;
+              let lineEnd = sseBuffer.indexOf('\n');
+              while (lineEnd !== -1) {
+                const line = sseBuffer.slice(0, lineEnd).trim();
+                sseBuffer = sseBuffer.slice(lineEnd + 1);
+                if (line.startsWith('data: ')) {
+                  const payload = line.slice(6).trim();
+                  if (payload && payload !== '[DONE]') {
+                    try {
+                      const parsed = JSON.parse(payload);
+                      const candidate = parsed?.usage?.total_cost;
+                      if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0) {
+                        finalUsageCost = candidate;
+                      }
+                    } catch {}
+                  }
+                }
+                lineEnd = sseBuffer.indexOf('\n');
+              }
+
+              controller.enqueue(value);
+            }
+
+            const billingChunk = await reconcile();
+            if (billingChunk) {
+              controller.enqueue(billingChunk);
+            }
+            controller.close();
+          } catch (error) {
+            await reconcile();
+            controller.error(error);
+          } finally {
+            reader.releaseLock();
+          }
+        },
+      });
+    };
+
+    const responseStream = billingContext
+      ? wrapStreamWithBillingReconcile(stream, billingContext)
+      : stream;
+
+    return new Response(responseStream, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',
@@ -75,6 +192,7 @@ export async function POST(request: NextRequest) {
       
       const estimatedCost = getAnalysisCost(mode, imgCount);
       const billing = await checkAndDeductBalance(userEmail, estimatedCost, 'Анализ изображения', { mode, imageCount: imgCount });
+      billingContext = { email: userEmail, estimatedCost };
       
       if (!billing.allowed) {
         return NextResponse.json(
@@ -101,6 +219,7 @@ export async function POST(request: NextRequest) {
     const useStreaming = formData.get('useStreaming') === 'true';
     const isTwoStage = formData.get('isTwoStage') === 'true';
     const isAnonymous = formData.get('isAnonymous') === 'true';
+    const isComparative = formData.get('isComparative') === 'true';
     
     // Специальности удалены для стабильности
     const specialty = undefined;
@@ -126,7 +245,7 @@ export async function POST(request: NextRequest) {
       if (isDicom) {
         // DICOM: используем processDicomJs (уже включает анонимизацию)
         const arrayBuffer = await img.arrayBuffer();
-        let buffer = Buffer.from(arrayBuffer);
+        let buffer: Buffer<ArrayBufferLike> = Buffer.from(arrayBuffer);
         
         // 1. Если анонимно — затираем теги в буфере ПЕРЕД обработкой
         if (isAnonymous) {
@@ -172,7 +291,7 @@ export async function POST(request: NextRequest) {
       } else {
         // ОБЫЧНОЕ ИЗОБРАЖЕНИЕ: АНОНИМИЗАЦИЯ НА СЕРВЕРЕ (ТОЛЬКО ЕСЛИ ВКЛЮЧЕНО)
         const arrayBuffer = await img.arrayBuffer();
-        let buffer = Buffer.from(arrayBuffer);
+        let buffer: Buffer<ArrayBufferLike> = Buffer.from(arrayBuffer);
         let currentMimeType = img.type;
         
         // 1) Гарантируем формат, который примут vision-провайдеры.
@@ -181,6 +300,9 @@ export async function POST(request: NextRequest) {
           const ensured = await ensureVisionSupportedImage(buffer, currentMimeType);
           buffer = ensured.buffer;
           currentMimeType = ensured.mimeType;
+          const enhanced = await enhanceMedicalImageBuffer(buffer, currentMimeType);
+          buffer = enhanced.buffer;
+          currentMimeType = enhanced.mimeType;
         } catch (e: any) {
           return NextResponse.json(
             { success: false, error: e?.message || 'Не удалось обработать изображение' },
@@ -191,7 +313,6 @@ export async function POST(request: NextRequest) {
         // 2) Применяем анонимизацию для всех изображений (JPG/PNG и т.д.), если включен режим анонимности
         if (isAnonymous && currentMimeType.startsWith('image/')) {
           // Не логируем имя файла — может содержать ПДн
-          // @ts-expect-error - Несовместимость типов Buffer между canvas и Node.js, но код работает корректно
           buffer = await anonymizeImageBuffer(buffer, currentMimeType);
         }
         
@@ -207,21 +328,23 @@ export async function POST(request: NextRequest) {
 
     const finalClinicalContext = [clinicalContext, dicomContext].filter(Boolean).join('\n\n');
     let modelToUse = customModel || (mode === 'fast' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
+    const displayedCost = billingContext?.estimatedCost ?? getAnalysisCost(mode, allImages.length);
 
-    // Если изображений несколько, используем специальный промпт для сравнения, если он еще не задан явно
+    // Сравнительный промпт включаем ТОЛЬКО по явному флагу.
+    // Множественные кадры/срезы одного исследования не считаем динамикой "было/стало".
     let finalPrompt = prompt;
-    if (allImages.length > 1 && !prompt.includes('СРАВНИТЕЛЬНЫЙ')) {
+    if (isComparative && allImages.length > 1 && !prompt.includes('СРАВНИТЕЛЬНЫЙ')) {
       const { getImageComparisonPrompt } = await import('@/lib/prompts');
       finalPrompt = getImageComparisonPrompt(prompt);
     }
 
     if (mode === 'fast') {
       if (useStreaming) {
-        const stream = await analyzeImageFastStreaming(finalPrompt, imagesBase64, imageType, finalClinicalContext, undefined, [], isTwoStage);
+        const stream = await analyzeImageFastStreaming(finalPrompt, imagesBase64, imageType, finalClinicalContext, undefined, [], isTwoStage, isComparative);
         return handleStreamingResponse(stream, MODELS.GEMINI_3_FLASH);
       }
-      const result = await analyzeImageFast({ prompt: finalPrompt, imagesBase64, imageType: imageType as any, clinicalContext: finalClinicalContext });
-      return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: 0.5 });
+      const result = await analyzeImageFast({ prompt: finalPrompt, imagesBase64, imageType: imageType as any, clinicalContext: finalClinicalContext, isComparative });
+      return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: displayedCost });
     }
 
     if (allImages.length > 1) {
@@ -235,7 +358,8 @@ export async function POST(request: NextRequest) {
           modelToUse, 
           undefined,  // specialty
           [],         // history
-          isTwoStage
+          isTwoStage,
+          isComparative
         );
         return handleStreamingResponse(stream, modelToUse);
       }
@@ -245,9 +369,10 @@ export async function POST(request: NextRequest) {
         imageType: imageType as any, 
         clinicalContext: finalClinicalContext, 
         targetModel: modelToUse, 
-        isRadiologyOnly: isTwoStage 
+        isRadiologyOnly: isTwoStage,
+        isComparative
       });
-      return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: 2.0 });
+      return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: displayedCost });
     } else {
       if (useStreaming) {
         const stream = await analyzeImageOpusTwoStageStreaming(
@@ -270,7 +395,7 @@ export async function POST(request: NextRequest) {
         targetModel: modelToUse, 
         isRadiologyOnly: isTwoStage 
       });
-      return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: 1.5 });
+      return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: displayedCost });
     }
   } catch (error: any) {
     const { safeErrorMessage } = await import('@/lib/safe-error');

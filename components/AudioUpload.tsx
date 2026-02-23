@@ -285,7 +285,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
         <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg flex items-center justify-between text-sm">
           <div className="flex items-center gap-4">
             <span>⏱️ Длительность: <b>{formatTime(Math.round(lastAnalysis.duration))}</b></span>
-            <span>💰 Стоимость: <b>{lastAnalysis.cost.toFixed(2)} у.е.</b></span>
+            <span>💰 Стоимость сервиса: <b>{lastAnalysis.cost.toFixed(2)} у.е.</b></span>
           </div>
           <button 
             onClick={() => setLastAnalysis(null)}

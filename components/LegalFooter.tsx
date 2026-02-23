@@ -86,6 +86,9 @@ export default function LegalFooter() {
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-gray-400">
               <div className="flex flex-col items-center sm:items-start gap-1">
                 <p>© {mounted ? new Date().getFullYear() : '2026'} Doctor Opus. Все права защищены.</p>
+                <p className="text-[10px] opacity-80">
+                  Запрещены white-label, перепродажа, коммерческое использование и копирование интерфейса/текстов/архитектуры под другим брендом без письменного разрешения правообладателя.
+                </p>
                 <p className="text-[10px] opacity-70 italic">Самозанятый Селиванов В.Ф., ИНН 920455053236, г. Севастополь, тел: +7 979 037 05 96, email: support@doctor-opus.ru</p>
               </div>
               

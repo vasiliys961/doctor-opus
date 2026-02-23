@@ -75,7 +75,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     if (!modelName) return null
     if (modelName.includes('opus')) return '🧠 Opus 4.6'
     if (modelName.includes('sonnet')) return '🤖 Sonnet 4.6'
-    if (modelName.includes('gemini') || modelName.includes('flash')) return '⚡ Gemini Flash'
+    if (modelName.includes('gemini') || modelName.includes('flash')) return '⚡ Gemini 3.1'
     return modelName
   }
 
@@ -629,7 +629,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
               </p>
               {cost !== undefined && cost > 0 && !loading && (
                 <div className="bg-teal-50 text-teal-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-teal-200 shadow-sm">
-                  💰 Стоимость: {cost.toFixed(2)} ед.
+                  💰 Стоимость сервиса: {cost.toFixed(2)} ед.
                 </div>
               )}
             </div>
@@ -800,7 +800,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         <div className="flex flex-col md:flex-row justify-between gap-4 text-[10px] text-gray-400">
           <div className="space-y-1 max-w-2xl">
             <p><strong>⚠️ Верификация:</strong> Данное консультативное заключение требует обязательной проверки и подписи лечащего врача. Doctor Opus — информационно-аналитический сервис, не являющийся медицинской организацией и не оказывающий медицинских услуг. Все данные носят ознакомительный характер.</p>
-            <p><strong>ℹ️ О тарификации:</strong> Повторные запросы к тем же данным тарифицируются заново, если они не были сохранены в кэше системы.</p>
+            <p><strong>ℹ️ О тарификации:</strong> Стоимость отражает цену сервиса (модели + инфраструктура: серверная обработка, хранение, доставка). Повторные запросы к тем же данным тарифицируются заново, если они не были сохранены в кэше системы.</p>
           </div>
           <div className="text-right">
             <p>ID сессии: {sessionId || 'N/A'}</p>

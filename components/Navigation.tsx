@@ -186,7 +186,7 @@ export default function Navigation() {
             <p className="font-semibold mb-1">Клинический Ассистент v3.50</p>
             <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Clinical Edition</p>
             <ul className="space-y-1 text-xs opacity-70">
-              <li>• Claude 4.5 + Gemini 3.0</li>
+              <li>• Opus 4.6 + Gemini 3.1</li>
               <li>• DICOM Viewer + Measure</li>
               <li>• Multi-modal (Images + Labs)</li>
               <li>• Trend Analysis & RAG</li>

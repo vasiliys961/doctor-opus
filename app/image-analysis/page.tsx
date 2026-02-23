@@ -479,12 +479,12 @@ export default function ImageAnalysisPage() {
                       )}
                       
                       {parsingLabs && (
-                        <span className="text-[10px] text-indigo-600 animate-pulse font-bold">⌛ Оцифровка Gemini 3.0...</span>
+                        <span className="text-[10px] text-indigo-600 animate-pulse font-bold">⌛ Оцифровка Gemini 3.1...</span>
                       )}
                     </div>
                     
                     {!labFile && !labsContext && (
-                      <span className="text-[10px] text-indigo-600">ИИ автоматически извлечет показатели (Gemini 3.0)</span>
+                      <span className="text-[10px] text-indigo-600">ИИ автоматически извлечет показатели (Gemini 3.1)</span>
                     )}
                     {labsContext && (
                       <div className="relative">

@@ -411,6 +411,7 @@ export default function VideoComparisonPage() {
       formData.append('prompt', comparisonPrompt)
       formData.append('imageType', 'universal')
       formData.append('isTwoStage', 'true') // Включаем режим радиологического протокола
+      formData.append('isComparative', 'true')
 
       console.log(`🎬 [VIDEO COMPARISON] Отправка ${frames1.length + frames2.length} кадров на анализ...`)
       

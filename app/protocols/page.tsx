@@ -167,7 +167,7 @@ export default function ClinicalProtocolsPage() {
         📚 Клинические рекомендации
       </h1>
       <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">
-        Поиск актуальных международных и российских клинических рекомендаций через Claude 4.5
+        Поиск актуальных международных и российских клинических рекомендаций через Opus 4.6 и Gemini 3.1
       </p>
 
       {/* Форма поиска */}
@@ -313,7 +313,7 @@ export default function ClinicalProtocolsPage() {
             <div className="flex flex-col sm:flex-row gap-2 text-xs sm:text-sm text-gray-600">
               {currentCost > 0 && (
                 <span className="bg-teal-50 text-teal-700 px-2 py-1 rounded font-bold border border-teal-100">
-                  💰 Стоимость: {currentCost.toFixed(2)} ед.
+                  💰 Стоимость сервиса: {currentCost.toFixed(2)} ед.
                 </span>
               )}
               {tokensUsed > 0 && (
