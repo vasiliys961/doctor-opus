@@ -29,6 +29,20 @@ export function isAdminEmail(email?: string | null): boolean {
   return getAdminEmails().includes(email.toLowerCase());
 }
 
+// Список VIP email — из серверного env (единый источник истины)
+function getVipEmails(): string[] {
+  const envVip = process.env.VIP_EMAILS;
+  if (envVip) {
+    return envVip.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  }
+  return [];
+}
+
+export function isVipEmail(email?: string | null): boolean {
+  if (!email) return false;
+  return getVipEmails().includes(email.toLowerCase());
+}
+
 // JWT maxAge из env или 24 часа по умолчанию
 const JWT_MAX_AGE = parseInt(process.env.JWT_MAX_AGE_SECONDS || '86400', 10);
 
@@ -117,14 +131,16 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token }) {
       if (token.email) {
-        token.isAdmin = isAdminEmail(token.email);
+        (token as any).isAdmin = isAdminEmail(token.email);
+        (token as any).isVip = isVipEmail(token.email);
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).id = token.sub;
-        (session.user as any).isAdmin = token.isAdmin || false;
+        (session.user as any).isAdmin = (token as any).isAdmin || false;
+        (session.user as any).isVip = (token as any).isVip || false;
       }
       return session;
     },

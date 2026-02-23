@@ -57,6 +57,32 @@ export default function BalanceWidget() {
     return null
   }
 
+  // Единый источник VIP для UI: серверная сессия (не зависит от localStorage/клиентского env).
+  const isSessionUnlimited = Boolean((session?.user as any)?.isVip || (session?.user as any)?.isAdmin)
+
+  // Специальный виджет для безлимитного доступа
+  if (isSessionUnlimited || balance?.isUnlimited) {
+    return (
+      <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white rounded-lg p-4 shadow-lg border border-white/20">
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider opacity-80 mb-1">Статус аккаунта</p>
+            <p className="text-2xl font-bold flex items-baseline">
+              ♾️ БЕЗЛИМИТ
+            </p>
+            <p className="text-[10px] opacity-70 mt-1">Доступ владельца</p>
+          </div>
+          <span className="bg-white/20 text-[10px] px-2 py-1 rounded-full font-bold shadow-sm">
+            VIP
+          </span>
+        </div>
+        <div className="mt-3 pt-2 border-t border-white/10 text-[10px] opacity-80">
+          Списания отключены. Полный доступ ко всем моделям.
+        </div>
+      </div>
+    )
+  }
+
   // Если баланса нет (пакет не куплен), показываем базовую информацию о тратах
   if (!balance) {
     const usageData = getUsageBySections();
@@ -84,29 +110,6 @@ export default function BalanceWidget() {
   const isCriticalBalance = balance.currentCredits <= 0
   const isNegative = balance.currentCredits < 0
   
-  // Специальный виджет для безлимитного доступа
-  if (balance.isUnlimited) {
-    return (
-      <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white rounded-lg p-4 shadow-lg border border-white/20">
-        <div className="flex items-start justify-between mb-2">
-          <div>
-            <p className="text-[10px] uppercase tracking-wider opacity-80 mb-1">Статус аккаунта</p>
-            <p className="text-2xl font-bold flex items-baseline">
-              ♾️ БЕЗЛИМИТ
-            </p>
-            <p className="text-[10px] opacity-70 mt-1">Доступ владельца</p>
-          </div>
-          <span className="bg-white/20 text-[10px] px-2 py-1 rounded-full font-bold shadow-sm">
-            VIP
-          </span>
-        </div>
-        <div className="mt-3 pt-2 border-t border-white/10 text-[10px] opacity-80">
-          Списания отключены. Полный доступ ко всем моделям.
-        </div>
-      </div>
-    )
-  }
-
   const bgColor = isNegative
     ? 'bg-gradient-to-r from-red-600 to-red-800'
     : isCriticalBalance
