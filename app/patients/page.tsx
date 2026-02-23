@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { getAllPatients, savePatient, deletePatient, Patient, getPatientHistory, deleteHistoryRecord, AnalysisRecord } from '@/lib/patient-db'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
 const LabTrendChart = dynamic(() => import('@/components/LabTrendChart'), { ssr: false })
@@ -630,7 +631,7 @@ function PatientsContent() {
                             </span>
                           </div>
                           <div className="prose prose-sm max-w-none text-gray-800 line-clamp-6 overflow-hidden relative">
-                            <ReactMarkdown className="[&_h1]:text-lg [&_h2]:text-base [&_p]:mb-2">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} className="[&_h1]:text-lg [&_h2]:text-base [&_p]:mb-2">
                               {record.conclusion}
                             </ReactMarkdown>
                             {record.conclusion.length > 300 && (
@@ -678,7 +679,7 @@ function PatientsContent() {
                         AI Case Summary
                       </div>
                       <div className="prose prose-sm max-w-none text-indigo-900 leading-relaxed italic">
-                        <ReactMarkdown>{caseSummary}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{caseSummary}</ReactMarkdown>
                       </div>
                     </div>
                   )}

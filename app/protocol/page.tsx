@@ -7,6 +7,7 @@ import AudioUpload from '@/components/AudioUpload'
 const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
 
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } from 'docx'
 import { saveAs } from 'file-saver'
 import { DEFAULT_TEMPLATES, ProtocolTemplate } from '@/lib/protocol-templates'
@@ -461,7 +462,7 @@ export default function ProtocolPage() {
           
           {protocol ? (
             <div className="prose prose-sm max-w-none border border-gray-200 rounded-lg p-6 bg-white overflow-y-auto max-h-[800px]">
-              <ReactMarkdown>{protocol}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{protocol}</ReactMarkdown>
             </div>
           ) : (
             <div className="text-center text-gray-500 py-20 border-2 border-dashed border-gray-100 rounded-lg">

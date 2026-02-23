@@ -7,6 +7,7 @@ import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
@@ -826,7 +827,7 @@ export default function GeneticPage() {
           <h2 className="text-xl font-semibold mb-4">📊 Извлеченные генетические данные</h2>
           <div className="bg-gray-50 p-4 rounded-lg mb-6 max-h-96 overflow-y-auto">
             <div className="text-sm text-gray-800 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:mt-4 [&_h3]:mb-2 [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:space-y-1 [&_li]:marker:text-blue-600 [&_code]:bg-gray-200 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs [&_strong]:font-semibold [&_strong]:text-gray-900">
-              <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
                 {convertToMarkdown(extractedData)}
               </ReactMarkdown>
             </div>
@@ -1011,6 +1012,7 @@ export default function GeneticPage() {
                   <div className="text-sm leading-relaxed">
                     {msg.content ? (
                       <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeSanitize]}
                         className="[&_h1]:text-lg [&_h1]:font-bold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-base [&_h2]:font-bold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-1 [&_h3]:mb-1 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:mb-2 [&_ul]:space-y-0.5 [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-2 [&_ol]:space-y-0.5 [&_li]:mb-0.5 [&_strong]:font-semibold [&_code]:bg-gray-200 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs"
                       >

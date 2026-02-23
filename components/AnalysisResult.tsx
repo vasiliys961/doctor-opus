@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import { saveAnalysisResult, getAllPatients, Patient } from '@/lib/patient-db'
 import LibrarySearch from './LibrarySearch'
@@ -108,9 +109,16 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         // Убираем только технические строки стриминга
         if (l.includes('данные приняты') || l.includes('раздел 0 принят')) return false;
         if (l.includes('подготовка к анализу') || l.includes('извлечение данных')) return false;
+        if (l.includes('данные извлечены') || l.includes('находок') && l.includes('метрик')) return false;
         if (l.includes('клинический разбор через') || l.includes('профессорский разбор через')) return false;
         if (l.startsWith('>') && l.includes('этап')) return false;
+        if (l.includes('этап 1:') || l.includes('этап 2:')) return false;
         if (l.includes('gemini vision') || l.includes('быстрый анализ')) return false;
+        if (l.includes('анализ анатомических структур')) return false;
+        if (l.includes('измерение размеров образований')) return false;
+        if (l.includes('оценка плотности тканей')) return false;
+        if (l.includes('проверка контрастного усиления')) return false;
+        if (l.includes('детализация патологических изменений')) return false;
         if (line.trim() === '.' || line.trim() === '..' || line.trim() === '...') return false;
         if (l.startsWith('---') && l.length < 10) return false;
         // Юридический статус как inline-текст (без заголовка #)
@@ -521,9 +529,16 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       // Убираем только технические строки стриминга
       if (l.includes('данные приняты') || l.includes('раздел 0 принят')) return false;
       if (l.includes('подготовка к анализу') || l.includes('извлечение данных')) return false;
+      if (l.includes('данные извлечены') || l.includes('находок') && l.includes('метрик')) return false;
       if (l.includes('клинический разбор через') || l.includes('профессорский разбор через')) return false;
       if (l.startsWith('>') && l.includes('этап')) return false;
+      if (l.includes('этап 1:') || l.includes('этап 2:')) return false;
       if (l.includes('gemini vision') || l.includes('быстрый анализ')) return false;
+      if (l.includes('анализ анатомических структур')) return false;
+      if (l.includes('измерение размеров образований')) return false;
+      if (l.includes('оценка плотности тканей')) return false;
+      if (l.includes('проверка контрастного усиления')) return false;
+      if (l.includes('детализация патологических изменений')) return false;
       if (line.trim() === '.' || line.trim() === '..' || line.trim() === '...') return false;
       if (l.startsWith('---') && l.length < 10) return false;
       return true;
@@ -582,11 +597,11 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     return out.join('\n').trim();
   };
 
-  const handleTransferToEcgProtocol = () => {
+  const handleTransferToProtocol = (useEcgTemplate = false) => {
     const draftText = buildProtocolDraftFromResult(result);
     const payload = {
-      kind: 'ecg',
-      templateId: ECG_FUNCTIONAL_TEMPLATE_ID,
+      kind: imageType || 'image',
+      templateId: useEcgTemplate ? ECG_FUNCTIONAL_TEMPLATE_ID : undefined,
       rawText: draftText,
       timestamp: new Date().toISOString(),
     };
@@ -594,6 +609,8 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     localStorage.setItem(PROTOCOL_DRAFT_KEY, JSON.stringify(payload));
     router.push('/protocol');
   };
+
+  const handleTransferToEcgProtocol = () => handleTransferToProtocol(true);
 
   // Если есть результат, показываем его даже во время загрузки (для streaming)
   if (!result) {
@@ -674,6 +691,15 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
               title="Оформить короткое заключение функционалиста по шаблону"
             >
               🫀 В протокол ЭКГ
+            </button>
+          )}
+          {!loading && result && imageType !== 'ecg' && (
+            <button
+              onClick={() => handleTransferToProtocol(false)}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
+              title="Передать очищенное заключение в раздел Протокол"
+            >
+              📄 В протокол
             </button>
           )}
           <button
@@ -772,6 +798,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           }}
         >
           <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeSanitize]}
             className="[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-6 [&_h1]:mb-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-5 [&_h2]:mb-3 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:mt-4 [&_h3]:mb-2 [&_h4]:text-base [&_h4]:font-semibold [&_h4]:mt-3 [&_h4]:mb-2 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-3 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:mb-3 [&_ol]:space-y-1 [&_li]:mb-1 [&_strong]:font-semibold [&_strong]:text-gray-900 [&_code]:bg-gray-100 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-gray-100 [&_pre]:p-4 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:mb-3 [&_blockquote]:border-l-4 [&_blockquote]:border-gray-300 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-gray-700 [&_table]:w-full [&_table]:border-collapse [&_table]:mb-3 [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-4 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_td]:border [&_td]:border-gray-300 [&_td]:px-4 [&_td]:py-2"
           >

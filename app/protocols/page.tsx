@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { logUsage } from '@/lib/simple-logger'
 import { deductBalance } from '@/lib/subscription-manager'
 import { MODELS } from '@/lib/openrouter'
@@ -331,6 +332,7 @@ export default function ClinicalProtocolsPage() {
 
           <div className="prose prose-sm sm:prose max-w-none">
             <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
               components={{
                 h1: ({ node, ...props }) => (
                   <h1 className="text-xl sm:text-2xl font-bold mt-4 mb-3 text-primary-900" {...props} />
