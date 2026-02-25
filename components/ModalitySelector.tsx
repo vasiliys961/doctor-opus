@@ -20,22 +20,22 @@ interface ModalitySelectorProps {
 
 export default function ModalitySelector({ value, onChange, disabled = false }: ModalitySelectorProps) {
   const modalities: Array<{ value: ImageModality; label: string; icon: string }> = [
-    { value: 'universal', label: 'Универсальный', icon: '🔍' },
-    { value: 'xray', label: 'Рентген', icon: '🩻' },
-    { value: 'ct', label: 'КТ', icon: '🌀' },
-    { value: 'mri', label: 'МРТ', icon: '🧲' },
-    { value: 'ultrasound', label: 'УЗИ', icon: '🔊' },
-    { value: 'ecg', label: 'ЭКГ', icon: '💓' },
-    { value: 'dermatoscopy', label: 'Дерматоскопия', icon: '🔬' },
-    { value: 'histology', label: 'Гистология', icon: '🧪' },
-    { value: 'retinal', label: 'Офтальмология', icon: '👁️' },
-    { value: 'mammography', label: 'Маммография', icon: '🎀' },
+    { value: 'universal', label: 'Universal', icon: '🔍' },
+    { value: 'xray', label: 'X-Ray', icon: '🩻' },
+    { value: 'ct', label: 'CT', icon: '🌀' },
+    { value: 'mri', label: 'MRI', icon: '🧲' },
+    { value: 'ultrasound', label: 'Ultrasound', icon: '🔊' },
+    { value: 'ecg', label: 'ECG', icon: '💓' },
+    { value: 'dermatoscopy', label: 'Dermatoscopy', icon: '🔬' },
+    { value: 'histology', label: 'Histology', icon: '🧪' },
+    { value: 'retinal', label: 'Ophthalmology', icon: '👁️' },
+    { value: 'mammography', label: 'Mammography', icon: '🎀' },
   ]
 
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium text-gray-700">
-        Тип исследования:
+        Study Type:
       </label>
       <div className="flex flex-wrap gap-2">
         {modalities.map((modality) => (

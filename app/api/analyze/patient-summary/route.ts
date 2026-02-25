@@ -34,7 +34,7 @@ ${history.map((h: any) => `[${h.date}] ${h.type.toUpperCase()}: ${h.conclusion.s
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
+        'HTTP-Referer': 'https://doctor-opus.online',
         'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify({

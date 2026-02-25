@@ -367,7 +367,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
           headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://doctor-opus.ru',
+            'HTTP-Referer': 'https://doctor-opus.online',
             'X-Title': 'Doctor Opus'
           },
           body: JSON.stringify({
@@ -470,7 +470,7 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
+        'HTTP-Referer': 'https://doctor-opus.online',
         'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify({
@@ -776,7 +776,7 @@ ${directiveCriteria}`;
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
+        'HTTP-Referer': 'https://doctor-opus.online',
         'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify(textPayload)
@@ -903,7 +903,7 @@ export async function analyzeMultipleImages(options: {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
+        'HTTP-Referer': 'https://doctor-opus.online',
         'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify(payload)

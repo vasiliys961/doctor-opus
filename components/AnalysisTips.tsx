@@ -13,7 +13,7 @@ interface AnalysisTipsProps {
 }
 
 export default function AnalysisTips({ 
-  title = 'Советы по использованию режимов анализа',
+  title = 'Tips on Using Analysis Modes',
   content 
 }: AnalysisTipsProps) {
   const [isOpen, setIsOpen] = useState(true)
@@ -38,7 +38,7 @@ export default function AnalysisTips({
             <div className="flex gap-3">
               <span className="shrink-0 text-yellow-600">⚡</span>
               <div>
-                <strong>Быстрый анализ</strong> — {content.fast}
+                <strong>Fast Analysis</strong> — {content.fast}
               </div>
             </div>
           )}
@@ -47,7 +47,7 @@ export default function AnalysisTips({
             <div className="flex gap-3">
               <span className="shrink-0 text-purple-600">⭐</span>
               <div>
-                <strong>Оптимизированный режим</strong> — {content.optimized}
+                <strong>Optimized Mode</strong> — {content.optimized}
               </div>
             </div>
           )}
@@ -56,7 +56,7 @@ export default function AnalysisTips({
             <div className="flex gap-3">
               <span className="shrink-0 text-green-600">🧠</span>
               <div>
-                <strong>Итоговое мнение ИИ‑ассистента</strong> — {content.validated}
+                <strong>AI Expert Validated</strong> — {content.validated}
               </div>
             </div>
           )}

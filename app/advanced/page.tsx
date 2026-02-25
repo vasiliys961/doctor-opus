@@ -47,7 +47,7 @@ export default function AdvancedAnalysisPage() {
 
   const analyzeAdvanced = async (targetStage: 'description' | 'directive' = 'description') => {
     if (!mainImage) {
-      setError('Загрузите основное изображение для анализа')
+      setError('Please upload a main image for analysis')
       return
     }
 
@@ -61,8 +61,8 @@ export default function AdvancedAnalysisPage() {
 
     try {
       const prompt = `РАСШИРЕННЫЙ АНАЛИЗ С КОНТЕКСТОМ.
-      Клиническая информация: ${additionalContext}
-      Дополнительных файлов: ${additionalFiles.length}`
+      Clinical information: ${additionalContext}
+      Additional files: ${additionalFiles.length}`
 
       const modelToUse = mode === 'fast' 
         ? 'google/gemini-3-flash-preview' 
@@ -124,7 +124,7 @@ export default function AdvancedAnalysisPage() {
         }
       })
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -133,47 +133,47 @@ export default function AdvancedAnalysisPage() {
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-7xl">
       <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 mb-4 sm:mb-6">
-        🔬 Расширенный ИИ-анализ с контекстом
+        🔬 Advanced AI Analysis with Context
       </h1>
 
       <AnalysisTips 
         content={{
-          fast: "базовый скрининг основного изображения с учетом контекста.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — лучший выбор для анализа снимков с описанием.",
-          validated: "двухэтапный экспертный анализ (Gemini JSON + Opus 4.6) — объединяет точность зрения Gemini и клинический интеллект Opus.",
+          fast: "Basic screening of the main image with context.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — best choice for image analysis with clinical description.",
+          validated: "Two-stage expert analysis (Gemini JSON + Opus 4.6) — combining Gemini's visual accuracy and Opus's clinical intelligence.",
           extra: [
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini JSON + Sonnet) — лучший выбор для анализа снимков с описанием.",
-            "📎 Вы можете приложить дополнительные PDF, DOCX или фото для анализа в контексте.",
-            "📡 Стриминг позволяет видеть процесс формирования заключения в реальном времени."
+            "⭐ Recommended mode: «Optimized» (Gemini JSON + Sonnet) — best choice for image analysis with clinical description.",
+            "📎 You can attach additional PDFs, DOCX, or photos for contextual analysis.",
+            "📡 Streaming lets you see the report being generated in real time."
           ]
         }}
       />
 
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <div className="mb-6">
-          <h2 className="text-lg sm:text-xl font-semibold mb-3">📷 Основное изображение</h2>
+          <h2 className="text-lg sm:text-xl font-semibold mb-3">📷 Main Image</h2>
           <ImageUpload onUpload={handleMainImageUpload} accept="image/*" maxSize={50} />
           {mainImagePreview && (
             <div className="mt-4 flex flex-col items-center">
-              <img src={mainImagePreview} alt="Превью" className="max-h-64 rounded-lg shadow-md" />
+              <img src={mainImagePreview} alt="Preview" className="max-h-64 rounded-lg shadow-md" />
               <button
                 onClick={() => setShowEditor(true)}
                 className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
               >
-                🎨 Закрасить данные на снимке
+                🎨 Redact Data on Image
               </button>
             </div>
           )}
         </div>
 
         <div className="mb-6">
-          <h2 className="text-lg sm:text-xl font-semibold mb-3">📝 Клинический контекст</h2>
+          <h2 className="text-lg sm:text-xl font-semibold mb-3">📝 Clinical Context</h2>
           <textarea
             value={additionalContext}
             onChange={(e) => setAdditionalContext(e.target.value)}
             rows={4}
             className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
-            placeholder="Жалобы, анамнез, результаты других анализов..."
+            placeholder="Complaints, history, other test results..."
             disabled={loading}
           />
           <div className="mt-4">
@@ -187,10 +187,10 @@ export default function AdvancedAnalysisPage() {
               />
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-blue-900">
-                  🛡️ Анонимный анализ
+                  🛡️ Anonymous Analysis
                 </span>
                 <span className="text-[10px] text-blue-700 font-normal">
-                  ФИО и адрес будут удалены из результата автоматически.
+                  Name and address will be removed automatically.
                 </span>
               </div>
             </label>
@@ -198,7 +198,7 @@ export default function AdvancedAnalysisPage() {
         </div>
 
         <div className="mb-6">
-          <h2 className="text-lg sm:text-xl font-semibold mb-3">📎 Дополнительные изображения</h2>
+          <h2 className="text-lg sm:text-xl font-semibold mb-3">📎 Additional Images</h2>
           <input
             type="file"
             accept="image/*"
@@ -247,7 +247,7 @@ export default function AdvancedAnalysisPage() {
             disabled={loading || !mainImage}
             className="bg-primary-500 hover:bg-primary-600 text-white font-semibold py-3 px-6 rounded-lg disabled:opacity-50"
           >
-            {loading && accumulatedDescription === '' ? '⌛ Описание...' : '🔍 Шаг 1: Описание'}
+            {loading && accumulatedDescription === '' ? '⌛ Description...' : '🔍 Step 1: Description'}
           </button>
           
           <button
@@ -255,7 +255,7 @@ export default function AdvancedAnalysisPage() {
             disabled={loading || !mainImage || !accumulatedDescription}
             className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg disabled:opacity-50"
           >
-            {loading && accumulatedDescription !== '' ? '⌛ Заключение...' : '🩺 Шаг 2: Клиническая директива'}
+            {loading && accumulatedDescription !== '' ? '⌛ Conclusion...' : '🩺 Step 2: Clinical Directive'}
           </button>
         </div>
       </div>

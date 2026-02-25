@@ -92,7 +92,7 @@ async function extractPDFTextViaGemini(base64PDF: string, fileName: string): Pro
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
+        'HTTP-Referer': 'https://doctor-opus.online',
         'X-Title': 'Doctor Opus',
       },
       body: JSON.stringify(extractionPayload),
@@ -313,7 +313,7 @@ export async function sendTextRequestWithFiles(
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
+        'HTTP-Referer': 'https://doctor-opus.online',
         'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify(payload)
@@ -436,7 +436,7 @@ export async function sendTextRequestStreamingWithFiles(
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.ru',
+          'HTTP-Referer': 'https://doctor-opus.online',
           'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify(payload)

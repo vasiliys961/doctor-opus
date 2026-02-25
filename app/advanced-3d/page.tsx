@@ -20,7 +20,7 @@ export default function Advanced3DPage() {
       setFiles(dicomFiles)
       setShowViewer(true)
     } else {
-      alert('Пожалуйста, загрузите серию DICOM-файлов (папку или несколько файлов).')
+      alert('Please upload a DICOM series (a folder or multiple files).')
     }
   }
 
@@ -31,8 +31,8 @@ export default function Advanced3DPage() {
             Advanced 3D Engine <span className="text-primary-600">v2.0</span>
           </h1>
           <p className="text-slate-600 max-w-2xl mx-auto">
-            Профессиональная система объемного рендеринга для МРТ и КТ. 
-            Поддержка Cinematic-режима, клинических пресетов и аппаратного ускорения Apple M1.
+            Professional volumetric rendering system for MRI and CT. 
+            Supports Cinematic mode, clinical presets, and Apple M1 hardware acceleration.
           </p>
         </div>
 
@@ -41,17 +41,17 @@ export default function Advanced3DPage() {
             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col items-center text-center">
               <span className="text-3xl mb-3">🧊</span>
               <h3 className="font-bold text-slate-800 text-sm mb-1">Volume Rendering</h3>
-              <p className="text-slate-500 text-[11px]">Честная 3D-реконструкция из серии 2D-срезов.</p>
+              <p className="text-slate-500 text-[11px]">True 3D reconstruction from a series of 2D slices.</p>
             </div>
             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col items-center text-center">
               <span className="text-3xl mb-3">✨</span>
               <h3 className="font-bold text-slate-800 text-sm mb-1">Cinematic Mode</h3>
-              <p className="text-slate-500 text-[11px]">Фотореалистичное освещение и мягкие тени.</p>
+              <p className="text-slate-500 text-[11px]">Photorealistic lighting and soft shadows.</p>
             </div>
             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col items-center text-center">
               <span className="text-3xl mb-3">🫀</span>
               <h3 className="font-bold text-slate-800 text-sm mb-1">Vessel Highlight</h3>
-              <p className="text-slate-500 text-[11px]">Выделение сосудов и контрастных зон.</p>
+              <p className="text-slate-500 text-[11px]">Vessel and contrast zone segmentation.</p>
             </div>
           </div>
 
@@ -59,11 +59,11 @@ export default function Advanced3DPage() {
             <div className="bg-primary-50 border border-primary-100 rounded-2xl p-6 flex items-start gap-4">
               <span className="text-2xl">💡</span>
               <div className="text-sm text-primary-800">
-                <p className="font-bold mb-1">Как использовать:</p>
+                <p className="font-bold mb-1">How to use:</p>
                 <ul className="list-disc list-inside space-y-1 opacity-80">
-                  <li>Загрузите всю папку с DICOM-снимками МРТ/КТ</li>
-                  <li>Дождитесь завершения сборки 3D-модели</li>
-                  <li>Переключайтесь между Clinical и Cinematic режимами</li>
+                  <li>Upload the entire folder with MRI/CT DICOM images</li>
+                  <li>Wait for the 3D model to finish building</li>
+                  <li>Switch between Clinical and Cinematic modes</li>
                 </ul>
               </div>
             </div>

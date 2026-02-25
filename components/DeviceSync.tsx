@@ -53,10 +53,10 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
       if (data.success) {
         setSyncCode(data.code)
         setMode('receive')
-        setStatus('Ожидание подключения смартфона...')
+        setStatus('Waiting for smartphone connection...')
       }
     } catch (e) {
-      setStatus('Ошибка инициализации синхронизации')
+      setStatus('Sync initialization error')
     } finally {
       setIsLoading(false)
     }
@@ -68,14 +68,14 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
     if (!code || !currentImage) return
     
     setIsLoading(true)
-    setStatus('Подготовка изображения...')
+    setStatus('Preparing image...')
     try {
       const mime = getDataUrlMime(currentImage)
       let imageToSend = currentImage
 
       // Конвертируем в JPEG только когда есть риск несовместимости.
       if (mime && mime !== 'image/jpeg' && mime !== 'image/png') {
-        setStatus('Конвертация в JPEG...')
+        setStatus('Converting to JPEG...')
         try {
           imageToSend = await convertDataUrlToJpeg(currentImage, 0.9)
         } catch (_e) {
@@ -85,7 +85,7 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
         }
       }
 
-      setStatus('Отправка...')
+      setStatus('Sending...')
       const response = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -97,12 +97,12 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
       })
       const data = await response.json()
       if (data.success) {
-        setStatus('✅ Снимок успешно передан на десктоп!')
+        setStatus('✅ Image successfully transferred to desktop!')
       } else {
-        setStatus(`❌ Ошибка: ${data.error}`)
+        setStatus(`❌ Error: ${data.error}`)
       }
     } catch (e) {
-      setStatus('Ошибка сети при отправке')
+      setStatus('Network error during sending')
     } finally {
       setIsLoading(false)
     }
@@ -117,7 +117,7 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
       const data = await response.json()
       if (data.success && data.hasImage && onImageReceived) {
         onImageReceived(data.image)
-        setStatus('✅ Снимок получен!')
+        setStatus('✅ Image received!')
         // Можно не останавливать, если нужно передать несколько снимков
       }
     } catch (e) {
@@ -139,7 +139,7 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
     <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 shadow-sm">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-lg font-bold text-blue-900 flex items-center">
-          📱 Синхронизация между устройствами
+          📱 Cross-Device Sync
         </h3>
         {mode !== 'none' && (
           <button 
@@ -158,23 +158,23 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
             className="flex flex-col items-center justify-center p-4 bg-white border-2 border-blue-200 rounded-lg hover:border-blue-400 transition-all group"
           >
             <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">💻</span>
-            <span className="text-sm font-semibold text-gray-700">Я на десктопе</span>
-            <span className="text-xs text-gray-500">(хочу получить фото)</span>
+            <span className="text-sm font-semibold text-gray-700">I'm on desktop</span>
+            <span className="text-xs text-gray-500">(want to receive photo)</span>
           </button>
           <button
             onClick={() => setMode('send')}
             className="flex flex-col items-center justify-center p-4 bg-white border-2 border-blue-200 rounded-lg hover:border-blue-400 transition-all group"
           >
             <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">📱</span>
-            <span className="text-sm font-semibold text-gray-700">Я на смартфоне</span>
-            <span className="text-xs text-gray-500">(хочу отправить фото)</span>
+            <span className="text-sm font-semibold text-gray-700">I'm on smartphone</span>
+            <span className="text-xs text-gray-500">(want to send photo)</span>
           </button>
         </div>
       )}
 
       {mode === 'receive' && (
         <div className="text-center p-4 bg-white rounded-lg border border-blue-100">
-          <p className="text-sm text-gray-600 mb-2">Введите этот код на смартфоне:</p>
+          <p className="text-sm text-gray-600 mb-2">Enter this code on your smartphone:</p>
           <div className="text-4xl font-mono font-bold tracking-widest text-primary-600 mb-3">
             {syncCode}
           </div>
@@ -188,7 +188,7 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Код с экрана десктопа:
+              Code from desktop screen:
             </label>
             <input
               type="text"
@@ -196,7 +196,7 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
               inputMode="numeric"
               autoComplete="one-time-code"
               onChange={(e) => setInputCode(e.target.value)}
-              placeholder="Напр: 452 981"
+              placeholder="E.g.: 452 981"
               className="w-full px-4 py-3 text-center text-2xl font-mono tracking-widest border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -210,12 +210,12 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
                 : 'bg-blue-600 hover:bg-blue-700 active:transform active:scale-95'
             }`}
           >
-            {isLoading ? '⌛ Отправка...' : '📤 Отправить текущее фото на десктоп'}
+            {isLoading ? '⌛ Sending...' : '📤 Send current photo to desktop'}
           </button>
           
           {!currentImage && (
             <p className="text-xs text-center text-red-500">
-              ⚠️ Сначала сделайте или загрузите фото ниже
+              ⚠️ First take or upload a photo below
             </p>
           )}
           

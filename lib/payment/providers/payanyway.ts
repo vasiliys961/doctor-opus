@@ -48,8 +48,8 @@ export class PayanywayProvider implements PaymentProvider {
       MNT_DESCRIPTION: description,
       MNT_TEST_MODE: this.testMode,
       MNT_SIGNATURE: signature,
-      MNT_SUCCESS_URL: `${process.env.NEXTAUTH_URL || 'https://doctor-opus.ru'}/subscription?status=success`,
-      MNT_FAIL_URL: `${process.env.NEXTAUTH_URL || 'https://doctor-opus.ru'}/subscription?status=fail`,
+      MNT_SUCCESS_URL: `${process.env.NEXTAUTH_URL || 'https://doctor-opus.online'}/subscription?status=success`,
+      MNT_FAIL_URL: `${process.env.NEXTAUTH_URL || 'https://doctor-opus.online'}/subscription?status=fail`,
     });
 
     if (email) params.append('MNT_SUBSCRIBER_ID', email);

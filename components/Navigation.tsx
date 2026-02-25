@@ -12,30 +12,30 @@ export default function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
 
   const pages = [
-    { name: '🏠 Главная', href: '/' },
-    { name: '📘 Инструкция для врача', href: '/manual' },
-    { name: '🤖 ИИ-Ассистент', href: '/chat' },
-    { name: '📚 Персональная библиотека', href: '/library' },
-    { name: '📝 Протокол приёма', href: '/protocol' },
-    { name: '🧮 Мед. калькуляторы', href: '/calculators' },
-    { name: '📚 Клинические рекомендации', href: '/protocols' },
-    { name: '📈 Оценка ЭКГ', href: '/ecg' },
-    { name: '🔍 Изображение+синхронизация', href: '/image-analysis' },
-    { name: '🔬 Клинический разбор (Case Review)', href: '/advanced' },
-    { name: '📊 Сравнение с предыдущим (Follow-up)', href: '/comparative' },
-    { name: '🩻 Описание рентгена', href: '/xray' },
-    { name: '🧠 Описание МРТ', href: '/mri' },
-    { name: '🩻 Описание КТ', href: '/ct' },
-    { name: '🔬 3D Визуализация (Cinematic)', href: '/advanced-3d' },
-    { name: '🔊 Описание УЗИ', href: '/ultrasound' },
-    { name: '🔬 Оценка дерматоскопии', href: '/dermatoscopy' },
-    { name: '🔬 Оценка лабораторных данных', href: '/lab' },
-    { name: '🎬 Клинический разбор видео', href: '/video' },
-    { name: '📄 Сканирование документов', href: '/document' },
-    { name: '🧬 Генетический профиль', href: '/genetic' },
-    { name: '🧪 Лаборатория (USB)', href: '/devices' },
-    { name: '👤 База данных пациентов', href: '/patients' },
-    { name: '📊 Расход единиц', href: '/statistics' },
+    { name: '🏠 Home', href: '/' },
+    { name: '📘 Physician Guide', href: '/manual' },
+    { name: '🤖 AI Assistant', href: '/chat' },
+    { name: '📚 Personal Library', href: '/library' },
+    { name: '📝 Visit Protocol', href: '/protocol' },
+    { name: '🧮 Medical Calculators', href: '/calculators' },
+    { name: '📚 Clinical Guidelines', href: '/protocols' },
+    { name: '📈 ECG Analysis', href: '/ecg' },
+    { name: '🔍 Image Analysis + Sync', href: '/image-analysis' },
+    { name: '🔬 Case Review (Advanced)', href: '/advanced' },
+    { name: '📊 Follow-up Comparison', href: '/comparative' },
+    { name: '🩻 X-Ray Report', href: '/xray' },
+    { name: '🧠 MRI Report', href: '/mri' },
+    { name: '🩻 CT Report', href: '/ct' },
+    { name: '🔬 3D Visualization (Cinematic)', href: '/advanced-3d' },
+    { name: '🔊 Ultrasound Report', href: '/ultrasound' },
+    { name: '🔬 Dermoscopy Analysis', href: '/dermatoscopy' },
+    { name: '🔬 Lab Data Interpretation', href: '/lab' },
+    { name: '🎬 Video Case Review', href: '/video' },
+    { name: '📄 Document Scan', href: '/document' },
+    { name: '🧬 Genetic Profile', href: '/genetic' },
+    { name: '🧪 Lab Devices (USB)', href: '/devices' },
+    { name: '👤 Patient Database', href: '/patients' },
+    { name: '📊 Credit Usage', href: '/statistics' },
   ]
 
   const isAdmin = (session?.user as any)?.isAdmin
@@ -57,7 +57,7 @@ export default function Navigation() {
                 href="/auth/signin" 
                 className="text-xs bg-white text-primary-900 px-3 py-1.5 rounded-full font-bold shadow-sm"
               >
-                Войти
+                Sign In
               </Link>
             )}
             <button
@@ -103,26 +103,26 @@ export default function Navigation() {
             <BalanceWidget />
           </div>
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold">🧠 Меню</h1>
+            <h1 className="text-2xl font-bold">🧠 Menu</h1>
             {status === 'authenticated' ? (
               <button
                 onClick={() => signOut({ callbackUrl: '/auth/signin' })}
                 className="text-[10px] bg-red-500/20 hover:bg-red-500/40 text-red-200 px-2 py-1 rounded transition-colors"
               >
-                Выйти
+                Sign Out
               </button>
             ) : (
               <Link
                 href="/auth/signin"
                 className="text-[10px] bg-teal-500/20 hover:bg-teal-500/40 text-teal-200 px-2 py-1 rounded transition-colors"
               >
-                Войти
+                Sign In
               </Link>
             )}
           </div>
           {session?.user && (
             <div className="mb-4 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
-              <p className="text-[10px] text-primary-300 uppercase font-bold tracking-tighter">Пользователь</p>
+              <p className="text-[10px] text-primary-300 uppercase font-bold tracking-tighter">Signed in as</p>
               <p className="text-xs truncate font-medium text-white">{session.user.email}</p>
             </div>
           )}
@@ -178,19 +178,19 @@ export default function Navigation() {
                     : 'bg-red-500/20 text-red-200 hover:bg-red-500/30 border border-red-500/30'
                 }`}
               >
-                ⚙️ Админ-панель (Платежи)
+                ⚙️ Admin Panel (Payments)
               </Link>
             </div>
           )}
           <div className="mt-6 p-4 bg-primary-800/50 rounded-lg text-sm border border-primary-700">
-            <p className="font-semibold mb-1">Клинический Ассистент v3.50</p>
+            <p className="font-semibold mb-1">Clinical Assistant v3.50</p>
             <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Clinical Edition</p>
             <ul className="space-y-1 text-xs opacity-70">
               <li>• Opus 4.6 + Gemini 3.1</li>
               <li>• DICOM Viewer + Measure</li>
               <li>• Multi-modal (Images + Labs)</li>
               <li>• Trend Analysis & RAG</li>
-              <li className="text-teal-400 font-bold mt-2">🛡️ Поддержка клинических решений</li>
+              <li className="text-teal-400 font-bold mt-2">🛡️ Clinical Decision Support</li>
             </ul>
           </div>
         </div>

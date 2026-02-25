@@ -42,7 +42,7 @@ export default function UltrasoundPage() {
 
   const analyzeUltrasound = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file && extractedFrames.length === 0) {
-      setError('Сначала загрузите изображение или захватите кадры из видео')
+      setError('Please upload an image first or capture frames from video')
       return
     }
 
@@ -122,7 +122,7 @@ export default function UltrasoundPage() {
         setLoading(false)
       }
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
       setLoading(false)
     }
   }
@@ -201,7 +201,7 @@ export default function UltrasoundPage() {
       const frames = await extractAndAnonymizeFrames(file)
       setExtractedFrames(frames)
     } catch (err: any) {
-      setError('Ошибка извлечения: ' + err.message)
+      setError('Extraction error: ' + err.message)
     } finally {
       setExtracting(false)
     }
@@ -209,17 +209,17 @@ export default function UltrasoundPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🔊 Анализ УЗИ (Cine-loop)</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">🔊 Ultrasound Analysis (Cine-loop)</h1>
       
       <AnalysisTips 
         content={{
           fast: "быстрый разбор УЗИ-снимков или захваченных кадров петли.",
-          optimized: "рекомендуемый режим для детальной оценки эхо-структур.",
-          validated: "экспертный анализ сложных случаев (Gemini + Opus).",
+          optimized: "Recommended mode for detailed assessment of echo structures.",
+          validated: "Expert analysis for complex cases (Gemini + Opus).",
           extra: [
             "📹 **Cine-loop**: Вы можете загрузить видео УЗИ и захватить конкретные кадры для анализа.",
-            "🖱️ Используйте «Ручной захват» для точного выбора момента (например, раскрытие клапана).",
-            "🛡️ Все захваченные кадры можно анонимизировать вручную перед отправкой."
+            "🖱️ Use «Manual Capture» to select the exact frame (e.g., valve opening).",
+            "🛡️ All captured frames can be manually anonymized before submission."
           ]
         }}
       />
@@ -262,11 +262,11 @@ export default function UltrasoundPage() {
                   <button 
                     onClick={() => { setIsManualCaptureMode(true); setExtractedFrames([]); }}
                     className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${isManualCaptureMode ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
-                  >🖱️ Ручной захват</button>
+                  >🖱️ Manual Capture</button>
                   <button 
                     onClick={() => { setIsManualCaptureMode(false); handleAutoExtract(); }}
                     className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${!isManualCaptureMode ? 'bg-green-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
-                  >🤖 Авто-извлечение</button>
+                  >🤖 Auto-Extract</button>
                 </div>
 
                 {!isManualCaptureMode && (
@@ -275,7 +275,7 @@ export default function UltrasoundPage() {
                     disabled={extracting}
                     className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-xs shadow-lg transition-all"
                   >
-                    {extracting ? '⏳ Извлекаю...' : '🎞️ Извлечь кадры'}
+                    {extracting ? '⏳ Extracting...' : '🎞️ Extract Frames'}
                   </button>
                 )}
               </div>
@@ -283,18 +283,18 @@ export default function UltrasoundPage() {
             
             {extractedFrames.length > 0 && (
               <div className="w-full md:w-64 bg-gray-800 rounded-lg p-3 overflow-y-auto max-h-[450px]">
-                <h3 className="text-white text-xs font-bold mb-3 uppercase tracking-widest text-center">Захвачено: {extractedFrames.length}</h3>
+                <h3 className="text-white text-xs font-bold mb-3 uppercase tracking-widest text-center">Captured: {extractedFrames.length}</h3>
                 <div className="grid grid-cols-2 gap-2">
                   {extractedFrames.map((f, i) => (
                     <div key={i} className="relative group aspect-video rounded border border-gray-600 overflow-hidden">
                       <img src={f.preview} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                        <button onClick={() => setEditingFrameIndex(i)} className="text-[10px] bg-white text-black px-1 rounded font-bold">РЕД.</button>
+                        <button onClick={() => setEditingFrameIndex(i)} className="text-[10px] bg-white text-black px-1 rounded font-bold"> EDIT</button>
                       </div>
                     </div>
                   ))}
                 </div>
-                <button onClick={() => setExtractedFrames([])} className="w-full mt-4 text-[10px] text-red-400 hover:text-red-300 underline font-bold">СБРОСИТЬ ВСЕ</button>
+                <button onClick={() => setExtractedFrames([])} className="w-full mt-4 text-[10px] text-red-400 hover:text-red-300 underline font-bold">RESET ALL</button>
               </div>
             )}
           </div>
@@ -309,7 +309,7 @@ export default function UltrasoundPage() {
               onClick={() => setShowEditor(true)}
               className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
             >
-              🎨 Закрасить данные
+              🎨 Redact Data
             </button>
           </div>
         </div>
@@ -327,7 +327,7 @@ export default function UltrasoundPage() {
               <textarea
                 value={clinicalContext}
                 onChange={(e) => setClinicalContext(e.target.value)}
-                placeholder="Жалобы, анамнез, цель исследования..."
+                placeholder="Complaints, history, study objective..."
                 className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 text-sm h-32 ${
                   /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
                   ? 'border-red-500 bg-red-50' 
@@ -337,7 +337,7 @@ export default function UltrasoundPage() {
               />
               {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
                 <p className="text-[10px] text-red-600 mb-2 font-bold">
-                  ⚠️ Похоже, вы ввели ФИО. Пожалуйста, удалите персональные данные для защиты приватности.
+                  ⚠️ It looks like you entered a patient name. Please remove personal identifying information.
                 </p>
               )}
               <div className="mb-4 mt-4">
@@ -351,10 +351,10 @@ export default function UltrasoundPage() {
                   />
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-blue-900">
-                      🛡️ Разовый анонимный анализ
+                      🛡️ One-time anonymous analysis
                     </span>
                     <span className="text-[10px] text-blue-700 font-normal">
-                      Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                      Result will not be saved to patient database (maximum PHI protection).
                     </span>
                   </div>
                 </label>
@@ -369,11 +369,11 @@ export default function UltrasoundPage() {
                   className="w-full py-4 bg-primary-600 hover:bg-primary-700 text-white font-black rounded-2xl shadow-xl transform hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                 >
                   <span className="text-2xl">🚀</span>
-                  ЗАПУСТИТЬ АНАЛИЗ {isVideo ? `(${extractedFrames.length} КАДРОВ)` : ''}
+                  RUN ANALYSIS {isVideo ? `(${extractedFrames.length} FRAMES)` : ''}
                 </button>
                 <label className="flex items-center justify-center gap-2 cursor-pointer text-xs text-gray-500">
                   <input type="checkbox" checked={useStreaming} onChange={(e) => setUseStreaming(e.target.checked)} className="rounded text-primary-600" />
-                  Streaming режим
+                  Streaming mode
                 </label>
               </div>
             </div>

@@ -50,7 +50,7 @@ export default function ImageAnalysisPage() {
   const dataUrlToFile = (dataUrl: string, filename: string) => {
     const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/)
     if (!match) {
-      throw new Error('Некорректный формат изображения (ожидался data URL base64)')
+      throw new Error('Invalid image format (expected base64 data URL)')
     }
     const mime = match[1]
     const ext = mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'bin'
@@ -87,10 +87,10 @@ export default function ImageAnalysisPage() {
         setLabsContext(prev => prev ? `${prev}\n\n${data.labsText}` : data.labsText)
         setLabFile(null) // Сбрасываем файл после успешной оцифровки
       } else {
-        setError('Ошибка при оцифровке анализов: ' + (data.error || 'неизвестная ошибка'))
+        setError('Error digitizing lab results: ' + (data.error || 'unknown error'))
       }
     } catch (err) {
-      setError('Ошибка при загрузке анализов')
+      setError('Error loading lab results')
     } finally {
       setParsingLabs(false)
     }
@@ -98,7 +98,7 @@ export default function ImageAnalysisPage() {
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
-      setError('Сначала загрузите изображение')
+      setError('Please upload an image first')
       return
     }
 
@@ -130,7 +130,7 @@ export default function ImageAnalysisPage() {
           setLoading(false);
           setModelInfo({ 
             model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.6', 
-            mode: analysisMode + ' (из кэша)' 
+            mode: analysisMode + ' (from cache)' 
           });
           return;
         }
@@ -166,7 +166,7 @@ export default function ImageAnalysisPage() {
 
       // Объединяем клинический контекст, анализы и библиотеку
       let combinedContext = labsContext 
-        ? `${clinicalContext}\n\n=== ДАННЫЕ ЛАБОРАТОРНЫХ АНАЛИЗОВ ===\n${labsContext}`
+        ? `${clinicalContext}\n\n=== LABORATORY TEST RESULTS ===\n${labsContext}`
         : clinicalContext
 
       if (libraryContext) {
@@ -245,7 +245,7 @@ export default function ImageAnalysisPage() {
             },
             onError: (error) => {
               console.error('❌ [STREAMING] Ошибка:', error)
-              setError(`Ошибка streaming: ${error.message}`)
+              setError(`Streaming error: ${error.message}`)
             },
             onComplete: (finalText) => {
               console.log('✅ [IMAGE-ANALYSIS STREAMING] Анализ завершен')
@@ -256,7 +256,7 @@ export default function ImageAnalysisPage() {
           })
         } catch (fetchError: any) {
           console.error('❌ [CLIENT] Ошибка fetch:', fetchError)
-          setError(`Ошибка запроса: ${fetchError.message}`)
+          setError(`Request error: ${fetchError.message}`)
           setLoading(false)
         }
       } else {
@@ -285,11 +285,11 @@ export default function ImageAnalysisPage() {
             outputTokens: 1500,
           })
         } else {
-          setError(data.error || 'Ошибка при анализе')
+          setError(data.error || 'Analysis error')
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -328,7 +328,7 @@ export default function ImageAnalysisPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🔍 Анализ медицинских изображений</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">🔍 Medical Image Analysis</h1>
       
       <DeviceSync 
         currentImage={imagePreview}
@@ -350,37 +350,37 @@ export default function ImageAnalysisPage() {
               document.getElementById('synced-image-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }, 50)
           } catch (_e) {
-            setError('Не удалось принять снимок: некорректный формат данных')
+            setError('Failed to receive image: invalid data format')
           }
         }}
       />
 
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг (сначала краткое структурированное описание исследования, затем текстовый разбор), даёт компактное заключение и общий сигнал риска, удобен для первичного просмотра и триажа.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и цены для большинства медицинских исследований.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
+          fast: "Two-stage screening (structured image description then clinical interpretation). Provides a concise conclusion and risk signal — convenient for initial review and triage.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — ideal balance of accuracy and cost for most medical studies.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for critical and complex cases; the most resource-intensive mode.",
           extra: [
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для большинства медицинских изображений.",
-            "💡 Система автоматически определяет тип изображения: ЭКГ, Рентген, КТ, МРТ, УЗИ, Дерматоскопия, Гистология, Офтальмология, Маммография. Поддерживается формат DICOM.",
-            "📸 Вы можете загрузить файл, сделать фото с камеры или использовать ссылку.",
-            "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
-            "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
+            "⭐ Recommended mode: «Optimized» (Gemini + Sonnet) — best balance of cost and quality for most medical images.",
+            "💡 The system supports: ECG, X-Ray, CT, MRI, Ultrasound, Dermatoscopy, Histology, Ophthalmology, Mammography. DICOM format supported.",
+            "📸 You can upload a file, take a photo with a camera, or use a URL.",
+            "🔄 Streaming mode lets you see the model's reasoning in real time.",
+            "💾 Results can be saved to patient context and exported to a report."
           ]
         }}
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Загрузите медицинское изображение</h2>
+        <h2 className="text-xl font-semibold mb-4">Upload Medical Image</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Поддерживаемые типы: ЭКГ, Рентген, МРТ, КТ, УЗИ, Дерматоскопия, Гистология, Офтальмология, Маммография, DICOM (.dcm)
+          Supported types: ECG, X-Ray, MRI, CT, Ultrasound, Dermatoscopy, Histology, Ophthalmology, Mammography, DICOM (.dcm)
         </p>
         
         <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
 
         {validation && validation.warnings.length > 0 && (
           <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-            <h4 className="text-amber-800 font-bold text-sm mb-1">🔍 Предварительный анализ качества снимка:</h4>
+            <h4 className="text-amber-800 font-bold text-sm mb-1">🔍 Preliminary image quality assessment:</h4>
             <ul className="text-xs text-amber-700 list-disc list-inside">
               {validation.warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
@@ -397,7 +397,7 @@ export default function ImageAnalysisPage() {
                 />
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold text-gray-700">
-                    👤 Клинический контекст (жалобы, анамнез, цель исследования)
+                    👤 Clinical Context (complaints, history, study objective)
                   </label>
                   <VoiceInput 
                     onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
@@ -405,8 +405,8 @@ export default function ImageAnalysisPage() {
                   />
                 </div>
                 <div className="mb-2 p-2 bg-amber-50 border border-amber-100 rounded text-[10px] text-amber-800">
-                  ⚠️ <strong>Важно:</strong> Не указывайте ФИО, дату рождения и другие персональные данные пациента. 
-                  Используйте обезличенные формулировки (например: "пациент М., 45 лет").
+                  ⚠️ <strong>Важно:</strong> Do not enter patient name, date of birth, or other identifying information. 
+                  Use anonymized descriptions (e.g., "Male patient, 45 y.o.").
                 </div>
                 <textarea
                   value={clinicalContext}
@@ -422,7 +422,7 @@ export default function ImageAnalysisPage() {
                 />
                 {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
                   <p className="text-[10px] text-red-600 mb-2 font-bold">
-                    ⚠️ Похоже, вы ввели ФИО. Пожалуйста, удалите персональные данные для защиты приватности.
+                    ⚠️ It looks like you entered a patient name. Please remove personal identifying information.
                   </p>
                 )}
                 <div className="mb-4">
@@ -436,21 +436,21 @@ export default function ImageAnalysisPage() {
                     />
                     <div className="flex flex-col">
                       <span className="text-xs font-bold text-blue-900">
-                        🛡️ Разовый анонимный анализ
+                        🛡️ One-time anonymous analysis
                       </span>
                       <span className="text-[10px] text-blue-700">
-                        Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                        Result will not be saved to the patient database (maximum PHI protection).
                       </span>
                     </div>
                   </label>
                 </div>
                 <p className="text-xs text-gray-500 mb-4">
-                  💡 Добавление контекста значительно повышает точность и релевантность анализа.
+                  💡 Adding clinical context significantly improves analysis accuracy.
                 </p>
 
                 <div className="mt-4 p-4 border border-dashed border-gray-300 rounded-lg bg-indigo-50/30">
                   <h3 className="text-sm font-bold text-indigo-900 mb-2 flex items-center gap-2">
-                    🧪 Добавить лабораторные анализы (Мульти-модальный анализ)
+                    🧪 Add Laboratory Results (Multi-modal Analysis)
                   </h3>
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
@@ -466,7 +466,7 @@ export default function ImageAnalysisPage() {
                         htmlFor="labs-upload" 
                         className={`px-3 py-2 bg-white border border-indigo-300 rounded text-xs font-semibold cursor-pointer hover:bg-indigo-50 flex items-center gap-2 ${parsingLabs ? 'opacity-50' : ''}`}
                       >
-                        {labFile ? `📎 ${labFile.name.substring(0, 20)}...` : '📄 Выбрать фото/PDF анализов'}
+                        {labFile ? `📎 ${labFile.name.substring(0, 20)}...` : '📄 Choose lab photo/PDF'}
                       </label>
                       
                       {labFile && !parsingLabs && (
@@ -474,31 +474,31 @@ export default function ImageAnalysisPage() {
                           onClick={parseLabs}
                           className="px-3 py-2 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 transition-colors"
                         >
-                          ⚡ Оцифровать анализы
+                          ⚡ Digitize Lab Results
                         </button>
                       )}
                       
                       {parsingLabs && (
-                        <span className="text-[10px] text-indigo-600 animate-pulse font-bold">⌛ Оцифровка Gemini 3.1...</span>
+                        <span className="text-[10px] text-indigo-600 animate-pulse font-bold">⌛ Digitizing with Gemini 3.1...</span>
                       )}
                     </div>
                     
                     {!labFile && !labsContext && (
-                      <span className="text-[10px] text-indigo-600">ИИ автоматически извлечет показатели (Gemini 3.1)</span>
+                      <span className="text-[10px] text-indigo-600">AI will auto-extract lab values (Gemini 3.1)</span>
                     )}
                     {labsContext && (
                       <div className="relative">
                         <textarea
                           value={labsContext}
                           onChange={(e) => setLabsContext(e.target.value)}
-                          placeholder="Результаты анализов появятся здесь..."
+                          placeholder="Lab results will appear here..."
                           className="w-full px-3 py-2 border border-indigo-200 rounded text-xs bg-white h-24 font-mono"
                           disabled={loading}
                         />
                         <button 
                           onClick={() => setLabsContext('')}
                           className="absolute top-1 right-1 p-1 bg-red-100 text-red-600 rounded-full hover:bg-red-200"
-                          title="Очистить"
+                          title="Clear"
                         >
                           ✕
                         </button>
@@ -532,7 +532,7 @@ export default function ImageAnalysisPage() {
                     className="w-4 h-4 text-primary-600 rounded"
                   />
                   <span className="text-sm text-gray-700">
-                    📡 Streaming режим (постепенное появление текста)
+                    📡 Streaming mode (progressive text output)
                   </span>
                 </label>
               </div>
@@ -543,21 +543,21 @@ export default function ImageAnalysisPage() {
                   disabled={loading}
                   className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed font-bold"
                 >
-                  ⚡ Скрининг {useStreaming ? '(стриминг)' : ''}
+                  ⚡ Screening {useStreaming ? '(streaming)' : ''}
                 </button>
                 <button
                   onClick={() => analyzeImage('optimized', useStreaming)}
                   disabled={loading}
                   className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-bold"
                 >
-                  ⭐ Получить консультацию {useStreaming ? '(стриминг)' : ''}
+                  ⭐ Get Consultation {useStreaming ? '(streaming)' : ''}
                 </button>
                 <button
                   onClick={() => analyzeImage('validated', useStreaming)}
                   disabled={loading}
                   className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed font-bold"
                 >
-                  🧠 Экспертный разбор {useStreaming ? '(стриминг)' : ''}
+                  🧠 Expert Review {useStreaming ? '(streaming)' : ''}
                 </button>
               </div>
             </div>
@@ -568,8 +568,8 @@ export default function ImageAnalysisPage() {
       {file && isDicom && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">🖥️ Просмотр DICOM (Cornerstone.js)</h2>
-            <div className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">Обработка в браузере</div>
+            <h2 className="text-xl font-semibold">🖥️ DICOM Viewer (Cornerstone.js)</h2>
+            <div className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">Browser-side processing</div>
           </div>
           <DicomViewer 
             file={file} 
@@ -589,18 +589,18 @@ export default function ImageAnalysisPage() {
 
       {file && !isDicom && imagePreview && (
         <div id="synced-image-preview" className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">📷 Загруженное изображение</h2>
+          <h2 className="text-xl font-semibold mb-4">📷 Uploaded Image</h2>
           <div className="flex flex-col items-center w-full">
             <img 
               src={imagePreview} 
-              alt="Загруженное изображение" 
+              alt="Uploaded Image" 
               className="w-full max-h-[800px] rounded-lg shadow-md object-contain border border-gray-200"
             />
             <button
               onClick={() => setShowEditor(true)}
               className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
             >
-              🎨 Закрасить данные
+              🎨 Redact Data
             </button>
           </div>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600 border-t pt-4">

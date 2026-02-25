@@ -63,7 +63,7 @@ export default function LabPage() {
 
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
     if (!window.pdfjsLib) {
-      throw new Error('PDF.js не загружен. Подождите несколько секунд и попробуйте снова.')
+      throw new Error('PDF.js is not loaded. Please wait a few seconds and try again.')
     }
 
     try {
@@ -96,7 +96,7 @@ export default function LabPage() {
         const context = canvas.getContext('2d')
         
         if (!context) {
-          throw new Error('Не удалось получить контекст canvas')
+          throw new Error('Failed to get canvas context')
         }
         
         canvas.width = viewport.width
@@ -116,7 +116,7 @@ export default function LabPage() {
       }
 
       if (base64Images.length === 0) {
-        throw new Error('Не удалось конвертировать ни одной страницы PDF')
+        throw new Error('Failed to convert any PDF pages')
       }
 
       console.log(`✅ [LAB PDF] Конвертация завершена. Получено ${base64Images.length} изображений`)
@@ -124,7 +124,7 @@ export default function LabPage() {
       
     } catch (error: any) {
       console.error('❌ [LAB PDF] Ошибка конвертации:', error)
-      throw new Error(`Ошибка конвертации PDF: ${error.message}`)
+      throw new Error(`PDF conversion error: ${error.message}`)
     }
   }
 
@@ -146,7 +146,7 @@ export default function LabPage() {
 
   const handleAnalyze = async () => {
     if (!file) {
-      setError('Сначала выберите файл для анализа')
+      setError('Please select a file for analysis first')
       return
     }
 
@@ -200,7 +200,7 @@ export default function LabPage() {
             },
             onError: (err) => {
               console.error('❌ [STREAMING] Ошибка:', err)
-              setError(`Ошибка стриминга: ${err.message}`)
+              setError(`Streaming error: ${err.message}`)
             },
             onComplete: (finalText) => {
               console.log('✅ [LAB STREAMING] Анализ завершен')
@@ -221,7 +221,7 @@ export default function LabPage() {
               outputTokens: 1000,
             })
           } else {
-            setError(data.error || 'Ошибка при анализе')
+            setError(data.error || 'Analysis error')
           }
         }
         setLoading(false)
@@ -281,7 +281,7 @@ export default function LabPage() {
             },
             onError: (err) => {
               console.error('❌ [STREAMING] Ошибка:', err)
-              setError(`Ошибка стриминга: ${err.message}`)
+              setError(`Streaming error: ${err.message}`)
             },
             onComplete: (finalText) => {
               console.log('✅ [LAB STREAMING] Анализ завершен')
@@ -302,7 +302,7 @@ export default function LabPage() {
               outputTokens: 1000,
             })
           } else {
-            setError(data.error || 'Ошибка при анализе')
+            setError(data.error || 'Analysis error')
           }
         }
       } else {
@@ -345,7 +345,7 @@ export default function LabPage() {
             },
             onError: (err) => {
               console.error('❌ [STREAMING] Ошибка:', err)
-              setError(`Ошибка стриминга: ${err.message}`)
+              setError(`Streaming error: ${err.message}`)
             },
             onComplete: (finalText) => {
               console.log('✅ [LAB STREAMING] Анализ завершен')
@@ -366,12 +366,12 @@ export default function LabPage() {
               outputTokens: 1000,
             })
           } else {
-            setError(data.error || 'Ошибка при анализе')
+            setError(data.error || 'Analysis error')
           }
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
       setConvertingPDF(false)
     } finally {
       setLoading(false)
@@ -386,24 +386,24 @@ export default function LabPage() {
   return (
     <>
       <div className="container mx-auto px-4 py-8 max-w-7xl">
-        <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 Анализ лабораторных данных</h1>
+        <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 Laboratory Data Analysis</h1>
         
         <AnalysisTips 
           content={{
-            fast: "быстрый анализ через Gemini 3.1 Flash — идеально подходит для мгновенного извлечения данных из лабораторных бланков.",
-            optimized: "сбалансированный режим (Gemini JSON + Sonnet 4.6) — глубокий клинический разбор на основе извлеченных данных.",
-            validated: "экспертный анализ (Gemini JSON + Opus 4.6) — максимально детальная оценка отклонений от нормы.",
+            fast: "Fast analysis via Gemini 3.1 Flash — ideal for instant extraction of data from lab reports.",
+            optimized: "Balanced mode (Gemini JSON + Sonnet 4.6) — deep clinical interpretation of extracted data.",
+            validated: "Expert analysis (Gemini JSON + Opus 4.6) — the most detailed assessment of abnormal values.",
             extra: [
-              "🚀 Рекомендуемый выбор: Gemini 3.1 Flash (режим «Быстрый») — самая высокая точность распознавания таблиц и показателей.",
-              "📄 Вы можете загрузить PDF, Excel (XLSX/XLS), CSV или просто фото бланка.",
-              "🔍 Система автоматически распознает таблицы и переводит их в цифровой формат.",
-              "💾 Результаты можно сохранить и использовать для сравнительного анализа в будущем."
+              "🚀 Recommended: Gemini 3.1 Flash (Fast mode) — highest accuracy for table and value recognition.",
+              "📄 You can upload PDF, Excel (XLSX/XLS), CSV, or a photo of a lab report.",
+              "🔍 The system automatically recognizes tables and converts them to digital format.",
+              "💾 Results can be saved and used for comparative analysis in the future."
             ]
           }}
         />
         
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Загрузите файл с лабораторными данными</h2>
+          <h2 className="text-xl font-semibold mb-4">Upload Laboratory Data File</h2>
           
           <div className="mb-6">
             <PatientSelector 
@@ -411,7 +411,7 @@ export default function LabPage() {
               disabled={loading} 
             />
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              👤 Клинический контекст пациента (жалобы, диагноз, цель анализа)
+              👤 Clinical Context (complaints, diagnosis, study objective)
             </label>
             <textarea
               value={clinicalContext}
@@ -427,7 +427,7 @@ export default function LabPage() {
             />
             {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
               <p className="text-[10px] text-red-600 mb-2 font-bold">
-                ⚠️ Похоже, вы ввели ФИО. Пожалуйста, удалите персональные данные для защиты приватности.
+                ⚠️ It looks like you entered a patient name. Please remove personal identifying information.
               </p>
             )}
             <div className="mb-4">
@@ -441,16 +441,16 @@ export default function LabPage() {
                 />
                 <div className="flex flex-col">
                   <span className="text-xs font-bold text-blue-900">
-                    🛡️ Разовый анонимный анализ
+                    🛡️ One-time anonymous analysis
                   </span>
                   <span className="text-[10px] text-blue-700 font-normal">
-                    Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                    Result will not be saved to the patient database (maximum PHI protection).
                   </span>
                 </div>
               </label>
             </div>
             <p className="text-xs text-gray-500 mb-4">
-              💡 Клинический контекст поможет системе точнее интерпретировать отклонения от нормы.
+              💡 Clinical context helps the system interpret deviations more accurately.
             </p>
           </div>
 
@@ -474,29 +474,29 @@ export default function LabPage() {
                 className="w-4 h-4 text-primary-600 rounded"
               />
               <span className="text-sm text-gray-700">
-                📡 Streaming режим (постепенное появление текста)
+                📡 Streaming mode (progressive text output)
               </span>
             </label>
           </div>
 
           <p className="text-sm text-gray-600 mb-4">
-            Поддерживаемые форматы: PDF, XLSX, XLS, CSV, изображения (JPG, PNG)
+            Supported formats: PDF, XLSX, XLS, CSV, images (JPG, PNG)
           </p>
           <ImageUpload onUpload={handleUpload} accept=".pdf,.xlsx,.xls,.csv,image/*" maxSize={50} />
 
           {file && processedImages.length > 0 && (
             <div className="mt-6 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-700">📷 Предпросмотр изображения</h3>
+                <h3 className="text-sm font-bold text-gray-700">📷 Image Preview</h3>
                 <div className="text-xs text-gray-500">
-                  {processedImages.length > 1 && `Страница ${currentEditorIndex + 1} из ${processedImages.length}`}
+                  {processedImages.length > 1 && `Page ${currentEditorIndex + 1} of ${processedImages.length}`}
                 </div>
               </div>
               
               <div className="flex flex-col items-center">
                 <img 
                   src={`data:image/jpeg;base64,${processedImages[currentEditorIndex]}`} 
-                  alt="Предпросмотр" 
+                  alt="Preview" 
                   className="max-w-full max-h-[400px] rounded-lg shadow-md object-contain mb-4"
                 />
                 
@@ -505,7 +505,7 @@ export default function LabPage() {
                     onClick={() => setShowEditor(true)}
                     className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
                   >
-                    🎨 Закрасить данные
+                    🎨 Redact Data
                   </button>
                   
                   {processedImages.length > 1 && (
@@ -534,7 +534,7 @@ export default function LabPage() {
           {file && (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) && processedImages.length === 0 && (
             <div className="mt-6 flex flex-col items-center gap-3">
               <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg text-[11px] text-amber-800 w-full max-w-md">
-                ⚠️ <strong>Для ручной анонимизации:</strong> сначала нажмите «Подготовить страницы», чтобы увидеть снимки и закрасить ФИО.
+                ⚠️ <strong>For manual anonymization:</strong> click «Prepare Pages» first to preview and redact PHI.
               </div>
               <button
                 onClick={async () => {
@@ -551,7 +551,7 @@ export default function LabPage() {
                 disabled={convertingPDF}
                 className="px-6 py-2 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700 transition-all shadow-md"
               >
-                {convertingPDF ? '⌛ Обработка...' : '📄 Подготовить страницы для анонимизации'}
+                {convertingPDF ? '⌛ Processing...' : '📄 Prepare Pages for Anonymization'}
               </button>
             </div>
           )}
@@ -565,7 +565,7 @@ export default function LabPage() {
                   onClick={() => setFile(null)} 
                   className="text-red-500 hover:text-red-700 text-sm underline"
                 >
-                  Удалить
+                  Remove
                 </button>
               </div>
               <button
@@ -573,7 +573,7 @@ export default function LabPage() {
                 className="w-full sm:w-auto px-10 py-4 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 transition-all shadow-lg transform hover:scale-105 active:scale-95 flex items-center justify-center gap-3"
               >
                 <span className="text-xl">🚀</span>
-                Запустить анализ ({mode === 'fast' ? 'Быстрый' : mode === 'optimized' ? 'Оптимизированный' : 'Точный'})
+                Run Analysis ({mode === 'fast' ? 'Fast' : mode === 'optimized' ? 'Optimized' : 'Expert'})
               </button>
             </div>
           )}
@@ -586,8 +586,8 @@ export default function LabPage() {
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-700 mr-3"></div>
               <span>
                 {conversionProgress 
-                  ? `Конвертация PDF: страница ${conversionProgress.current} из ${conversionProgress.total}...`
-                  : 'Подготовка PDF к конвертации...'}
+                  ? `Converting PDF: page ${conversionProgress.current} of ${conversionProgress.total}...`
+                  : 'Preparing PDF for conversion...'}
               </span>
             </div>
           </div>

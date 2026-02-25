@@ -38,6 +38,6 @@ export interface PaymentProvider {
   }>;
 }
 
-export type PaymentProviderType = 'payanyway';
+export type PaymentProviderType = 'nowpayments';
 
 export type RefundStatus = 'pending' | 'approved' | 'completed' | 'rejected';

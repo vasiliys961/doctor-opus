@@ -37,7 +37,7 @@ export default function XRayPage() {
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
-      setError('Сначала загрузите изображение')
+      setError('Please upload an image first')
       return
     }
 
@@ -133,7 +133,7 @@ export default function XRayPage() {
           },
           onError: (error) => {
             console.error('❌ [XRAY STREAMING] Ошибка:', error)
-            setError(`Ошибка streaming: ${error.message}`)
+            setError(`Streaming error: ${error.message}`)
           },
           onComplete: (finalText) => {
             console.log('✅ [XRAY STREAMING] Анализ завершен')
@@ -165,11 +165,11 @@ export default function XRayPage() {
             outputTokens: 1500,
           })
         } else {
-          setError(data.error || 'Ошибка при анализе')
+          setError(data.error || 'Analysis error')
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -219,27 +219,27 @@ export default function XRayPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🩻 Анализ рентгена</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">🩻 X-Ray Analysis</h1>
       
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг рентгена (сначала структурированное описание снимка, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и качества для анализа рентгенограмм.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев.",
+          fast: "Two-stage X-Ray screening (structured image description then clinical interpretation). Provides a concise conclusion and risk signal — ideal for initial review and triage.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — ideal balance of accuracy and quality for X-Ray analysis.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for critical and complex cases.",
           extra: [
-            "✅ **GPT-5.2**: ЛУЧШИЙ выбор для 80% рентгена (общий анализ, МРТ).",
-            "🦴 **Claude Sonnet 4.6**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах (83% точности).",
-            "⚠️ **Claude Opus 4.6**: НЕ рекомендуем для этого раздела (самая слабая модель для изображений).",
-            "📸 Вы можете загрузить файл рентгена, сделать фото с камеры или использовать ссылку.",
-            "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
-            "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
+            "✅ **GPT-5.2**: BEST choice for 80% of X-Ray cases (general analysis, MRI).",
+            "🦴 **Claude Sonnet 4.6**: EXCEPTION — BEST results on fractures (83% accuracy).",
+            "⚠️ **Claude Opus 4.6**: NOT recommended for this section (weakest model for imaging).",
+            "📸 You can upload an X-Ray file, take a photo with a camera, or use a URL.",
+            "🔄 Streaming mode lets you see the model's reasoning in real time.",
+            "💾 Results can be saved to patient context and exported to a report."
           ]
         }}
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Загрузите снимки</h2>
+          <h2 className="text-xl font-semibold">Upload Images</h2>
           <button
             onClick={() => {
               setIsComparisonMode(!isComparisonMode)
@@ -254,19 +254,19 @@ export default function XRayPage() {
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            {isComparisonMode ? '✅ Режим сравнения ВКЛ' : '📊 Включить сравнение (Было/Стало)'}
+            {isComparisonMode ? '✅ Comparison Mode ON' : '📊 Enable Comparison (Before/After)'}
           </button>
         </div>
         
         <div className={`grid grid-cols-1 ${isComparisonMode ? 'lg:grid-cols-2' : ''} gap-6`}>
           <div>
-            <p className="text-sm font-medium text-gray-700 mb-2">{isComparisonMode ? '🔵 ТЕКУЩИЙ СНИМОК (СТАЛО)' : 'Выберите снимок для анализа'}</p>
+            <p className="text-sm font-medium text-gray-700 mb-2">{isComparisonMode ? '🔵 🔵 CURRENT IMAGE (NOW)' : 'Choose an image for analysis'}</p>
             <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
           </div>
           
           {isComparisonMode && (
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2 text-blue-600">⚪ АРХИВНЫЙ СНИМОК (БЫЛО)</p>
+              <p className="text-sm font-medium text-gray-700 mb-2 text-blue-600">⚪ ⚪ ARCHIVE IMAGE (BEFORE)</p>
               <ImageUpload onUpload={handleArchiveUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
             </div>
           )}
@@ -275,15 +275,15 @@ export default function XRayPage() {
 
       {(imagePreview || archivePreview) && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">📷 {isComparisonMode ? 'Просмотр сравнения' : 'Загруженное изображение'}</h2>
+          <h2 className="text-xl font-semibold mb-4">📷 {isComparisonMode ? 'Comparison View' : 'Uploaded Image'}</h2>
           
           <div className={`grid grid-cols-1 ${isComparisonMode && archivePreview ? 'md:grid-cols-2' : ''} gap-4`}>
             {imagePreview && (
               <div className="flex flex-col items-center">
-                {isComparisonMode && <span className="text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">Текущий</span>}
+                {isComparisonMode && <span className="text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">Current</span>}
                 <img 
                   src={imagePreview} 
-                  alt="Текущее изображение" 
+                  alt="Current image" 
                   className="w-full max-h-[600px] rounded-lg shadow-lg object-contain border-2 border-blue-100"
                 />
                 <button
@@ -293,17 +293,17 @@ export default function XRayPage() {
                   }}
                   className="mt-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
                 >
-                  🎨 Закрасить данные
+                  🎨 Redact Data
                 </button>
               </div>
             )}
             
             {isComparisonMode && archivePreview && (
               <div className="flex flex-col items-center">
-                <span className="text-xs font-bold text-blue-600 mb-1 uppercase tracking-widest">Архив (БЫЛО)</span>
+                <span className="text-xs font-bold text-blue-600 mb-1 uppercase tracking-widest">Archive (BEFORE)</span>
                 <img 
                   src={archivePreview} 
-                  alt="Архивное изображение" 
+                  alt="Archive image" 
                   className="w-full max-h-[600px] rounded-lg shadow-lg object-contain border-2 border-gray-200 opacity-80"
                 />
                 <button
@@ -313,7 +313,7 @@ export default function XRayPage() {
                   }}
                   className="mt-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
                 >
-                  🎨 Закрасить данные
+                  🎨 Redact Data
                 </button>
               </div>
             )}
@@ -327,7 +327,7 @@ export default function XRayPage() {
               />
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-700">
-                  👤 Клинический контекст пациента (жалобы, анамнез, цель исследования)
+                  👤 Clinical Context (complaints, history, study objective)
                 </label>
                 <VoiceInput 
                   onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
@@ -343,7 +343,7 @@ export default function XRayPage() {
                 disabled={loading}
               />
               <p className="text-xs text-gray-500 mb-4">
-                💡 Добавление контекста значительно повышает точность и релевантность анализа.
+                💡 Adding clinical context significantly improves analysis accuracy.
               </p>
             </div>
 
@@ -363,7 +363,7 @@ export default function XRayPage() {
                 className="w-4 h-4 text-primary-600 rounded"
               />
               <span className="text-sm text-gray-700">
-                📡 Streaming режим (постепенное появление текста)
+                📡 Streaming mode (progressive text output)
               </span>
             </label>
             
@@ -373,21 +373,21 @@ export default function XRayPage() {
                 disabled={loading}
                 className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⚡ Быстрый {useStreaming ? '(стриминг)' : ''}
+                ⚡ Fast {useStreaming ? '(streaming)' : ''}
               </button>
               <button
                 onClick={() => analyzeImage('optimized', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⭐ Оптимизированный {useStreaming ? '(стриминг)' : ''}
+                ⭐ Optimized {useStreaming ? '(streaming)' : ''}
               </button>
               <button
                 onClick={() => analyzeImage('validated', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                🧠 С валидацией {useStreaming ? '(стриминг)' : ''}
+                🧠 Expert Validated {useStreaming ? '(streaming)' : ''}
               </button>
             </div>
           </div>

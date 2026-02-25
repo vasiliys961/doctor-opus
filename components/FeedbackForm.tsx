@@ -10,16 +10,16 @@ interface FeedbackFormProps {
 }
 
 const specialties = [
-  "Кардиология", "Онкология", "Пульмонология", "Неврология", 
-  "ОВП", "Инфекционные болезни", "Гастроэнтерология", 
-  "Радиология", "Дерматология", "Лабораторный анализ",
-  "Генетика", "Другое"
+  "Cardiology", "Oncology", "Pulmonology", "Neurology", 
+  "General Practice", "Infectious Diseases", "Gastroenterology", 
+  "Radiology", "Dermatology", "Laboratory Analysis",
+  "Genetics", "Other"
 ];
 
 const correctnessOptions = [
-  { value: "✅ Полностью верно", label: "✅ Полностью верно" },
-  { value: "⚠️ Частично верно", label: "⚠️ Частично верно" },
-  { value: "❌ Ошибка", label: "❌ Ошибка" }
+  { value: "✅ Fully correct", label: "✅ Fully correct" },
+  { value: "⚠️ Partially correct", label: "⚠️ Partially correct" },
+  { value: "❌ Incorrect", label: "❌ Incorrect" }
 ];
 
 const FeedbackForm: React.FC<FeedbackFormProps> = ({ 
@@ -29,8 +29,8 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
   inputCase,
   onSuccess 
 }) => {
-  const [correctness, setCorrectness] = useState("✅ Полностью верно");
-  const [specialty, setSpecialty] = useState("Кардиология");
+  const [correctness, setCorrectness] = useState("✅ Fully correct");
+  const [specialty, setSpecialty] = useState("Cardiology");
   const [consent, setConsent] = useState(true);
   const [correctDiagnosis, setCorrectDiagnosis] = useState("");
   const [comment, setComment] = useState("");
@@ -41,7 +41,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!consent) {
-      setError("Пожалуйста, дайте согласие на использование данных.");
+      setError("Please provide consent to use this data for model improvement.");
       return;
     }
 
@@ -56,10 +56,10 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
           analysis_type: analysisType,
           analysis_id: analysisId || `${analysisType}_${Date.now()}`,
           ai_response: analysisResult,
-          feedback_type: correctness === "❌ Ошибка" ? "incorrect_diagnosis" : 
-                         correctness === "⚠️ Частично верно" ? "needs_improvement" : "correct",
+        feedback_type: correctness === "❌ Incorrect" ? "incorrect_diagnosis" : 
+                       correctness === "⚠️ Partially correct" ? "needs_improvement" : "correct",
           doctor_comment: anonymizeText(comment),
-          correct_diagnosis: anonymizeText(correctness !== "✅ Полностью верно" ? correctDiagnosis : ''),
+          correct_diagnosis: anonymizeText(correctness !== "✅ Fully correct" ? correctDiagnosis : ''),
           specialty,
           correctness,
           consent,
@@ -73,10 +73,10 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
         setSubmitted(true);
         if (onSuccess) onSuccess();
       } else {
-        throw new Error(result.error || 'Ошибка при отправке отзыва');
+        throw new Error(result.error || 'Error submitting feedback');
       }
     } catch (err: any) {
-      setError(err.message || "Произошла ошибка при отправке");
+      setError(err.message || "An error occurred while submitting");
     } finally {
       setIsSubmitting(false);
     }
@@ -85,9 +85,9 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
   if (submitted) {
     return (
       <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center shadow-sm">
-        <h3 className="text-green-800 font-bold text-lg mb-2">✅ Спасибо за ваш отзыв!</h3>
+        <h3 className="text-green-800 font-bold text-lg mb-2">✅ Thank you for your feedback!</h3>
         <p className="text-green-700 text-sm">
-          Ваш вклад помогает нам улучшить качество анализа и сделать систему точнее.
+          Your input helps us improve the quality of analysis and make the system more accurate.
         </p>
       </div>
     );
@@ -97,10 +97,10 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
     <div className="bg-white border border-primary-100 rounded-xl shadow-sm overflow-hidden mt-8">
       <div className="bg-primary-50 px-6 py-4 border-b border-primary-100">
         <h3 className="font-bold text-primary-900 flex items-center gap-2 text-lg">
-          📝 Оставить отзыв
+          📝 Submit Feedback
         </h3>
         <p className="text-primary-700 text-xs mt-1">
-          Ваш отзыв поможет улучшить систему. Все данные будут анонимизированы.
+          Your feedback helps improve the system. All data will be anonymized.
         </p>
       </div>
       
@@ -108,7 +108,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-3">
             <label className="block text-sm font-bold text-gray-700">
-              📊 Оценка корректности:
+              📊 Accuracy Assessment:
             </label>
             <div className="space-y-2">
               {correctnessOptions.map((option) => (
@@ -129,7 +129,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
           <div className="space-y-3">
             <label className="block text-sm font-bold text-gray-700">
-              🏥 Ваша специальность:
+              🏥 Your Specialty:
             </label>
             <select
               value={specialty}
@@ -143,15 +143,15 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
           </div>
         </div>
 
-        {correctness !== "✅ Полностью верно" && (
+        {correctness !== "✅ Fully correct" && (
           <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
             <label className="block text-sm font-bold text-gray-700">
-              ✅ Укажите правильный диагноз/уточнение:
+              ✅ Provide the correct diagnosis/clarification:
             </label>
             <textarea
               value={correctDiagnosis}
               onChange={(e) => setCorrectDiagnosis(e.target.value)}
-              placeholder="Введите правильный диагноз, уточнение или исправление..."
+              placeholder="Enter the correct diagnosis, clarification, or correction..."
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
               rows={3}
               maxLength={2000}
@@ -161,12 +161,12 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
         <div className="space-y-3">
           <label className="block text-sm font-bold text-gray-700">
-            💬 Ваш комментарий (опционально):
+            💬 Your Comment (optional):
           </label>
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Укажите, что можно улучшить, что не хватает, или дополнительные замечания..."
+            placeholder="What could be improved, what is missing, or any additional remarks..."
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
             rows={3}
             maxLength={3000}
@@ -182,8 +182,8 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
             className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
           />
           <label htmlFor="consent" className="text-xs text-gray-600 leading-relaxed cursor-pointer select-none">
-            ✓ Согласен использовать этот случай для улучшения модели (анонимно). 
-            Данные будут использованы исключительно для повышения точности анализа.
+            ✓ I agree to use this case for model improvement (anonymously). 
+            Data will be used exclusively to improve analysis accuracy.
           </label>
         </div>
 
@@ -198,12 +198,12 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
           disabled={isSubmitting || !analysisResult}
           className="w-full md:w-auto px-6 py-2 bg-primary-600 text-white font-bold rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md active:scale-95"
         >
-          {isSubmitting ? 'Отправка...' : '📤 Отправить отзыв'}
+          {isSubmitting ? 'Submitting...' : '📤 Submit Feedback'}
         </button>
         
         {!analysisResult && (
           <p className="text-xs text-amber-600 font-medium">
-            💡 Форма станет активной после завершения анализа.
+            💡 The form will become active once the analysis is complete.
           </p>
         )}
       </form>

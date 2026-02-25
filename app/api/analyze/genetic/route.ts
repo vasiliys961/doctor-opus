@@ -133,7 +133,7 @@ APOE;rs429358;CC;высокий риск болезни Альцгеймера`;
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://doctor-opus.ru',
+            'HTTP-Referer': 'https://doctor-opus.online',
             'X-Title': 'Doctor Opus',
           },
           body: JSON.stringify(extractionPayload),
@@ -236,7 +236,7 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.ru',
+          'HTTP-Referer': 'https://doctor-opus.online',
           'X-Title': 'Doctor Opus',
         },
         body: JSON.stringify(extractionPayload),

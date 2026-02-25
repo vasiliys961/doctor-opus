@@ -10,93 +10,92 @@ export interface ChatSpecialist {
 export const CHAT_SPECIALISTS: ChatSpecialist[] = [
   {
     id: 'universal',
-    label: 'Универсальная Консультация-Эксперт',
+    label: 'Universal Expert Consultation',
     icon: '👨‍⚕️',
-    description: 'Общий клинический разбор и междисциплинарный подход.'
+    description: 'General clinical case review with an interdisciplinary approach.'
   },
   {
     id: 'cardiology',
-    label: 'Консультация кардиолога (школа Браунвальда)',
+    label: 'Cardiology Consultation (Braunwald School)',
     icon: '❤️',
-    description: 'Эксперт в области гемодинамики, ЭКГ и заболеваний сердца.'
+    description: 'Expert in hemodynamics, ECG interpretation, and cardiac disease.'
   },
   {
     id: 'neurology',
-    label: 'Консультация невролога (школа Энн Осборн)',
+    label: 'Neurology Consultation (Ann Osborn School)',
     icon: '🧠',
-    description: 'Специалист по заболеваниям ЦНС и нейровизуализации.'
+    description: 'Specialist in CNS disorders and neuroimaging.'
   },
   {
     id: 'endocrinology',
-    label: 'Консультация эндокринолога (Академик РАН)',
+    label: 'Endocrinology Consultation (Academic Expert)',
     icon: '🦋',
-    description: 'Академический подход к гормональным нарушениям и диабету.'
+    description: 'Academic approach to hormonal disorders and diabetes management.'
   },
   {
     id: 'radiology',
-    label: 'Консультация рентгенолога (школа Фелсона)',
+    label: 'Radiology Consultation (Felson School)',
     icon: '☢️',
-    description: 'Мастер структурного анализа рентгена, КТ и МРТ.'
+    description: 'Master of structural analysis: X-Ray, CT, and MRI interpretation.'
   },
   {
     id: 'oncology',
-    label: 'Консультация онколога (критерии Де Виты)',
+    label: 'Oncology Consultation (DeVita Criteria)',
     icon: '🧬',
-    description: 'Эксперт по стадированию и современным протоколам терапии.'
+    description: 'Expert in staging and modern treatment protocol selection.'
   },
   {
     id: 'hematology',
-    label: 'Консультация гематолога (школа Винтроба)',
+    label: 'Hematology Consultation (Wintrobe School)',
     icon: '🩸',
-    description: 'Специалист по патологии крови и костного мозга.'
+    description: 'Specialist in blood and bone marrow pathology.'
   },
   {
     id: 'gynecology',
-    label: 'Консультация гинеколога (школа Уильямса)',
+    label: 'Gynecology Consultation (Williams School)',
     icon: '🌸',
-    description: 'Эксперт в области женского здоровья и акушерства.'
+    description: "Expert in women's health and obstetrics."
   },
   {
     id: 'rheumatology',
-    label: 'Консультация ревматолога (школа Келли)',
+    label: 'Rheumatology Consultation (Kelly School)',
     icon: '🦴',
-    description: 'Специалист по системным аутоиммунным заболеваниям.'
+    description: 'Specialist in systemic autoimmune diseases.'
   },
   {
     id: 'traumatology',
-    label: 'Консультация травматолога (школа Кэмпбелла)',
+    label: 'Orthopedic/Trauma Consultation (Campbell School)',
     icon: '🦾',
-    description: 'Эксперт в области повреждений опорно-двигательного аппарата.'
+    description: 'Expert in musculoskeletal injuries and orthopedic conditions.'
   },
   {
     id: 'gastroenterology',
-    label: 'Консультация гастроэнтеролога (школа Слейзенджера)',
+    label: 'Gastroenterology Consultation (Sleisenger School)',
     icon: '🧪',
-    description: 'Эксперт по заболеваниям ЖКТ и печени.'
+    description: 'Expert in GI tract and hepatobiliary disease.'
   },
   {
     id: 'dermatology',
-    label: 'Консультация дерматолога (школа Фицпатрика)',
+    label: 'Dermatology Consultation (Fitzpatrick School)',
     icon: '🔍',
-    description: 'Специалист по дерматоскопии и патологии кожи.'
+    description: 'Specialist in dermoscopy and skin pathology.'
   },
   {
     id: 'pediatrics',
-    label: 'Консультация педиатра (школа Нельсона)',
+    label: 'Pediatrics Consultation (Nelson School)',
     icon: '👶',
-    description: 'Эксперт в области детских болезней и развития.'
+    description: 'Expert in childhood diseases and developmental medicine.'
   },
   {
     id: 'openevidence',
-    label: 'Академический поиск',
+    label: 'Academic Evidence Search',
     icon: '🌐',
-    description: 'Поиск по медицинским базам данных и академической литературе.'
+    description: 'Search across medical databases and academic literature.'
   },
   {
     id: 'ai_consultant',
-    label: 'ИИ-Ассистент (Медицина)',
+    label: 'AI in Medicine Consultant',
     icon: '🦾',
-    description: 'Эксперт по внедрению нейросетей в клиническую практику: подбор инструментов и обучение.'
+    description: 'Expert in AI tool implementation in clinical practice: tool selection and training.'
   }
 ];
-

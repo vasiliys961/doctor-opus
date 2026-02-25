@@ -37,7 +37,7 @@ export default function ECGPage() {
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
-      setError('Сначала загрузите изображение ЭКГ')
+      setError('Please upload an ECG image first')
       return
     }
 
@@ -48,38 +48,33 @@ export default function ECGPage() {
     setAnalysisStep('description')
 
     try {
-      const prompt = 'Проанализируйте изображение ЭКГ и сформируйте диагностический протокол.'
+      const prompt = 'Analyze the ECG image and generate a diagnostic protocol.'
 
-      // Проверка кэша
       if (imagePreview) {
         const cacheKey = getAnalysisCacheKey(imagePreview, clinicalContext + 'ecg', analysisMode);
         const cachedResult = getFromCache(cacheKey);
         
         if (cachedResult) {
-          console.log('📦 [CACHE] Найдено в кэше ЭКГ, пропускаем запрос');
+          console.log('📦 [CACHE] ECG cache hit, skipping request');
           setResult(cachedResult);
           setLoading(false);
           setModelInfo(analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
                         analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.6');
           return;
         }
-        // Сохраняем ключ для записи после завершения
         (window as any)._currentCacheKey = cacheKey;
       }
 
-      // Для режима validated используем специальный двухэтапный анализ: Gemini JSON → Opus
-      // Для других режимов используем обычный анализ
       const formData = new FormData()
       formData.append('file', file)
       formData.append('prompt', prompt)
       formData.append('clinicalContext', clinicalContext)
-      formData.append('mode', analysisMode) // validated, optimized, или fast
-      formData.append('imageType', 'ecg') // Указываем тип изображения для использования специфичных промптов
+      formData.append('mode', analysisMode)
+      formData.append('imageType', 'ecg')
       formData.append('useStreaming', useStream.toString())
       formData.append('isTwoStage', 'true')
       formData.append('isAnonymous', isAnonymous.toString())
 
-      // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat';
         formData.append('model', targetModelId);
@@ -90,9 +85,7 @@ export default function ECGPage() {
       }
 
       if (useStream) {
-        // Streaming режим
-        console.log('📡 [ECG CLIENT] Запуск streaming режима для режима:', analysisMode)
-        setResult('') // Очищаем предыдущий результат для стриминга
+        setResult('')
         setLoading(true)
         setCurrentCost(0)
         
@@ -104,8 +97,7 @@ export default function ECGPage() {
 
           if (!response.ok) {
             const errorText = await response.text()
-            console.error('❌ [ECG CLIENT] Streaming ошибка:', response.status, errorText)
-            throw new Error(`Ошибка API: ${response.status} - ${errorText}`)
+            throw new Error(`API error: ${response.status} - ${errorText}`)
           }
 
           const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat';
@@ -120,7 +112,6 @@ export default function ECGPage() {
               })
             },
             onUsage: (usage) => {
-              console.log('📊 [ECG STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
               logUsage({
@@ -131,18 +122,16 @@ export default function ECGPage() {
               })
             },
             onComplete: (finalText) => {
-              console.log('✅ [ECG STREAMING] Анализ завершен')
               setAnalysisStep('description_complete')
               
-              // Очищаем текст от технических заголовков перед сохранением в кэш
               const cleanText = finalText
                 .split('\n')
                 .filter(line => {
                   const l = line.toLowerCase();
-                  return !l.includes('подготовка к анализу') && 
-                         !l.includes('извлечение данных') && 
-                         !l.includes('клинический разбор через') &&
-                         !l.includes('профессорский разбор через') &&
+                  return !l.includes('preparing analysis') && 
+                         !l.includes('extracting data') && 
+                         !l.includes('clinical review in') &&
+                         !l.includes('professor review in') &&
                          !l.startsWith('---') &&
                          line.trim() !== '.' &&
                          line.trim() !== '..' &&
@@ -157,18 +146,15 @@ export default function ECGPage() {
               }
             },
             onError: (err) => {
-              console.error('❌ [ECG STREAMING] Ошибка:', err)
-              setError(`Ошибка стриминга: ${err.message}`)
+              setError(`Streaming error: ${err.message}`)
             }
           })
         } catch (err: any) {
-          console.error('❌ [ECG CLIENT] Ошибка:', err)
           setError(err.message)
         } finally {
           setLoading(false)
         }
       } else {
-        // Обычный режим
         const response = await fetch('/api/analyze/image', {
           method: 'POST',
           body: formData,
@@ -191,7 +177,6 @@ export default function ECGPage() {
           const cost = data.cost || 1.0;
           setCurrentCost(cost);
 
-          // Логирование использования
           logUsage({
             section: 'ecg',
             model: modelUsed,
@@ -199,11 +184,11 @@ export default function ECGPage() {
             outputTokens: 1000,
           })
         } else {
-          setError(data.error || 'Ошибка при анализе')
+          setError(data.error || 'Analysis error')
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -211,14 +196,11 @@ export default function ECGPage() {
 
   const handleUpload = async (uploadedFile: File) => {
     setFile(uploadedFile)
-    // Создаем превью изображения
     const reader = new FileReader()
     reader.onloadend = () => {
       setImagePreview(reader.result as string)
     }
     reader.readAsDataURL(uploadedFile)
-    
-    // Не запускаем анализ автоматически при загрузке
     setResult('')
     setFlashResult('')
     setError(null)
@@ -229,25 +211,25 @@ export default function ECGPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">📈 Анализ ЭКГ</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">📈 ECG Analysis</h1>
       
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг ЭКГ (сначала детализированное, но компактное описание кривой, затем текстовый разбор), даёт краткое заключение и оценку риска, удобно для быстрого первичного просмотра.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс глубины и качества для анализа кривых ЭКГ.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев.",
+          fast: "Two-stage ECG screening (detailed compact waveform description, then clinical interpretation). Provides a concise conclusion and risk assessment — ideal for quick initial review.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — ideal balance of depth and quality for ECG waveform analysis.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for critical and complex cases.",
           extra: [
-            "💡 Рекомендуется GPT-5.2 для быстрых анализов и Opus для сложных случаев.",
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества для анализа кривых ЭКГ.",
-            "📸 Вы можете загрузить файл с ЭКГ, сделать фото с камеры или использовать ссылку.",
-            "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
-            "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
+            "💡 GPT-5.2 is recommended for fast analyses; Opus for complex cases.",
+            "⭐ Recommended mode: «Optimized» (Gemini + Sonnet) — best balance of accuracy and quality for ECG analysis.",
+            "📸 You can upload an ECG file, take a photo with a camera, or use a URL.",
+            "🔄 Streaming mode lets you see the model's reasoning in real time.",
+            "💾 Results can be saved to patient context and exported to a report."
           ]
         }}
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Загрузите изображение ЭКГ</h2>
+        <h2 className="text-xl font-semibold mb-4">Upload ECG Image</h2>
         
         <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} />
         
@@ -262,7 +244,7 @@ export default function ECGPage() {
               />
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-700">
-                  👤 Клинический контекст (жалобы, анамнез, цель исследования)
+                  👤 Clinical Context (complaints, history, study objective)
                 </label>
                 <VoiceInput 
                   onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
@@ -270,13 +252,13 @@ export default function ECGPage() {
                 />
               </div>
               <div className="mb-2 p-2 bg-amber-50 border border-amber-100 rounded text-[10px] text-amber-800">
-                ⚠️ <strong>Важно:</strong> Не указывайте ФИО, дату рождения и другие персональные данные пациента. 
-                Используйте обезличенные формулировки (например: "пациент М., 45 лет").
+                ⚠️ <strong>Important:</strong> Do not enter patient name, date of birth, or other identifying information. 
+                Use anonymized descriptions (e.g., "Male patient, 45 y.o.").
               </div>
               <textarea
                 value={clinicalContext}
                 onChange={(e) => setClinicalContext(e.target.value)}
-                placeholder="Пример: Пациент 55 лет, боли в груди при нагрузке, в анамнезе ИБС. Оценить наличие ишемических изменений."
+                placeholder="Example: Male patient, 55 y.o., chest pain on exertion, history of IHD. Assess for ischemic changes."
                 className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4 ${
                   /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
                   ? 'border-red-500 bg-red-50' 
@@ -287,7 +269,7 @@ export default function ECGPage() {
               />
               {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
                 <p className="text-[10px] text-red-600 mb-2 font-bold">
-                  ⚠️ Похоже, вы ввели ФИО. Пожалуйста, удалите персональные данные для защиты приватности.
+                  ⚠️ It looks like you entered a patient name. Please remove personal identifying information to protect privacy.
                 </p>
               )}
               <div className="mb-4">
@@ -301,16 +283,16 @@ export default function ECGPage() {
                   />
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-blue-900">
-                      🛡️ Разовый анонимный анализ
+                      🛡️ One-time anonymous analysis
                     </span>
                     <span className="text-[10px] text-blue-700 font-normal">
-                      Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                      Result will not be saved to the patient database (maximum PHI protection).
                     </span>
                   </div>
                 </label>
               </div>
               <p className="text-xs text-gray-500 mb-4">
-                💡 Добавление контекста значительно повышает точность и релевантность анализа.
+                💡 Adding clinical context significantly improves the accuracy and relevance of the analysis.
               </p>
             </div>
 
@@ -331,7 +313,7 @@ export default function ECGPage() {
                   className="w-4 h-4 text-primary-600 rounded"
                 />
                 <span className="text-sm text-gray-700">
-                  📡 Streaming режим (постепенное появление текста)
+                  📡 Streaming mode (progressive text output)
                 </span>
               </label>
             </div>
@@ -342,21 +324,21 @@ export default function ECGPage() {
                 disabled={loading}
                 className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⚡ Быстрый {useStreaming ? '(стриминг)' : ''}
+                ⚡ Fast {useStreaming ? '(streaming)' : ''}
               </button>
               <button
                 onClick={() => analyzeImage('optimized', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⭐ Оптимизированный {useStreaming ? '(стриминг)' : ''}
+                ⭐ Optimized {useStreaming ? '(streaming)' : ''}
               </button>
               <button
                 onClick={() => analyzeImage('validated', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
               >
-                🧠 С валидацией {useStreaming ? '(стриминг)' : ''}
+                🧠 Expert Validated {useStreaming ? '(streaming)' : ''}
               </button>
             </div>
             </div>
@@ -367,13 +349,13 @@ export default function ECGPage() {
       {file && imagePreview && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">📷 Загруженное изображение ЭКГ</h2>
+            <h2 className="text-xl font-semibold">📷 Uploaded ECG Image</h2>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowEditor(true)}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
               >
-                🎨 Закрасить данные
+                🎨 Redact Data
               </button>
               <button
                 onClick={() => setShowCaliper(!showCaliper)}
@@ -383,7 +365,7 @@ export default function ECGPage() {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                📏 {showCaliper ? 'Выключить линейку' : 'Цифровой циркуль (линейка)'}
+                📏 {showCaliper ? 'Hide Caliper' : 'Digital Caliper (Ruler)'}
               </button>
             </div>
           </div>
@@ -394,15 +376,15 @@ export default function ECGPage() {
             ) : (
               <img 
                 src={imagePreview} 
-                alt="Загруженное изображение ЭКГ" 
+                alt="Uploaded ECG image" 
                 className="w-full max-h-[800px] rounded-lg shadow-md object-contain border border-gray-200"
               />
             )}
           </div>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600 border-t pt-4">
-            <p><strong>Имя:</strong> {file.name}</p>
-            <p><strong>Размер:</strong> {(file.size / 1024 / 1024).toFixed(2)} MB</p>
-            <p><strong>Тип:</strong> {file.type || 'не указан'}</p>
+            <p><strong>Name:</strong> {file.name}</p>
+            <p><strong>Size:</strong> {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+            <p><strong>Type:</strong> {file.type || 'unknown'}</p>
           </div>
         </div>
       )}

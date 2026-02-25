@@ -32,75 +32,66 @@ export function isVIP(email?: string | null): boolean {
   return getVipEmails().includes(emailLower);
 }
 
-// Курс конвертации USD -> единицы (настраивается через .env)
+// USD → credits conversion rate (configurable via .env)
 const USD_TO_CREDITS_RATE = parseInt(process.env.NEXT_PUBLIC_USD_TO_CREDITS || '100');
 
-// Пакеты подписки (Бета-тестирование до 31.05.2026)
-// Индивидуальные пакеты: акцент на "Профи" как лучшее соотношение цены/объёма
-// Командные пакеты: дороже за единицу (включают многопользовательский доступ и аналитику)
+// Subscription packages — International (USD pricing)
+// Individual packages: "Pro" highlighted as best value
+// Team packages: higher per-credit cost (includes multi-user access and analytics)
 export const SUBSCRIPTION_PACKAGES = {
-  // === ИНДИВИДУАЛЬНЫЕ ПАКЕТЫ ===
-  intro: { 
-    name: 'Знакомство', 
-    credits: 150,
-    priceRub: 390,
-    bonusPercent: 0,
-    description: 'Попробовать возможности AI-анализа',
-    recommended: false,
-    category: 'individual'
-  },
+  // === INDIVIDUAL PACKAGES ===
   starter: { 
-    name: 'Старт', 
-    credits: 400,
-    priceRub: 890,
+    name: 'Starter', 
+    credits: 50,
+    priceUsd: 9.99,
     bonusPercent: 0,
-    description: 'Для первых недель активного использования',
+    description: 'Try the full capabilities of AI-powered medical analysis',
     recommended: false,
     category: 'individual'
   },
-  practice: { 
-    name: 'Практика', 
-    credits: 900,
-    priceRub: 1990,
+  standard: { 
+    name: 'Standard', 
+    credits: 150,
+    priceUsd: 24.99,
     bonusPercent: 0,
-    description: 'Для регулярной работы в течение 2-3 недель',
+    description: 'For regular clinical use — covers weeks of active practice',
     recommended: false,
     category: 'individual'
   },
   pro: { 
-    name: 'Профи', 
-    credits: 2000,
-    priceRub: 3990,
+    name: 'Pro', 
+    credits: 500,
+    priceUsd: 69.99,
     bonusPercent: 0,
-    description: 'Рабочий инструмент практикующего врача',
+    description: 'The working tool for the practicing physician',
     recommended: true,
     category: 'individual'
   },
-  // === КОМАНДНЫЕ ПАКЕТЫ (для клиник) ===
+  // === TEAM PACKAGES (for clinics) ===
   department: { 
-    name: 'Отделение', 
-    credits: 6000,
-    priceRub: 14490,
+    name: 'Department', 
+    credits: 2000,
+    priceUsd: 199.99,
     bonusPercent: 0,
-    description: 'Общий пул для 2-5 врачей с аналитикой',
+    description: 'Shared pool for 2–5 physicians with usage analytics',
     recommended: false,
     category: 'team'
   },
   clinic: { 
-    name: 'Клиника', 
-    credits: 15000,
-    priceRub: 34990,
+    name: 'Clinic', 
+    credits: 5000,
+    priceUsd: 449.99,
     bonusPercent: 0,
-    description: 'Для команды до 10 врачей с приоритетной поддержкой',
+    description: 'For teams up to 10 physicians with priority support',
     recommended: false,
     category: 'team'
   },
   center: { 
-    name: 'Центр', 
-    credits: 30000,
-    priceRub: 64990,
+    name: 'Medical Center', 
+    credits: 12000,
+    priceUsd: 999.99,
     bonusPercent: 0,
-    description: 'Для крупного центра до 20 врачей',
+    description: 'For large centers up to 20 physicians',
     recommended: false,
     category: 'team'
   },
@@ -111,7 +102,7 @@ export interface SubscriptionBalance {
   currentCredits: number;
   totalSpent: number;
   packageName: string;
-  packagePriceRub: number;
+  packagePriceUsd: number;
   purchaseDate: string;
   expiryDate: string | null;
   isUnlimited?: boolean;
@@ -128,15 +119,12 @@ export interface Transaction {
   costUsd: number;
   costCredits: number;
   operation: string;
-  specialty?: string; // Поле для аудита клиники
+  specialty?: string;
 }
 
 const BALANCE_KEY = 'userSubscriptionBalance';
 const TRANSACTIONS_KEY = 'userTransactions';
 
-/**
- * Проверка доступности системы
- */
 export function isSubscriptionEnabled(): boolean {
   return SUBSCRIPTION_ENABLED;
 }

@@ -264,7 +264,7 @@ ${directivePrompt}`;
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.ru',
+          'HTTP-Referer': 'https://doctor-opus.online',
           'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify({
@@ -450,7 +450,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.ru',
+          'HTTP-Referer': 'https://doctor-opus.online',
           'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify(        {
@@ -664,7 +664,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.ru',
+          'HTTP-Referer': 'https://doctor-opus.online',
           'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify({
@@ -856,7 +856,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.ru',
+          'HTTP-Referer': 'https://doctor-opus.online',
           'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify({
@@ -948,7 +948,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://doctor-opus.ru',
+      'HTTP-Referer': 'https://doctor-opus.online',
       'X-Title': 'Doctor Opus'
     },
     body: JSON.stringify({
@@ -1148,7 +1148,7 @@ export async function analyzeImageStreaming(
         headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://doctor-opus.ru',
+            'HTTP-Referer': 'https://doctor-opus.online',
             'X-Title': 'Doctor Opus'
           },
         body: JSON.stringify({
@@ -1262,7 +1262,7 @@ export async function analyzeMultipleImagesStreaming(
         headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://doctor-opus.ru',
+            'HTTP-Referer': 'https://doctor-opus.online',
             'X-Title': 'Doctor Opus'
           },
         body: JSON.stringify({

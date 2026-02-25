@@ -66,7 +66,7 @@ export async function POST(req: Request) {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
+        'HTTP-Referer': 'https://doctor-opus.online',
         'X-Title': 'Doctor Opus',
       },
       body: JSON.stringify(payload)

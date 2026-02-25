@@ -66,7 +66,7 @@ export default function VideoPage() {
       // Проверка размера (100MB max)
       const maxSize = 100 * 1024 * 1024
       if (selectedFile.size > maxSize) {
-        setError(`Размер видео превышает 100MB (${(selectedFile.size / 1024 / 1024).toFixed(1)}MB)`)
+        setError(`Video size exceeds 100MB (${(selectedFile.size / 1024 / 1024).toFixed(1)}MB)`)
         return
       }
       
@@ -136,7 +136,7 @@ export default function VideoPage() {
         setFile(selectedFile);
       }
     } catch (err: any) {
-      setError('Ошибка при обработке DICOM: ' + err.message);
+      setError('DICOM processing error: ' + err.message);
     } finally {
       setExtracting(false);
     }
@@ -173,7 +173,7 @@ export default function VideoPage() {
           setAnalysisMode('frames');
         }
       } catch (err: any) {
-        setError('Ошибка при обработке папки: ' + err.message);
+        setError('Folder processing error: ' + err.message);
       } finally {
         setExtracting(false);
       }
@@ -187,15 +187,15 @@ export default function VideoPage() {
         setExtractedFrames([]);
         setError(null);
       } else {
-        setError('В папке не найдено DICOM-файлов или видео');
+        setError('No DICOM files or video found in folder');
       }
     }
   }
 
-  // Извлечение и анонимизация кадров из ВСЕХ видео в плейлисте (по порядку)
+  // Извлечение и анонимизация frames из ВСЕХ видео в плейлисте (по порядку)
   const handleExtractFrames = async () => {
     if (playlist.length === 0 && !file) {
-      setError('Пожалуйста, выберите видео файл или папку')
+      setError('Please select a video file or folder')
       return
     }
 
@@ -208,7 +208,7 @@ export default function VideoPage() {
       const filesToProcess = playlist.length > 0 ? playlist : [file!];
       const allExtractedFrames: ExtractedFrame[] = [];
       
-      console.log(`🎬 [VIDEO] Начало пакетного извлечения кадров из ${filesToProcess.length} видео...`)
+      console.log(`🎬 [VIDEO] Начало пакетного извлечения frames из ${filesToProcess.length} видео...`)
       
       for (let i = 0; i < filesToProcess.length; i++) {
         const currentFile = filesToProcess[i];
@@ -239,11 +239,11 @@ export default function VideoPage() {
       const finalFrames = allExtractedFrames.map((f, i) => ({ ...f, index: i }));
       
       setExtractedFrames(finalFrames)
-      console.log(`✅ [VIDEO] Успешно извлечено ${finalFrames.length} кадров из всех ракурсов`)
+      console.log(`✅ [VIDEO] Успешно извлечено ${finalFrames.length} frames из всех ракурсов`)
       
     } catch (err: any) {
-      console.error('❌ [VIDEO] Ошибка извлечения кадров:', err)
-      setError(err.message || 'Ошибка при извлечении кадров')
+      console.error('❌ [VIDEO] Ошибка извлечения frames:', err)
+      setError(err.message || 'Frame extraction error')
     } finally {
       setExtracting(false)
     }
@@ -294,7 +294,7 @@ export default function VideoPage() {
         const fileDataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader()
           reader.onload = () => resolve(reader.result as string)
-          reader.onerror = () => reject(new Error('Ошибка чтения'))
+          reader.onerror = () => reject(new Error('Read error'))
           reader.readAsDataURL(frame.file)
         })
 
@@ -302,7 +302,7 @@ export default function VideoPage() {
         const img = new Image()
         await new Promise<void>((resolve, reject) => {
           img.onload = () => resolve()
-          img.onerror = () => reject(new Error('Ошибка загрузки'))
+          img.onerror = () => reject(new Error('Load error'))
           img.src = fileDataUrl
         })
 
@@ -354,13 +354,13 @@ export default function VideoPage() {
     
     setExtractedFrames(newFrames)
     setEditingFrameIndex(null)
-    console.log(`✅ Все ${newFrames.length} кадров обработаны!`)
+    console.log(`✅ Все ${newFrames.length} frames обработаны!`)
   }
 
-  // Анализ извлеченных кадров
+  // Анализ извлеченных frames
   const handleAnalyzeFrames = async () => {
     if (extractedFrames.length === 0) {
-      setError('Сначала извлеките кадры из видео')
+      setError('Please extract frames from video first')
       return
     }
 
@@ -399,7 +399,7 @@ export default function VideoPage() {
       formData.append('imageType', imageType)
       formData.append('isTwoStage', 'true') // Включаем режим радиологического протокола
 
-      console.log(`🎬 [VIDEO] Отправка ${extractedFrames.length} кадров на анализ...`)
+      console.log(`🎬 [VIDEO] Отправка ${extractedFrames.length} frames на анализ...`)
       
       const response = await fetch('/api/analyze/image', {
         method: 'POST',
@@ -409,7 +409,7 @@ export default function VideoPage() {
       const data = await response.json()
 
       if (data.success) {
-        setResult(data.result || 'Анализ выполнен')
+        setResult(data.result || 'Analysis complete')
         setCurrentCost(data.cost || 0)
         setModel(data.model || 'google/gemini-3-flash-preview')
         setMode(data.mode || 'fast')
@@ -424,11 +424,11 @@ export default function VideoPage() {
           outputTokens: data.usage?.completion_tokens || 0,
         })
       } else {
-        setError(data.error || 'Ошибка при анализе кадров')
+        setError(data.error || 'Frame analysis error')
       }
     } catch (err: any) {
       console.error('❌ [VIDEO] Ошибка:', err)
-      setError(err.message || 'Произошла ошибка при анализе')
+      setError(err.message || 'An error occurred during analysis')
     } finally {
       setAnalyzing(false)
       setLoading(false)
@@ -438,17 +438,17 @@ export default function VideoPage() {
   // Анализ полного видео (для анонимных файлов)
   const handleAnalyzeFullVideo = async () => {
     if (!file) {
-      setError('Пожалуйста, выберите видео файл')
+      setError('Please select a video file')
       return
     }
 
     if (playlist.length > 1) {
-      setError('Режим "Полное видео" пока поддерживает только один файл. Для анализа всей папки (всех ракурсов) используйте "Безопасный режим (извлечение кадров)".')
+      setError('"Full Video" mode currently supports only one file. To analyze a full folder use "Safe Mode (frame extraction)".')
       return
     }
 
     if (!confirmNoPersonalData) {
-      setError('Необходимо подтвердить отсутствие персональных данных')
+      setError('You must confirm the absence of personal data')
       return
     }
 
@@ -481,7 +481,7 @@ export default function VideoPage() {
       if (data.success) {
         // Пользователю показываем только финальный этап 2.
         // Этап 1 (технические данные) доступен отдельно по кнопке.
-        setResult(data.analysis || data.result || 'Анализ выполнен')
+        setResult(data.analysis || data.result || 'Analysis complete')
         setStage1TechnicalData(data.description || '')
         setShowTechnicalData(false)
         setCurrentCost(data.cost || 0)
@@ -496,11 +496,11 @@ export default function VideoPage() {
           outputTokens: data.usage?.completion_tokens || 4000,
         })
       } else {
-        setError(data.error || 'Ошибка при анализе видео')
+        setError(data.error || 'Video analysis error')
       }
     } catch (err: any) {
       console.error('❌ [VIDEO] Ошибка:', err)
-      setError(err.message || 'Произошла ошибка при анализе')
+      setError(err.message || 'An error occurred during analysis')
     } finally {
       setAnalyzing(false)
       setLoading(false)
@@ -518,25 +518,25 @@ export default function VideoPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🎬 Анализ видео</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">🎬 Video Analysis</h1>
       
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг (сначала структурированное описание видео через Gemini Vision, затем текстовый разбор через Gemini Flash), даёт компактное заключение и общий сигнал риска.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для детального клинического разбора видеоматериалов; самый дорогой режим.",
+          fast: "Two-stage screening (structured video description via Gemini Vision, then clinical interpretation via Gemini Flash). Provides a concise conclusion and risk signal.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for detailed clinical review of video materials; most resource-intensive mode.",
           extra: [
-            "🛡️ Видео автоматически обрабатывается: система извлекает 5-12 ключевых кадров (адаптивно по длине видео).",
-            "🔒 Каждый кадр анонимизируется: черные полосы по краям (10% верх, 8% низ, 12% с боков).",
-            "👁️ Preview перед отправкой: вы видите все кадры и можете дополнительно отредактировать любой из них.",
-            "🎯 Точность ~92-95% при анализе 7 кадров — оптимальный баланс качества и безопасности.",
-            "💰 Экономия в 5-6 раз по сравнению с отправкой всего видео.",
-            "⏱️ Обработка занимает 4-8 секунд в зависимости от длительности видео."
+            "🛡️ Video is automatically processed: the system extracts 5-12 key frames (adaptive to video length).",
+            "🔒 Each frame is anonymized: black bars on edges (10% top, 8% bottom, 12% sides).",
+            "👁️ Preview before sending: you can see all frames and manually edit any of them.",
+            "🎯 ~92-95% accuracy with 7 frames — optimal quality and safety balance.",
+            "💰 5-6x cost savings compared to sending the full video.",
+            "⏱️ Processing takes 4-8 seconds depending on video length."
           ]
         }}
       />
 
       <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Загрузите видео для анализа</h2>
+        <h2 className="text-xl font-semibold mb-4">Upload Video for Analysis</h2>
         
         <div className="space-y-4">
           {/* Загрузка видео или папки */}
@@ -566,18 +566,18 @@ export default function VideoPage() {
                   onClick={() => fileInputRef.current?.click()}
                   className="text-primary-600 hover:text-primary-700 font-semibold underline"
                 >
-                  Выберите файл
+                  Choose file
                 </button>
-                <span className="text-gray-600"> или </span>
+                <span className="text-gray-600"> or </span>
                 <button
                   onClick={() => folderInputRef.current?.click()}
                   className="text-primary-600 hover:text-primary-700 font-semibold underline"
                 >
-                  папку целиком
+                  entire folder
                 </button>
               </div>
               <p className="text-sm text-gray-500">
-                Поддерживаются: Видео (MP4, MOV, AVI) или DICOM-серии (папка)
+                Supported: Video (MP4, MOV, AVI) or DICOM series (folder)
               </p>
             </div>
           </div>
@@ -586,14 +586,14 @@ export default function VideoPage() {
               <div className="mt-2 space-y-2">
                 <p className="text-sm text-gray-600">
                   {playlist.length > 1 
-                    ? `✅ Найдено в папке: ${playlist.length} видео`
-                    : `✅ Выбран: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`
+                    ? `✅ Found in folder: ${playlist.length} videos`
+                    : `✅ Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`
                   }
                 </p>
 
                 {playlist.length > 1 && (
                   <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg max-h-40 overflow-y-auto">
-                    <p className="text-xs font-bold text-blue-700 mb-2 uppercase">Список файлов для комплексного анализа:</p>
+                    <p className="text-xs font-bold text-blue-700 mb-2 uppercase">File list for comprehensive analysis:</p>
                     <ul className="text-xs text-blue-600 space-y-1">
                       {playlist.map((f, i) => (
                         <li key={i} className="flex justify-between">
@@ -607,7 +607,7 @@ export default function VideoPage() {
                 
                 {/* Переключатель режимов анализа */}
                 <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <p className="text-sm font-semibold text-gray-900 mb-2">Выберите режим анализа:</p>
+                  <p className="text-sm font-semibold text-gray-900 mb-2">Select analysis mode:</p>
                   <div className="space-y-2">
                     <label className="flex items-start cursor-pointer">
                       <input
@@ -621,11 +621,11 @@ export default function VideoPage() {
                         className="mt-1 mr-3"
                       />
                       <div className="flex-1">
-                        <span className="font-semibold text-green-700">🛡️ Безопасный (извлечение кадров)</span>
+                        <span className="font-semibold text-green-700">🛡️ Safe (frame extraction)</span>
                         <p className="text-xs text-gray-600 mt-1">
-                          Система извлечет 5-12 ключевых кадров, анонимизирует каждый (черные полосы по краям), 
-                          покажет preview. Вы сможете отредактировать любой кадр вручную. 
-                          <strong>Рекомендуется по умолчанию.</strong>
+                          The system will extract 5-12 key frames, anonymize each (black bars on edges), 
+                          and show a preview. You can manually edit any frame. 
+                          <strong>Recommended by default.</strong>
                         </p>
                       </div>
                     </label>
@@ -639,11 +639,11 @@ export default function VideoPage() {
                         className="mt-1 mr-3"
                       />
                       <div className="flex-1">
-                        <span className="font-semibold text-amber-700">⚡ Полное видео</span>
+                        <span className="font-semibold text-amber-700">⚡ Full Video</span>
                         <p className="text-xs text-gray-600 mt-1">
-                          Видео отправляется целиком без обработки. Более высокая точность (100%), 
-                          но требует предварительной проверки на отсутствие ПД.
-                          <strong> Только для анонимных файлов!</strong>
+                          Video is sent in full without processing. Higher accuracy (100%), 
+                          but requires prior verification of absence of personal data.
+                          <strong> For anonymous files only!</strong>
                         </p>
                       </div>
                     </label>
@@ -656,16 +656,16 @@ export default function VideoPage() {
                     <div className="flex items-start space-x-2 mb-3">
                       <span className="text-2xl">⚠️</span>
                       <div>
-                        <p className="font-bold text-red-900 text-lg">ВНИМАНИЕ: Риск утечки персональных данных!</p>
+                        <p className="font-bold text-red-900 text-lg">WARNING: Risk of personal data exposure!</p>
                         <p className="text-red-800 text-sm mt-1">
-                          В режиме "Полное видео" кадры НЕ анонимизируются автоматически. 
-                          Если на видео присутствуют ФИО, дата рождения, паспортные данные или ID пациента - 
-                          <strong> это нарушение ФЗ-152!</strong>
+                          In "Full Video" mode, frames are NOT anonymized automatically. 
+                          If the video contains patient names, date of birth, ID, or address — 
+                          <strong> this is a HIPAA/GDPR violation!</strong>
                         </p>
                         <ul className="text-red-700 text-xs mt-2 ml-4 list-disc space-y-1">
-                          <li>Видео будет отправлено в OpenRouter (США) целиком</li>
-                          <li>Все кадры попадут в обработку без изменений</li>
-                          <li>Текстовые оверлеи и метаданные сохраняются</li>
+                          <li>Video will be sent to OpenRouter (US) in full</li>
+                          <li>All frames will be processed without modification</li>
+                          <li>Text overlays and metadata are preserved</li>
                         </ul>
                       </div>
                     </div>
@@ -679,9 +679,9 @@ export default function VideoPage() {
                         required
                       />
                       <span className="text-sm font-semibold text-red-900">
-                        Подтверждаю: я просмотрел видео и удостоверяю, что оно НЕ содержит 
-                        персональных данных пациента (ФИО, дата рождения, паспорт, ID, адрес, телефон). 
-                        Я беру на себя ответственность за соблюдение ФЗ-152.
+                        I confirm: I have reviewed the video and certify it does NOT contain 
+                        patient personal data (name, date of birth, passport, ID, address, phone). 
+                        I take full responsibility for HIPAA/GDPR compliance.
                       </span>
                     </label>
                   </div>
@@ -700,7 +700,7 @@ export default function VideoPage() {
                         : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
                     }`}
                   >
-                    🤖 Авто-извлечение
+                    🤖 Auto-Extract
                   </button>
                   <button
                     onClick={() => {
@@ -713,7 +713,7 @@ export default function VideoPage() {
                         : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
                     }`}
                   >
-                    🖱️ Ручной захват (УЗИ-петля)
+                    🖱️ Manual Capture (Cine-loop)
                   </button>
                 </div>
 
@@ -739,22 +739,22 @@ export default function VideoPage() {
                         <button 
                           onClick={() => stepFrame(-1)}
                           className="px-3 py-1.5 text-white hover:bg-gray-700 rounded transition-colors text-xs font-bold"
-                          title="Назад на 1 сек"
+                          title="Back 1 sec"
                         >-1s</button>
                         <button 
                           onClick={() => stepFrame(-0.1)}
                           className="px-3 py-1.5 text-white hover:bg-gray-700 rounded transition-colors text-xs font-bold border-l border-gray-700"
-                          title="Назад на 0.1 сек"
+                          title="Back 0.1 sec"
                         >-0.1s</button>
                         <button 
                           onClick={() => stepFrame(0.1)}
                           className="px-3 py-1.5 text-white hover:bg-gray-700 rounded transition-colors text-xs font-bold border-l border-gray-700"
-                          title="Вперед на 0.1 сек"
+                          title="Forward 0.1 sec"
                         >+0.1s</button>
                         <button 
                           onClick={() => stepFrame(1)}
                           className="px-3 py-1.5 text-white hover:bg-gray-700 rounded transition-colors text-xs font-bold border-l border-gray-700"
-                          title="Вперед на 1 сек"
+                          title="Forward 1 sec"
                         >+1s</button>
                       </div>
                       
@@ -763,16 +763,16 @@ export default function VideoPage() {
                         className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg transition-all transform active:scale-95 flex items-center gap-2"
                       >
                         <span className="text-xl">📸</span>
-                        <span>ЗАХВАТИТЬ КАДР</span>
+                        <span>CAPTURE FRAME</span>
                       </button>
                     </div>
                     <p className="text-[10px] text-gray-400 text-center mt-3">
-                      💡 Используйте кнопки ±0.1s для точного выбора кадра УЗИ-петли.
+                      💡 Use ±0.1s buttons for precise cine-loop frame selection.
                     </p>
                   </div>
                 )}
 
-                {/* Кнопка извлечения кадров (только для режима "кадры" и если не ручной режим) */}
+                {/* Кнопка извлечения frames (только для режима "кадры" и если не ручной режим) */}
                 {analysisMode === 'frames' && !isManualCaptureMode && extractedFrames.length === 0 && (
                   <button
                     onClick={handleExtractFrames}
@@ -780,27 +780,27 @@ export default function VideoPage() {
                     className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {extracting 
-                      ? `⏳ Извлечение кадров... ${extractionProgress.current}/${extractionProgress.total}` 
-                      : '🎞️ Извлечь и анонимизировать кадры'
+                      ? `⏳ Extracting frames... ${extractionProgress.current}/${extractionProgress.total}` 
+                      : '🎞️ Extract and anonymize frames'
                     }
                   </button>
                 )}
               </div>
             )}
 
-          {/* Preview извлеченных кадров */}
+          {/* Preview извлеченных frames */}
           {extractedFrames.length > 0 && (
             <div className={`p-4 rounded-lg border ${isManualCaptureMode ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className={`font-semibold ${isManualCaptureMode ? 'text-blue-900' : 'text-green-900'}`}>
-                  ✅ {isManualCaptureMode ? 'Захвачено' : 'Извлечено'} {extractedFrames.length} кадров
+                  ✅ {isManualCaptureMode ? 'Captured' : 'Extracted'} {extractedFrames.length} frames
                 </h3>
                 <div className="flex items-center space-x-3">
                   <button
                     onClick={() => setShow3D(true)}
                     className="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-xs font-bold shadow-sm"
                   >
-                    <span>🧊 Вращать в 3D</span>
+                    <span>🧊 Rotate in 3D</span>
                   </button>
                   <button
                     onClick={() => {
@@ -809,7 +809,7 @@ export default function VideoPage() {
                     }}
                     className={`text-sm underline ${isManualCaptureMode ? 'text-blue-700 hover:text-blue-900' : 'text-green-700 hover:text-green-900'}`}
                   >
-                    🔄 Сбросить кадры
+                    🔄 Reset frames
                   </button>
                 </div>
               </div>
@@ -840,7 +840,7 @@ export default function VideoPage() {
               </div>
               
               <p className={`text-xs ${isManualCaptureMode ? 'text-blue-700' : 'text-green-700'}`}>
-                💡 {isManualCaptureMode ? 'Вы можете захватить еще кадры или отправить текущие на анализ.' : 'Наведите на кадр, чтобы дополнительно отредактировать его вручную.'}
+                💡 {isManualCaptureMode ? 'You can capture more frames or submit the current ones for analysis.' : 'Hover over a frame to manually edit it.'}
               </p>
             </div>
           )}
@@ -861,7 +861,7 @@ export default function VideoPage() {
             
             <div className="flex items-center justify-between">
               <label className="block text-sm font-medium text-gray-700">
-                Дополнительный контекст
+                Additional Context
               </label>
               <VoiceInput 
                 onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
@@ -871,7 +871,7 @@ export default function VideoPage() {
             <textarea
               value={clinicalContext}
               onChange={(e) => setClinicalContext(e.target.value)}
-              placeholder="Укажите дополнительную информацию: жалобы пациента, анамнез, цель исследования..."
+              placeholder="Enter additional information: patient complaints, history, study objective..."
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
               rows={4}
               disabled={loading}
@@ -893,12 +893,12 @@ export default function VideoPage() {
               ? '⏳ Анализ...' 
               : analysisMode === 'frames'
                 ? (extractedFrames.length > 0
-                    ? `📤 Отправить ${extractedFrames.length} кадров на анализ`
+                    ? `📤 Отправить ${extractedFrames.length} frames на анализ`
                     : '🎬 Сначала извлеките кадры'
                   )
                 : (confirmNoPersonalData
                     ? '⚡ Отправить полное видео на анализ'
-                    : '⚠️ Подтвердите отсутствие ПД'
+                    : '⚠️ Confirm absence of PHI'
                   )
             }
           </button>

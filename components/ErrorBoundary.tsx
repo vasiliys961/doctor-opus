@@ -44,16 +44,16 @@ export default class ErrorBoundary extends Component<Props, State> {
         <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-center my-4">
           <div className="text-3xl mb-3">⚠️</div>
           <h3 className="text-lg font-bold text-red-800 mb-2">
-            Произошла ошибка{this.props.componentName ? ` в "${this.props.componentName}"` : ''}
+            An error occurred{this.props.componentName ? ` в "${this.props.componentName}"` : ''}
           </h3>
           <p className="text-sm text-red-600 mb-4">
-            {this.state.error?.message || 'Неизвестная ошибка'}
+            {this.state.error?.message || 'Unknown error'}
           </p>
           <button
             onClick={this.handleReset}
             className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-colors"
           >
-            Попробовать снова
+            Try again
           </button>
         </div>
       )

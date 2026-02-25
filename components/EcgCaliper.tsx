@@ -74,14 +74,14 @@ export default function EcgCaliper({ imageUrl, containerWidth }: EcgCaliperProps
     <div className="relative flex flex-col items-center select-none">
       <div className="w-full mb-4 flex gap-4 items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
         <div className="flex flex-col">
-          <span className="text-[10px] font-bold text-blue-600 uppercase">Измерение интервала</span>
-          <span className="text-xl font-mono font-bold text-blue-800">{timeMs} <span className="text-sm">мс</span></span>
+          <span className="text-[10px] font-bold text-blue-600 uppercase">Interval Measurement</span>
+          <span className="text-xl font-mono font-bold text-blue-800">{timeMs} <span className="text-sm">ms</span></span>
         </div>
         
         <div className="h-8 w-px bg-blue-200 mx-2"></div>
         
         <div className="flex flex-col flex-grow">
-          <span className="text-[10px] font-bold text-gray-500 uppercase">Калибровка (пикс/сек)</span>
+          <span className="text-[10px] font-bold text-gray-500 uppercase">Calibration (px/sec)</span>
           <input 
             type="range" 
             min="50" 
@@ -93,7 +93,7 @@ export default function EcgCaliper({ imageUrl, containerWidth }: EcgCaliperProps
         </div>
 
         <div className="flex flex-col">
-          <span className="text-[10px] font-bold text-gray-500 uppercase">Скорость</span>
+          <span className="text-[10px] font-bold text-gray-500 uppercase">Speed</span>
           <div className="flex bg-white rounded border overflow-hidden">
             <button 
               onClick={() => setSpeed(25)}
@@ -163,7 +163,7 @@ export default function EcgCaliper({ imageUrl, containerWidth }: EcgCaliperProps
       </div>
       
       <p className="mt-2 text-[10px] text-gray-500 italic">
-        💡 Перетаскивайте синие маркеры для измерения интервалов. Настройте калибровку по сетке ЭКГ (1 сек = 5 больших клеток при 25 мм/с).
+        💡 Drag the blue markers to measure intervals. Calibrate using the ECG grid (1 sec = 5 large cells at 25 mm/s).
       </p>
     </div>
   )

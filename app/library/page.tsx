@@ -25,7 +25,7 @@ export default function LibraryPage() {
       const docs = await getAllDocuments();
       setDocuments(docs || []);
     } catch (err) {
-      setError('Не удалось загрузить список документов');
+      setError('Failed to load document list');
     } finally {
       setIsLoading(false);
     }
@@ -36,14 +36,14 @@ export default function LibraryPage() {
     if (!file) return;
 
     if (file.type !== 'application/pdf') {
-      alert('Пожалуйста, выберите файл в формате PDF');
+      alert('Please select a file in PDF format');
       return;
     }
 
     try {
       setUploading(true);
       setError(null);
-      setProgress('Отправка файла на локальный сервер...');
+      setProgress('Uploading file to local server...');
       
       const formData = new FormData();
       formData.append('file', file);
@@ -56,10 +56,10 @@ export default function LibraryPage() {
       const result = await response.json();
 
       if (!result.success) {
-        throw new Error(result.error || 'Ошибка при обработке PDF');
+        throw new Error(result.error || 'PDF processing error');
       }
 
-      setProgress('Сохранение в локальную базу...');
+      setProgress('Saving to local database...');
 
       // Сохраняем результат в IndexedDB
       const newDoc: LibraryDocument = {
@@ -77,19 +77,19 @@ export default function LibraryPage() {
       setProgress('');
     } catch (err: any) {
       console.error('Upload error:', err);
-      setError(err.message || 'Ошибка при обработке PDF');
+      setError(err.message || 'PDF processing error');
     } finally {
       setUploading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Вы уверены, что хотите удалить этот документ?')) return;
+    if (!confirm('Are you sure you want to delete this document?')) return;
     try {
       await deleteDocument(id);
       setDocuments(prev => prev.filter(doc => doc.id !== id));
     } catch (err) {
-      alert('Ошибка при удалении');
+      alert('Deletion error');
     }
   };
 
@@ -97,11 +97,11 @@ export default function LibraryPage() {
     <div className="max-w-4xl mx-auto py-4 sm:py-8">
       <div className="bg-white rounded-2xl shadow-sm p-6 mb-8 border border-gray-100">
         <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-primary-900">
-          <span>📚</span> Персональная библиотека
+          <span>📚</span> Personal Library
         </h2>
         <p className="text-gray-600 mb-6 text-sm sm:text-base">
-          Загружайте PDF-литературу. Файлы обрабатываются на **вашем локальном сервере** 
-          (не отправляются в интернет) и сохраняются в браузер. Поддерживаются большие файлы до 100 МБ.
+          Upload PDF literature. Files are processed on **your local server** 
+          (not sent to the internet) and stored in your browser. Large files up to 100 MB are supported.
         </p>
 
         <div className="flex items-center justify-center w-full">
@@ -109,9 +109,9 @@ export default function LibraryPage() {
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
               <span className="text-3xl mb-2">{uploading ? '⚙️' : '📄'}</span>
               <p className="mb-2 text-sm text-primary-700 font-semibold text-center px-4">
-                {uploading ? progress : 'Выберите PDF для обработки'}
+                {uploading ? progress : 'Choose PDF to process'}
               </p>
-              <p className="text-xs text-primary-500">До 100 МБ • Обработка на локальном сервере</p>
+              <p className="text-xs text-primary-500">Up to 100 MB • Processed on local server</p>
             </div>
             {!uploading && (
               <input 
@@ -129,7 +129,7 @@ export default function LibraryPage() {
         <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 flex items-start shadow-sm border border-red-100">
           <span className="mr-2 text-xl">⚠️</span>
           <div className="flex-1">
-            <p className="font-bold mb-1">Ошибка обработки</p>
+            <p className="font-bold mb-1">Processing error</p>
             <p className="text-sm">{error}</p>
             {error.includes('Python') && (
               <p className="text-xs mt-2 bg-red-100 p-2 rounded">
@@ -145,23 +145,23 @@ export default function LibraryPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Документ</th>
-                <th className="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Фрагментов</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Размер</th>
-                <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Действие</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Document</th>
+                <th className="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Chunks</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Size</th>
+                <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-10 text-center text-gray-400 text-sm italic">Загрузка...</td>
+                  <td colSpan={4} className="px-6 py-10 text-center text-gray-400 text-sm italic">Loading...</td>
                 </tr>
               ) : documents.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-6 py-10 text-center text-gray-400 text-sm italic">
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-4xl">📚</span>
-                      <p>Библиотека пуста. Загрузите первый документ.</p>
+                      <p>Library is empty. Upload your first document.</p>
                     </div>
                   </td>
                 </tr>
@@ -176,7 +176,7 @@ export default function LibraryPage() {
                       <span className="text-xs font-bold bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full border border-indigo-100">{doc.chunksCount}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-xs text-gray-500">{(doc.size / 1024 / 1024).toFixed(1)} МБ</div>
+                      <div className="text-xs text-gray-500">{(doc.size / 1024 / 1024).toFixed(1)} MB</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                       <button 

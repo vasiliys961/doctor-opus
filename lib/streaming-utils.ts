@@ -25,8 +25,8 @@ export async function handleSSEStream(
   let accumulatedText = ''
 
   if (!reader) {
-    console.error('❌ [STREAMING UTILS] Не удалось создать reader для streaming потока')
-    throw new Error('Не удалось создать reader для streaming потока')
+    console.error('❌ [STREAMING UTILS] Failed to create reader for streaming')
+    throw new Error('Failed to create reader for streaming')
   }
 
   let buffer = ''

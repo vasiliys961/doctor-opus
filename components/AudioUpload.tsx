@@ -43,13 +43,13 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
     
     // Проверка размера
     if (file.size > maxSize * 1024 * 1024) {
-      setError(`Файл слишком большой. Максимальный размер: ${maxSize}MB`)
+      setError(`File is too large. Maximum size: ${maxSize}MB`)
       return
     }
 
     // Проверка типа
     if (!file.type.startsWith('audio/') && !file.type.includes('webm') && !file.type.includes('octet-stream')) {
-      setError('Пожалуйста, загрузите аудиофайл')
+      setError('Please upload an audio file')
       return
     }
 
@@ -75,12 +75,12 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
         setLastAnalysis({ duration: data.duration, cost: data.cost })
         onTranscribe(data.transcript, { duration: data.duration, cost: data.cost })
       } else {
-        console.error('❌ Ошибка транскрипции:', data.error)
-        setError(data.error || 'Ошибка транскрипции')
+        console.error('❌ Transcription error:', data.error)
+        setError(data.error || 'Transcription error')
       }
     } catch (err: any) {
       console.error('❌ Исключение при транскрипции:', err)
-      setError(err.message || 'Произошла ошибка при транскрипции')
+      setError(err.message || 'An error occurred during transcription')
     } finally {
       setTranscribing(false)
     }
@@ -151,7 +151,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
         setRecordingTime(prev => prev + 1)
       }, 1000)
     } catch (err: any) {
-      setError('Не удалось получить доступ к микрофону: ' + err.message)
+      setError('Could not access microphone: ' + err.message)
     }
   }
 
@@ -220,7 +220,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
           {transcribing ? (
             <>
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-              <div className="text-primary-900 font-semibold">Идёт транскрипция...</div>
+              <div className="text-primary-900 font-semibold">Transcription in progress...</div>
             </>
           ) : recording ? (
             <>
@@ -229,7 +229,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
                 <div className="absolute inset-0 rounded-full bg-red-500 opacity-20 animate-ping"></div>
               </div>
               <div className="text-primary-900 font-semibold text-xl">
-                Идёт запись... {formatTime(recordingTime)}
+                Recording...  {formatTime(recordingTime)}
               </div>
               <button
                 onClick={stopRecording}
@@ -260,16 +260,16 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
               </div>
               
               <p className="text-sm text-gray-600 mt-2">
-                Вы также можете перетащить аудиофайл в эту область
+                You can also drag and drop an audio file here
               </p>
               
               <p className="text-sm text-gray-500">
-                Поддерживаемые форматы: MP3, WAV, M4A, WEBM, OGG, FLAC
+                Supported formats: MP3, WAV, M4A, WEBM, OGG, FLAC
                 <br />
                 Максимальный размер: {maxSize}MB
               </p>
               <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
-                Не диктуйте ФИО, адреса и паспортные данные пациентов. Аудиозапись может обрабатываться внешним сервисом транскрипции.
+                Do not dictate patient names, addresses, or ID data. Audio may be processed by an external transcription service.
               </p>
             </>
           )}
@@ -284,8 +284,8 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
       {lastAnalysis && !transcribing && !recording && (
         <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg flex items-center justify-between text-sm">
           <div className="flex items-center gap-4">
-            <span>⏱️ Длительность: <b>{formatTime(Math.round(lastAnalysis.duration))}</b></span>
-            <span>💰 Стоимость сервиса: <b>{lastAnalysis.cost.toFixed(2)} у.е.</b></span>
+            <span>⏱️ Duration: <b>{formatTime(Math.round(lastAnalysis.duration))}</b></span>
+            <span>💰 Service cost: <b>{lastAnalysis.cost.toFixed(2)} cr.</b></span>
           </div>
           <button 
             onClick={() => setLastAnalysis(null)}

@@ -20,19 +20,19 @@ import mammoth from 'mammoth'
 type ModelType = 'opus' | 'sonnet'
 
 const specialtyMap: Record<string, Specialty> = {
-  'Кардиолог': 'cardiology',
-  'Эндокринолог': 'endocrinology',
-  'Рентгенолог / Радиолог': 'radiology',
-  'Дерматовенеролог': 'dermatology',
-  'Невролог': 'neurology',
-  'Гастроэнтеролог': 'gastroenterology',
-  'Педиатр': 'pediatrics',
-  'Онколог': 'oncology',
-  'Гематолог': 'hematology',
-  'Гинеколог': 'gynecology',
-  'Ревматолог': 'rheumatology',
-  'Академический поиск': 'openevidence',
-  'ИИ-Эксперт': 'ai_assistant',
+  'Cardiologist': 'cardiology',
+  'Endocrinologist': 'endocrinology',
+  'Radiologist': 'radiology',
+  'Dermatologist': 'dermatology',
+  'Neurologist': 'neurology',
+  'Gastroenterologist': 'gastroenterology',
+  'Pediatrician': 'pediatrics',
+  'Oncologist': 'oncology',
+  'Hematologist': 'hematology',
+  'Gynecologist': 'gynecology',
+  'Rheumatologist': 'rheumatology',
+  'Academic Search': 'openevidence',
+  'AI Expert': 'ai_assistant',
 };
 
 export default function ChatPage() {
@@ -63,7 +63,7 @@ export default function ChatPage() {
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
   const [convertingPDF, setConvertingPDF] = useState(false)
 
-  // Загружаем PDF.js v3 из локальных файлов (public/pdfjs/)
+  // Load PDF.js v3 from local files (public/pdfjs/)
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.pdfjsLib) {
       const script = document.createElement('script')
@@ -72,11 +72,11 @@ export default function ChatPage() {
         if (window.pdfjsLib) {
           window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js'
           setPdfJsLoaded(true)
-          console.log('✅ PDF.js v3 загружен локально (Чат)')
+          console.log('✅ PDF.js v3 loaded locally (Chat)')
         }
       }
       script.onerror = () => {
-        console.warn('⚠️ PDF.js не удалось загрузить в Чате')
+        console.warn('⚠️ PDF.js failed to load in Chat')
       }
       document.head.appendChild(script)
     } else if (window.pdfjsLib) {
@@ -86,7 +86,7 @@ export default function ChatPage() {
 
   const convertPDFToImages = async (pdfFile: File): Promise<File[]> => {
     if (!window.pdfjsLib) {
-      throw new Error('PDF.js не загружен. Подождите несколько секунд и попробуйте снова.')
+      throw new Error('PDF.js is not loaded. Please wait a few seconds and try again.')
     }
 
     const pdfjs = window.pdfjsLib
@@ -94,7 +94,7 @@ export default function ChatPage() {
     const loadingTask = pdfjs.getDocument({ data: arrayBuffer, verbosity: 0 })
     const pdf = await loadingTask.promise
     const totalPages = pdf.numPages
-    const maxPages = Math.min(totalPages, 10) // Ограничиваем 10 страницами для чата
+    const maxPages = Math.min(totalPages, 10) // Limit to 10 pages for chat
 
     const imageFiles: File[] = []
 
@@ -116,7 +116,7 @@ export default function ChatPage() {
 
       const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
       if (blob) {
-        const name = pdfFile.name.replace('.pdf', '') + `_стр_${pageNum}.jpg`
+        const name = pdfFile.name.replace('.pdf', '') + `_p${pageNum}.jpg`
         imageFiles.push(new File([blob], name, { type: 'image/jpeg' }))
       }
     }
@@ -131,67 +131,58 @@ export default function ChatPage() {
       const originalText = result.value;
       const safeText = anonymizeText(originalText);
       
-      // Создаем новый текстовый файл вместо Word (так ИИ его точно прочитает)
       const blob = new Blob([safeText], { type: 'text/plain' });
-      return new File([blob], wordFile.name.replace(/\.docx?$/i, '') + '_защищен.txt', { type: 'text/plain' });
+      return new File([blob], wordFile.name.replace(/\.docx?$/i, '') + '_anonymized.txt', { type: 'text/plain' });
     } catch (err) {
-      console.error('Ошибка анонимизации Word:', err);
+      console.error('Word anonymization error:', err);
       return wordFile;
     }
   }
 
   useEffect(() => {
-    // Проверяем наличие переданных данных из анализа изображений
     const pendingData = sessionStorage.getItem('pending_analysis');
     if (pendingData) {
       try {
         const { text, type, initialQuestion } = JSON.parse(pendingData);
         
-        // Автоматический выбор специальности
         if (type === 'ecg') setSpecialty('cardiology');
         else if (['ct', 'mri', 'xray', 'ultrasound'].includes(type)) setSpecialty('radiology');
-        else if (type === 'Клинические рекомендации') setSpecialty('universal');
+        else if (type === 'Clinical Guidelines') setSpecialty('universal');
         
-        // Формируем вводное сообщение
         let initialPrompt = '';
         
-        if (type === 'Клинические рекомендации') {
-          initialPrompt = `Я изучаю следующие клинические рекомендации:\n\n${text}\n\nВопрос: ${initialQuestion || 'Проанализируй эти данные.'}`;
+        if (type === 'Clinical Guidelines') {
+          initialPrompt = `I am reviewing the following clinical guidelines:\n\n${text}\n\nQuestion: ${initialQuestion || 'Analyze this data.'}`;
         } else {
           const typeNames: Record<string, string> = {
-            'ecg': 'ЭКГ',
-            'ct': 'КТ',
-            'mri': 'МРТ',
-            'xray': 'рентгена',
-            'ultrasound': 'УЗИ'
+            'ecg': 'ECG',
+            'ct': 'CT',
+            'mri': 'MRI',
+            'xray': 'X-Ray',
+            'ultrasound': 'Ultrasound'
           };
-          const typeName = typeNames[type] || 'исследования';
-          initialPrompt = `Ниже приведен готовый диагностический протокол ${typeName}. ПРОТОКОЛ УЖЕ СОСТАВЛЕН. НЕ переписывай его, НЕ дублируй описание находок. Твоя задача — разработать клиническую тактику ведения пациента на основе этого заключения:\n\n${text}${initialQuestion ? `\n\nУточняющий вопрос: ${initialQuestion}` : ''}`;
+          const typeName = typeNames[type] || 'study';
+          initialPrompt = `Below is a completed diagnostic report for ${typeName}. THE REPORT IS ALREADY COMPOSED. DO NOT rewrite it, DO NOT duplicate the findings. Your task is to develop a clinical management strategy based on this conclusion:\n\n${text}${initialQuestion ? `\n\nFollow-up question: ${initialQuestion}` : ''}`;
         }
         
         setMessage(initialPrompt);
-        
-        // Очищаем, чтобы не подставлялось при перезагрузке
         sessionStorage.removeItem('pending_analysis');
         
-        // Если передан конкретный вопрос, сразу отправляем его
         if (initialQuestion) {
-          // Используем setTimeout, чтобы дождаться обновления стейта сообщения
           setTimeout(() => {
             const sendButton = document.querySelector('button.bg-primary-500.active\\:bg-primary-700') as HTMLButtonElement;
             if (sendButton) sendButton.click();
           }, 100);
         }
       } catch (e) {
-        console.error('Ошибка при разборе данных анализа:', e);
+        console.error('Error parsing pending analysis data:', e);
       }
     }
   }, []);
 
   useEffect(() => {
-    // Автоматически выбираем подходящую модель при смене специальности
     if (specialty === 'openevidence') {
-      // Для академического поиска модель выбирается на сервере (Perplexity -> Sonnet)
+      // For academic search the model is selected server-side (Perplexity -> Sonnet)
     }
   }, [specialty])
 
@@ -201,18 +192,14 @@ export default function ChatPage() {
     setIsCutOff(false);
     setLoading(true);
     
-    // Подготавливаем запрос на продолжение
     const lastAssistantMessage = messages[lastMessageIndex];
-    const continuePrompt = "Продолжи свой предыдущий ответ с того места, где ты остановился. Начни прямо с прерванного предложения, без вводных слов.";
+    const continuePrompt = "Continue your previous answer from where you left off. Start directly from the interrupted sentence, without any preamble.";
     
     // Добавляем сообщение ассистента, которое будем дополнять
     const assistantMessageIndex = lastMessageIndex;
     let accumulatedText = lastAssistantMessage.content;
 
     try {
-      // ВАЖНО: отправляем на сервер ключ модели (sonnet/gpt52/opus/gemini),
-      // а не строковый id провайдера. Сервер сам выберет актуальный id (например Sonnet 4.6),
-      // иначе при обновлении MODELS.SONNET клиент может незаметно попасть в fallback (Opus).
       const modelName = model
 
       const response = await fetch('/api/chat', {
@@ -251,7 +238,6 @@ export default function ChatPage() {
               try {
                 const json = JSON.parse(data);
                 
-                // Проверяем причину завершения
                 const finishReason = json.choices?.[0]?.finish_reason;
                 if (finishReason === 'length') {
                   setIsCutOff(true);
@@ -287,15 +273,14 @@ export default function ChatPage() {
     setIsCutOff(false)
     setLoading(true)
 
-    let userMessage = message || (selectedFiles.length > 0 ? 'Проанализируйте прикрепленные файлы' : '')
+    let userMessage = message || (selectedFiles.length > 0 ? 'Please analyze the attached files.' : '')
     
-    // Автоматический поиск в библиотеке (RAG), если включен тумблер
     if (useLibrary && message.trim()) {
       setSearchingLibrary(true)
       try {
         const results = await searchLibraryLocal(message, 3)
         if (results.length > 0) {
-          userMessage += `\n\n### КОНТЕКСТ ИЗ БИБЛИОТЕКИ:\n${results.join('\n---\n')}`
+          userMessage += `\n\n### LIBRARY CONTEXT:\n${results.join('\n---\n')}`
         }
       } catch (err) {
         console.error('Auto library search error:', err)
@@ -314,7 +299,6 @@ export default function ChatPage() {
     setSelectedFiles([])
     setShowFileUpload(false)
     
-    // Анонимизируем изображения перед отправкой, если включено
     let filesToSend = [...selectedFiles];
     if (autoAnonymize) {
       setIsProcessingFiles(true);
@@ -354,8 +338,6 @@ export default function ChatPage() {
     }
 
     try {
-      // ВАЖНО: отправляем на сервер ключ модели (sonnet/gpt52/opus/gemini),
-      // а не строковый id провайдера. Сервер сам выберет актуальный id (например Sonnet 4.6).
       const modelName = model
 
       if (filesToSend.length > 0) {
@@ -383,14 +365,12 @@ export default function ChatPage() {
           let accumulatedText = ''
 
           if (reader) {
-            console.log('📡 [STREAMING WITH FILES] Начало чтения потока')
             let buffer = ''
             let streamError = false
             
             while (true) {
               const { done, value } = await reader.read()
               if (done || streamError) {
-                console.log('📡 [STREAMING WITH FILES] Поток завершён')
                 break
               }
 
@@ -404,17 +384,15 @@ export default function ChatPage() {
                 if (line.startsWith('data: ')) {
                   const data = line.slice(6).trim()
                   if (data === '[DONE]') {
-                    streamError = true // Прерываем внешний цикл
+                    streamError = true
                     break
                   }
 
                   try {
                     const json = JSON.parse(data)
                     
-                    // Проверяем причину завершения
                     const finishReason = json.choices?.[0]?.finish_reason;
                     if (finishReason === 'length') {
-                      console.log('⚠️ [STREAMING WITH FILES] Ответ прерван по лимиту длины');
                       setIsCutOff(true);
                       setLastMessageIndex(assistantMessageIndex);
                     }
@@ -425,16 +403,15 @@ export default function ChatPage() {
                         if (newMessages[assistantMessageIndex]) {
                           newMessages[assistantMessageIndex] = {
                             role: 'assistant',
-                            content: `❌ Ошибка: ${json.error}`
+                            content: `❌ Error: ${json.error}`
                           }
                         }
                         return newMessages
                       })
-                      streamError = true // Прерываем внешний цикл
+                      streamError = true
                       break
                     }
 
-                    // Обработка статистики использования
                     if (json.usage && json.usage.total_cost) {
                       setMessages(prev => {
                         const newMessages = [...prev]
@@ -453,9 +430,9 @@ export default function ChatPage() {
                         model: json.model || modelName,
                         inputTokens: json.usage.prompt_tokens,
                         outputTokens: json.usage.completion_tokens,
-                        specialty: specialty // Передаем специальность
+                        specialty: specialty
                       })
-                      continue; // Переходим к следующей строке, контента здесь нет
+                      continue;
                     }
 
                     const content = json.choices?.[0]?.delta?.content || ''
@@ -479,16 +456,13 @@ export default function ChatPage() {
                       })
                     }
                   } catch (e) {
-                    console.warn('⚠️ [STREAMING WITH FILES] Ошибка парсинга SSE:', e)
+                    console.warn('⚠️ [STREAMING WITH FILES] SSE parse error:', e)
                   }
                 }
               }
             }
-            
-            console.log('✅ [STREAMING WITH FILES] Итого получено:', accumulatedText.length, 'символов')
           }
         } else {
-          // Ообычный режим с файлами
           const response = await fetch('/api/chat', {
             method: 'POST',
             body: formData,
@@ -510,13 +484,11 @@ export default function ChatPage() {
               outputTokens: 1200,
             })
           } else {
-            setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${data.error}` }])
+            setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${data.error}` }])
           }
         }
       } else {
-        // Отправка без файлов (обычный режим)
         if (useStreaming) {
-          // Streaming режим
           const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
@@ -540,14 +512,12 @@ export default function ChatPage() {
           let accumulatedText = ''
 
           if (reader) {
-            console.log('📡 [STREAMING] Начало чтения потока')
             let buffer = ''
             let streamError = false
             
             while (true) {
               const { done, value } = await reader.read()
               if (done || streamError) {
-                console.log('📡 [STREAMING] Поток завершён')
                 break
               }
 
@@ -568,10 +538,8 @@ export default function ChatPage() {
                   try {
                     const json = JSON.parse(data)
 
-                    // Проверяем причину завершения
                     const finishReason = json.choices?.[0]?.finish_reason;
                     if (finishReason === 'length') {
-                      console.log('⚠️ [STREAMING] Ответ прерван по лимиту длины');
                       setIsCutOff(true);
                       setLastMessageIndex(assistantMessageIndex);
                     }
@@ -582,7 +550,7 @@ export default function ChatPage() {
                         if (newMessages[assistantMessageIndex]) {
                           newMessages[assistantMessageIndex] = {
                             role: 'assistant',
-                            content: `❌ Ошибка: ${json.error}`
+                            content: `❌ Error: ${json.error}`
                           }
                         }
                         return newMessages
@@ -591,7 +559,6 @@ export default function ChatPage() {
                       break
                     }
 
-                    // Обработка статистики использования
                     if (json.usage && json.usage.total_cost) {
                       setMessages(prev => {
                         const newMessages = [...prev]
@@ -610,17 +577,15 @@ export default function ChatPage() {
                         model: json.model || modelName,
                         inputTokens: json.usage.prompt_tokens,
                         outputTokens: json.usage.completion_tokens,
-                        specialty: specialty // Передаем специальность
+                        specialty: specialty
                       })
                       continue;
                     }
 
-                    // OpenRouter формат: json.choices[0].delta.content
                     const content = json.choices?.[0]?.delta?.content || ''
                     if (content) {
                       accumulatedText += content
                       
-                      // Обновляем последнее сообщение ассистента
                       setMessages(prev => {
                         const newMessages = [...prev]
                         if (newMessages[assistantMessageIndex]) {
@@ -629,7 +594,6 @@ export default function ChatPage() {
                             content: accumulatedText
                           }
                         } else {
-                          // Если сообщения нет, добавляем новое
                           newMessages.push({
                             role: 'assistant',
                             content: accumulatedText
@@ -639,17 +603,13 @@ export default function ChatPage() {
                       })
                     }
                   } catch (e) {
-                    // Логируем ошибки парсинга для отладки
-                    console.warn('⚠️ [STREAMING] Ошибка парсинга SSE:', e, 'data:', data.substring(0, 100))
+                    console.warn('⚠️ [STREAMING] SSE parse error:', e, 'data:', data.substring(0, 100))
                   }
                 }
               }
             }
-            
-            console.log('✅ [STREAMING] Итого получено:', accumulatedText.length, 'символов')
           }
         } else {
-          // Обычный режим
           const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
@@ -681,7 +641,7 @@ export default function ChatPage() {
               specialty: specialty // Передаем специальность
             })
           } else {
-            setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${data.error}` }])
+            setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${data.error}` }])
           }
         }
       }
@@ -691,10 +651,10 @@ export default function ChatPage() {
         if (useStreaming && newMessages[assistantMessageIndex]) {
           newMessages[assistantMessageIndex] = {
             role: 'assistant',
-            content: `Ошибка: ${err.message}`
+            content: `Error: ${err.message}`
           }
         } else {
-          newMessages.push({ role: 'assistant', content: `Ошибка: ${err.message}` })
+          newMessages.push({ role: 'assistant', content: `Error: ${err.message}` })
         }
         return newMessages
       })
@@ -710,10 +670,10 @@ export default function ChatPage() {
     try {
       const results = await searchLibraryLocal(message, 3)
       if (results.length > 0) {
-        const context = `\n\n### КОНТЕКСТ ИЗ БИБЛИОТЕКИ:\n${results.join('\n---\n')}`
+        const context = `\n\n### LIBRARY CONTEXT:\n${results.join('\n---\n')}`
         setMessage(prev => prev + context)
       } else {
-        alert('В библиотеке не найдено релевантных материалов.')
+        alert('No relevant materials found in the library.')
       }
     } catch (err) {
       console.error('Library search error:', err)
@@ -723,7 +683,7 @@ export default function ChatPage() {
   }
 
   const clearChat = () => {
-    if (confirm('Вы уверены, что хотите очистить историю чата?')) {
+    if (confirm('Are you sure you want to clear the chat history?')) {
       setMessages([])
     }
   }
@@ -734,11 +694,11 @@ export default function ChatPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-2">
             <span className="bg-teal-600 text-white p-1.5 rounded-lg shadow-sm">🤖</span>
-            ИИ-Ассистент
+            AI Assistant
           </h1>
           {session?.user && (
             <p className="text-xs text-slate-500 mt-1">
-              Сессия: {session.user.email}
+              Session: {session.user.email}
             </p>
           )}
         </div>
@@ -747,16 +707,16 @@ export default function ChatPage() {
           <button
             onClick={clearChat}
             className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 border border-slate-200 shadow-sm"
-            title="Очистить историю диалога"
+            title="Clear chat history"
           >
-            🗑️ Очистить
+            🗑️ Clear
           </button>
           
           <button
             onClick={() => signOut({ callbackUrl: '/auth/signin' })}
             className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 border border-slate-200 shadow-sm"
           >
-            🚪 Выйти
+            🚪 Sign Out
           </button>
         </div>
       </div>
@@ -764,7 +724,7 @@ export default function ChatPage() {
       <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6 mb-4 sm:mb-6 h-[70vh] sm:h-[700px] overflow-y-auto">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-10 sm:mt-20 text-sm sm:text-base">
-            Начните диалог с ИИ-ассистентом
+            Start a dialogue with the AI Assistant
           </div>
         ) : (
           <div className="space-y-3 sm:space-y-4">
@@ -778,7 +738,7 @@ export default function ChatPage() {
                 }`}
               >
                 <div className="font-semibold mb-2 text-sm sm:text-base flex items-center justify-between">
-                  <span>{msg.role === 'user' ? 'Вы' : `Аналитический ответ (${msg.model || 'ИИ-Ассистент'})`}</span>
+                  <span>{msg.role === 'user' ? 'You' : `Analytical Response (${msg.model || 'AI Assistant'})`}</span>
                   {msg.role === 'assistant' && msg.cost !== undefined && (
                     <span className="text-[10px] bg-teal-50 text-teal-700 px-2 py-0.5 rounded border border-teal-100 font-bold">
                       💰 {msg.cost.toFixed(2)} ед.
@@ -849,7 +809,7 @@ export default function ChatPage() {
                   onClick={handleContinue}
                   className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-full text-xs font-bold transition-all border border-amber-300 shadow-sm animate-pulse"
                 >
-                  ⏳ Ответ прерван. Дописать до конца?
+                  ⏳ Response was cut off. Continue to end?
                 </button>
               </div>
             )}
@@ -860,7 +820,7 @@ export default function ChatPage() {
       {showAudioUpload && (
         <div className="mb-3 sm:mb-4 bg-white rounded-lg shadow-lg p-3 sm:p-4">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold text-sm sm:text-base">🎤 Загрузка аудио</h3>
+            <h3 className="font-semibold text-sm sm:text-base">🎤 Audio Upload</h3>
             <button
               onClick={() => setShowAudioUpload(false)}
               className="text-gray-500 hover:text-gray-700 p-2 touch-manipulation"
@@ -880,7 +840,7 @@ export default function ChatPage() {
       {showFileUpload && (
         <div className="mb-3 sm:mb-4 bg-white rounded-lg shadow-lg p-3 sm:p-4">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold text-sm sm:text-base">📎 Загрузка файлов</h3>
+            <h3 className="font-semibold text-sm sm:text-base">📎 File Upload</h3>
             <button
               onClick={() => {
                 setShowFileUpload(false)
@@ -901,9 +861,9 @@ export default function ChatPage() {
           {selectedFiles.length > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-200">
               <div className="text-xs sm:text-sm font-medium mb-3 flex items-center justify-between">
-                <span>Выбранные файлы ({selectedFiles.length}):</span>
+                <span>Selected files ({selectedFiles.length}):</span>
                 <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                  💡 Нажмите 🛡️ для удаления ФИО или 🎨 для закрашивания
+                  💡 Press 🛡️ to remove PHI or 🎨 to redact manually
                 </span>
               </div>
               <div className="flex flex-wrap gap-2 sm:gap-3">
@@ -928,7 +888,7 @@ export default function ChatPage() {
                         <button
                           onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
                           className="p-1 hover:bg-red-50 rounded-full text-red-400 hover:text-red-600 transition-colors"
-                          title="Удалить файл"
+                          title="Remove file"
                         >
                           ✕
                         </button>
@@ -957,10 +917,10 @@ export default function ChatPage() {
                             }}
                             disabled={convertingPDF}
                             className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-2 py-1 bg-teal-50 hover:bg-teal-100 rounded-lg text-teal-700 transition-colors font-bold"
-                            title="Разобрать PDF на страницы для закрашивания ФИО"
+                            title="Extract PDF pages for PHI redaction"
                           >
                             <span>{convertingPDF ? '⌛' : '🛡️'}</span>
-                            <span className="text-[9px] uppercase tracking-tighter">Аноним.</span>
+                            <span className="text-[9px] uppercase tracking-tighter">Anon.</span>
                           </button>
                         )}
                         
@@ -971,10 +931,10 @@ export default function ChatPage() {
                               setShowEditor(true);
                             }}
                             className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-lg text-indigo-700 transition-colors font-bold"
-                            title="Закрасить данные вручную"
+                            title="Manually redact data"
                           >
                             <span>🎨</span>
-                            <span className="text-[9px] uppercase tracking-tighter">Правка</span>
+                            <span className="text-[9px] uppercase tracking-tighter">Redact</span>
                           </button>
                         )}
 
@@ -1006,10 +966,10 @@ export default function ChatPage() {
                               }
                             }}
                             className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 rounded-lg text-blue-700 transition-colors font-bold"
-                            title="Автоматически очистить текст от ФИО"
+                            title="Automatically strip PHI from text"
                           >
                             <span>🛡️</span>
-                            <span className="text-[9px] uppercase tracking-tighter">Аноним.</span>
+                            <span className="text-[9px] uppercase tracking-tighter">Anon.</span>
                           </button>
                         )}
                       </div>
@@ -1048,7 +1008,7 @@ export default function ChatPage() {
               onChange={(e) => setUseLibrary(e.target.checked)}
               className="w-5 h-5 sm:w-4 sm:h-4 text-teal-600"
             />
-            <span className="text-xs sm:text-sm font-medium text-teal-700">📚 Библиотека (RAG)</span>
+            <span className="text-xs sm:text-sm font-medium text-teal-700">📚 Library (RAG)</span>
           </label>
 
           <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
@@ -1058,11 +1018,11 @@ export default function ChatPage() {
               onChange={(e) => setAutoAnonymize(e.target.checked)}
               className="w-5 h-5 sm:w-4 sm:h-4 text-blue-600"
             />
-            <span className="text-xs sm:text-sm font-medium text-blue-700">🛡️ Авто-анонимизация</span>
+            <span className="text-xs sm:text-sm font-medium text-blue-700">🛡️ Auto-Anonymize</span>
           </label>
           
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Модель:</span>
+            <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Model:</span>
             <select
               value={model}
               onChange={(e) => setModel(e.target.value as any)}
@@ -1083,7 +1043,7 @@ export default function ChatPage() {
           <button
             onClick={() => setShowAudioUpload(!showAudioUpload)}
             className="px-4 py-3 sm:py-2 bg-secondary-500 hover:bg-secondary-600 active:bg-secondary-700 text-white rounded-lg transition-colors text-lg sm:text-base touch-manipulation"
-            title="Загрузить аудио"
+            title="Upload audio"
           >
             🎤
           </button>
@@ -1094,7 +1054,7 @@ export default function ChatPage() {
                 ? 'bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white'
                 : 'bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-700'
             }`}
-            title="Загрузить файлы"
+            title="Upload files"
           >
             📎 {selectedFiles.length > 0 && `(${selectedFiles.length})`}
           </button>
@@ -1108,7 +1068,7 @@ export default function ChatPage() {
                   ? 'bg-indigo-100 text-indigo-400' 
                   : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
             }`}
-            title={useLibrary ? "Автоматический поиск включен" : "Найти и вставить контекст из вашей библиотеки PDF вручную"}
+            title={useLibrary ? "Auto library search is enabled" : "Find and insert context from your PDF library manually"}
           >
             {searchingLibrary ? '⏳' : '📚'}
           </button>
@@ -1122,7 +1082,7 @@ export default function ChatPage() {
               handleSend();
             }
           }}
-          placeholder="Введите ваш вопрос..."
+          placeholder="Enter your question..."
           className="flex-1 px-4 py-3 sm:py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base touch-manipulation min-h-[50px] max-h-[200px] resize-y"
           disabled={loading}
           rows={1}
@@ -1135,10 +1095,10 @@ export default function ChatPage() {
           {isProcessingFiles ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              <span>🛡️ Защита...</span>
+              <span>🛡️ Processing...</span>
             </>
           ) : (
-            'Отправить'
+            'Send'
           )}
         </button>
       </div>
@@ -1164,7 +1124,7 @@ export default function ChatPage() {
                   return updated;
                 });
               })
-              .catch(err => console.error('Ошибка сохранения файла в чате:', err));
+              .catch(err => console.error('Error saving file in chat:', err));
           }}
           onCancel={() => {
             setShowEditor(false);

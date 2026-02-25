@@ -27,10 +27,10 @@ export default function BalancePage() {
         <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
           <p className="text-2xl mb-4">⚠️</p>
           <h1 className="text-xl font-bold text-gray-800 mb-2">
-            Система подписки отключена
+            Subscription system is disabled
           </h1>
           <p className="text-gray-600 text-sm">
-            Добавьте NEXT_PUBLIC_SUBSCRIPTION_ENABLED=true в .env.local
+            Add NEXT_PUBLIC_SUBSCRIPTION_ENABLED=true to .env.local
           </p>
         </div>
       </div>
@@ -38,9 +38,9 @@ export default function BalancePage() {
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('ru-RU', {
-      day: '2-digit',
+    return new Date(dateString).toLocaleString('en-US', {
       month: '2-digit',
+      day: '2-digit',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
@@ -56,13 +56,13 @@ export default function BalancePage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <h1 className="text-3xl font-bold text-gray-800">
-            💰 Баланс и история
+            💰 Balance & History
           </h1>
           <Link 
             href="/clinic/dashboard"
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition shadow-md font-bold text-sm"
           >
-            🏢 Панель клиники (Аудит)
+            🏢 Clinic Dashboard (Audit)
           </Link>
         </div>
 
@@ -72,28 +72,28 @@ export default function BalancePage() {
             <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Текущий баланс</p>
+                  <p className="text-sm text-gray-600 mb-1">Current Balance</p>
                   <p className="text-3xl font-bold text-teal-600">
-                    {balance.currentCredits.toLocaleString('ru-RU')} ед.
+                    {balance.currentCredits.toLocaleString('en-US')} cr.
                   </p>
                 </div>
                 
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Начальный баланс</p>
+                  <p className="text-sm text-gray-600 mb-1">Initial Balance</p>
                   <p className="text-2xl font-semibold text-gray-800">
-                    {balance.initialCredits.toLocaleString('ru-RU')} ед.
+                    {balance.initialCredits.toLocaleString('en-US')} cr.
                   </p>
                 </div>
                 
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Потрачено</p>
+                  <p className="text-sm text-gray-600 mb-1">Spent</p>
                   <p className="text-2xl font-semibold text-red-600">
-                    {balance.totalSpent.toLocaleString('ru-RU')} ед.
+                    {balance.totalSpent.toLocaleString('en-US')} cr.
                   </p>
                 </div>
                 
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Пакет</p>
+                  <p className="text-sm text-gray-600 mb-1">Package</p>
                   <p className="text-xl font-semibold text-gray-800">
                     {balance.packageName}
                   </p>
@@ -106,7 +106,7 @@ export default function BalancePage() {
               {/* Прогресс-бар */}
               <div className="mt-6">
                 <div className="flex justify-between text-sm text-gray-600 mb-2">
-                  <span>Использовано</span>
+                  <span>Used</span>
                   <span>{((balance.totalSpent / balance.initialCredits) * 100).toFixed(1)}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3">
@@ -122,7 +122,7 @@ export default function BalancePage() {
             <div className="bg-white rounded-xl shadow-lg p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">
-                  История операций ({filteredTransactions.length})
+                  Transaction History ({filteredTransactions.length})
                 </h2>
                 
                 <select 
@@ -130,20 +130,20 @@ export default function BalancePage() {
                   onChange={(e) => setFilter(e.target.value)}
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 >
-                  <option value="all">Все операции</option>
-                  <option value="ecg">ЭКГ</option>
-                  <option value="mri">МРТ</option>
-                  <option value="ct">КТ</option>
-                  <option value="xray">Рентген</option>
-                  <option value="lab">Лабораторные</option>
-                  <option value="chat">Чат</option>
-                  <option value="protocol">Протоколы</option>
+                  <option value="all">All operations</option>
+                  <option value="ecg">ECG</option>
+                  <option value="mri">MRI</option>
+                  <option value="ct">CT</option>
+                  <option value="xray">X-Ray</option>
+                  <option value="lab">Laboratory</option>
+                  <option value="chat">Chat</option>
+                  <option value="protocol">Protocols</option>
                 </select>
               </div>
 
               {filteredTransactions.length === 0 ? (
                 <p className="text-gray-500 text-center py-8">
-                  {filter === 'all' ? 'Операций пока нет' : 'Нет операций в этом разделе'}
+                  {filter === 'all' ? 'No operations yet' : 'No operations in this section'}
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -157,8 +157,8 @@ export default function BalancePage() {
                             {formatDate(txn.date)} · {txn.model.split('/').pop()}
                           </p>
                           <p className="text-xs text-gray-400 mt-1">
-                            Токенов: {(txn.inputTokens + txn.outputTokens).toLocaleString('ru-RU')} 
-                            ({txn.inputTokens.toLocaleString('ru-RU')} вх / {txn.outputTokens.toLocaleString('ru-RU')} вых)
+                            Tokens: {(txn.inputTokens + txn.outputTokens).toLocaleString('en-US')} 
+                            ({txn.inputTokens.toLocaleString('en-US')} in / {txn.outputTokens.toLocaleString('en-US')} out)
                           </p>
                         </div>
                         <div className="text-right ml-4">
@@ -179,13 +179,13 @@ export default function BalancePage() {
         ) : (
           <div className="bg-white rounded-xl shadow-lg p-8 text-center">
             <p className="text-xl text-gray-600 mb-4">
-              У вас пока нет активной подписки
+              You don&apos;t have an active subscription yet
             </p>
             <Link 
               href="/subscription"
               className="inline-block bg-teal-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-teal-700 transition"
             >
-              Выбрать пакет
+              Choose a Package
             </Link>
           </div>
         )}

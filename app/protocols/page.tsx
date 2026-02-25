@@ -26,24 +26,24 @@ export default function ClinicalProtocolsPage() {
   const [chatHistory, setHistory] = useState<{role: 'user' | 'assistant', content: string}[]>([])
 
   const specialties = [
-    'Кардиология',
-    'Неврология',
-    'Эндокринология',
-    'Пульмонология',
-    'Гастроэнтерология',
-    'Нефрология',
-    'Ревматология',
-    'Онкология',
-    'Инфекционные болезни',
-    'Педиатрия',
-    'Акушерство и гинекология',
-    'Хирургия',
-    'Анестезиология и реаниматология',
+    'Cardiology',
+    'Neurology',
+    'Endocrinology',
+    'Pulmonology',
+    'Gastroenterology',
+    'Nephrology',
+    'Rheumatology',
+    'Oncology',
+    'Infectious Diseases',
+    'Pediatrics',
+    'Obstetrics & Gynecology',
+    'Surgery',
+    'Anesthesiology & Critical Care',
   ]
 
   const handleSearch = async () => {
     if (!query.trim()) {
-      setError('Введите запрос для поиска')
+      setError('Please enter a search query')
       return
     }
 
@@ -101,11 +101,11 @@ export default function ClinicalProtocolsPage() {
           // 2. Списываем с баланса подписки (если есть)
           deductBalance({
             section: 'protocols',
-            sectionName: 'Клинические рекомендации',
+            sectionName: 'Clinical Guidelines',
             model: usage.model || (modelMode === 'online' ? 'perplexity/sonar' : modelMode === 'detailed' ? MODELS.SONNET : MODELS.GEMINI_3_FLASH),
             inputTokens: usage.prompt_tokens,
             outputTokens: usage.completion_tokens,
-            operation: `Поиск: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`,
+            operation: `Search: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`,
             specialty: specialty // Передаем специальность
           });
         },
@@ -115,11 +115,11 @@ export default function ClinicalProtocolsPage() {
         },
         onError: (err) => {
           console.error('❌ [CLINICAL RECS] Ошибка стриминга:', err);
-          setError(`Ошибка стриминга: ${err.message}`);
+          setError(`Streaming error: ${err.message}`);
         }
       });
     } catch (err: any) {
-      setError(`Ошибка: ${err.message}`)
+      setError(`Error: ${err.message}`)
     } finally {
       setLoading(false)
     }
@@ -134,7 +134,7 @@ export default function ClinicalProtocolsPage() {
     // Сохраняем контекст и вопрос для полноценного чата
     const data = {
       text: result,
-      type: 'Клинические рекомендации',
+      type: 'Clinical Guidelines',
       initialQuestion: userMsg, // Передаем сам вопрос
       model: model,
       timestamp: new Date().toISOString()
@@ -143,7 +143,7 @@ export default function ClinicalProtocolsPage() {
     sessionStorage.setItem('pending_analysis', JSON.stringify(data));
     
     // Показываем статус перехода
-    setResult(prev => prev + `\n\n---\n⏳ **Переходим в ИИ-Ассистент для обсуждения вопроса:** _${userMsg}_...`);
+    setResult(prev => prev + `\n\n---\n⏳ **Moving to AI Assistant to discuss:** _${userMsg}_...`);
     
     // Перенаправляем через небольшую задержку для наглядности
     setTimeout(() => {
@@ -154,7 +154,7 @@ export default function ClinicalProtocolsPage() {
   const handleTransferToChat = () => {
     const data = {
       text: result,
-      type: 'Клинические рекомендации',
+      type: 'Clinical Guidelines',
       model: model,
       timestamp: new Date().toISOString()
     };
@@ -165,17 +165,17 @@ export default function ClinicalProtocolsPage() {
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-6xl">
       <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 mb-2">
-        📚 Клинические рекомендации
+        📚 Clinical Guidelines
       </h1>
       <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">
-        Поиск актуальных международных и российских клинических рекомендаций через Opus 4.6 и Gemini 3.1
+        Search current international clinical guidelines via Opus 4.6 and Gemini 3.1
       </p>
 
       {/* Форма поиска */}
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-4 sm:mb-6">
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Специальность (необязательно)
+            Specialty (optional)
           </label>
           <select
             value={specialty}
@@ -183,7 +183,7 @@ export default function ClinicalProtocolsPage() {
             className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base touch-manipulation"
             disabled={loading}
           >
-            <option value="">Не выбрана</option>
+            <option value="">Not selected</option>
             {specialties.map((spec) => (
               <option key={spec} value={spec}>
                 {spec}
@@ -194,7 +194,7 @@ export default function ClinicalProtocolsPage() {
 
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Запрос <span className="text-red-500">*</span>
+            Query <span className="text-red-500">*</span>
           </label>
           <textarea
             value={query}
@@ -214,7 +214,7 @@ export default function ClinicalProtocolsPage() {
         {/* Переключатель режима модели */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Глубина анализа
+            Analysis Depth
           </label>
           <div className="grid grid-cols-3 gap-2 p-1 bg-gray-100 rounded-lg border border-gray-200">
             <button
@@ -226,7 +226,7 @@ export default function ClinicalProtocolsPage() {
               }`}
               disabled={loading}
             >
-              🚀 Стандарт
+              🚀 Standard
             </button>
             <button
               onClick={() => setModelMode('detailed')}
@@ -237,7 +237,7 @@ export default function ClinicalProtocolsPage() {
               }`}
               disabled={loading}
             >
-              🎓 Клинический разбор
+              🎓 Clinical Review
             </button>
             <button
               onClick={() => setModelMode('online')}
@@ -253,10 +253,10 @@ export default function ClinicalProtocolsPage() {
           </div>
           <p className="mt-2 text-[10px] sm:text-xs text-gray-500">
             {modelMode === 'standard' 
-              ? '💡 Рекомендуется для быстрого поиска основных протоколов.' 
+              ? '💡 Recommended for quick search of main protocols.' 
               : modelMode === 'detailed'
-                ? '💡 Глубокий клинический разбор: дифференциальный анализ, шкалы, пошаговая тактика ведения и схемы терапии.'
-                : '💡 Поиск в реальном времени по свежим публикациям 2024-2025 гг. со ссылками.'}
+                ? '💡 Deep clinical review: differential analysis, scales, step-by-step management, and treatment regimens.'
+                : '💡 Real-time search of recent 2024-2025 publications with references.'}
           </p>
         </div>
 
@@ -284,16 +284,16 @@ export default function ClinicalProtocolsPage() {
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                 />
               </svg>
-              Поиск...
+              Searching...
             </span>
           ) : (
-            '🔍 Найти клинические рекомендации'
+            '🔍 Find Clinical Guidelines'
           )}
         </button>
         
         {!query.trim() && !loading && (
           <p className="mt-2 text-xs text-gray-500 text-center">
-            💡 Введите запрос в поле выше, чтобы активировать кнопку поиска
+            💡 Enter a query above to activate the search button
           </p>
         )}
 
@@ -309,17 +309,17 @@ export default function ClinicalProtocolsPage() {
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
             <h2 className="text-lg sm:text-xl font-bold text-primary-900">
-              📋 Найденные протоколы
+              📋 Found Protocols
             </h2>
             <div className="flex flex-col sm:flex-row gap-2 text-xs sm:text-sm text-gray-600">
               {currentCost > 0 && (
                 <span className="bg-teal-50 text-teal-700 px-2 py-1 rounded font-bold border border-teal-100">
-                  💰 Стоимость сервиса: {currentCost.toFixed(2)} ед.
+                  💰 Service cost: {currentCost.toFixed(2)} ед.
                 </span>
               )}
               {tokensUsed > 0 && (
                 <span className="bg-gray-100 px-2 py-1 rounded">
-                  📊 Токенов: {tokensUsed.toLocaleString()}
+                  📊 Tokens: {tokensUsed.toLocaleString()}
                 </span>
               )}
               {model && (
@@ -377,13 +377,13 @@ export default function ClinicalProtocolsPage() {
           <div className="mt-8 pt-6 border-t border-gray-100">
             <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
               <h3 className="text-base font-bold text-gray-900 flex-grow">
-                🧐 Есть уточняющие вопросы по этому протоколу?
+                🧐 Have follow-up questions about this protocol?
               </h3>
               <button
                 onClick={handleTransferToChat}
                 className="w-full sm:w-auto px-4 py-2 bg-teal-50 text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors text-xs font-bold flex items-center justify-center gap-2"
               >
-                <span>💬 Обсудить в полном чате</span>
+                <span>💬 Discuss in full chat</span>
               </button>
             </div>
             
@@ -397,7 +397,7 @@ export default function ClinicalProtocolsPage() {
                     handleFollowUp()
                   }
                 }}
-                placeholder="Задайте вопрос (например: 'А можно ли этот препарат при почечной недостаточности?')"
+                placeholder="Ask a question (e.g., 'Is this drug safe in renal failure?')"
                 className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm resize-none pr-12"
                 rows={2}
                 disabled={isAskingFollowUp}
@@ -420,15 +420,15 @@ export default function ClinicalProtocolsPage() {
               </button>
             </div>
             <p className="mt-2 text-[10px] text-gray-400 italic">
-              💡 Нажмите Enter для отправки. Ассистент ответит с учетом контекста текущего протокола.
+              💡 Press Enter to send. The assistant will reply in the context of the current protocol.
             </p>
           </div>
 
           <div className="mt-6 p-3 sm:p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-xs sm:text-sm">
-            <p className="font-semibold text-yellow-900 mb-1">⚠️ ВАЖНО:</p>
+            <p className="font-semibold text-yellow-900 mb-1">⚠️ IMPORTANT:</p>
             <p className="text-yellow-800">
-              Результаты поиска носят информационный характер. Всегда сверяйтесь с официальными
-              источниками и актуальными версиями клинических рекомендаций.
+              Search results are for informational purposes only. Always verify with official
+              sources and current versions of clinical guidelines.
             </p>
           </div>
         </div>

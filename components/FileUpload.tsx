@@ -38,7 +38,7 @@ export default function FileUpload({
       for (const file of Array.from(files)) {
         // Проверка размера
         if (file.size > maxSize * 1024 * 1024) {
-          setError(`Файл ${file.name} слишком большой. Максимальный размер: ${maxSize}MB`)
+          setError(`File ${file.name} is too large. Maximum size: ${maxSize}MB`)
           continue
         }
 
@@ -50,7 +50,7 @@ export default function FileUpload({
         )
         
         if (isDuplicate) {
-          setError(`Файл ${file.name} уже добавлен`)
+          setError(`File ${file.name} has already been added`)
           continue
         }
 
@@ -89,7 +89,7 @@ export default function FileUpload({
       }
     } catch (err) {
       console.error("Processing error:", err)
-      setError("Ошибка при обработке файлов")
+      setError("Error processing files")
     } finally {
       setIsCompressing(false)
     }
@@ -235,7 +235,7 @@ export default function FileUpload({
                   <button
                     onClick={() => setEditingFileIndex(idx)}
                     className="text-blue-600 hover:text-blue-800 text-sm font-medium px-2"
-                    title="Открыть редактор для точной анонимизации"
+                    title="Open editor for precise anonymization"
                   >
                     🎨 Редактировать
                   </button>
@@ -243,7 +243,7 @@ export default function FileUpload({
                 <button
                   onClick={() => removeFile(item.file)}
                   className="text-red-500 hover:text-red-700 text-xl"
-                  title="Удалить файл"
+                  title="Remove file"
                 >
                   ✕
                 </button>
@@ -258,13 +258,13 @@ export default function FileUpload({
                 onClick={anonymizeAllImages}
                 disabled={isCompressing}
                 className="w-full flex items-center justify-center space-x-2 py-2 px-4 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Закрасить черным области с персональными данными на всех изображениях"
+                title="Redact personal data areas on all images"
               >
-                <span>🛡️ Анонимизировать все изображения</span>
+                <span>🛡️ Anonymize all images</span>
               </button>
               <p className="text-xs text-gray-500 mt-2 italic text-center">
-                Автоматически скроет зоны с ФИО и персональными данными на всех загруженных снимках. 
-                Защита по ФЗ-152.
+                Automatically hides areas with names and personal data on all uploaded scans. 
+                PHI protection.
               </p>
             </div>
           )}
@@ -318,7 +318,7 @@ export default function FileUpload({
           {isCompressing ? (
             <div className="flex flex-col items-center space-y-2">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
-              <p className="text-primary-600 font-medium">Оптимизация файлов...</p>
+              <p className="text-primary-600 font-medium">Optimizing files...</p>
             </div>
           ) : (
             <>
@@ -348,15 +348,15 @@ export default function FileUpload({
                 </button>
               </div>
               
-              <span className="text-gray-600">или перетащите папку со снимками сюда</span>
+              <span className="text-gray-600">or drag and drop a folder with images here</span>
             </>
           )}
           
           <p className="text-sm text-gray-500">
-            Поддерживаются: DICOM серии (.dcm), изображения (JPG, PNG), PDF, документы
+            Supported: DICOM series (.dcm), images (JPG, PNG), PDF, documents
             <br />
             Максимальный размер файла: {maxSize}MB
-            {multiple && ' • Можно загрузить несколько файлов'}
+            {multiple && ' • Multiple files can be uploaded'}
           </p>
         </div>
       </div>

@@ -134,7 +134,7 @@ export default function DocumentPage() {
       saveAs(blob, `Scan_${new Date().getTime()}.docx`)
     } catch (err) {
       console.error('Ошибка при создании Word:', err)
-      alert('Не удалось создать Word файл')
+      alert('Failed to create Word file')
     }
   }
 
@@ -154,7 +154,7 @@ export default function DocumentPage() {
 
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
     if (!window.pdfjsLib) {
-      throw new Error('PDF.js не загружен. Подождите несколько секунд и попробуйте снова.')
+      throw new Error('PDF.js is not loaded. Please wait a few seconds and try again.')
     }
 
     try {
@@ -187,7 +187,7 @@ export default function DocumentPage() {
         const context = canvas.getContext('2d')
         
         if (!context) {
-          throw new Error('Не удалось получить контекст canvas')
+          throw new Error('Failed to get canvas context')
         }
         
         canvas.width = viewport.width
@@ -207,7 +207,7 @@ export default function DocumentPage() {
       }
 
       if (base64Images.length === 0) {
-        throw new Error('Не удалось конвертировать ни одной страницы PDF')
+        throw new Error('Failed to convert any PDF pages')
       }
 
       console.log(`✅ [DOC PDF] Конвертация завершена. Получено ${base64Images.length} изображений`)
@@ -215,7 +215,7 @@ export default function DocumentPage() {
       
     } catch (error: any) {
       console.error('❌ [DOC PDF] Ошибка конвертации:', error)
-      throw new Error(`Ошибка конвертации PDF: ${error.message}`)
+      throw new Error(`PDF conversion error: ${error.message}`)
     }
   }
 
@@ -246,7 +246,7 @@ export default function DocumentPage() {
       // Конвертация data:image/... в File без fetch(data:...) — совместимо с CSP.
       const dataUrlToFile = (dataUrl: string, fileName: string): File => {
         const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
-        if (!match) throw new Error('Неверный формат изображения')
+        if (!match) throw new Error('Invalid image format')
 
         const mimeType = match[1] || 'image/png'
         const base64 = match[2]
@@ -268,7 +268,7 @@ export default function DocumentPage() {
         const fileFromDataUrl = dataUrlToFile(imageData, 'document.png')
         formData.append('file', fileFromDataUrl)
       } else {
-        if (!file) throw new Error('Файл не выбран')
+        if (!file) throw new Error('No file selected')
         formData.append('file', file)
       }
 
@@ -295,10 +295,10 @@ export default function DocumentPage() {
           outputTokens: data.usage?.completion_tokens || 800,
         })
       } else {
-        setError(data.error || 'Ошибка при сканировании')
+        setError(data.error || 'Scanning error')
       }
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -308,7 +308,7 @@ export default function DocumentPage() {
     <>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-primary-900 mb-6">📄 Сканирование документов</h1>
+        <h1 className="text-3xl font-bold text-primary-900 mb-6">📄 Document Scanning</h1>
         
         <div className="flex gap-4 mb-8">
           <button
@@ -321,8 +321,8 @@ export default function DocumentPage() {
           >
             <span className="text-2xl">💾</span>
             <div>
-              <div className="text-sm uppercase tracking-wider">Локальный</div>
-              <div className="text-[10px] font-normal opacity-80">Без ИИ, 100% приватно</div>
+              <div className="text-sm uppercase tracking-wider">Local</div>
+              <div className="text-[10px] font-normal opacity-80">No AI, 100% private</div>
             </div>
           </button>
           <button
@@ -335,34 +335,34 @@ export default function DocumentPage() {
           >
             <span className="text-2xl">🧠</span>
             <div>
-              <div className="text-sm uppercase tracking-wider">Умный OCR</div>
-              <div className="text-[10px] font-normal opacity-80">Распознавание текста через ИИ</div>
+              <div className="text-sm uppercase tracking-wider">Smart OCR</div>
+              <div className="text-[10px] font-normal opacity-80">AI-powered text recognition</div>
             </div>
           </button>
         </div>
 
         <AnalysisTips 
-          title="Советы по сканированию документов"
+          title="Document Scanning Tips"
           content={{
-            fast: scanMode === 'ai' ? "используется модель Gemini 3.1 Flash — она идеально подходит для быстрого и точного извлечения текста." : "локальный режим позволяет моментально создать качественный цифровой скан без отправки данных в сеть.",
+            fast: scanMode === 'ai' ? "Uses Gemini 3.1 Flash — ideal for fast and accurate text extraction." : "Local mode instantly creates a quality digital scan without sending data online.",
             extra: scanMode === 'ai' ? [
-              "⭐ Рекомендуемый режим: Gemini 3.1 Flash — лучший баланс скорости распознавания текста и стоимости.",
-              "🛡️ В режиме ИИ обязательно используйте тумблер анонимизации для защиты ПД.",
-              "🔍 Система сохраняет структуру документа: таблицы переводятся в Markdown."
+              "⭐ Recommended mode: Gemini 3.1 Flash — best balance of text recognition speed and cost.",
+              "🛡️ In AI mode, always use the anonymization toggle to protect personal data.",
+              "🔍 The system preserves document structure: tables are converted to Markdown."
             ] : [
-              "💾 Используйте фильтры для улучшения читаемости (контрастность, яркость).",
-              "📄 Кнопка «Word» создаст документ со снимком на весь лист.",
-              "🌍 100% приватность: обработка происходит прямо в вашем браузере."
+              "💾 Use filters to improve readability (contrast, brightness).",
+              "📄 The «Word» button creates a document with the scan at full page width.",
+              "🌍 100% private: processing happens directly in your browser."
             ]
           }}
         />
         
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">
-            {scanMode === 'local' ? '1. Загрузите или сфотографируйте документ' : 'Загрузите документ для распознавания'}
+            {scanMode === 'local' ? '1. Upload or photograph the document' : 'Upload document for recognition'}
           </h2>
           <p className="text-sm text-gray-600 mb-4">
-            Поддерживаемые форматы: PDF, изображения (JPG, PNG)
+            Supported formats: PDF, images (JPG, PNG)
           </p>
           <ImageUpload onUpload={handleUpload} accept=".pdf,image/*" maxSize={50} />
         </div>
@@ -374,8 +374,8 @@ export default function DocumentPage() {
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-700 mr-3"></div>
               <span>
                 {conversionProgress 
-                  ? `Конвертация PDF: страница ${conversionProgress.current} из ${conversionProgress.total}...`
-                  : 'Подготовка PDF к конвертации...'}
+                  ? `Converting PDF: page ${conversionProgress.current} of ${conversionProgress.total}...`
+                  : 'Preparing PDF for conversion...'}
               </span>
             </div>
           </div>
@@ -384,16 +384,16 @@ export default function DocumentPage() {
       {file && imagePreview && scanMode === 'local' && (
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-            🎨 2. Настройка и экспорт
+            🎨 2. Settings and Export
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-6">
               <div className="p-4 bg-gray-50 rounded-lg space-y-4">
-                <h3 className="font-semibold text-sm text-gray-700 uppercase tracking-widest">Инструменты ксерокса</h3>
+                <h3 className="font-semibold text-sm text-gray-700 uppercase tracking-widest">Copier Tools</h3>
                 
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Яркость ({brightness}%)</label>
+                  <label className="text-xs text-gray-500 mb-1 block">Brightness ({brightness}%)</label>
                   <input 
                     type="range" min="50" max="200" value={brightness} 
                     onChange={(e) => setBrightness(Number(e.target.value))}
@@ -402,7 +402,7 @@ export default function DocumentPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Контрастность ({contrast}%)</label>
+                  <label className="text-xs text-gray-500 mb-1 block">Contrast ({contrast}%)</label>
                   <input 
                     type="range" min="50" max="250" value={contrast} 
                     onChange={(e) => setContrast(Number(e.target.value))}
@@ -411,7 +411,7 @@ export default function DocumentPage() {
                 </div>
 
                 <div className="flex items-center justify-between pt-2">
-                  <span className="text-sm font-medium">Черно-белый режим</span>
+                  <span className="text-sm font-medium">Grayscale mode</span>
                   <button 
                     onClick={() => setIsGrayscale(!isGrayscale)}
                     className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
@@ -429,21 +429,21 @@ export default function DocumentPage() {
                 className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
               >
                 <span className="text-xl">🎨</span>
-                Закрасить данные вручную
+                Manually Redact Data
               </button>
               <button
                 onClick={handleDownloadWord}
                   className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-3"
                 >
                   <span className="text-xl">📝</span>
-                  Сохранить как Word (.docx)
+                  Save as Word (.docx)
                 </button>
                 <button
                   onClick={handlePrintPDF}
                   className="w-full py-4 bg-green-600 text-white rounded-xl font-bold shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-3"
                 >
                   <span className="text-xl">💾</span>
-                  Скачать/Печать как PDF
+                  Download/Print as PDF
                 </button>
               </div>
             </div>
@@ -451,7 +451,7 @@ export default function DocumentPage() {
             <div className="flex justify-center bg-gray-900 rounded-lg p-2 overflow-hidden items-start shadow-inner min-h-[400px]">
               <img 
                 src={processedImage || imagePreview} 
-                alt="Предпросмотр скана" 
+                alt="Scan preview" 
                 className="max-w-full rounded shadow-2xl"
               />
             </div>
@@ -462,13 +462,13 @@ export default function DocumentPage() {
       {file && imagePreview && scanMode === 'ai' && (
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">📷 Предпросмотр и анонимизация</h2>
+            <h2 className="text-xl font-semibold">📷 Preview and Anonymization</h2>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowEditor(true)}
                 className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-all border border-indigo-200 flex items-center gap-2"
               >
-                🎨 Закрасить данные вручную
+                🎨 Manually Redact Data
               </button>
             </div>
           </div>
@@ -476,7 +476,7 @@ export default function DocumentPage() {
           <div className="flex justify-center bg-gray-50 rounded-xl p-4 border-2 border-dashed border-gray-200 mb-6">
             <img 
               src={processedImage || imagePreview} 
-              alt="Загруженный документ" 
+              alt="Uploaded document" 
               className="max-w-full max-h-[600px] rounded-lg shadow-lg object-contain"
             />
           </div>
@@ -492,10 +492,10 @@ export default function DocumentPage() {
               />
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-blue-900">
-                  🛡️ Анонимный анализ активен
+                  🛡️ Anonymous analysis active
                 </span>
                 <span className="text-[10px] text-blue-700 font-normal">
-                  Данные выше уже анонимизированы вами или будут скрыты автоматически.
+                  Data above has been anonymized by you or will be hidden automatically.
                 </span>
               </div>
             </label>
@@ -506,7 +506,7 @@ export default function DocumentPage() {
               className="w-full sm:w-auto px-10 py-4 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-lg transform hover:scale-105 disabled:opacity-50 flex items-center justify-center gap-3"
             >
               <span className="text-xl">🚀</span>
-              Распознать текст
+              Recognize Text
             </button>
           </div>
         </div>

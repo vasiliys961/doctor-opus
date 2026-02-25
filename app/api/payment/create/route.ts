@@ -3,70 +3,51 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { paymentService } from "@/lib/payment/payment-service";
 import { SUBSCRIPTION_PACKAGES } from "@/lib/subscription-manager";
-import { savePaymentConsent, initDatabase, createPayment } from "@/lib/database";
+import { initDatabase, createPayment } from "@/lib/database";
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
       return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
+        { success: false, error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    const { packageId, isRecurring } = await request.json();
+    const { packageId } = await request.json();
 
     if (!packageId || !SUBSCRIPTION_PACKAGES[packageId as keyof typeof SUBSCRIPTION_PACKAGES]) {
       return NextResponse.json(
-        { success: false, error: 'Неверный пакет услуг' },
+        { success: false, error: 'Invalid package ID' },
         { status: 400 }
       );
     }
 
     const pkg = SUBSCRIPTION_PACKAGES[packageId as keyof typeof SUBSCRIPTION_PACKAGES];
-    
-    // Инициализация БД
+    const priceUsd = (pkg as any).priceUsd as number;
+
     await initDatabase();
 
-    // Логируем согласие пользователя (требование эквайринга)
-    if (isRecurring) {
-      try {
-        await savePaymentConsent({
-          email: session.user.email || 'unknown',
-          package_id: packageId,
-          consent_type: 'recurring_agreement',
-          ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-          user_agent: request.headers.get('user-agent') || 'unknown'
-        });
-      } catch (dbError) {
-        console.error('⚠️ [PAYMENT] Ошибка сохранения согласия в БД:', dbError);
-        // Не прерываем платеж из-за ошибки лога
-      }
-    }
-
-    // Создаем запись о платеже в БД
     const paymentResult = await createPayment({
       email: session.user.email || 'unknown',
-      amount: pkg.priceRub,
+      amount: priceUsd,
       units: pkg.credits,
       package_id: packageId
     });
 
     if (!paymentResult.success) {
-      throw new Error('Ошибка сохранения данных платежа в базе');
+      throw new Error('Failed to save payment record to database');
     }
 
-    // Используем ID из базы как InvId для провайдера
     const invId = paymentResult.paymentId;
 
     const provider = paymentService.getProvider();
     const paymentUrl = await provider.generatePaymentUrl({
-      amount: pkg.priceRub,
+      amount: priceUsd,
       orderId: invId,
-      description: `Активация пакета ${pkg.name} для ${session.user.email}`,
+      description: `Doctor Opus — ${pkg.name} package (${pkg.credits} credits) for ${session.user.email}`,
       email: session.user.email || undefined,
-      isRecurring
     });
 
     return NextResponse.json({
@@ -75,11 +56,10 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('❌ [PAYMENT CREATE] Ошибка:', error);
+    console.error('❌ [PAYMENT CREATE] Error:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка создания платежа' },
+      { success: false, error: 'Failed to create payment' },
       { status: 500 }
     );
   }
 }
-

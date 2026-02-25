@@ -2,128 +2,94 @@ import LegalPageLayout from '@/components/LegalPageLayout'
 
 export default function OfferPage() {
   return (
-    <LegalPageLayout title="Публичная оферта" lastUpdated="10.01.2026">
-      <section className="prose prose-slate max-w-none text-sm sm:text-base">
-        <div className="text-center mb-8">
-          <h2 className="text-xl font-bold uppercase">ПУБЛИЧНАЯ ОФЕРТА</h2>
-          <p className="font-bold">о заключении договора предоставления доступа к программному обеспечению и информационных услуг</p>
-        </div>
+    <LegalPageLayout title="SaaS Subscription Agreement" lastUpdated="February 25, 2026">
+      <section>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">1. Parties</h2>
+        <p>
+          This SaaS Subscription Agreement ("Agreement") governs access to and use of the Doctor Opus
+          Clinical Decision Support System ("Service"), operated at <strong>doctor-opus.online</strong>
+          ("Provider"), by the registered user ("Subscriber") who is a licensed healthcare professional.
+        </p>
+      </section>
 
-        <h3 className="font-bold text-gray-900 mt-6 mb-2">1. Общие положения</h3>
+      <section>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">2. Service Description</h2>
         <p>
-          1.1. В настоящей Публичной оферте содержатся условия заключения Договора предоставления доступа к программному обеспечению и информационных услуг (далее — «Договор»). Настоящей офертой признается предложение, адресованное заинтересованному кругу лиц, которое выражает намерение Исполнителя считать себя заключившим Договор с адресатом, которым будет принято предложение.
+          The Provider grants the Subscriber a non-exclusive, non-transferable, revocable license to
+          access and use the Service on a prepaid credit basis for the purpose of clinical decision
+          support in the Subscriber's licensed medical practice.
         </p>
-        <p>
-          1.2. Нижеизложенный текст Публичной оферты является официальным публичным предложением Исполнителя (самозанятый Селиванов В.Ф., ИНН 920455053236) в соответствии с положениями пункта 2 статьи 437 Гражданского кодекса РФ. Местом хранения и обработки данных является Российская Федерация (инфраструктура провайдера ООО «Таймвэб»).
-        </p>
-        <p>
-          1.3. Договор считается заключенным и приобретает силу с момента совершения Сторонами действий, предусмотренных в настоящей Оферте (Акцепта), что означает полное принятие всех условий без каких-либо изъятий или ограничений.
-        </p>
-        <p>
-          1.4. Программное обеспечение "Doctor Opus" не является медицинским изделием, не предназначено для постановки диагнозов и не заменяет профессиональную медицинскую консультацию.
-        </p>
+      </section>
 
-        <h3 className="font-bold text-gray-900 mt-6 mb-2">2. Термины и определения</h3>
-        <ul className="list-disc pl-5 space-y-1">
-          <li><strong>Договор</strong> — текст настоящей Оферты, акцептованный Заказчиком.</li>
-          <li><strong>Конклюдентные действия</strong> — поведение, выражающее согласие заключить договор (регистрация, заполнение заявки, оплата).</li>
-          <li><strong>Сайт Исполнителя</strong> — совокупность программ и информации по адресу: <strong>doctor-opus.ru</strong></li>
-          <li><strong>ПО (Программное обеспечение)</strong> — программный комплекс "Doctor Opus" для автоматизированного анализа медицинских данных.</li>
-          <li><strong>Услуга</strong> — предоставление доступа к Личному кабинету и функциональным возможностям ПО.</li>
+      <section>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">3. License Scope and Restrictions</h2>
+        <p className="mb-2">The license granted herein is limited to the following:</p>
+        <ul className="list-disc pl-5 space-y-1 text-gray-700">
+          <li>Personal professional use by the registered Subscriber only</li>
+          <li>Clinical decision support purposes within a licensed medical practice</li>
+          <li>Access via web interface at doctor-opus.online</li>
         </ul>
+        <p className="mt-3 mb-2">The Subscriber shall NOT:</p>
+        <ul className="list-disc pl-5 space-y-1 text-gray-700">
+          <li>Resell, sublicense, or white-label the Service</li>
+          <li>Share access credentials with third parties</li>
+          <li>Reverse-engineer or attempt to extract underlying AI models or code</li>
+          <li>Use the Service to develop competing products</li>
+        </ul>
+      </section>
 
-        <h3 className="font-bold text-gray-900 mt-6 mb-2">3. Предмет Договора</h3>
-        <p>
-          3.1. Исполнитель обязуется предоставить Заказчику доступ к ПО и оказать информационные услуги, а Заказчик обязуется оплатить их в размере и сроки, установленные настоящим Договором.
+      <section>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">4. Payment and Credits</h2>
+        <p className="mb-3">
+          4.1. The Subscriber purchases prepaid credits to access the Service. Credits are consumed
+          per analytical operation as described on the pricing page.
+        </p>
+        <p className="mb-3">
+          4.2. Payment is processed through NOWPayments (crypto/fiat gateway). All prices are in USD.
         </p>
         <p>
-          3.2. Результаты работы ПО носят исключительно справочный и информационный характер, предназначены для информационно‑аналитической поддержки специалистов и не являются медицинским заключением.
+          4.3. Unused credits do not expire but are non-transferable and non-refundable except as
+          provided in the Refund Policy.
         </p>
-        <p>
-          3.3. Акцепт настоящей Оферты выражается в совершении следующих действий: регистрация учетной записи на Сайте, заполнение заявки на анализ или совершение оплаты.
-        </p>
+      </section>
 
-        <h3 className="font-bold text-gray-900 mt-6 mb-2 text-teal-700">4. Рекуррентные платежи (Автоматические списания)</h3>
-        <div className="bg-teal-50 p-4 rounded-xl border border-teal-100 space-y-3">
-          <p>
-            4.1. При совершении оплаты за пакет услуг (единиц), Заказчик может дать согласие на автоматическое пополнение баланса (рекуррентные платежи).
-          </p>
-          <p>
-            4.2. <strong>Порядок списания:</strong> Списание средств производится автоматически с банковской карты Заказчика в размере стоимости ранее выбранного пакета при наступлении любого из событий:
-            <br />— Снижение баланса единиц в Личном кабинете ниже 5 (пяти).
-            <br />— Истечение 30 календарных дней с момента последней оплаты.
-          </p>
-          <p>
-          4.3. <strong>Отмена подписки:</strong> Заказчик может в любой момент отключить автопродление в Личном кабинете (раздел «Подписка») либо путем обращения в поддержку по адресу support@doctor-opus.ru.
-        </p>
-          <p>
-            4.4. <strong>Изменение стоимости:</strong> Исполнитель вправе изменять стоимость пакетов в одностороннем порядке. Новые цены применяются к следующему периоду списания после их публикации на Сайте.
+      <section>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">5. Medical Disclaimer</h2>
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <p className="text-red-900 text-sm">
+            The Service provides analytical support only and does NOT constitute a medical diagnosis,
+            clinical opinion, or treatment recommendation. It is NOT FDA-approved. The Subscriber bears
+            full clinical and legal responsibility for all patient-care decisions made using the Service.
+            The Provider shall not be liable for any adverse patient outcomes.
           </p>
         </div>
+      </section>
 
-        <h3 className="font-bold text-gray-900 mt-6 mb-2">5. Цена и порядок расчетов</h3>
+      <section>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">6. Termination</h2>
         <p>
-          5.1. Стоимость и порядок оказания услуг устанавливаются на Сайте Исполнителя в разделе «Подписка». Все расчеты производятся в безналичном порядке через защищенный платежный шлюз.
+          The Provider may suspend or terminate access to the Service for violation of this Agreement,
+          fraudulent activity, or misuse. The Subscriber may terminate this Agreement at any time by
+          deleting their account. Upon termination, unused credits are forfeited unless refund eligibility
+          applies under the Refund Policy.
         </p>
+      </section>
 
-        <h3 className="font-bold text-gray-900 mt-6 mb-2">6. Надлежащее оказание услуг и возврат</h3>
+      <section>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">7. Intellectual Property</h2>
         <p>
-          6.1. Возврат денежных средств за неоказанные услуги осуществляется в соответствии с требованиями Закона РФ от 07.02.1992 N 2300-1 "О защите прав потребителей".
+          All intellectual property rights in and to the Service, including AI models, prompts, design,
+          architecture, and content, are and shall remain the exclusive property of the Provider.
+          This Agreement does not transfer any ownership rights to the Subscriber.
         </p>
-        <p>
-          6.2. Соблюдение претензионного порядка обязательно. Срок ответа на претензию — 10 рабочих дней. Возврат неиспользованных средств производится в течение 10 рабочих дней по заявлению Заказчика.
-        </p>
+      </section>
 
-        <h3 className="font-bold text-gray-900 mt-6 mb-2">7. Конфиденциальность и безопасность</h3>
+      <section>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">8. Contact</h2>
         <p>
-          7.1. Стороны обеспечивают конфиденциальность и безопасность персональных данных в соответствии с ФЗ от 27.07.2006 г. № 152-ФЗ «О персональных данных» и ФЗ от 27.07.2006 г. № 149-ФЗ «Об информации».
+          <strong>Email:</strong> support@doctor-opus.online<br />
+          <strong>Website:</strong> https://doctor-opus.online
         </p>
-
-        <h3 className="font-bold text-gray-900 mt-6 mb-2">8. Форс-мажор и ответственность</h3>
-        <p>
-          8.1. Стороны освобождаются от ответственности за неисполнение обязательств вследствие обстоятельств непреодолимой силы (эпидемии, стихийные бедствия, запретные действия властей).
-        </p>
-        <p>
-          8.2. Сторона, не исполнившая обязательства, обязана возместить другой Стороне причиненные убытки.
-        </p>
-
-        <h3 className="font-bold text-gray-900 mt-6 mb-2">9. Срок действия и изменения</h3>
-        <p>
-          9.1. Оферта вступает в силу с момента размещения на Сайте и действует до момента её отзыва Исполнителем. Изменения в Оферте считаются принятыми Заказчиком в полном объеме с момента их публикации.
-        </p>
-
-        <h3 className="font-bold text-gray-900 mt-6 mb-2">10. Интеллектуальные права и ограничения использования</h3>
-        <p>
-          10.1. Исключительные права на ПО Doctor Opus, включая исходный код, интерфейс, тексты, структуру, дизайн, логику и архитектуру сервиса, принадлежат Исполнителю (Правообладателю).
-        </p>
-        <p>
-          10.2. Без предварительного письменного разрешения Исполнителя запрещаются:
-          <br />— коммерческое использование ПО и его производных;
-          <br />— white-label использование (использование под иным наименованием или брендом);
-          <br />— перепродажа доступа к ПО, его функциям или результатам;
-          <br />— копирование и воспроизведение интерфейса, текстов, архитектуры и ключевых элементов ПО;
-          <br />— создание производных продуктов, имитирующих ПО под другим брендом.
-        </p>
-        <p>
-          10.3. Нарушение условий настоящего раздела является существенным нарушением Договора и влечет ответственность в соответствии с законодательством Российской Федерации.
-        </p>
-
-        <div className="mt-10 p-6 bg-gray-50 rounded-2xl border border-gray-200">
-          <h3 className="font-bold text-lg mb-4">Реквизиты Исполнителя</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-            <div className="space-y-1">
-              <p><strong>Исполнитель:</strong> Селиванов Василий Федорович</p>
-              <p><strong>ИНН:</strong> 920455053236</p>
-              <p><strong>Статус:</strong> Самозанятый</p>
-            </div>
-            <div className="space-y-1">
-              <p><strong>Телефон:</strong> +7 979 037 05 96</p>
-              <p><strong>Email:</strong> support@doctor-opus.ru</p>
-              <p><strong>Сайт:</strong> doctor-opus.ru</p>
-              <p><strong>Город:</strong> г. Севастополь</p>
-            </div>
-          </div>
-        </div>
       </section>
     </LegalPageLayout>
   )

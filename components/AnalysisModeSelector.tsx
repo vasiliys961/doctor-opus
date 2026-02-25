@@ -27,20 +27,20 @@ export default function AnalysisModeSelector({
   const modes: Array<{ value: AnalysisMode; label: string; description: string; icon: string }> = [
     {
       value: 'fast',
-      label: '⚡ Быстрый анализ',
-      description: 'Gemini 3.1 — компактное заключение для первичного просмотра',
+      label: '⚡ Fast Analysis',
+      description: 'Gemini 3.1 — concise report for initial screening',
       icon: '⚡'
     },
     {
       value: 'optimized',
-      label: '⭐ Оптимизированный',
-      description: 'Gemini JSON + Выбор ИИ — лучший баланс точности и глубины',
+      label: '⭐ Optimized',
+      description: 'Gemini JSON + AI Choice — best balance of accuracy and depth',
       icon: '⭐'
     },
     {
       value: 'validated',
-      label: '🧠 С валидацией',
-      description: 'Gemini JSON + Opus 4.6 — экспертный разбор сложных случаев',
+      label: '🧠 Expert Validated',
+      description: 'Gemini JSON + Opus 4.6 — expert review for complex cases',
       icon: '🧠'
     }
   ]
@@ -49,7 +49,7 @@ export default function AnalysisModeSelector({
     <div className="space-y-4">
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
-          Режим анализа:
+          Analysis Mode:
         </label>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {modes.map((mode) => (
@@ -82,10 +82,10 @@ export default function AnalysisModeSelector({
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <label className="block text-sm font-bold text-primary-900 mb-1">
-                🚀 Выбор модели для «Оптимизированного» режима:
+                🚀 Model selection for «Optimized» mode:
               </label>
               <p className="text-[10px] text-primary-700">
-                Выберите «Разум», который будет интерпретировать данные из снимков.
+                Choose the AI model that will interpret the imaging data.
               </p>
             </div>
             
@@ -100,7 +100,7 @@ export default function AnalysisModeSelector({
                 }`}
               >
                 Claude Sonnet 4.6
-                <div className="text-[9px] font-normal opacity-80">Стандарт (90 сек)</div>
+                <div className="text-[9px] font-normal opacity-80">Standard (~90 sec)</div>
               </button>
               <button
                 onClick={() => onOptimizedModelChange('gpt52')}
@@ -112,7 +112,7 @@ export default function AnalysisModeSelector({
                 }`}
               >
                 GPT-5.2 ⚡️
-                <div className="text-[9px] font-normal opacity-80">Тест-драйв (15 сек)</div>
+                <div className="text-[9px] font-normal opacity-80">Test drive (~15 sec)</div>
               </button>
             </div>
           </div>
@@ -141,10 +141,10 @@ export default function AnalysisModeSelector({
           </div>
           <div>
             <div className="font-semibold text-gray-900">
-              📚 Использовать персональную библиотеку
+              📚 Use Personal Library
             </div>
             <div className="text-xs text-gray-600">
-              RAG-поиск по вашим загруженным PDF-файлам для уточнения анализа
+              RAG search over your uploaded PDF files to enhance analysis context
             </div>
           </div>
         </div>

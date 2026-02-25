@@ -7,9 +7,9 @@
  *   EMAIL_PROVIDER=smtp
  *   SMTP_HOST=smtp.timeweb.ru
  *   SMTP_PORT=465
- *   SMTP_USER=support@doctor-opus.ru
+ *   SMTP_USER=support@doctor-opus.online
  *   SMTP_PASS=пароль
- *   SMTP_FROM=Doctor Opus <support@doctor-opus.ru>
+ *   SMTP_FROM=Doctor Opus <support@doctor-opus.online>
  */
 
 export interface EmailResult {

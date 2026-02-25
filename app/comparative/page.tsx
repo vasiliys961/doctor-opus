@@ -66,7 +66,7 @@ export default function ComparativeAnalysisPage() {
 
   const analyzeComparative = async (targetStage: 'description' | 'directive' = 'description') => {
     if (images.length < 2) {
-      setError('Загрузите минимум 2 изображения для сравнения')
+      setError('Please upload at least 2 images for comparison')
       return
     }
 
@@ -81,13 +81,13 @@ export default function ComparativeAnalysisPage() {
     try {
       let comparisonPrompt = ''
       switch (comparisonMode) {
-        case 'temporal': comparisonPrompt = `СРАВНИТЕЛЬНЫЙ АНАЛИЗ В ДИНАМИКЕ`; break
-        case 'location': comparisonPrompt = `СРАВНИТЕЛЬНЫЙ АНАЛИЗ ПО ЛОКАЛИЗАЦИИ`; break
-        default: comparisonPrompt = `СРАВНИТЕЛЬНЫЙ АНАЛИЗ МЕДИЦИНСКИХ ИЗОБРАЖЕНИЙ`;
+        case 'temporal': comparisonPrompt = `COMPARATIVE ANALYSIS OVER TIME`; break
+        case 'location': comparisonPrompt = `COMPARATIVE ANALYSIS BY LOCATION`; break
+        default: comparisonPrompt = `COMPARATIVE MEDICAL IMAGE ANALYSIS`;
       }
       
       if (additionalContext.trim()) {
-        comparisonPrompt += `\n\nДОПОЛНИТЕЛЬНАЯ КЛИНИЧЕСКАЯ ИНФОРМАЦИЯ:\n${additionalContext.trim()}`
+        comparisonPrompt += `\n\nADDITIONAL CLINICAL INFORMATION:\n${additionalContext.trim()}`
       }
 
       const modelToUse = mode === 'fast' 
@@ -151,7 +151,7 @@ export default function ComparativeAnalysisPage() {
         }
       })
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -160,25 +160,25 @@ export default function ComparativeAnalysisPage() {
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-7xl">
       <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 mb-4 sm:mb-6">
-        📊 Сравнительный анализ изображений
+        📊 Comparative Image Analysis
       </h1>
 
       <AnalysisTips 
         content={{
-          fast: "быстрое сравнение основных признаков на нескольких изображениях.",
-          optimized: "рекомендуемый режим: «Оптимизированный» (Gemini JSON → Sonnet) — оптимально для сравнения 'было/стало'.",
-          validated: "двухэтапный разбор (Gemini JSON → Opus 4.6) — максимально точная оценка динамики HU и структурных изменений.",
+          fast: "Fast comparison of main findings across multiple images.",
+          optimized: "Recommended mode: «Optimized» (Gemini JSON → Sonnet) — optimal for before/after comparison.",
+          validated: "Two-stage analysis (Gemini JSON → Opus 4.6) — most accurate assessment of HU dynamics and structural changes.",
           extra: [
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini JSON → Sonnet) — оптимально для сравнения 'было/стало'.",
-            "⏰ Используйте режим 'Динамика во времени' для анализа прогрессирования.",
-            "📍 Режим 'По локализации' подходит для сравнения снимков разных органов."
+            "⭐ Recommended mode: «Optimized» (Gemini JSON → Sonnet) — optimal for before/after comparison.",
+            "⏰ Use 'Over Time' mode to analyze disease progression.",
+            "📍 The 'By Location' mode is suitable for comparing scans of different organs."
           ]
         }}
       />
 
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <div className="mb-6">
-          <h2 className="text-lg sm:text-xl font-semibold mb-3">🎯 Режим сравнения</h2>
+          <h2 className="text-lg sm:text-xl font-semibold mb-3">🎯 Comparison Mode</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <button
               onClick={() => setComparisonMode('temporal')}
@@ -187,7 +187,7 @@ export default function ComparativeAnalysisPage() {
               }`}
             >
               <div className="text-2xl mb-2">⏰</div>
-              <div className="font-semibold text-sm">Динамика во времени</div>
+              <div className="font-semibold text-sm">Over Time</div>
             </button>
             <button
               onClick={() => setComparisonMode('location')}
@@ -196,7 +196,7 @@ export default function ComparativeAnalysisPage() {
               }`}
             >
               <div className="text-2xl mb-2">📍</div>
-              <div className="font-semibold text-sm">По локализации</div>
+              <div className="font-semibold text-sm">By Location</div>
             </button>
             <button
               onClick={() => setComparisonMode('general')}
@@ -205,7 +205,7 @@ export default function ComparativeAnalysisPage() {
               }`}
             >
               <div className="text-2xl mb-2">🔍</div>
-              <div className="font-semibold text-sm">Общее сравнение</div>
+              <div className="font-semibold text-sm">General Comparison</div>
             </button>
           </div>
           
@@ -214,14 +214,14 @@ export default function ComparativeAnalysisPage() {
               href="/comparative/video" 
               className="text-primary-600 hover:text-primary-800 font-semibold flex items-center gap-2 bg-primary-50 px-4 py-2 rounded-lg border border-primary-200 transition-colors"
             >
-              🎬 Перейти к сравнению видео-исследований →
+              🎬 Go to video study comparison →
             </a>
           </div>
         </div>
 
         <div className="mb-6">
           <h2 className="text-lg sm:text-xl font-semibold mb-3">
-            📷 Изображения для сравнения <span className="text-red-500">*</span>
+            📷 Images for Comparison <span className="text-red-500">*</span>
           </h2>
           <ImageUpload onUpload={handleImageUpload} accept="image/*" maxSize={50} />
         </div>
@@ -232,8 +232,8 @@ export default function ComparativeAnalysisPage() {
               {images.map((img, index) => (
                 <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                   <div className="flex justify-between items-start mb-3">
-                    <span className="font-semibold text-sm">Изображение {index + 1}</span>
-                    <button onClick={() => removeImage(index)} className="text-red-500 hover:text-red-700 text-sm">✕ Удалить</button>
+                    <span className="font-semibold text-sm">Image {index + 1}</span>
+                    <button onClick={() => removeImage(index)} className="text-red-500 hover:text-red-700 text-sm">✕ Remove</button>
                   </div>
                   <img src={img.preview} alt="" className="w-full h-48 object-contain rounded-lg mb-2" />
                   <button
@@ -247,7 +247,7 @@ export default function ComparativeAnalysisPage() {
                   </button>
                   <input
                     type="text"
-                    placeholder="Описание (необязательно)"
+                    placeholder="Description (optional)"
                     value={img.description}
                     onChange={(e) => updateImageData(index, 'description', e.target.value)}
                     className="w-full px-3 py-2 text-sm border rounded"
@@ -260,7 +260,7 @@ export default function ComparativeAnalysisPage() {
         )}
 
         <div className="mb-6">
-          <h2 className="text-lg sm:text-xl font-semibold mb-3">📝 Клиническая информация</h2>
+          <h2 className="text-lg sm:text-xl font-semibold mb-3">📝 Clinical Information</h2>
           <textarea
             value={additionalContext}
             onChange={(e) => setAdditionalContext(e.target.value)}
@@ -291,7 +291,7 @@ export default function ComparativeAnalysisPage() {
             disabled={loading || images.length < 2}
             className="bg-primary-500 hover:bg-primary-600 text-white font-semibold py-3 px-6 rounded-lg disabled:opacity-50"
           >
-            {loading && accumulatedDescription === '' ? '⌛ Описание...' : '🔍 Шаг 1: Описание и сравнение'}
+            {loading && accumulatedDescription === '' ? '⌛ Description...' : '🔍 Step 1: Description and Comparison'}
           </button>
           
           <button
@@ -299,7 +299,7 @@ export default function ComparativeAnalysisPage() {
             disabled={loading || images.length < 2 || !accumulatedDescription}
             className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg disabled:opacity-50"
           >
-            {loading && accumulatedDescription !== '' ? '⌛ Заключение...' : '🩺 Шаг 2: Клиническая директива'}
+            {loading && accumulatedDescription !== '' ? '⌛ Conclusion...' : '🩺 Step 2: Clinical Directive'}
           </button>
         </div>
       </div>

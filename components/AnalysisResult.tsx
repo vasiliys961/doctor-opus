@@ -49,7 +49,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       const allPatients = await getAllPatients()
       setPatients(allPatients)
     } catch (error) {
-      console.error('Ошибка при загрузке пациентов:', error)
+      console.error('Error loading patients:', error)
     }
   }
 
@@ -62,11 +62,11 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         conclusion: result,
         imageType: imageType
       })
-      alert('Результат успешно сохранен в карту пациента!')
+      alert('Result successfully saved to patient record!')
       setShowPatientSelector(false)
     } catch (error) {
-      console.error('Ошибка при сохранении:', error)
-      alert('Не удалось сохранить результат.')
+      console.error('Error saving result:', error)
+      alert('Failed to save result.')
     } finally {
       setSaving(false)
     }
@@ -95,44 +95,32 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   const handleDownloadDoc = async () => {
     setDownloading(true)
     try {
-      // Dynamic import тяжёлых библиотек (~500KB) — грузятся только при скачивании
       const { Document, Paragraph, TextRun, AlignmentType, Packer } = await import('docx');
       const fileSaver = await import('file-saver');
       const saveAs = fileSaver.saveAs || fileSaver.default?.saveAs || fileSaver.default;
-      // Хелпер: конвертация plain-объектов в TextRun (docx доступен только после dynamic import)
       const toRuns = (data: DocRunData[]) => data.map(r => new TextRun({ text: r.text, bold: r.bold, italics: r.italics, font: r.font }));
 
-      // Парсим результат AI и создаем параграфы для DOCX
-      // Убираем только технический мусор стриминга, весь клинический контент сохраняем как есть
       const lines = result.split('\n').filter(line => {
         const l = line.toLowerCase().trim();
-        // Убираем только технические строки стриминга
-        if (l.includes('данные приняты') || l.includes('раздел 0 принят')) return false;
-        if (l.includes('подготовка к анализу') || l.includes('извлечение данных')) return false;
-        if (l.includes('данные извлечены') || l.includes('находок') && l.includes('метрик')) return false;
-        if (l.includes('клинический разбор через') || l.includes('профессорский разбор через')) return false;
-        if (l.startsWith('>') && l.includes('этап')) return false;
-        if (l.includes('этап 1:') || l.includes('этап 2:')) return false;
-        if (l.includes('gemini vision') || l.includes('быстрый анализ')) return false;
-        if (l.includes('анализ анатомических структур')) return false;
-        if (l.includes('измерение размеров образований')) return false;
-        if (l.includes('оценка плотности тканей')) return false;
-        if (l.includes('проверка контрастного усиления')) return false;
-        if (l.includes('детализация патологических изменений')) return false;
+        if (l.includes('data received') || l.includes('section 0 accepted')) return false;
+        if (l.includes('preparing analysis') || l.includes('extracting data')) return false;
+        if (l.includes('data extracted') || l.includes('findings') && l.includes('metrics')) return false;
+        if (l.includes('clinical review in') || l.includes('professor review in')) return false;
+        if (l.startsWith('>') && l.includes('stage')) return false;
+        if (l.includes('stage 1:') || l.includes('stage 2:')) return false;
+        if (l.includes('gemini vision') || l.includes('fast analysis')) return false;
         if (line.trim() === '.' || line.trim() === '..' || line.trim() === '...') return false;
         if (l.startsWith('---') && l.length < 10) return false;
-        // Юридический статус как inline-текст (без заголовка #)
-        if (l.startsWith('юридический статус') || l.startsWith('**юридический статус')) return false;
+        if (l.startsWith('legal status') || l.startsWith('**legal status')) return false;
         return true;
       });
 
       const paragraphs: any[] = []
 
-      // 1. Шапка
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: "МЕДИЦИНСКИЙ КОНСУЛЬТАТИВНЫЙ ОТЧЕТ", bold: true, size: 28 }),
+            new TextRun({ text: "MEDICAL CONSULTATIVE REPORT", bold: true, size: 28 }),
           ],
           alignment: AlignmentType.CENTER,
           spacing: { after: 200 },
@@ -142,30 +130,26 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: `Дата: ${new Date().toLocaleDateString('ru-RU')}`, size: 20 }),
+            new TextRun({ text: `Date: ${new Date().toLocaleDateString('en-US')}`, size: 20 }),
           ],
           alignment: AlignmentType.RIGHT,
           spacing: { after: 400 },
         })
       )
 
-      // 2. ОСНОВНОЙ КОНТЕНТ — в DOCX входят только: Протокол описания, Заключение
-      // Клинические гипотезы, тактика, риски НЕ входят в скачиваемый файл
       const excludeSections = [
-        'клинический обзор',
-        'ведущий синдром',
-        'клинический сценарий',
-        'оценка рисков',
-        'ориентировочная тактика',
-        'тактика ведения',
-        'противоречия и ограничения',
-        'юридический статус',
-        'интегрированная сводка',
-        'технические параметры',
-        'клинические гипотезы',           // Убираем из DOCX (для внутреннего использования)
-        'differential diagnosis',          // Англ. вариант
-        'дифференциальная диагностика',    // Альт. вариант
-        'дифференциальный диагноз',
+        'clinical review',
+        'leading syndrome',
+        'clinical scenario',
+        'risk assessment',
+        'management strategy',
+        'treatment tactics',
+        'contradictions and limitations',
+        'legal status',
+        'integrated summary',
+        'technical parameters',
+        'clinical hypotheses',
+        'differential diagnosis',
       ];
       let skipSection = false;
       let skipSectionLevel = 0; // уровень заголовка исключённой секции
@@ -242,11 +226,10 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         }
       }
 
-      // 3. БЛОК ВЕРИФИКАЦИИ ВРАЧОМ
       paragraphs.push(new Paragraph({ 
         border: { top: { color: "000000", space: 1, value: "single", size: 6 } },
         children: [
-          new TextRun({ text: "ВЕРИФИЦИРОВАНО ВРАЧОМ / VERIFIED BY PHYSICIAN", bold: true, size: 18 })
+          new TextRun({ text: "VERIFIED BY PHYSICIAN", bold: true, size: 18 })
         ],
         spacing: { before: 300, after: 40 },
       }));
@@ -254,7 +237,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: "Данный отчет сформирован системой Doctor Opus и верифицирован врачом. / This report was generated by Doctor Opus and verified by a physician.", size: 10, italics: true, color: "666666" }),
+            new TextRun({ text: "This report was generated by Doctor Opus AI and must be verified by the treating physician.", size: 10, italics: true, color: "666666" }),
           ],
           spacing: { after: 120 },
         })
@@ -263,7 +246,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: "Врач / Physician: ____________________ / ____________________", size: 18 }),
+            new TextRun({ text: "Physician: ____________________ / ____________________", size: 18 }),
           ],
           spacing: { after: 40 },
         })
@@ -272,18 +255,17 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({ text: "                                     (подпись / signature)             (ФИО / Full Name)", size: 10, color: "999999" }),
+            new TextRun({ text: "                                     (signature)                      (Full Name)", size: 10, color: "999999" }),
           ],
           spacing: { after: 200 },
         })
       )
 
-      // Дисклеймер (компактно, без громоздкого юридического блока)
       paragraphs.push(
         new Paragraph({
           children: [
             new TextRun({ 
-              text: "Данное заключение сформировано ИИ Doctor Opus как аналитический черновик и содержит клинические гипотезы. Это не является медицинским заключением. Окончательное клиническое решение принимает исключительно лечащий врач.", 
+              text: "This conclusion was generated by Doctor Opus AI as an analytical draft containing clinical hypotheses. It does not constitute a medical opinion. The final clinical decision rests solely with the treating physician.", 
               size: 14,
               italics: true,
               color: "999999"
@@ -293,12 +275,11 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         })
       )
 
-      // Подвал (очень компактно)
       paragraphs.push(
         new Paragraph({
           children: [
             new TextRun({ 
-              text: "Doctor Opus v4.0 Clinical. Документ носит информационно-справочный характер.",
+              text: "Doctor Opus v4.0 Clinical. For informational and analytical purposes only.",
               size: 10,
               color: "AAAAAA",
               italics: true
@@ -308,7 +289,6 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         })
       )
 
-      // Создаем документ с полями 0.5 дюйма (720 twips)
       const doc = new Document({
         sections: [
           {
@@ -323,11 +303,11 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       })
 
       const blob = await Packer.toBlob(doc)
-      const fileName = `Report_${new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')}.docx`;
+      const fileName = `Report_${new Date().toLocaleDateString('en-US').replace(/\//g, '-')}.docx`;
       saveAs(blob, fileName)
     } catch (error: any) {
-      console.error('Ошибка при скачивании документа:', error?.message || error, error?.stack)
-      alert(`Ошибка при скачивании: ${error?.message || 'Неизвестная ошибка'}. Попробуйте обновить страницу.`)
+      console.error('Error downloading document:', error?.message || error, error?.stack)
+      alert(`Download error: ${error?.message || 'Unknown error'}. Try refreshing the page.`)
     } finally {
       setDownloading(false)
     }
@@ -482,34 +462,28 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       // Проверяем поддержку Web Share API
       if (navigator.share) {
         await navigator.share({
-          title: 'Результат медицинского анализа',
+          title: 'Medical Analysis Result',
           text: result.substring(0, 1000) + (result.length > 1000 ? '...' : ''),
           url: window.location.href
         })
       } else {
-        // Fallback: копируем текст в буфер обмена
         await navigator.clipboard.writeText(result)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
-        alert('Текст скопирован в буфер обмена!')
+        alert('Text copied to clipboard!')
       }
     } catch (error: any) {
-      // Пользователь отменил шаринг или произошла ошибка
       if (error.name !== 'AbortError') {
-        console.error('Ошибка при попытке поделиться:', error)
-        // Fallback: копируем текст
         await navigator.clipboard.writeText(result)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
-        alert('Текст скопирован в буфер обмена!')
+        alert('Text copied to clipboard!')
       }
     }
   }
 
   const handleTransferToConsultant = () => {
-    // Передаём только краткую сводку (первые 2000 символов) и метаданные.
-    // Полный результат не сохраняем в sessionStorage для безопасности ПДн.
-    const truncated = result.length > 2000 ? result.substring(0, 2000) + '\n\n[...результат сокращён для передачи]' : result;
+    const truncated = result.length > 2000 ? result.substring(0, 2000) + '\n\n[...result truncated for transfer]' : result;
     const data = {
       text: truncated,
       type: imageType,
@@ -522,43 +496,33 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
 
   const buildProtocolDraftFromResult = (fullText: string) => {
     // Берем только "сухую" клиническую часть (протокол описания + заключение),
-    // отбрасывая технический мусор стриминга и секции с гипотезами/тактикой.
     const lines = fullText.split('\n').filter(line => {
       const l = line.toLowerCase().trim();
       if (!l) return true;
-      // Убираем только технические строки стриминга
-      if (l.includes('данные приняты') || l.includes('раздел 0 принят')) return false;
-      if (l.includes('подготовка к анализу') || l.includes('извлечение данных')) return false;
-      if (l.includes('данные извлечены') || l.includes('находок') && l.includes('метрик')) return false;
-      if (l.includes('клинический разбор через') || l.includes('профессорский разбор через')) return false;
-      if (l.startsWith('>') && l.includes('этап')) return false;
-      if (l.includes('этап 1:') || l.includes('этап 2:')) return false;
-      if (l.includes('gemini vision') || l.includes('быстрый анализ')) return false;
-      if (l.includes('анализ анатомических структур')) return false;
-      if (l.includes('измерение размеров образований')) return false;
-      if (l.includes('оценка плотности тканей')) return false;
-      if (l.includes('проверка контрастного усиления')) return false;
-      if (l.includes('детализация патологических изменений')) return false;
+      if (l.includes('data received') || l.includes('section 0 accepted')) return false;
+      if (l.includes('preparing analysis') || l.includes('extracting data')) return false;
+      if (l.includes('clinical review in') || l.includes('professor review in')) return false;
+      if (l.startsWith('>') && l.includes('stage')) return false;
+      if (l.includes('stage 1:') || l.includes('stage 2:')) return false;
+      if (l.includes('gemini vision') || l.includes('fast analysis')) return false;
       if (line.trim() === '.' || line.trim() === '..' || line.trim() === '...') return false;
       if (l.startsWith('---') && l.length < 10) return false;
       return true;
     });
 
     const excludeSections = [
-      'клинический обзор',
-      'ведущий синдром',
-      'клинический сценарий',
-      'оценка рисков',
-      'ориентировочная тактика',
-      'тактика ведения',
-      'противоречия и ограничения',
-      'юридический статус',
-      'интегрированная сводка',
-      'технические параметры',
-      'клинические гипотезы',
+      'clinical review',
+      'leading syndrome',
+      'clinical scenario',
+      'risk assessment',
+      'management strategy',
+      'treatment tactics',
+      'contradictions and limitations',
+      'legal status',
+      'integrated summary',
+      'technical parameters',
+      'clinical hypotheses',
       'differential diagnosis',
-      'дифференциальная диагностика',
-      'дифференциальный диагноз',
     ];
 
     let skipSection = false;
@@ -612,14 +576,13 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
 
   const handleTransferToEcgProtocol = () => handleTransferToProtocol(true);
 
-  // Если есть результат, показываем его даже во время загрузки (для streaming)
   if (!result) {
     if (loading) {
       return (
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex items-center justify-center space-x-2">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-            <span className="text-primary-900 font-semibold">Анализ выполняется...</span>
+            <span className="text-primary-900 font-semibold">Analysis in progress...</span>
           </div>
         </div>
       )
@@ -631,22 +594,22 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mt-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-xl font-bold text-primary-900">🩺 Консультативное заключение</h3>
+          <h3 className="text-xl font-bold text-primary-900">🩺 Consultative Report</h3>
           {loading && (
             <div className="flex items-center space-x-2 mt-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
-              <span className="text-sm text-gray-600">Анализ выполняется...</span>
+              <span className="text-sm text-gray-600">Analysis in progress...</span>
             </div>
           )}
           {model && (
             <div className="flex flex-wrap items-center gap-2 mt-1">
               <p className="text-sm text-gray-600">
-                Использована модель: <span className="font-semibold">{getModelDisplayName(model)}</span>
-                {mode && <span className="ml-2">({mode === 'fast' ? 'быстрый' : mode === 'optimized' ? 'оптимизированный' : 'с валидацией'})</span>}
+                Model used: <span className="font-semibold">{getModelDisplayName(model)}</span>
+                {mode && <span className="ml-2">({mode === 'fast' ? 'fast' : mode === 'optimized' ? 'optimized' : 'expert validated'})</span>}
               </p>
               {cost !== undefined && cost > 0 && !loading && (
                 <div className="bg-teal-50 text-teal-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-teal-200 shadow-sm">
-                  💰 Стоимость сервиса: {cost.toFixed(2)} ед.
+                  💰 Service cost: {cost.toFixed(2)} cr.
                 </div>
               )}
             </div>
@@ -658,37 +621,37 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
               onClick={() => setShowPatientSelector(true)}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm flex items-center gap-2"
             >
-              📌 В карту пациента
+              📌 Save to Patient Record
             </button>
           )}
           <button
             onClick={() => setShowLibrarySearch(!showLibrarySearch)}
             className={`px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2 font-bold ${showLibrarySearch ? 'bg-primary-100 text-primary-700' : 'bg-primary-50 text-primary-600 hover:bg-primary-100'}`}
           >
-            📚 {showLibrarySearch ? 'Скрыть библиотеку' : 'Найти в Библиотеке'}
+            📚 {showLibrarySearch ? 'Hide Library' : 'Search Library'}
           </button>
           <button
             onClick={handleCopy}
             className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors text-sm"
           >
-            {copied ? '✓ Скопировано' : '📋 Копировать'}
+            {copied ? '✓ Copied' : '📋 Copy'}
           </button>
           {!loading && result && imageType === 'ecg' && (
             <button
               onClick={handleTransferToEcgProtocol}
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
-              title="Оформить короткое заключение функционалиста по шаблону"
+              title="Generate a short ECG functional conclusion using template"
             >
-              🫀 В протокол ЭКГ
+              🫀 ECG Protocol
             </button>
           )}
           {!loading && result && imageType !== 'ecg' && (
             <button
               onClick={() => handleTransferToProtocol(false)}
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
-              title="Передать очищенное заключение в раздел Протокол"
+              title="Transfer clean conclusion to Protocol section"
             >
-              📄 В протокол
+              📄 To Protocol
             </button>
           )}
           <button
@@ -696,37 +659,36 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             disabled={downloading}
             className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {downloading ? '⏳ Скачивание...' : '📄 Скачать .docx'}
+            {downloading ? '⏳ Downloading...' : '📄 Download .docx'}
           </button>
           <button
             onClick={() => window.print()}
             className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors text-sm"
           >
-            🖨️ Печать
+            🖨️ Print
           </button>
           <button
             onClick={handleShare}
             className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors text-sm"
           >
-            🔗 Поделиться
+            🔗 Share
           </button>
           {!loading && result && (
             <button
               onClick={handleTransferToConsultant}
               className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
             >
-              🩺 Обсудить тактику
+              🩺 Discuss Management
             </button>
           )}
         </div>
       </div>
 
-      {/* Модальное окно выбора пациента */}
       {showPatientSelector && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
             <div className="p-4 border-b flex justify-between items-center bg-indigo-50 rounded-t-xl">
-              <h4 className="font-bold text-indigo-900">Выберите пациента</h4>
+              <h4 className="font-bold text-indigo-900">Select Patient</h4>
               <button 
                 onClick={() => setShowPatientSelector(false)}
                 className="text-gray-500 hover:text-gray-700 p-1"
@@ -737,12 +699,12 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             <div className="overflow-y-auto p-2 flex-grow">
               {patients.length === 0 ? (
                 <div className="p-8 text-center">
-                  <p className="text-gray-500 mb-4">База пациентов пуста</p>
+                  <p className="text-gray-500 mb-4">Patient database is empty</p>
                   <a 
                     href="/patients" 
                     className="text-indigo-600 hover:underline font-semibold"
                   >
-                    Перейти к созданию пациента
+                    Go to create patient
                   </a>
                 </div>
               ) : (
@@ -756,7 +718,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
                     >
                       <div className="font-semibold text-gray-900 group-hover:text-indigo-700">{p.name}</div>
                       <div className="text-xs text-gray-500">
-                        {p.age} лет • {p.diagnosis || 'Нет диагноза'}
+                        {p.age} y.o. • {p.diagnosis || 'No diagnosis'}
                       </div>
                     </button>
                   ))}
@@ -768,7 +730,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
                 onClick={() => setShowPatientSelector(false)}
                 className="text-sm text-gray-600 hover:text-gray-800"
               >
-                Отмена
+                Cancel
               </button>
             </div>
           </div>
@@ -802,7 +764,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
                 className="group relative px-10 py-5 bg-gradient-to-r from-teal-500 via-emerald-500 to-teal-600 text-white rounded-2xl transition-all shadow-[0_0_20px_rgba(20,184,166,0.4)] hover:shadow-[0_0_40px_rgba(20,184,166,0.7)] hover:scale-105 flex items-center gap-4 text-xl font-black animate-bounce-slow"
               >
                 <span className="text-3xl animate-pulse">🩺</span>
-                <span className="tracking-widest uppercase">Обсудить клиническую тактику</span>
+                <span className="tracking-widest uppercase">Discuss Clinical Management</span>
                 <div className="absolute -inset-1 bg-gradient-to-r from-teal-400 to-emerald-400 rounded-2xl blur opacity-25 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-pulse-fast"></div>
               </button>
             </div>
@@ -815,12 +777,12 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       <div className="mt-8 pt-4 border-t border-gray-100">
         <div className="flex flex-col md:flex-row justify-between gap-4 text-[10px] text-gray-400">
           <div className="space-y-1 max-w-2xl">
-            <p><strong>⚠️ Верификация:</strong> Данное консультативное заключение требует обязательной проверки и подписи лечащего врача. Doctor Opus — информационно-аналитический сервис, не являющийся медицинской организацией и не оказывающий медицинских услуг. Все данные носят ознакомительный характер.</p>
-            <p><strong>ℹ️ О тарификации:</strong> Стоимость отражает цену сервиса (модели + инфраструктура: серверная обработка, хранение, доставка). Повторные запросы к тем же данным тарифицируются заново, если они не были сохранены в кэше системы.</p>
+            <p><strong>⚠️ Verification Required:</strong> This consultative report must be reviewed and signed by the treating physician. Doctor Opus is an informational-analytical SaaS service and does not provide medical services. All content is for informational purposes only.</p>
+            <p><strong>ℹ️ Pricing:</strong> Credit cost reflects the service charge (AI models + infrastructure: server processing, storage, delivery). Repeated requests for the same data are re-billed unless cached.</p>
           </div>
           <div className="text-right">
-            <p>ID сессии: {sessionId || 'N/A'}</p>
-            <p>Версия ядра: 4.1.0-rational</p>
+            <p>Session ID: {sessionId || 'N/A'}</p>
+            <p>Core version: 4.1.0-rational</p>
           </div>
         </div>
       </div>

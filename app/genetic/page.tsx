@@ -143,7 +143,7 @@ export default function GeneticPage() {
   // Конвертация PDF в изображения на клиенте
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
     if (!window.pdfjsLib) {
-      throw new Error('PDF.js не загружен. Подождите несколько секунд и попробуйте снова.')
+      throw new Error('PDF.js is not loaded. Please wait a few seconds and try again.')
     }
 
     try {
@@ -178,7 +178,7 @@ export default function GeneticPage() {
         const context = canvas.getContext('2d')
         
         if (!context) {
-          throw new Error('Не удалось получить контекст canvas для рендеринга страницы')
+          throw new Error('Failed to get canvas context for page rendering')
         }
         
         canvas.width = viewport.width
@@ -202,7 +202,7 @@ export default function GeneticPage() {
       }
 
       if (base64Images.length === 0) {
-        throw new Error('Не удалось конвертировать ни одной страницы PDF в изображение')
+        throw new Error('Failed to convert any PDF pages to images')
       }
 
       console.log(`✅ [PDF] Конвертация завершена. Получено ${base64Images.length} изображений`)
@@ -210,7 +210,7 @@ export default function GeneticPage() {
       
     } catch (error: any) {
       console.error('❌ [PDF] Ошибка конвертации:', error)
-      throw new Error(`Ошибка конвертации PDF: ${error.message}`)
+      throw new Error(`PDF conversion error: ${error.message}`)
     }
   }
 
@@ -227,7 +227,7 @@ export default function GeneticPage() {
       if (uploadedFile.type === 'application/pdf' || uploadedFile.name.toLowerCase().endsWith('.pdf')) {
         console.log('📄 [GENETIC PAGE] PDF обнаружен — будет отправлен напрямую на сервер')
         setLoading(false)
-        // processedImages остаётся пустым — отобразится блок «Извлечь данные»
+        // processedImages остаётся пустым — отобразится блок «Extract Data»
         return
       }
 
@@ -248,7 +248,7 @@ export default function GeneticPage() {
 
     } catch (err: any) {
       console.error('❌ [GENETIC PAGE] Ошибка:', err)
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
       setLoading(false)
       setConvertingPDF(false)
     }
@@ -280,7 +280,7 @@ export default function GeneticPage() {
         const extractionData = await extractionResponse.json()
 
         if (!extractionData.success) {
-          const errorMsg = extractionData.error || 'Ошибка при извлечении данных'
+          const errorMsg = extractionData.error || 'Data extraction error'
           setError(errorMsg)
           setLoading(false)
           return
@@ -311,7 +311,7 @@ export default function GeneticPage() {
         const extractionData = await extractionResponse.json()
 
         if (!extractionData.success) {
-          setError(extractionData.error || 'Ошибка при извлечении данных')
+          setError(extractionData.error || 'Data extraction error')
           setLoading(false)
           return
         }
@@ -328,14 +328,14 @@ export default function GeneticPage() {
       setLoading(false)
     } catch (err: any) {
       console.error('❌ [GENETIC PAGE] Ошибка extraction:', err)
-      setError(err.message || 'Произошла ошибка при анализе')
+      setError(err.message || 'An error occurred during analysis')
       setLoading(false)
     }
   }
 
   const handleSendToGeneticist = async () => {
     if (!extractedData) {
-      setError('Нет извлеченных данных для отправки')
+      setError('No extracted data to submit')
       return
     }
 
@@ -413,7 +413,7 @@ export default function GeneticPage() {
           },
           onError: (error: Error) => {
             console.error('❌ [GENETIC PAGE] Ошибка streaming:', error)
-            setError(error.message || 'Ошибка при получении данных')
+            setError(error.message || 'Error retrieving data')
             setLoading(false)
           },
           onComplete: (finalText: string) => {
@@ -445,7 +445,7 @@ export default function GeneticPage() {
             }
           ])
         } else {
-          setError(consultData.error || 'Ошибка при анализе')
+          setError(consultData.error || 'Analysis error')
         }
         
         // Логирование использования (этап консультации)
@@ -460,7 +460,7 @@ export default function GeneticPage() {
       }
     } catch (err: any) {
       console.error('❌ [GENETIC PAGE] Ошибка:', err)
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
       setLoading(false)
     }
   }
@@ -485,7 +485,7 @@ export default function GeneticPage() {
       ...chatHistory,
       { 
         role: 'user' as const, 
-        content: userQuestion || (filesBase64.length > 0 ? `[Прикреплено файлов: ${filesBase64.length}]` : ''),
+        content: userQuestion || (filesBase64.length > 0 ? `[Files attached: ${filesBase64.length}]` : ''),
         files: filesBase64.length > 0 ? filesBase64 : undefined
       }
     ]
@@ -567,7 +567,7 @@ export default function GeneticPage() {
           },
           onError: (error: Error) => {
             console.error('❌ [GENETIC PAGE] Ошибка streaming:', error)
-            setError(error.message || 'Ошибка при получении данных')
+            setError(error.message || 'Error retrieving data')
             setChatLoading(false)
             // Удаляем пустое сообщение при ошибке
             setChatHistory(prev => prev.slice(0, -1))
@@ -591,14 +591,14 @@ export default function GeneticPage() {
             return newHistory
           })
         } else {
-          setError(consultData.error || 'Ошибка при анализе')
+          setError(consultData.error || 'Analysis error')
           setChatHistory(prev => prev.slice(0, -1))
         }
         setChatLoading(false)
       }
     } catch (err: any) {
       console.error('❌ [GENETIC PAGE] Ошибка chat:', err)
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
       setChatLoading(false)
       // Удаляем пустое сообщение при ошибке
       setChatHistory(prev => prev.slice(0, -1))
@@ -607,27 +607,27 @@ export default function GeneticPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🧬 Генетический анализ</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">🧬 Genetic Analysis</h1>
       
       <AnalysisTips 
         title="Как работает генетический анализ"
         content={{
-          fast: "первый этап: извлечение данных из сложных отчетов и VCF‑файлов. Мы используем специализированные алгоритмы для корректного чтения rsID и генотипов.",
-          validated: "второй этап: экспертное мнение «Ассистента-генетика» (Claude Opus 4.6) — самый точный клинический разбор рисков; экспертный режим.",
+          fast: "First stage: data extraction from complex genetic reports and VCF files. Specialized algorithms for correct rsID and genotype parsing.",
+          validated: "Second stage: expert opinion from the «Genetics Assistant» (Claude Opus 4.6) — the most detailed clinical risk analysis; expert mode.",
           extra: [
-            "⭐ Рекомендуемый режим: «Экспертный» (Opus 4.6) — максимально глубокий анализ генетических данных.",
-            "🚀 Альтернатива: «GPT-5.2» — отличный баланс скорости, мощности и стоимости.",
-            "👤 Рекомендуется добавить клинический контекст для более точной интерпретации результатов.",
-            "💬 После получения заключения вы можете продолжить диалог с генетиком для уточнения деталей.",
-            "📎 Можно прикреплять дополнительные анализы и документы прямо в чат."
+            "⭐ Recommended mode: «Expert» (Opus 4.6) — deepest genetic data analysis.",
+            "🚀 Alternative: «GPT-5.2» — excellent balance of speed, power, and cost.",
+            "👤 Adding clinical context is recommended for more accurate interpretation.",
+            "💬 After receiving the report, you can continue the dialogue with the genetics specialist for further details.",
+            "📎 You can attach additional tests and documents directly in the chat."
           ]
         }}
       />
       
       <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Загрузите генетический отчет</h2>
+        <h2 className="text-xl font-semibold mb-4">Upload Genetic Report</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Поддерживаемые форматы: VCF, PDF, TXT, изображения
+          Supported formats: VCF, PDF, TXT, images
         </p>
         <ImageUpload onUpload={handleUpload} accept=".vcf,.pdf,.txt,image/*" maxSize={50} />
         
@@ -637,23 +637,23 @@ export default function GeneticPage() {
       {file && processedImages.length > 0 && !extractedData && (
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">📷 Предпросмотр и анонимизация</h2>
+            <h2 className="text-xl font-semibold">📷 Preview and Anonymization</h2>
             <div className="text-sm text-gray-500">
-              {processedImages.length > 1 && `Страница ${currentEditorIndex + 1} из ${processedImages.length}`}
+              {processedImages.length > 1 && `Page ${currentEditorIndex + 1} of ${processedImages.length}`}
             </div>
           </div>
 
           <div className="flex flex-col items-center bg-gray-50 rounded-xl p-4 border-2 border-dashed border-gray-200 mb-6 relative group">
             <img 
               src={`data:image/jpeg;base64,${processedImages[currentEditorIndex]}`} 
-              alt="Загруженный отчет" 
+              alt="Uploaded report" 
               className="max-w-full max-h-[600px] rounded-lg shadow-lg object-contain"
             />
             <button
               onClick={() => setShowEditor(true)}
               className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
             >
-              🎨 Закрасить данные на этой странице
+              🎨 Redact Data on This Page
             </button>
             
             {processedImages.length > 1 && (
@@ -663,14 +663,14 @@ export default function GeneticPage() {
                   disabled={currentEditorIndex === 0}
                   className="px-4 py-2 bg-white border border-gray-300 rounded-lg disabled:opacity-30"
                 >
-                  ← Пред.
+                  ← Prev
                 </button>
                 <button
                   onClick={() => setCurrentEditorIndex(prev => Math.min(processedImages.length - 1, prev + 1))}
                   disabled={currentEditorIndex === processedImages.length - 1}
                   className="px-4 py-2 bg-white border border-gray-300 rounded-lg disabled:opacity-30"
                 >
-                  След. →
+                  Next →
                 </button>
               </div>
             )}
@@ -687,10 +687,10 @@ export default function GeneticPage() {
               />
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-blue-900">
-                  🛡️ Анонимный анализ активен
+                  🛡️ Anonymous analysis active
                 </span>
                 <span className="text-[10px] text-blue-700 font-normal">
-                  ФИО и адрес будут затерты перед отправкой к ИИ.
+                  Name and address will be redacted before sending to AI.
                 </span>
               </div>
             </label>
@@ -701,7 +701,7 @@ export default function GeneticPage() {
               className="w-full sm:w-auto px-10 py-4 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-lg transform hover:scale-105 disabled:opacity-50 flex items-center justify-center gap-3"
             >
               <span className="text-xl">🚀</span>
-              Извлечь данные
+              Extract Data
             </button>
           </div>
         </div>
@@ -711,8 +711,8 @@ export default function GeneticPage() {
       {file && processedImages.length === 0 && !extractedData && !loading && !convertingPDF && (
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
           <div className="mb-4 text-4xl">📄</div>
-          <h3 className="text-lg font-bold mb-2">Файл загружен: {file.name}</h3>
-          <p className="text-sm text-gray-600 mb-4">Готов к извлечению генетических данных</p>
+          <h3 className="text-lg font-bold mb-2">File loaded: {file.name}</h3>
+          <p className="text-sm text-gray-600 mb-4">Ready for genetic data extraction</p>
           
           <div className="flex flex-col items-center gap-4">
              <label className="flex items-center space-x-2 cursor-pointer p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-900 w-fit shadow-sm">
@@ -725,7 +725,7 @@ export default function GeneticPage() {
               />
               <div className="flex flex-col text-left">
                 <span className="text-sm font-bold text-blue-900">
-                  🛡️ Анонимный анализ
+                  🛡️ Anonymous Analysis
                 </span>
                 <span className="text-[10px] text-blue-700 font-normal">
                   ФИО, даты рождения, паспорта, телефоны будут удалены из результата.
@@ -781,7 +781,7 @@ export default function GeneticPage() {
                 onClick={runExtraction}
                 className="px-10 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-lg"
               >
-                🚀 Извлечь данные
+                🚀 Extract Data
               </button>
             )}
           </div>

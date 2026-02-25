@@ -40,7 +40,7 @@ export default function AdminPaymentsPage() {
         setPayments(data.payments || [])
         if (data.notice) setNotice(data.notice)
       } else {
-        setError(data.error || 'Ошибка загрузки')
+        setError(data.error || 'Loading error')
       }
     } catch (err: any) {
       setError(err.message)
@@ -53,7 +53,7 @@ export default function AdminPaymentsPage() {
     const payment = payments.find(p => p.id === paymentId)
     if (!payment) return
 
-    if (!confirm(`Подтвердите возврат:\n\nПользователь: ${payment.email}\nСумма: ${payment.amount} руб.\nЕдиницы: ${payment.units} ед.\n\nСтатус платежа будет изменен на "Возвращен".\nНе забудьте выполнить перевод средств в кабинете платежной системы.`)) {
+    if (!confirm(`Confirm refund:\n\nUser: ${payment.email}\nAmount: ${payment.amount} USD\nCredits: ${payment.units} cr.\n\nPayment status will be changed to "Refunded".\nDo not forget to process the refund in your payment system account.`)) {
       return
     }
 
@@ -67,13 +67,13 @@ export default function AdminPaymentsPage() {
       const data = await res.json()
 
       if (data.success) {
-        alert(`Возврат оформлен.\n\n${data.refund.note}`)
+        alert(`Refund processed.\n\n${data.refund.note}`)
         loadPayments()
       } else {
-        alert('Ошибка: ' + data.error)
+        alert('Error: ' + data.error)
       }
     } catch (err: any) {
-      alert('Техническая ошибка: ' + err.message)
+      alert('Technical error: ' + err.message)
     } finally {
       setRefunding(null)
     }
@@ -84,10 +84,10 @@ export default function AdminPaymentsPage() {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center bg-white p-10 rounded-2xl shadow-lg max-w-md">
           <div className="text-5xl mb-4">🔒</div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Доступ ограничен</h2>
-          <p className="text-slate-500 mb-6">Эта страница доступна только администраторам системы.</p>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Access Restricted</h2>
+          <p className="text-slate-500 mb-6">This page is accessible to system administrators only.</p>
           <Link href="/" className="bg-teal-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-teal-700 transition-all">
-            На главную
+            Go to Home
           </Link>
         </div>
       </div>
@@ -105,9 +105,9 @@ export default function AdminPaymentsPage() {
       refunded: 'bg-red-100 text-red-700',
     }
     const labels: Record<string, string> = {
-      completed: 'Оплачен',
-      pending: 'Ожидает',
-      refunded: 'Возвращен',
+      completed: 'Paid',
+      pending: 'Pending',
+      refunded: 'Refunded',
     }
     return (
       <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase ${styles[status] || 'bg-slate-100 text-slate-600'}`}>
@@ -123,22 +123,22 @@ export default function AdminPaymentsPage() {
           <div>
             <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
               <span className="bg-red-600 text-white p-2 rounded-xl shadow-lg text-2xl">⚙️</span>
-              Управление платежами
+              Payment Management
             </h1>
-            <p className="text-slate-500 mt-1 italic">Только для администратора. Здесь можно одобрить возврат одной кнопкой.</p>
+            <p className="text-slate-500 mt-1 italic">Admin only. One-click refund approval.</p>
           </div>
           <div className="flex gap-3">
             <button
               onClick={loadPayments}
               className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition shadow-sm text-sm font-medium"
             >
-              🔄 Обновить
+              🔄 Refresh
             </button>
             <Link 
               href="/"
               className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition shadow-sm text-sm font-medium"
             >
-              ← Назад
+              ← Back
             </Link>
           </div>
         </div>
@@ -158,13 +158,13 @@ export default function AdminPaymentsPage() {
         {loading ? (
           <div className="bg-white rounded-2xl shadow-sm border p-12 text-center">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-            <p className="text-slate-500">Загрузка платежей...</p>
+            <p className="text-slate-500">Loading payments...</p>
           </div>
         ) : payments.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-sm border p-12 text-center">
             <div className="text-5xl mb-4 opacity-20">💳</div>
-            <p className="text-slate-500 font-medium">Платежей пока нет.</p>
-            <p className="text-sm text-slate-400 mt-2">Когда пользователи начнут покупать пакеты, данные появятся здесь.</p>
+            <p className="text-slate-500 font-medium">No payments yet.</p>
+            <p className="text-sm text-slate-400 mt-2">When users start purchasing packages, data will appear here.</p>
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
@@ -174,12 +174,12 @@ export default function AdminPaymentsPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID</th>
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email</th>
-                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Сумма</th>
-                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Единицы</th>
-                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Текущий баланс</th>
-                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Статус</th>
-                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Дата</th>
-                    <th className="px-4 py-3 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">Действие</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Amount</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Credits</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Current Balance</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Date</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -188,9 +188,9 @@ export default function AdminPaymentsPage() {
                       <td className="px-4 py-3 text-sm text-slate-500 font-mono">#{p.id}</td>
                       <td className="px-4 py-3 text-sm text-slate-800 font-medium">{p.email}</td>
                       <td className="px-4 py-3 text-sm font-bold text-slate-800">{parseFloat(p.amount).toFixed(0)} ₽</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{parseFloat(p.units).toFixed(0)} ед.</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{parseFloat(p.units).toFixed(0)} cr.</td>
                       <td className="px-4 py-3 text-sm text-indigo-600 font-bold">
-                        {p.current_balance ? parseFloat(p.current_balance).toFixed(1) : '—'} ед.
+                        {p.current_balance ? parseFloat(p.current_balance).toFixed(1) : '—'} cr.
                       </td>
                       <td className="px-4 py-3">{statusBadge(p.status)}</td>
                       <td className="px-4 py-3 text-xs text-slate-400">{formatDate(p.created_at)}</td>
@@ -204,7 +204,7 @@ export default function AdminPaymentsPage() {
                             {refunding === p.id ? '⏳...' : '🛑 Возврат'}
                           </button>
                         ) : p.status === 'refunded' ? (
-                          <span className="text-xs text-red-400 font-bold">Возвращен</span>
+                          <span className="text-xs text-red-400 font-bold">Refunded</span>
                         ) : (
                           <span className="text-xs text-slate-300">—</span>
                         )}
@@ -219,8 +219,8 @@ export default function AdminPaymentsPage() {
 
         <div className="mt-8 p-5 bg-amber-50 border border-amber-100 rounded-xl">
           <p className="text-sm text-amber-800 leading-relaxed">
-            <strong>Как пользоваться:</strong> Когда пользователь просит возврат (например, по email), найдите его платеж в таблице и нажмите кнопку <strong>«🛑 Возврат»</strong>. 
-            Система обновит статус в БД и спишет юниты с баланса. После этого выполните перевод средств вручную в кабинете вашей платежной системы. 
+            <strong>How to use:</strong> When a user requests a refund (e.g., by email), find their payment in the table and click the <strong>«🛑 Refund»</strong> button. 
+            The system will update the status in the DB and deduct credits from the balance. Then manually transfer the funds in your payment provider account. 
             Когда платежная система будет полностью подключена, возврат будет выполняться автоматически через API.
           </p>
         </div>

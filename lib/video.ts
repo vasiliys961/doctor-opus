@@ -104,7 +104,7 @@ export async function analyzeVideoTwoStage(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://doctor-opus.ru',
+      'HTTP-Referer': 'https://doctor-opus.online',
       'X-Title': 'Doctor Opus',
     },
     body: JSON.stringify(descriptionPayload),
@@ -116,7 +116,7 @@ export async function analyzeVideoTwoStage(
   }
 
   const descriptionData = await descriptionResponse.json();
-  const description = descriptionData?.choices?.[0]?.message?.content || 'Не удалось получить описание.';
+  const description = descriptionData?.choices?.[0]?.message?.content || 'Failed to get description.';
 
   // Суммируем токены первого этапа
   if (descriptionData?.usage) {
@@ -149,7 +149,7 @@ export async function analyzeVideoTwoStage(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://doctor-opus.ru',
+      'HTTP-Referer': 'https://doctor-opus.online',
       'X-Title': 'Doctor Opus',
     },
     body: JSON.stringify(analysisPayload),
@@ -161,7 +161,7 @@ export async function analyzeVideoTwoStage(
   }
 
   const analysisData = await analysisResponse.json();
-  const analysis = analysisData?.choices?.[0]?.message?.content || 'Не удалось получить заключение.';
+  const analysis = analysisData?.choices?.[0]?.message?.content || 'Failed to get conclusion.';
 
   // Суммируем токены второго этапа
   if (analysisData?.usage) {
@@ -224,7 +224,7 @@ export async function analyzeTwoVideosTwoStage(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://doctor-opus.ru',
+      'HTTP-Referer': 'https://doctor-opus.online',
       'X-Title': 'Doctor Opus',
     },
     body: JSON.stringify(descriptionPayload),
@@ -235,7 +235,7 @@ export async function analyzeTwoVideosTwoStage(
   }
 
   const descriptionData = await descriptionResponse.json();
-  const description = descriptionData?.choices?.[0]?.message?.content || 'Не удалось получить описание.';
+  const description = descriptionData?.choices?.[0]?.message?.content || 'Failed to get description.';
 
   if (descriptionData?.usage) {
     totalPromptTokens += descriptionData.usage.prompt_tokens || 0;
@@ -264,7 +264,7 @@ export async function analyzeTwoVideosTwoStage(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://doctor-opus.ru',
+      'HTTP-Referer': 'https://doctor-opus.online',
       'X-Title': 'Doctor Opus',
     },
     body: JSON.stringify(analysisPayload),
@@ -275,7 +275,7 @@ export async function analyzeTwoVideosTwoStage(
   }
 
   const analysisData = await analysisResponse.json();
-  const analysis = analysisData?.choices?.[0]?.message?.content || 'Не удалось получить заключение.';
+  const analysis = analysisData?.choices?.[0]?.message?.content || 'Failed to get conclusion.';
 
   if (analysisData?.usage) {
     totalPromptTokens += analysisData.usage.prompt_tokens || 0;

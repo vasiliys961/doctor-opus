@@ -147,7 +147,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
             headers: {
               Authorization: `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://doctor-opus.ru',
+              'HTTP-Referer': 'https://doctor-opus.online',
               'X-Title': 'Doctor Opus',
             },
             body: JSON.stringify(extractionPayload),

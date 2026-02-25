@@ -43,12 +43,12 @@ export default function PatientSelector({ onSelect, disabled = false }: PatientS
         const history = await getPatientHistory(patient.id)
         if (history && history.length > 0) {
           const recentHistory = history.slice(0, 2) // Берем последние 2 записи для сравнения
-          context += '\n\n=== ИСТОРИЯ ПОСЛЕДНИХ АНАЛИЗОВ (ДЛЯ СРАВНЕНИЯ) ==='
+          context += '\n\n=== RECENT ANALYSIS HISTORY (FOR COMPARISON) ==='
           recentHistory.forEach((record, index) => {
             const date = new Date(record.date).toLocaleDateString('ru-RU')
-            context += `\n[${index + 1}] Дата: ${date}, Исследование: ${record.imageType || record.type}\nЗаключение: ${record.conclusion.substring(0, 600)}...`
+            context += `\n[${index + 1}] Date: ${date}, Study: ${record.imageType || record.type}\nConclusion: ${record.conclusion.substring(0, 600)}...`
           })
-          context += '\n\nИНСТРУКЦИЯ: Проведи сравнительный анализ с историей пациента. Оцени динамику процесса (стабилизация, прогрессирование, регресс).'
+          context += '\n\nINSTRUCTION: Perform a comparative analysis with the patient's history. Assess the dynamics (stabilization, progression, regression).'
         }
       } catch (err) {
         console.error('Ошибка при получении истории пациента:', err)
@@ -61,7 +61,7 @@ export default function PatientSelector({ onSelect, disabled = false }: PatientS
   if (patients.length === 0) {
     return (
       <div className="text-xs text-gray-500 italic mb-2">
-        База пациентов пуста. Добавьте пациентов в разделе «База пациентов».
+        Patient database is empty. Add patients in the «Patient Database» section.
       </div>
     )
   }
@@ -69,7 +69,7 @@ export default function PatientSelector({ onSelect, disabled = false }: PatientS
   return (
     <div className="mb-4">
       <label className="block text-sm font-semibold text-gray-700 mb-1">
-        👥 Выбрать пациента из базы (автозаполнение контекста):
+        👥 Select patient from database (auto-fill context):
       </label>
       <select
         value={selectedId}
@@ -77,10 +77,10 @@ export default function PatientSelector({ onSelect, disabled = false }: PatientS
         disabled={disabled}
         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white"
       >
-        <option value="">-- Выберите пациента --</option>
+        <option value="">-- Select patient --</option>
         {patients.map(p => (
           <option key={p.id} value={p.id}>
-            {p.name} {p.age ? `(${p.age} л.)` : ''}
+            {p.name} {p.age ? `(${p.age} y.o.)` : ''}
           </option>
         ))}
       </select>

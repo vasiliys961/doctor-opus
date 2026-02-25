@@ -16,23 +16,18 @@ export default function BalanceWidget() {
 
   useEffect(() => {
     setMounted(true)
-    // Проверяем, включена ли система
     if (!isSubscriptionEnabled()) {
       setIsVisible(false)
       return
     }
 
-    // Если пользователь вошел в систему, проверяем бонус за регистрацию
     if (session?.user?.email) {
       upgradeBalanceToRegistered(session.user.email)
     }
 
     loadBalance()
     
-    // Слушаем событие обновления баланса
     window.addEventListener('balanceUpdated', loadBalance)
-    
-    // Обновлять каждые 10 секунд (на всякий случай)
     const interval = setInterval(loadBalance, 10000)
     return () => {
       window.removeEventListener('balanceUpdated', loadBalance)
@@ -45,45 +40,41 @@ export default function BalanceWidget() {
       const bal = getBalance()
       setBalance(bal)
       setUsagePercent(getUsagePercentage())
-      setIsVisible(true) // Всегда показываем виджет, если система включена
+      setIsVisible(true)
     } catch (error) {
       console.error('Error loading balance widget:', error)
       setIsVisible(false)
     }
   }
 
-  // Не показываем виджет, пока не примонтирован (предотвращает Hydration Error) или если система отключена
   if (!mounted || !isVisible) {
     return null
   }
 
-  // Единый источник VIP для UI: серверная сессия (не зависит от localStorage/клиентского env).
   const isSessionUnlimited = Boolean((session?.user as any)?.isVip || (session?.user as any)?.isAdmin)
 
-  // Специальный виджет для безлимитного доступа
   if (isSessionUnlimited || balance?.isUnlimited) {
     return (
       <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white rounded-lg p-4 shadow-lg border border-white/20">
         <div className="flex items-start justify-between mb-2">
           <div>
-            <p className="text-[10px] uppercase tracking-wider opacity-80 mb-1">Статус аккаунта</p>
+            <p className="text-[10px] uppercase tracking-wider opacity-80 mb-1">Account Status</p>
             <p className="text-2xl font-bold flex items-baseline">
-              ♾️ БЕЗЛИМИТ
+              ♾️ UNLIMITED
             </p>
-            <p className="text-[10px] opacity-70 mt-1">Доступ владельца</p>
+            <p className="text-[10px] opacity-70 mt-1">Owner access</p>
           </div>
           <span className="bg-white/20 text-[10px] px-2 py-1 rounded-full font-bold shadow-sm">
             VIP
           </span>
         </div>
         <div className="mt-3 pt-2 border-t border-white/10 text-[10px] opacity-80">
-          Списания отключены. Полный доступ ко всем моделям.
+          Credit deduction disabled. Full access to all models.
         </div>
       </div>
     )
   }
 
-  // Если баланса нет (пакет не куплен), показываем базовую информацию о тратах
   if (!balance) {
     const usageData = getUsageBySections();
     let totalSpentUnits = 0;
@@ -93,13 +84,13 @@ export default function BalanceWidget() {
       <Link href="/subscription">
         <div className="bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-lg p-4 shadow-lg hover:shadow-xl transition-all cursor-pointer border border-gray-600">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs opacity-90">Расход за месяц</p>
+            <p className="text-xs opacity-90">Usage this month</p>
             <span className="bg-white/20 text-[10px] px-2 py-0.5 rounded uppercase tracking-wider">Demo</span>
           </div>
-          <p className="text-2xl font-bold mb-1">{totalSpentUnits.toFixed(2)} ед.</p>
-          <p className="text-[10px] opacity-70 mb-3 uppercase tracking-tighter">Накоплено трат без подписки</p>
+          <p className="text-2xl font-bold mb-1">{totalSpentUnits.toFixed(2)} cr.</p>
+          <p className="text-[10px] opacity-70 mb-3 uppercase tracking-tighter">Accumulated without subscription</p>
           <div className="text-center bg-white/10 rounded py-1.5 text-[10px] font-bold hover:bg-white/20 transition-colors uppercase tracking-widest">
-            Активировать пакет →
+            Activate Package →
           </div>
         </div>
       </Link>
@@ -123,29 +114,28 @@ export default function BalanceWidget() {
       <div className={`${bgColor} text-white rounded-lg p-4 shadow-lg hover:shadow-xl transition-all cursor-pointer border border-white/10`}>
         <div className="flex items-start justify-between mb-3">
           <div>
-            <p className="text-[10px] uppercase tracking-wider opacity-80 mb-1">Доступный остаток</p>
+            <p className="text-[10px] uppercase tracking-wider opacity-80 mb-1">Available Balance</p>
             <p className="text-3xl font-bold flex items-baseline">
-              {balance.currentCredits.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              <span className="text-sm ml-1 opacity-80 font-normal">ед.</span>
+              {balance.currentCredits.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <span className="text-sm ml-1 opacity-80 font-normal">cr.</span>
             </p>
             <p className="text-[10px] opacity-70 mt-1">
-              Пакет: {balance.packageName}
+              Package: {balance.packageName}
             </p>
           </div>
           
           {isNegative && (
             <span className="bg-white text-red-700 text-[10px] px-2 py-1 rounded-full font-bold animate-pulse shadow-sm">
-              ДОЛИМИТ
+              OVERLIMIT
             </span>
           )}
           {isCriticalBalance && !isNegative && (
             <span className="bg-white text-red-600 text-[10px] px-2 py-1 rounded-full font-bold shadow-sm">
-              ⚠️ ПОПОЛНИТЬ
+              ⚠️ TOP UP
             </span>
           )}
         </div>
 
-        {/* Прогресс-бар */}
         <div className="w-full bg-black/20 rounded-full h-1.5 mb-2 overflow-hidden">
           <div 
             className={`h-full transition-all duration-1000 ${isNegative ? 'bg-red-300' : 'bg-white'}`}
@@ -154,14 +144,14 @@ export default function BalanceWidget() {
         </div>
 
         <div className="flex items-center justify-between text-[10px] font-medium opacity-90">
-          <span>Потрачено: {balance.totalSpent.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ед.</span>
+          <span>Used: {balance.totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} cr.</span>
           <span>{Math.max(0, Math.round((balance.currentCredits / balance.initialCredits) * 100))}%</span>
         </div>
 
         {(isLowBalance || isNegative) && (
           <div className="mt-3 pt-2 border-t border-white/20">
             <p className="text-[10px] text-center font-bold uppercase tracking-widest animate-bounce">
-              Активировать пакет →
+              Top Up Credits →
             </p>
           </div>
         )}
@@ -169,9 +159,3 @@ export default function BalanceWidget() {
     </Link>
   )
 }
-
-
-
-
-
-

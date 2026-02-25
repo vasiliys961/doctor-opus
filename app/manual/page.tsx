@@ -13,7 +13,7 @@ export default function ManualPage() {
       <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-100 prose prose-slate max-w-none prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-a:text-indigo-600 prose-img:rounded-2xl">
         <div className="mb-8 border-b pb-6">
           <h1 className="text-4xl font-black text-slate-900 mb-2 uppercase tracking-tight flex items-center gap-4">
-            📘 Инструкция врача
+            📘 Physician Manual
           </h1>
           <div className="h-1.5 w-24 bg-indigo-600 rounded-full"></div>
         </div>

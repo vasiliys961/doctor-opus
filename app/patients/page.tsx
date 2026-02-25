@@ -100,7 +100,7 @@ function PatientsContent() {
       if (data.success) {
         setCaseSummary(data.summary)
       } else {
-        alert('Ошибка: ' + data.error)
+        alert('Error: ' + data.error)
       }
     } catch (error) {
       console.error('Error generating summary:', error)
@@ -110,7 +110,7 @@ function PatientsContent() {
   }
 
   const handleDeleteHistory = async (id: string) => {
-    if (confirm('Удалить эту запись из истории?')) {
+    if (confirm('Delete this record from history?')) {
       await deleteHistoryRecord(id)
       if (selectedPatient) loadHistory(selectedPatient.id)
     }
@@ -168,7 +168,7 @@ function PatientsContent() {
 
   const addPatient = async () => {
     if (!newPatient.name.trim()) {
-      alert('Введите имя пациента')
+      alert('Please enter a patient name')
       return
     }
 
@@ -199,7 +199,7 @@ function PatientsContent() {
   }
 
   const handleDeletePatient = async (id: string) => {
-    if (confirm('Вы уверены, что хотите удалить этого пациента?')) {
+    if (confirm('Are you sure you want to delete this patient?')) {
       await deletePatient(id)
       loadPatients()
       setSelectedPatient(null)
@@ -220,9 +220,9 @@ function PatientsContent() {
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-primary-900 mb-6">👤 База данных пациентов</h1>
+        <h1 className="text-3xl font-bold text-primary-900 mb-6">👤 Patient Database</h1>
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <p className="text-gray-600">Загрузка...</p>
+          <p className="text-gray-600">Loading...</p>
         </div>
       </div>
     )
@@ -231,12 +231,12 @@ function PatientsContent() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-primary-900">👤 База данных пациентов</h1>
+        <h1 className="text-3xl font-bold text-primary-900">👤 Patient Database</h1>
         <button
           onClick={() => setShowAddModal(true)}
           className="bg-primary-500 hover:bg-primary-600 text-white px-6 py-2 rounded-lg transition-colors font-semibold"
         >
-          ➕ Добавить пациента
+          ➕ Add Patient
         </button>
       </div>
 
@@ -244,7 +244,7 @@ function PatientsContent() {
       <div className="mb-6">
         <input
           type="text"
-          placeholder="🔍 Поиск по имени, диагнозу, заметкам..."
+          placeholder="🔍 Search by name, diagnosis, notes..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -254,15 +254,15 @@ function PatientsContent() {
       {/* Статистика */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow-lg p-4">
-          <div className="text-gray-600 text-sm mb-1">Всего пациентов</div>
+          <div className="text-gray-600 text-sm mb-1">Total patients</div>
           <div className="text-3xl font-bold text-primary-700">{patients.length}</div>
         </div>
         <div className="bg-white rounded-lg shadow-lg p-4">
-          <div className="text-gray-600 text-sm mb-1">Результатов поиска</div>
+          <div className="text-gray-600 text-sm mb-1">Search results</div>
           <div className="text-3xl font-bold text-secondary-600">{filteredPatients.length}</div>
         </div>
         <div className="bg-white rounded-lg shadow-lg p-4">
-          <div className="text-gray-600 text-sm mb-1">Последнее обновление</div>
+          <div className="text-gray-600 text-sm mb-1">Last updated</div>
           <div className="text-sm font-semibold text-gray-700">
             {patients.length > 0
               ? formatDate(patients[patients.length - 1].lastVisit)
@@ -276,8 +276,8 @@ function PatientsContent() {
         <div className="bg-white rounded-lg shadow-lg p-8 text-center">
           <p className="text-gray-600 text-lg">
             {patients.length === 0
-              ? '📋 База пациентов пуста. Добавьте первого пациента!'
-              : '🔍 Пациенты не найдены. Попробуйте изменить запрос.'}
+              ? '📋 Patient database is empty. Add your first patient!'
+              : '🔍 No patients found. Try a different search.'}
           </p>
         </div>
       ) : (
@@ -290,7 +290,7 @@ function PatientsContent() {
                     Пациент
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Возраст
+                    Age
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Диагноз
@@ -313,7 +313,7 @@ function PatientsContent() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {patient.age ? `${patient.age} лет` : '—'}
+                      {patient.age ? `${patient.age} y.o.` : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-700">
                       {patient.diagnosis || '—'}
@@ -342,25 +342,25 @@ function PatientsContent() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">➕ Добавить пациента</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">➕ Add Patient</h2>
               
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Имя пациента *
+                    Patient Name *
                   </label>
                   <input
                     type="text"
                     value={newPatient.name}
                     onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    placeholder="Иванов Иван Иванович"
+                    placeholder="John Doe"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Возраст</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Age</label>
                     <input
                       type="number"
                       value={newPatient.age || ''}
@@ -370,22 +370,22 @@ function PatientsContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Пол</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
                     <select
                       value={newPatient.gender || 'male'}
                       onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value as any })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white"
                     >
-                      <option value="male">Мужской</option>
-                      <option value="female">Женский</option>
-                      <option value="other">Другой</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Телефон</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                     <input
                       type="tel"
                       value={newPatient.phone || ''}
@@ -409,7 +409,7 @@ function PatientsContent() {
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-medium text-gray-700">Диагноз</label>
+                    <label className="block text-sm font-medium text-gray-700">Diagnosis</label>
                     <VoiceInput onTranscript={(text) => setNewPatient({ ...newPatient, diagnosis: newPatient.diagnosis ? `${newPatient.diagnosis} ${text}` : text })} />
                   </div>
                   <input
@@ -417,13 +417,13 @@ function PatientsContent() {
                     value={newPatient.diagnosis || ''}
                     onChange={(e) => setNewPatient({ ...newPatient, diagnosis: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    placeholder="Основной диагноз"
+                    placeholder="Primary diagnosis"
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-medium text-gray-700">Заметки</label>
+                    <label className="block text-sm font-medium text-gray-700">Notes</label>
                     <VoiceInput onTranscript={(text) => setNewPatient({ ...newPatient, notes: newPatient.notes ? `${newPatient.notes} ${text}` : text })} />
                   </div>
                   <textarea
@@ -431,7 +431,7 @@ function PatientsContent() {
                     onChange={(e) => setNewPatient({ ...newPatient, notes: e.target.value })}
                     rows={4}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    placeholder="Дополнительная информация о пациенте..."
+                    placeholder="Additional patient information..."
                   />
                 </div>
               </div>
@@ -512,7 +512,7 @@ function PatientsContent() {
               {activeTab === 'info' ? (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Имя пациента</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Patient Name</label>
                     <input
                       type="text"
                       value={selectedPatient.name}
@@ -523,7 +523,7 @@ function PatientsContent() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Возраст</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Age</label>
                       <input
                         type="number"
                         value={selectedPatient.age || ''}
@@ -532,22 +532,22 @@ function PatientsContent() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Пол</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
                       <select
                         value={selectedPatient.gender || 'male'}
                         onChange={(e) => setSelectedPatient({ ...selectedPatient, gender: e.target.value as any })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white"
                       >
-                        <option value="male">Мужской</option>
-                        <option value="female">Женский</option>
-                        <option value="other">Другой</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
                       </select>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Телефон</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                       <input
                         type="tel"
                         value={selectedPatient.phone || ''}
@@ -568,7 +568,7 @@ function PatientsContent() {
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-sm font-medium text-gray-700">Диагноз</label>
+                      <label className="block text-sm font-medium text-gray-700">Diagnosis</label>
                       <VoiceInput onTranscript={(text) => setSelectedPatient({ ...selectedPatient, diagnosis: selectedPatient.diagnosis ? `${selectedPatient.diagnosis} ${text}` : text })} />
                     </div>
                     <input
@@ -581,7 +581,7 @@ function PatientsContent() {
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-sm font-medium text-gray-700">Заметки</label>
+                      <label className="block text-sm font-medium text-gray-700">Notes</label>
                       <VoiceInput onTranscript={(text) => setSelectedPatient({ ...selectedPatient, notes: selectedPatient.notes ? `${selectedPatient.notes} ${text}` : text })} />
                     </div>
                     <textarea
@@ -594,19 +594,19 @@ function PatientsContent() {
 
                   <div className="bg-gray-50 p-3 rounded-lg">
                     <p className="text-xs text-gray-500">
-                      <strong>Создан:</strong> {formatDate(selectedPatient.createdAt)} | 
-                      <strong> Последнее изменение:</strong> {formatDate(selectedPatient.lastVisit)}
+                      <strong>Created:</strong> {formatDate(selectedPatient.createdAt)} | 
+                      <strong> Last modified:</strong> {formatDate(selectedPatient.lastVisit)}
                     </p>
                   </div>
                 </div>
               ) : activeTab === 'history' ? (
                 <div className="space-y-4">
                   {loadingHistory ? (
-                    <p className="text-center py-8 text-gray-500">Загрузка истории...</p>
+                    <p className="text-center py-8 text-gray-500">Loading history...</p>
                   ) : history.length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                      <p className="text-gray-500">История анализов пуста</p>
-                      <p className="text-xs text-gray-400 mt-1">Сохраняйте результаты из разделов «Анализ изображений» или «ЭКГ»</p>
+                      <p className="text-gray-500">Analysis history is empty</p>
+                      <p className="text-xs text-gray-400 mt-1">Save results from «Image Analysis» or «ECG» sections</p>
                     </div>
                   ) : (
                     <div className="space-y-6">
@@ -615,7 +615,7 @@ function PatientsContent() {
                           <button
                             onClick={() => handleDeleteHistory(record.id)}
                             className="absolute top-4 right-4 text-gray-300 hover:text-red-500 transition-colors p-1"
-                            title="Удалить запись"
+                            title="Delete record"
                           >
                             🗑️
                           </button>
@@ -657,7 +657,7 @@ function PatientsContent() {
               ) : activeTab === 'timeline' ? (
                 <div className="space-y-0 relative">
                   <div className="flex justify-between items-center mb-6">
-                    <h3 className="font-bold text-gray-900">Лента событий пациента</h3>
+                    <h3 className="font-bold text-gray-900">Patient Event Feed</h3>
                     {history.length > 0 && (
                       <button
                         onClick={handleGenerateSummary}
@@ -665,9 +665,9 @@ function PatientsContent() {
                         className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
                       >
                         {generatingSummary ? (
-                          <>⏳ Генерирую сводку...</>
+                          <>⏳ Generating summary...</>
                         ) : (
-                          <>🧠 Сделать AI-сводку по случаю</>
+                          <>🧠 Generate AI Case Summary</>
                         )}
                       </button>
                     )}
@@ -686,7 +686,7 @@ function PatientsContent() {
 
                   {history.length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                      <p className="text-gray-500">Событий пока нет</p>
+                      <p className="text-gray-500">No events yet</p>
                     </div>
                   ) : (
                     <div className="relative ml-4 border-l-2 border-primary-100 pl-8 pb-4 space-y-8">
@@ -705,9 +705,9 @@ function PatientsContent() {
                                   {record.type === 'ecg' ? '📈' : record.type === 'image' ? '🩻' : record.type === 'lab' ? '🔬' : '📝'}
                                 </span>
                                 <span className="font-bold text-sm text-gray-800 uppercase tracking-tight">
-                                  {record.type === 'ecg' ? 'ЭКГ анализ' : 
+                                  {record.type === 'ecg' ? 'ECG Analysis' : 
                                    record.type === 'image' ? (record.imageType === 'xray' ? 'Рентген' : record.imageType === 'ct' ? 'КТ' : record.imageType === 'mri' ? 'МРТ' : 'Анализ снимка') : 
-                                   record.type === 'lab' ? 'Лабораторный анализ' : 'Обследование'}
+                                   record.type === 'lab' ? 'Laboratory Analysis' : 'Examination'}
                                 </span>
                               </div>
                               <p className="text-xs text-gray-600 line-clamp-2 italic">
@@ -727,7 +727,7 @@ function PatientsContent() {
                           <span className="text-xs font-bold text-gray-400 mb-1">
                             {new Date(selectedPatient.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                           </span>
-                          <div className="text-xs text-gray-400 italic">Создание карты пациента</div>
+                          <div className="text-xs text-gray-400 italic">Patient record created</div>
                         </div>
                       </div>
                     </div>
@@ -735,7 +735,7 @@ function PatientsContent() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  <h3 className="font-bold text-gray-900 mb-4">Динамика лабораторных показателей</h3>
+                  <h3 className="font-bold text-gray-900 mb-4">Lab Value Trends</h3>
                   {Object.keys(labTrends).length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
                       <p className="text-gray-500">Нет данных для построения графиков</p>
@@ -801,7 +801,7 @@ function PatientsContent() {
 
 export default function PatientsPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-gray-600">Загрузка...</div>}>
+    <Suspense fallback={<div className="p-6 text-gray-600">Loading...</div>}>
       <PatientsContent />
     </Suspense>
   )

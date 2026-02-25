@@ -47,14 +47,14 @@ export default function CTPage() {
         const fileDataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader()
           reader.onload = () => resolve(reader.result as string)
-          reader.onerror = () => reject(new Error('Ошибка чтения'))
+          reader.onerror = () => reject(new Error('Read error'))
           reader.readAsDataURL(slice)
         })
 
         const img = new Image()
         await new Promise<void>((resolve, reject) => {
           img.onload = () => resolve()
-          img.onerror = () => reject(new Error('Ошибка загрузки'))
+          img.onerror = () => reject(new Error('Load error'))
           img.src = fileDataUrl
         })
 
@@ -99,7 +99,7 @@ export default function CTPage() {
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
-      setError('Сначала загрузите изображение')
+      setError('Please upload an image first')
       return
     }
 
@@ -180,10 +180,10 @@ export default function CTPage() {
           },
           onError: (error) => {
             console.error('❌ [CT STREAMING] Ошибка:', error)
-            setError(`Ошибка streaming: ${error.message}`)
+            setError(`Streaming error: ${error.message}`)
           },
           onComplete: (finalText) => {
-            console.log('✅ [CT STREAMING] Анализ завершен')
+            console.log('✅ [CT STREAMING] Analysis complete')
             setAnalysisStep('description_complete')
           }
         })
@@ -210,11 +210,11 @@ export default function CTPage() {
             outputTokens: 1500,
           })
         } else {
-          setError(data.error || 'Ошибка при анализе')
+          setError(data.error || 'Analysis error')
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка')
+      setError(err.message || 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -254,36 +254,36 @@ export default function CTPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🩻 Анализ КТ</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">🩻 CT Analysis</h1>
       
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг (сначала структурированное описание плотности HU и структур, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и качества для КТ‑исследований.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев.",
+          fast: "Two-stage CT screening (structured HU density and structure description, then clinical interpretation). Provides a concise conclusion and overall risk signal.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — ideal balance of accuracy and quality for CT studies.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for critical and complex cases.",
           extra: [
-            "✅ **GPT-5.2**: ЛУЧШИЙ выбор для 80% исследований (общий анализ, КТ-анатомия).",
-            "🦴 **Claude Sonnet 4.6**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах и мелких структурах.",
-            "⚠️ **Claude Opus 4.6**: НЕ рекомендуем для этого раздела (слабая модель для изображений).",
-            "📸 Вы можете загрузить снимки КТ, сделать фото или использовать ссылку.",
-            "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
-            "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
+            "✅ **GPT-5.2**: BEST choice for 80% of CT studies (general analysis, CT anatomy).",
+            "🦴 **Claude Sonnet 4.6**: EXCEPTION — BEST results on fractures and fine structures.",
+            "⚠️ **Claude Opus 4.6**: NOT recommended for this section (weaker model for imaging).",
+            "📸 You can upload CT images, take a photo, or use a URL.",
+            "🔄 Streaming mode lets you see the model's reasoning in real time.",
+            "💾 Results can be saved to patient context and exported to a report."
           ]
         }}
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Загрузите КТ изображение или DICOM файл</h2>
+        <h2 className="text-xl font-semibold mb-4">Upload CT Image or DICOM file</h2>
         <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
       </div>
 
       {file && imagePreview && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">📷 Загруженное изображение</h2>
+          <h2 className="text-xl font-semibold mb-4">📷 Uploaded Image</h2>
           <div className="flex flex-col items-center w-full">
             <img 
               src={imagePreview} 
-              alt="Загруженное изображение" 
+              alt="Uploaded Image" 
               className="w-full max-h-[800px] rounded-lg shadow-lg object-contain mb-4"
             />
             <div className="flex gap-3 mb-4">
@@ -291,7 +291,7 @@ export default function CTPage() {
                 onClick={() => setShowEditor(true)}
                 className="px-6 py-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-all shadow-lg hover:scale-105 active:scale-95 flex items-center gap-2"
               >
-                <span>🎨 Закрасить данные</span>
+                <span>🎨 Redact Data</span>
               </button>
               {originalDicomStack.length > 0 && (
                 <div className="flex flex-col items-center gap-2">
@@ -308,7 +308,7 @@ export default function CTPage() {
                     <span>✨ Cinematic 3D</span>
                   </Link>
                   <p className="text-[10px] text-blue-600 font-medium">
-                    ✨ Доступна 3D-реконструкция и эффект "просвечивания"
+                    ✨ 3D reconstruction and MIP effect available
                   </p>
                 </div>
               )}
@@ -323,7 +323,7 @@ export default function CTPage() {
               />
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-700">
-                  👤 Клинический контекст пациента (жалобы, анамнез, цель исследования)
+                  👤 Clinical Context (complaints, history, study objective)
                 </label>
                 <VoiceInput 
                   onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
@@ -333,7 +333,7 @@ export default function CTPage() {
               <textarea
                 value={clinicalContext}
                 onChange={(e) => setClinicalContext(e.target.value)}
-                placeholder="Пример: Пациент 65 лет, курильщик со стажем, подозрение на новообразование в легком. Оценить размеры и плотность узла."
+                placeholder="Example: Patient, male, 65 y.o., smoker, suspected pulmonary nodule. Assess size and density."
                 className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4 ${
                   /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
                   ? 'border-red-500 bg-red-50' 
@@ -344,7 +344,7 @@ export default function CTPage() {
               />
               {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
                 <p className="text-[10px] text-red-600 mb-2 font-bold">
-                  ⚠️ Похоже, вы ввели ФИО. Пожалуйста, удалите персональные данные для защиты приватности.
+                  ⚠️ It looks like you entered a patient name. Please remove personal identifying information.
                 </p>
               )}
               <div className="mb-4">
@@ -358,16 +358,16 @@ export default function CTPage() {
                   />
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-blue-900">
-                      🛡️ Разовый анонимный анализ
+                      🛡️ One-time anonymous analysis
                     </span>
                     <span className="text-[10px] text-blue-700 font-normal">
-                      Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                      Result will not be saved to patient database (maximum PHI protection).
                     </span>
                   </div>
                 </label>
               </div>
               <p className="text-xs text-gray-500 mb-4">
-                💡 Добавление контекста значительно повышает точность и релевантность анализа.
+                💡 Adding clinical context significantly improves analysis accuracy.
               </p>
             </div>
 
@@ -387,7 +387,7 @@ export default function CTPage() {
                 className="w-4 h-4 text-primary-600 rounded"
               />
               <span className="text-sm text-gray-700">
-                📡 Streaming режим (постепенное появление текста)
+                📡 Streaming mode (progressive text output)
               </span>
             </label>
             
@@ -397,21 +397,21 @@ export default function CTPage() {
                 disabled={loading}
                 className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⚡ Быстрый {useStreaming ? '(стриминг)' : ''}
+                ⚡ Fast {useStreaming ? '(streaming)' : ''}
               </button>
               <button
                 onClick={() => analyzeImage('optimized', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⭐ Оптимизированный {useStreaming ? '(стриминг)' : ''}
+                ⭐ Optimized {useStreaming ? '(streaming)' : ''}
               </button>
               <button
                 onClick={() => analyzeImage('validated', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
               >
-                🧠 С валидацией {useStreaming ? '(стриминг)' : ''}
+                🧠 Expert Validated {useStreaming ? '(streaming)' : ''}
               </button>
             </div>
           </div>
