@@ -100,6 +100,30 @@ export async function deleteDocument(id: string): Promise<void> {
 }
 
 /**
+ * Возвращает чанки конкретного документа (например, загруженного шаблона протокола)
+ */
+export async function getDocumentChunks(documentId: string, limit: number = 5): Promise<string[]> {
+  const db = await openLibraryDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(CHUNKS_STORE, 'readonly');
+    const store = transaction.objectStore(CHUNKS_STORE);
+    const index = store.index('documentId');
+    const request = index.getAll(documentId);
+
+    request.onsuccess = () => {
+      const rows = request.result as LibraryChunk[];
+      const chunks = rows
+        .map(row => row.content)
+        .filter(Boolean)
+        .slice(0, Math.max(1, limit));
+      resolve(chunks);
+    };
+
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
  * Улучшенный поиск по чанкам: ищет совпадение по ключевым словам
  */
 export async function searchLibraryLocal(query: string, limit: number = 3): Promise<string[]> {

@@ -243,18 +243,33 @@ export default function DocumentPage() {
     setMode('')
 
     try {
-      // Если это base64 (после редактора)
-      const isBase64 = imageData.startsWith('data:image');
+      // Конвертация data:image/... в File без fetch(data:...) — совместимо с CSP.
+      const dataUrlToFile = (dataUrl: string, fileName: string): File => {
+        const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
+        if (!match) throw new Error('Неверный формат изображения')
+
+        const mimeType = match[1] || 'image/png'
+        const base64 = match[2]
+        const binary = atob(base64)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i)
+        }
+        return new File([bytes], fileName, { type: mimeType })
+      }
+
+      // Если это data:image (после редактора/предобработки)
+      const isBase64 = imageData.startsWith('data:image')
       
       // Отправляем на сервер (используем существующий API для документов)
       const formData = new FormData()
       
       if (isBase64) {
-        const res = await fetch(imageData);
-        const blob = await res.blob();
-        formData.append('file', new File([blob], 'document.png', { type: 'image/png' }));
+        const fileFromDataUrl = dataUrlToFile(imageData, 'document.png')
+        formData.append('file', fileFromDataUrl)
       } else {
-        formData.append('file', file!)
+        if (!file) throw new Error('Файл не выбран')
+        formData.append('file', file)
       }
 
       formData.append('isAnonymous', isAnonymous.toString())

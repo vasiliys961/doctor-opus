@@ -14,7 +14,8 @@ export async function POST(request: NextRequest) {
       templateId,
       customTemplate,
       specialistName,
-      universalPrompt = ''
+      universalPrompt = '',
+      ragExamples = []
     } = body;
     const rawText = anonymizeText(rawIncomingText);
 
@@ -26,6 +27,18 @@ export async function POST(request: NextRequest) {
     const specialistDirective = universalPrompt
       ? `СПЕЦИФИЧЕСКАЯ ИНСТРУКЦИЯ ДЛЯ ПРОФИЛЯ (${specialistName}): ${universalPrompt}\n\n`
       : '';
+    const safeRagExamples = Array.isArray(ragExamples)
+      ? ragExamples
+          .map((chunk: unknown) => anonymizeText(String(chunk ?? '')).trim())
+          .filter(Boolean)
+          .slice(0, 4)
+      : [];
+    const ragDirective = safeRagExamples.length > 0
+      ? `ПРИМЕРЫ ИЗ ПЕРСОНАЛЬНОЙ RAG-БИБЛИОТЕКИ (используй как образец структуры и стиля; факты бери только из входных данных):
+${safeRagExamples.map((chunk: string, index: number) => `--- ОБРАЗЕЦ #${index + 1} ---\n${chunk}`).join('\n\n')}
+
+`
+      : '';
 
     const isEcgFunctionalConclusion = templateId === 'ecg-functional-conclusion';
 
@@ -36,7 +49,7 @@ export async function POST(request: NextRequest) {
 ${specialistDirective}ВХОДНЫЕ ДАННЫЕ (из анализа ЭКГ):
 ${rawText}
 
-СТРОГИЙ ШАБЛОН ДЛЯ ВЫВОДА (заполни по нему):
+${ragDirective}СТРОГИЙ ШАБЛОН ДЛЯ ВЫВОДА (заполни по нему):
 ${customTemplate}
 
 ОГРАНИЧЕНИЯ (ОБЯЗАТЕЛЬНО):
@@ -53,7 +66,7 @@ ${specialistDirective}Вы совмещаете клиническую стро�
 Создать полный и структурированный протокол осмотра на основании следующих данных:
 ${rawText}
 
-СТРОГИЙ ШАБЛОН ДЛЯ ЗАПОЛНЕНИЯ:
+${ragDirective}СТРОГИЙ ШАБЛОН ДЛЯ ЗАПОЛНЕНИЯ:
 ${customTemplate}
 
 ОГРАНИЧЕНИЯ И ПРАВИЛА СТИЛЯ (ОБЯЗАТЕЛЬНО):

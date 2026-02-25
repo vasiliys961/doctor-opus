@@ -16,9 +16,42 @@ import { MODELS } from '@/lib/openrouter'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
+import { saveDocument, getDocumentChunks, searchLibraryLocal } from '@/lib/library-db'
 
 const PROTOCOL_DRAFT_KEY = 'protocol_draft'
+const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
 const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
+
+function chunkTemplateForRag(content: string, maxChunkLength: number = 1200): string[] {
+  const clean = content.replace(/\r\n/g, '\n').trim()
+  if (!clean) return []
+
+  const parts = clean
+    .split(/\n{2,}/)
+    .map(part => part.trim())
+    .filter(Boolean)
+
+  const chunks: string[] = []
+  let buffer = ''
+
+  for (const part of parts) {
+    if (!buffer) {
+      buffer = part
+      continue
+    }
+
+    const candidate = `${buffer}\n\n${part}`
+    if (candidate.length <= maxChunkLength) {
+      buffer = candidate
+    } else {
+      chunks.push(buffer)
+      buffer = part
+    }
+  }
+
+  if (buffer) chunks.push(buffer)
+  return chunks.slice(0, 10)
+}
 
 export default function ProtocolPage() {
   const [rawText, setRawText] = useState('')
@@ -34,6 +67,8 @@ export default function ProtocolPage() {
   const [specialistName, setSpecialistName] = useState(DEFAULT_TEMPLATES[0].specialist)
   const [customTemplate, setCustomTemplate] = useState(DEFAULT_TEMPLATES[0].content)
   const [isEditingTemplate, setIsEditingTemplate] = useState(false)
+  const [templateRagDocId, setTemplateRagDocId] = useState<string | null>(null)
+  const [isTemplateLocked, setIsTemplateLocked] = useState(false)
 
   // Универсальные промпты
   const [selectedUniversalKey, setSelectedUniversalKey] = useState<string>('')
@@ -50,8 +85,14 @@ export default function ProtocolPage() {
         setCustomTemplate(parsed.template)
         setSpecialistName(parsed.name || specialistName)
         setIsEditingTemplate(true)
+        setIsTemplateLocked(Boolean(parsed.isTemplateLocked))
+        if (parsed.ragDocId) {
+          setTemplateRagDocId(parsed.ragDocId)
+        }
       } catch (e) {}
     }
+    const ragDocId = localStorage.getItem(PROTOCOL_TEMPLATE_RAG_KEY)
+    if (ragDocId) setTemplateRagDocId(ragDocId)
   }, [])
 
   // Импорт черновика протокола (например, из анализа ЭКГ)
@@ -68,7 +109,7 @@ export default function ProtocolPage() {
       setRawText(parsed.rawText)
       const tpl = DEFAULT_TEMPLATES.find(t => t.id === (parsed.templateId || ''))
       if (tpl) {
-        applyTemplate(tpl)
+        applyTemplate(tpl, { force: true })
       }
     } catch (e) {
       // ignore
@@ -85,7 +126,7 @@ export default function ProtocolPage() {
       setSpecialistName(tpl.name)
       
       // Если у специалиста есть своя структура, подставляем её
-      if (tpl.structure) {
+      if (tpl.structure && !isTemplateLocked) {
         setCustomTemplate(tpl.structure)
       }
     } else {
@@ -96,7 +137,9 @@ export default function ProtocolPage() {
   const handleSaveAsDefault = () => {
     const data = {
       template: customTemplate,
-      name: specialistName
+      name: specialistName,
+      ragDocId: templateRagDocId,
+      isTemplateLocked
     }
     localStorage.setItem('user_protocol_template', JSON.stringify(data))
     alert('Шаблон сохранен как ваш персональный стандарт!')
@@ -109,10 +152,34 @@ export default function ProtocolPage() {
     const reader = new FileReader()
     reader.onload = (event) => {
       const content = event.target?.result as string
-      if (content) {
+      if (!content) return
+
+      void (async () => {
         setCustomTemplate(content)
         setIsEditingTemplate(true)
-      }
+        setIsTemplateLocked(true)
+
+        const chunks = chunkTemplateForRag(content)
+        if (chunks.length === 0) return
+
+        const docId = `protocol-template-${Date.now()}`
+        await saveDocument(
+          {
+            id: docId,
+            name: `Протокол-шаблон: ${file.name}`,
+            size: file.size,
+            uploaded_at: new Date().toISOString(),
+            chunksCount: chunks.length,
+          },
+          chunks
+        )
+        setTemplateRagDocId(docId)
+        localStorage.setItem(PROTOCOL_TEMPLATE_RAG_KEY, docId)
+        alert('Шаблон загружен и сохранен в библиотеку как RAG-образец.')
+      })().catch((error) => {
+        console.error('RAG save error:', error)
+        alert('Файл загружен в шаблон, но не удалось сохранить в RAG-библиотеку.')
+      })
     }
     reader.readAsText(file)
   }
@@ -138,6 +205,14 @@ export default function ProtocolPage() {
     const finalModel = modelsMap[model] || MODELS.SONNET;
 
     try {
+      let ragExamples: string[] = []
+      if (templateRagDocId) {
+        ragExamples = await getDocumentChunks(templateRagDocId, 4)
+      }
+      if (ragExamples.length === 0 && rawText.trim()) {
+        ragExamples = await searchLibraryLocal(`${specialistName} ${rawText}`, 3)
+      }
+
       const payload = {
         rawText,
         useStreaming: useStreaming,
@@ -146,7 +221,8 @@ export default function ProtocolPage() {
         customTemplate: customTemplate,
         specialistName: specialistName,
         // Добавляем универсальный промпт, если он есть
-        universalPrompt: universalPrompt
+        universalPrompt: universalPrompt,
+        ragExamples,
       };
 
       if (useStreaming) {
@@ -210,10 +286,12 @@ export default function ProtocolPage() {
   }
 
   // Функция применения шаблона
-  const applyTemplate = (tpl: ProtocolTemplate) => {
+  const applyTemplate = (tpl: ProtocolTemplate, options?: { force?: boolean }) => {
     setSelectedTemplateId(tpl.id)
     setSpecialistName(tpl.specialist)
-    setCustomTemplate(tpl.content)
+    if (!isTemplateLocked || options?.force) {
+      setCustomTemplate(tpl.content)
+    }
     // Не смешиваем универсальные директивы с выбранным шаблоном
     setSelectedUniversalKey('')
     setUniversalPrompt('')
@@ -355,9 +433,21 @@ export default function ProtocolPage() {
               <div className="mt-2 animate-in fade-in slide-in-from-top-1 space-y-2">
                 <textarea
                   value={customTemplate}
-                  onChange={(e) => setCustomTemplate(e.target.value)}
+                  onChange={(e) => {
+                    setCustomTemplate(e.target.value)
+                    if (!isTemplateLocked) setIsTemplateLocked(true)
+                  }}
                   className="w-full px-3 py-2 text-[10px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none min-h-[150px] font-mono leading-tight bg-white"
                 />
+                <label className="inline-flex items-center gap-2 text-[10px] font-semibold text-indigo-700">
+                  <input
+                    type="checkbox"
+                    checked={isTemplateLocked}
+                    onChange={(e) => setIsTemplateLocked(e.target.checked)}
+                    className="w-3.5 h-3.5"
+                  />
+                  🔒 Закрепить мой шаблон (не перезаписывать при смене специалиста)
+                </label>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={handleSaveAsDefault}
@@ -438,19 +528,6 @@ export default function ProtocolPage() {
                   💰 Стоимость сервиса: {currentCost.toFixed(2)} ед.
                 </div>
               )}
-              <div className="mt-2">
-                <a 
-                  href="/calculators"
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded-md transition-colors"
-                >
-                  🧮 Проверить через Мед. калькуляторы
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-              </div>
             </div>
             {protocol && (
               <div className="flex gap-2">

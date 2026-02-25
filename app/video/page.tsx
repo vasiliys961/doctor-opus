@@ -47,6 +47,8 @@ export default function VideoPage() {
   // Режим анализа видео
   const [analysisMode, setAnalysisMode] = useState<'frames' | 'full-video'>('frames')
   const [confirmNoPersonalData, setConfirmNoPersonalData] = useState(false)
+  const [stage1TechnicalData, setStage1TechnicalData] = useState<string>('')
+  const [showTechnicalData, setShowTechnicalData] = useState(false)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -367,6 +369,8 @@ export default function VideoPage() {
     setError(null)
     setResult('')
     setCurrentCost(0)
+    setStage1TechnicalData('')
+    setShowTechnicalData(false)
 
     try {
       const formData = new FormData()
@@ -409,6 +413,8 @@ export default function VideoPage() {
         setCurrentCost(data.cost || 0)
         setModel(data.model || 'google/gemini-3-flash-preview')
         setMode(data.mode || 'fast')
+        setStage1TechnicalData('')
+        setShowTechnicalData(false)
         
         // Логирование использования
         logUsage({
@@ -451,6 +457,8 @@ export default function VideoPage() {
     setError(null)
     setResult('')
     setCurrentCost(0)
+    setStage1TechnicalData('')
+    setShowTechnicalData(false)
 
     try {
       const formData = new FormData()
@@ -471,18 +479,11 @@ export default function VideoPage() {
       const data = await response.json()
 
       if (data.success) {
-        // Формируем результат с описанием и анализом
-        let fullResult = ''
-        
-        if (data.description) {
-          fullResult += `## 📝 ЭТАП 1: Описание видео (Gemini 3.0 Flash)\n\n${data.description}\n\n`
-        }
-        
-        if (data.analysis) {
-          fullResult += `## 🏥 ЭТАП 2: Клиническая директива (Экспертный ассистент)\n\n${data.analysis}`
-        }
-        
-        setResult(fullResult || data.result || 'Анализ выполнен')
+        // Пользователю показываем только финальный этап 2.
+        // Этап 1 (технические данные) доступен отдельно по кнопке.
+        setResult(data.analysis || data.result || 'Анализ выполнен')
+        setStage1TechnicalData(data.description || '')
+        setShowTechnicalData(false)
         setCurrentCost(data.cost || 0)
         setModel(data.model || 'google/gemini-3-flash-preview')
         setMode('fast')
@@ -928,6 +929,23 @@ export default function VideoPage() {
         mode={mode}
         images={extractedFrames.map(f => f.preview)}
       />
+
+      {!!stage1TechnicalData && !loading && (
+        <div className="bg-white rounded-lg shadow-lg p-4 mb-6">
+          <button
+            onClick={() => setShowTechnicalData(prev => !prev)}
+            className="px-3 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+          >
+            {showTechnicalData ? 'Скрыть техданные (Этап 1)' : 'Показать техданные (Этап 1)'}
+          </button>
+          {showTechnicalData && (
+            <div className="mt-3 border border-gray-200 rounded-lg bg-gray-50 p-3">
+              <p className="text-xs font-semibold text-gray-600 mb-2">Этап 1: описание видео (технический вывод модели)</p>
+              <pre className="text-xs whitespace-pre-wrap break-words text-gray-800">{stage1TechnicalData}</pre>
+            </div>
+          )}
+        </div>
+      )}
 
       {result && !loading && (
         <FeedbackForm 
