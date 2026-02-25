@@ -76,3 +76,15 @@ nginx/ssl/
 # Documentation history and temporary files
 docs/history/
 !docs/history/VERSION_*.md
+
+# Root-level one-off technical reports (keep docs in docs/history)
+BUGFIX_*.md
+BUGFIX_DETAILED_*.md
+OPTIMIZATION_*.md
+PERFORMANCE_OPTIMIZATION_*.md
+PROJECT_STATE_*.md
+PROMPTS_UPDATE_*.md
+PROTOCOL_TEMPLATES_FIX.md
+RELEASE_NOTES_*.md
+REMINDER_*.md
+SECURITY_UPDATES_*.md
