@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const rl = checkRateLimit(rlKey, RATE_LIMIT_AUTH);
     if (!rl.allowed) {
       return NextResponse.json(
-        { error: 'Слишком много попыток. Подождите.' },
+        { error: 'Too many attempts. Please wait.' },
         { status: 429 }
       );
     }
@@ -29,15 +29,15 @@ export async function POST(request: NextRequest) {
 
     // Валидация
     if (!email || typeof email !== 'string' || !email.includes('@')) {
-      return NextResponse.json({ error: 'Укажите корректный email' }, { status: 400 });
+      return NextResponse.json({ error: 'Please provide a valid email' }, { status: 400 });
     }
 
     if (!password || typeof password !== 'string' || password.length < 8) {
-      return NextResponse.json({ error: 'Пароль должен быть не менее 8 символов' }, { status: 400 });
+      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
     }
 
     if (password.length > 128) {
-      return NextResponse.json({ error: 'Пароль слишком длинный' }, { status: 400 });
+      return NextResponse.json({ error: 'Password is too long' }, { status: 400 });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     // Проверка БД
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
       return NextResponse.json(
-        { error: 'База данных не подключена. Регистрация невозможна.' },
+        { error: 'Database is not connected. Registration is unavailable.' },
         { status: 503 }
       );
     }
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     `;
 
     if (existing.length > 0) {
-      return NextResponse.json({ error: 'Пользователь с таким email уже зарегистрирован' }, { status: 409 });
+      return NextResponse.json({ error: 'A user with this email already exists' }, { status: 409 });
     }
 
     // Хэшируем пароль
@@ -85,16 +85,16 @@ export async function POST(request: NextRequest) {
       sendWelcomeEmail(normalizedEmail).catch(() => {});
     });
 
-    console.log(`✅ [AUTH] Зарегистрирован новый пользователь: ${normalizedEmail}, id: ${rows[0].id}`);
+    console.log(`✅ [AUTH] Registered new user: ${normalizedEmail}, id: ${rows[0].id}`);
 
     return NextResponse.json({
       success: true,
-      message: 'Регистрация успешна. Теперь вы можете войти.',
+      message: 'Registration successful. You can now sign in.',
     });
   } catch (error: any) {
-    console.error('❌ [AUTH] Ошибка регистрации:', error);
+    console.error('❌ [AUTH] Registration error:', error);
     return NextResponse.json(
-      { error: safeErrorMessage(error, 'Ошибка регистрации') },
+      { error: safeErrorMessage(error, 'Registration error') },
       { status: 500 }
     );
   }

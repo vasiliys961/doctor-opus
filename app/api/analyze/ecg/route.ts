@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
+        { success: false, error: 'Authorization required' },
         { status: 401 }
       );
     }
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ [ECG ANALYSIS] Ошибка:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка анализа ЭКГ' },
+      { success: false, error: 'ECG analysis error' },
       { status: 500 }
     );
   }

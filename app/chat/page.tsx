@@ -18,6 +18,8 @@ import { anonymizeText } from '@/lib/anonymization'
 import mammoth from 'mammoth'
 
 type ModelType = 'opus' | 'sonnet'
+const MAX_CHAT_FILES_PER_BATCH = 4;
+const MAX_CHAT_TOTAL_BYTES_PER_BATCH = 16 * 1024 * 1024;
 
 const specialtyMap: Record<string, Specialty> = {
   'Cardiologist': 'cardiology',
@@ -267,6 +269,30 @@ export default function ChatPage() {
     }
   };
 
+  const splitFilesIntoBatches = (files: File[]): File[][] => {
+    const batches: File[][] = [];
+    let currentBatch: File[] = [];
+    let currentBatchBytes = 0;
+
+    for (const file of files) {
+      const wouldExceedCount = currentBatch.length >= MAX_CHAT_FILES_PER_BATCH;
+      const wouldExceedBytes = (currentBatchBytes + file.size) > MAX_CHAT_TOTAL_BYTES_PER_BATCH;
+      if (currentBatch.length > 0 && (wouldExceedCount || wouldExceedBytes)) {
+        batches.push(currentBatch);
+        currentBatch = [];
+        currentBatchBytes = 0;
+      }
+      currentBatch.push(file);
+      currentBatchBytes += file.size;
+    }
+
+    if (currentBatch.length > 0) {
+      batches.push(currentBatch);
+    }
+
+    return batches;
+  };
+
   const handleSend = async () => {
     if (!message.trim() && selectedFiles.length === 0) return
 
@@ -341,6 +367,74 @@ export default function ChatPage() {
       const modelName = model
 
       if (filesToSend.length > 0) {
+        const fileBatches = splitFilesIntoBatches(filesToSend);
+        if (fileBatches.length > 1) {
+          let aggregatedText = `⚙️ Large upload detected. Processing ${filesToSend.length} files in ${fileBatches.length} batches for stable delivery.\n`;
+          let totalCost = 0;
+
+          if (useStreaming) {
+            setMessages(prev => {
+              const newMessages = [...prev];
+              if (newMessages[assistantMessageIndex]) {
+                newMessages[assistantMessageIndex] = { role: 'assistant', content: aggregatedText };
+              }
+              return newMessages;
+            });
+          }
+
+          for (let batchIndex = 0; batchIndex < fileBatches.length; batchIndex++) {
+            const batch = fileBatches[batchIndex];
+            const batchPrompt = `${userMessage}\n\n[Attachment batch ${batchIndex + 1}/${fileBatches.length}] Analyze files in this batch and provide findings.`;
+            const batchFormData = new FormData();
+            batchFormData.append('message', batchPrompt);
+            batchFormData.append('history', JSON.stringify(messages));
+            batchFormData.append('useStreaming', 'false');
+            batchFormData.append('model', modelName);
+            batchFormData.append('specialty', specialty);
+            batch.forEach(file => batchFormData.append('files', file));
+
+            const batchResponse = await fetch('/api/chat', {
+              method: 'POST',
+              body: batchFormData,
+            });
+
+            const batchData = await batchResponse.json().catch(() => ({ success: false, error: `HTTP ${batchResponse.status}` }));
+            if (!batchResponse.ok || !batchData.success) {
+              const details = batchData?.error || `HTTP error! status: ${batchResponse.status}`;
+              throw new Error(`Batch ${batchIndex + 1}/${fileBatches.length} failed: ${details}`);
+            }
+
+            totalCost += Number(batchData.cost || 0);
+            aggregatedText += `\n\n### Batch ${batchIndex + 1}/${fileBatches.length}\n${batchData.result || ''}`;
+
+            if (useStreaming) {
+              setMessages(prev => {
+                const newMessages = [...prev];
+                if (newMessages[assistantMessageIndex]) {
+                  newMessages[assistantMessageIndex] = {
+                    role: 'assistant',
+                    content: aggregatedText,
+                    cost: totalCost,
+                    model: batchData.model || modelName
+                  };
+                }
+                return newMessages;
+              });
+            }
+          }
+
+          if (!useStreaming) {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: aggregatedText,
+              cost: totalCost,
+              model: modelName
+            }]);
+          }
+
+          return;
+        }
+
         const formData = new FormData()
         formData.append('message', userMessage)
         formData.append('history', JSON.stringify(messages))

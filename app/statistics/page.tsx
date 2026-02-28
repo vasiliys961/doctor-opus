@@ -150,7 +150,7 @@ export default function StatisticsPage() {
   }
 
   const clearMonthStatistics = () => {
-    if (confirm('Are you sure you want to clear this month's statistics?')) {
+    if (confirm("Are you sure you want to clear this month's statistics?")) {
       clearCurrentMonthStats()
       setSectionStats({})
       setMonthTotalCost(0)
@@ -159,7 +159,7 @@ export default function StatisticsPage() {
   }
 
   const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('ru-RU').format(num)
+    return new Intl.NumberFormat('en-US').format(num)
   }
 
   const handleDeleteAccount = async () => {

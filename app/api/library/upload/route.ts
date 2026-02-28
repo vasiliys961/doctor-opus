@@ -21,11 +21,11 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
 
     if (!file) {
-      return NextResponse.json({ success: false, error: 'Файл не получен' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'File not provided' }, { status: 400 });
     }
 
     if (file.type !== 'application/pdf') {
-      return NextResponse.json({ success: false, error: 'Только PDF файлы поддерживаются' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Only PDF files are supported' }, { status: 400 });
     }
 
     // 1. Сохраняем во временный PDF файл
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       const result = JSON.parse(jsonContent);
 
       if (!result.success) {
-        throw new Error(result.error || 'Ошибка при извлечении текста');
+        throw new Error(result.error || 'Text extraction error');
       }
 
       return NextResponse.json({
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       console.error('Python execution error:', execError);
       return NextResponse.json({ 
         success: false, 
-        error: execError.message || 'Ошибка при обработке PDF на сервере' 
+        error: execError.message || 'Server-side PDF processing error' 
       }, { status: 500 });
     }
 
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     console.error('Upload handler error:', error);
     return NextResponse.json({ 
       success: false, 
-      error: 'Ошибка загрузки в библиотеку' 
+      error: 'Library upload error' 
     }, { status: 500 });
   } finally {
     // 5. Всегда удаляем временные файлы

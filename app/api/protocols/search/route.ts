@@ -5,9 +5,9 @@ import { MODELS } from '@/lib/openrouter';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /**
- * API endpoint для поиска актуальных клинических рекомендаций
- * Использует Gemini через OpenRouter
- * Основан на международных и российских клинических рекомендациях
+ * API endpoint for searching current international clinical guidelines
+ * Uses Gemini via OpenRouter
+ * Based on international evidence-based guidelines (ESC, AHA/ACC, WHO, KDIGO, NCCN, NICE, etc.)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
     if (!query || !query.trim()) {
       return NextResponse.json(
-        { success: false, error: 'Запрос не может быть пустым' },
+        { success: false, error: 'Query cannot be empty' },
         { status: 400 }
       );
     }
@@ -24,90 +24,88 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
         { status: 500 }
       );
     }
 
-    // РАСШИРЕННЫЙ ПРОМПТ: фокус на тактике ведения, дифф. анализе и шкалах
-    const searchPrompt = `КРИТИЧЕСКИ ВАЖНО: Твой ответ ДОЛЖЕН НАЧИНАТЬСЯ СРАЗУ С раздела "1. НАЗВАНИЯ ПРОТОКОЛОВ". НЕ пиши перед этим НИЧЕГО.
+    // EXPANDED PROMPT: focus on management tactics, differential analysis, and clinical scales
+    const searchPrompt = `CRITICAL: Your response MUST START IMMEDIATELY with section "1. GUIDELINE NAMES". Do NOT write anything before it.
 
-Найди актуальные клинические рекомендации по теме: ${query}
-${specialty ? `Специальность: ${specialty}` : ''}
+Find current international clinical guidelines on: ${query}
+${specialty ? `Specialty: ${specialty}` : ''}
 
-Предоставь исчерпывающий экспертный разбор на русском языке по следующей структуре:
+Provide a comprehensive expert review in English using the following structure:
 
-1. НАЗВАНИЯ ПРОТОКОЛОВ:
-   - 2-3 основных международных рекомендации [МЕЖДУНАРОДНЫЕ] (ESC, AHA/ACC, WHO, KDIGO, NCCN и др.)
-   - 1 российская рекомендация [РОССИЙСКИЕ] (Минздрав РФ)
-   - Обязательно укажи год публикации (приоритет 2023-2025 гг.)
+1. GUIDELINE NAMES:
+   - 2-3 major international guidelines [INTERNATIONAL] (ESC, AHA/ACC, WHO, KDIGO, NCCN, NICE, etc.)
+   - Year of publication required (priority: 2023-2025)
+   - DO NOT include country-specific national guidelines
 
-2. АЛГОРИТМ ДИФФЕРЕНЦИАЛЬНОГО АНАЛИЗА:
-   - С какими состояниями чаще всего путают данную патологию.
-   - Ключевые отличительные признаки (симптомы, маркеры), позволяющие исключить альтернативные диагнозы.
+2. DIFFERENTIAL DIAGNOSIS ALGORITHM:
+   - Conditions most commonly confused with this pathology.
+   - Key distinguishing features (symptoms, biomarkers) to rule out alternative diagnoses.
 
-3. КЛИНИЧЕСКИЕ КРИТЕРИИ И ПРОГНОСТИЧЕСКИЕ ШКАЛЫ:
-   - Золотой стандарт диагностики (лабораторный/инструментальный).
-   - Обязательные шкалы оценки (например, CHA2DS2-VASc, CURB-65, qSOFA, NYHA и т.д.).
-   - Интерпретация баллов и их влияние на выбор тактики.
+3. DIAGNOSTIC CRITERIA AND PROGNOSTIC SCORES:
+   - Gold standard diagnostics (laboratory/imaging).
+   - Required clinical scales (e.g., CHA2DS2-VASc, CURB-65, qSOFA, NYHA, etc.).
+   - Score interpretation and impact on management decisions.
 
-4. ПОШАГОВАЯ ТАКТИКА ВЕДЕНИЯ (MANAGEMENT):
-   - Алгоритм действий врача от момента постановки диагноза.
-   - Определение места лечения (амбулаторно vs госпитализация).
-   - Этапность обследования и лечения.
+4. STEP-BY-STEP MANAGEMENT ALGORITHM:
+   - Physician action algorithm from the time of diagnosis.
+   - Setting determination (outpatient vs. hospitalization vs. ICU).
+   - Sequential workup and treatment steps.
 
-5. СХЕМЫ ТЕРАПИИ (EVIDENCE-BASED):
-   - Группы препаратов, конкретные названия, дозировки и режимы приема.
-   - Уровни доказательности (A, B, C) для основных рекомендаций.
-   - Немедикаментозные методы и хирургия (если применимо).
+5. EVIDENCE-BASED TREATMENT REGIMENS:
+   - Drug classes, specific names, dosages, and dosing schedules.
+   - Levels of evidence (Class I/IIa/IIb, Level A/B/C) for key recommendations.
+   - Non-pharmacologic interventions and surgery (if applicable).
 
-6. МОНИТОРИНГ И «КРАСНЫЕ ФЛАГИ»:
-   - Сроки контрольных осмотров и анализов.
-   - Критерии эффективности и безопасности терапии.
-   - Тревожные признаки («красные флаги»), требующие немедленной смены тактики или госпитализации.
+6. MONITORING AND RED FLAGS:
+   - Follow-up visit and laboratory timelines.
+   - Efficacy and safety criteria.
+   - Red flag signs requiring immediate escalation or hospitalization.
 
-7. ОСОБЕННОСТИ ПРИМЕНЕНИЯ В РФ:
-   - Основные отличия рекомендаций МЗ РФ.
-   - Доступность препаратов и нюансы кодирования по МКБ-10/11.
+CRITICAL REQUIREMENTS:
+- Respond exclusively in English.
+- Be academically rigorous and clinically detailed.
+- Do NOT fabricate references.
+- Base all recommendations on international guidelines only (ESC, AHA, WHO, NICE, KDIGO, NCCN, IDSA, etc.)
+- If no specific scales or management algorithm exists for this topic, state so explicitly.`;
 
-КРИТИЧЕСКИ ВАЖНО: 
-- Будь академически строгим и детальным.
-- НЕ выдумывай ссылки.
-- Если по теме нет шкал или специфической тактики — укажи это.`;
-
-    // Выбор модели в зависимости от режима: standard (Gemini), detailed (GPT-4o) или online (Perplexity)
+    // Model selection based on mode: standard (Gemini), detailed (GPT), or online (Perplexity)
     let MODEL = MODELS.GEMINI_3_FLASH;
-    let MAX_TOKENS = 10000; // Оптимизировано: достаточно для развёрнутого разбора
+    let MAX_TOKENS = 10000;
 
     if (modelMode === 'online') {
       MODEL = 'perplexity/sonar';
       MAX_TOKENS = 4000;
     } else if (modelMode === 'detailed') {
-      MODEL = MODELS.GPT_5_2; 
-      MAX_TOKENS = 12000; // Оптимизировано: детальный режим
+      MODEL = MODELS.GPT_5_2;
+      MAX_TOKENS = 12000;
     }
-    
-    // Динамический системный промпт
+
+    // Dynamic system prompt
     let systemPrompt = '';
     if (modelMode === 'online') {
-      systemPrompt = 'Ты — ведущий медицинский эксперт. Твоя задача — найти самые свежие клинические рекомендации (2024-2025 годы) и составить глубокий разбор тактики ведения пациента. Акцент на диагностических критериях, обязательных шкалах и пошаговом алгоритме действий. НЕ пиши введения, начинай сразу с разделов.';
+      systemPrompt = 'You are a leading medical expert. Your task is to find the most current international clinical guidelines (2024-2025) and provide a deep review of patient management tactics. Focus on diagnostic criteria, required clinical scores, and step-by-step management algorithms. Do NOT write introductions — start immediately with the sections. Respond in English only.';
     } else if (modelMode === 'detailed') {
-      systemPrompt = 'Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. Твоя задача — предоставить исчерпывающий, академически строгий разбор темы. Обязательно включи детальный дифференциальный анализ, прогностические шкалы, пошаговую тактику менеджмента пациента и схемы терапии с уровнями доказательности. Твой ответ должен быть объемным и клинически глубоким. НЕ пиши введения, начинай сразу с разделов.';
+      systemPrompt = 'You are an expert medical AI assistant with the competence of a professor of medicine. Your task is to provide a comprehensive, academically rigorous review of the topic. Always include a detailed differential diagnosis analysis, prognostic scores, step-by-step patient management, and evidence-based treatment regimens with levels of evidence. Your answer should be detailed and clinically deep. Do NOT write introductions — start immediately with the sections. Respond in English only.';
     } else {
-      systemPrompt = 'Ты экспертный ассистент врача. Ищешь актуальные клинические рекомендации. Фокус на тактике ведения и критериях анализа. ВСЕГДА начинай ответ СРАЗУ с раздела "1. НАЗВАНИЯ ПРОТОКОЛОВ". НЕ пиши введения.';
+      systemPrompt = 'You are an expert physician assistant. You search for current international clinical guidelines. Focus on management tactics and diagnostic criteria. ALWAYS start your answer IMMEDIATELY with section "1. GUIDELINE NAMES". Do NOT write introductions. Respond in English only.';
     }
     
     console.log('');
-    console.log('🔍 [CLINICAL RECS] ========== ПОИСК КЛИНИЧЕСКИХ РЕКОМЕНДАЦИЙ ==========');
-    console.log('🔍 [CLINICAL RECS] Запрос:', `"${query}"`);
-    console.log('🔍 [CLINICAL RECS] Режим:', modelMode);
-    console.log('🤖 [MODEL] Модель:', MODEL);
+    console.log('🔍 [CLINICAL RECS] ========== SEARCHING CLINICAL GUIDELINES ==========');
+    console.log('🔍 [CLINICAL RECS] Query:', `"${query}"`);
+    console.log('🔍 [CLINICAL RECS] Mode:', modelMode);
+    console.log('🤖 [MODEL] Model:', MODEL);
     console.log('🤖 [AI] Max tokens:', MAX_TOKENS);
-    console.log('🤖 [AI] Размер промпта:', `${searchPrompt.length} символов`);
-    console.log('🤖 [AI] Режим:', useStreaming ? 'streaming' : 'обычный');
+    console.log('🤖 [AI] Prompt size:', `${searchPrompt.length} chars`);
+    console.log('🤖 [AI] Mode:', useStreaming ? 'streaming' : 'standard');
     console.log('');
 
-    // Используем выбранную модель через OpenRouter
+    // Using selected model via OpenRouter
     const payload = {
       model: MODEL,
       messages: [
@@ -121,8 +119,8 @@ ${specialty ? `Специальность: ${specialty}` : ''}
         }
       ],
       max_tokens: MAX_TOKENS,
-      temperature: 0.3, // Низкая температура для более точных и структурированных ответов
-      stream: useStreaming, // Включаем streaming
+      temperature: 0.3,
+      stream: useStreaming,
       stream_options: { include_usage: true }
     };
 
@@ -139,25 +137,25 @@ ${specialty ? `Специальность: ${specialty}` : ''}
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ [AI] Ошибка API: ${response.status}`, errorText);
+      console.error(`❌ [AI] API error: ${response.status}`, errorText);
       
       if (response.status === 402) {
         return NextResponse.json({
           success: false,
-          error: 'Недостаточно средств на OpenRouter. Пополните баланс.'
+          error: 'Insufficient OpenRouter balance. Please top up your account.'
         }, { status: 402 });
       }
       
       return NextResponse.json({
         success: false,
-        error: `Ошибка API: ${response.status} - ${errorText.substring(0, 200)}`
+        error: `API error: ${response.status} - ${errorText.substring(0, 200)}`
       }, { status: response.status });
     }
 
-    // Если streaming включен, возвращаем SSE поток
+    // If streaming is enabled, return SSE stream
     if (useStreaming && response.body) {
-    console.log(`📡 [${modelMode.toUpperCase()}] Запуск streaming режима...`);
-    console.log('📡 [MODEL] Модель:', MODEL);
+    console.log(`📡 [${modelMode.toUpperCase()}] Starting streaming mode...`);
+    console.log('📡 [MODEL] Model:', MODEL);
       console.log('');
       
       const encoder = new TextEncoder();
@@ -168,7 +166,7 @@ ${specialty ? `Специальность: ${specialty}` : ''}
           const reader = response.body!.getReader();
           let buffer = '';
           let chunkCount = 0;
-          let totalContentLength = 0; // Для подсчета символов
+          let totalContentLength = 0;
           
           try {
             while (true) {
@@ -176,9 +174,8 @@ ${specialty ? `Специальность: ${specialty}` : ''}
               
               if (done) {
                 console.log('');
-                console.log(`✅ [${modelMode.toUpperCase()}] ========== STREAMING ЗАВЕРШЕН (READER DONE) ==========`);
+                console.log(`✅ [${modelMode.toUpperCase()}] ========== STREAMING COMPLETE (READER DONE) ==========`);
                 
-                // Вывод красивого отчета в терминал если еще не выведен
                 const approxInputTokens = Math.ceil(searchPrompt.length / 4);
                 const approxOutputTokens = Math.ceil(totalContentLength / 4);
                 console.log(formatCostLog(MODEL, approxInputTokens, approxOutputTokens, approxInputTokens + approxOutputTokens));
@@ -192,9 +189,9 @@ ${specialty ? `Специальность: ${specialty}` : ''}
               const chunk = decoder.decode(value, { stream: true });
               buffer += chunk;
               
-              // Обрабатываем строки из буфера
+              // Process lines from buffer
               const lines = buffer.split('\n');
-              buffer = lines.pop() || ''; // Оставляем неполную строку в буфере
+              buffer = lines.pop() || '';
               
               for (const line of lines) {
                 if (line.trim() === '') continue;
@@ -204,7 +201,7 @@ ${specialty ? `Специальность: ${specialty}` : ''}
                   
                   if (dataStr === '[DONE]') {
                     console.log('');
-                    console.log(`✅ [${modelMode.toUpperCase()}] ========== STREAMING ЗАВЕРШЕН ==========`);
+                    console.log(`✅ [${modelMode.toUpperCase()}] ========== STREAMING COMPLETE ==========`);
                     controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                     controller.close();
                     return;
@@ -213,7 +210,7 @@ ${specialty ? `Специальность: ${specialty}` : ''}
                   try {
                     const json = JSON.parse(dataStr);
                     
-                    // Если пришел чанк с использованием, добавляем стоимость и прокидываем дальше
+                    // If usage chunk received, attach cost info and forward
                     if (json.usage) {
                       const { calculateCost } = await import('@/lib/cost-calculator');
                       const costInfo = calculateCost(json.usage.prompt_tokens, json.usage.completion_tokens, MODEL);
@@ -233,15 +230,15 @@ ${specialty ? `Специальность: ${specialty}` : ''}
                       controller.enqueue(encoder.encode(`data: ${dataStr}\n\n`));
                     }
                   } catch (e) {
-                    console.debug('⚠️ [AI] Ошибка парсинга SSE чанка:', e);
+                    console.debug('⚠️ [AI] SSE chunk parse error:', e);
                   }
                 }
               }
             }
             
-            console.log('📡 [STREAMING] Завершение цикла чтения...');
+            console.log('📡 [STREAMING] Read loop complete.');
           } catch (error) {
-            console.error('❌ [AI] Ошибка streaming:', error);
+            console.error('❌ [AI] Streaming error:', error);
             controller.error(error);
           } finally {
             reader.releaseLock();
@@ -260,20 +257,20 @@ ${specialty ? `Специальность: ${specialty}` : ''}
       });
     }
 
-    // Обычный режим без streaming
+    // Standard mode without streaming
     const data = await response.json();
     let content = data.choices?.[0]?.message?.content || '';
     const usage = data.usage || {};
     const tokensUsed = usage.total_tokens || 0;
 
-    // ФИЛЬТРАЦИЯ: обрезаем все до первого раздела "1. НАЗВАНИЯ ПРОТОКОЛОВ"
+    // FILTER: trim everything before the first "1. GUIDELINE NAMES" section
     const protocolStartMarkers = [
-      '1. НАЗВАНИЯ ПРОТОКОЛОВ',
-      '1. НАЗВАНИЯ ПРОТОКОЛОВ/РЕКОМЕНДАЦИЙ',
-      'НАЗВАНИЯ ПРОТОКОЛОВ',
-      'НАЗВАНИЯ ПРОТОКОЛОВ/РЕКОМЕНДАЦИЙ'
+      '1. GUIDELINE NAMES',
+      'GUIDELINE NAMES',
+      '1. PROTOCOLS',
+      'PROTOCOLS'
     ];
-    
+
     let foundIndex = -1;
     for (const marker of protocolStartMarkers) {
       const index = content.indexOf(marker);
@@ -281,14 +278,14 @@ ${specialty ? `Специальность: ${specialty}` : ''}
         foundIndex = index;
       }
     }
-    
+
     if (foundIndex > 0) {
       content = content.substring(foundIndex);
-      console.log('✂️ [AI] Обрезано', foundIndex, 'символов до раздела протоколов');
+      console.log('✂️ [AI] Trimmed', foundIndex, 'chars before guideline section');
     }
 
     console.log('');
-    console.log('✅ [AI] ========== ОТВЕТ ПОЛУЧЕН ==========');
+    console.log('✅ [AI] ========== RESPONSE RECEIVED ==========');
     console.log(formatCostLog(MODEL, usage.prompt_tokens || 0, usage.completion_tokens || 0, tokensUsed));
     console.log('');
 
@@ -296,17 +293,17 @@ ${specialty ? `Специальность: ${specialty}` : ''}
       success: true,
       content: content,
       tokensUsed: tokensUsed,
-      model: modelMode === 'online' ? 'Perplexity Sonar (Online Search)' : 
-             modelMode === 'detailed' ? 'GPT-5.2 (Detailed)' : 
+      model: modelMode === 'online' ? 'Perplexity Sonar (Online Search)' :
+             modelMode === 'detailed' ? 'GPT-5.2 (Detailed)' :
              'Gemini 3.0 Flash (Standard)'
     });
 
   } catch (error: any) {
-    console.error('❌ [AI] Ошибка:', error);
+    console.error('❌ [AI] Error:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Ошибка поиска протоколов' 
+      {
+        success: false,
+        error: 'Clinical guidelines search error'
       },
       { status: 500 }
     );

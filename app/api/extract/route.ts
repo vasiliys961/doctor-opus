@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const prompt = anonymizeText(formData.get('prompt') as string || 'Извлеки всю информацию из файла. Структурируй данные.');
+    const prompt = anonymizeText(formData.get('prompt') as string || 'Extract all information from the file. Structure the data.');
 
     if (!file) {
       return NextResponse.json(
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
         { status: 500 }
       );
     }
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       // Здесь возвращаем информацию о необходимости использования другого endpoint
       return NextResponse.json({
         success: false,
-        error: 'PDF файлы обрабатываются через /api/scan/document endpoint',
+        error: 'PDF files are processed via /api/scan/document endpoint',
         suggestion: 'Используйте /api/scan/document для PDF файлов',
       }, { status: 400 });
     }
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
         console.error('Error processing VCF.GZ file:', error);
         return NextResponse.json({
           success: false,
-          error: 'Ошибка обработки VCF.GZ файла',
+          error: 'VCF.GZ processing error',
         }, { status: 500 });
       }
     }
@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
         console.error('Error processing Excel file:', error);
         return NextResponse.json({
           success: false,
-          error: 'Ошибка обработки Excel файла',
+          error: 'Excel processing error',
         }, { status: 500 });
       }
     }
@@ -291,7 +291,7 @@ export async function POST(request: NextRequest) {
         if (!combinedContent) {
           return NextResponse.json({
             success: false,
-            error: 'ZIP архив не содержит обрабатываемых файлов',
+            error: 'ZIP archive contains no supported files',
           }, { status: 400 });
         }
         
@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
         console.error('Error processing ZIP file:', error);
         return NextResponse.json({
           success: false,
-          error: 'Ошибка обработки ZIP архива',
+          error: 'ZIP archive processing error',
         }, { status: 500 });
       }
     }
@@ -329,14 +329,14 @@ export async function POST(request: NextRequest) {
     // Неподдерживаемый формат
     return NextResponse.json({
       success: false,
-      error: `Неподдерживаемый формат файла: ${fileType}`,
+      error: `Unsupported file format: ${fileType}`,
       supportedFormats: ['pdf', 'csv', 'vcf', 'vcf.gz', 'txt', 'jpg', 'jpeg', 'png', 'json', 'xlsx', 'xls', 'zip'],
     }, { status: 400 });
 
   } catch (error: any) {
     console.error('Error extracting file data:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка извлечения данных из файла' },
+      { success: false, error: 'File data extraction error' },
       { status: 500 }
     );
   }

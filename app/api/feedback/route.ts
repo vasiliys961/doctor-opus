@@ -26,18 +26,18 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.success) {
-      throw new Error('Ошибка сохранения в БД');
+      throw new Error('Database save error');
     }
 
     return NextResponse.json({ 
       success: true, 
-      message: 'Отзыв успешно сохранен в базе данных и готов для обучения',
+      message: 'Feedback saved successfully and queued for training',
       id: result.id
     });
   } catch (error: any) {
     console.error('Error in feedback API:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка отправки отзыва' },
+      { success: false, error: 'Failed to submit feedback' },
       { status: 500 }
     );
   }

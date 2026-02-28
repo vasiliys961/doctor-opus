@@ -364,7 +364,7 @@ export default function GeneticPage() {
         body: JSON.stringify({
           analysis: extractedData,
           clinicalContext: clinicalContext.trim(),
-          question: question.trim() || 'Проанализируйте генетические данные. Извлеките варианты, их значение, клиническую значимость, рекомендации по фармакогеномике.',
+          question: question.trim() || 'Analyze the genetic data. Extract variants, interpretation, clinical significance, and pharmacogenomic recommendations.',
           mode: 'professor',
           model: modelType, // Отправляем выбранную модель
           useStreaming: useStreaming,
@@ -506,7 +506,7 @@ export default function GeneticPage() {
         body: JSON.stringify({
           analysis: extractedData,
           clinicalContext: clinicalContext.trim(),
-          question: userQuestion || 'Проанализируйте прикрепленные файлы в контексте генетического анализа.',
+          question: userQuestion || 'Analyze the attached files in the context of genetic interpretation.',
           mode: 'professor',
           model: modelType, // Используем ту же модель что и для основного анализа
           useStreaming: useStreaming,
@@ -610,7 +610,7 @@ export default function GeneticPage() {
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🧬 Genetic Analysis</h1>
       
       <AnalysisTips 
-        title="Как работает генетический анализ"
+        title="How genetic analysis works"
         content={{
           fast: "First stage: data extraction from complex genetic reports and VCF files. Specialized algorithms for correct rsID and genotype parsing.",
           validated: "Second stage: expert opinion from the «Genetics Assistant» (Claude Opus 4.6) — the most detailed clinical risk analysis; expert mode.",
@@ -728,7 +728,7 @@ export default function GeneticPage() {
                   🛡️ Anonymous Analysis
                 </span>
                 <span className="text-[10px] text-blue-700 font-normal">
-                  ФИО, даты рождения, паспорта, телефоны будут удалены из результата.
+                  Names, birth dates, passport IDs, and phone numbers will be removed from the result.
                 </span>
               </div>
             </label>
@@ -741,8 +741,8 @@ export default function GeneticPage() {
                     onClick={runExtraction}
                     className="flex-1 px-6 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-lg"
                   >
-                    <span className="block text-base">🚀 Быстрое извлечение</span>
-                    <span className="block text-[10px] font-normal opacity-80 mt-0.5">PDF → Gemini → данные</span>
+                    <span className="block text-base">🚀 Quick extraction</span>
+                    <span className="block text-[10px] font-normal opacity-80 mt-0.5">PDF → Gemini → data</span>
                   </button>
                   
                   {pdfjsReady && (
@@ -755,24 +755,24 @@ export default function GeneticPage() {
                           const images = await convertPDFToImages(file)
                           setProcessedImages(images)
                         } catch (err: any) {
-                          setError(err.message || 'Ошибка конвертации PDF')
+                          setError(err.message || 'PDF conversion error')
                         } finally {
                           setConvertingPDF(false)
                         }
                       }}
                       className="flex-1 px-6 py-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 transition-all shadow-lg"
                     >
-                      <span className="block text-base">🎨 Предпросмотр страниц</span>
-                      <span className="block text-[10px] font-normal opacity-80 mt-0.5">Ручная анонимизация ФИО</span>
+                      <span className="block text-base">🎨 Page preview</span>
+                      <span className="block text-[10px] font-normal opacity-80 mt-0.5">Manual PHI anonymization</span>
                     </button>
                   )}
                 </div>
 
                 <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-relaxed">
-                  ⚠️ <strong>Быстрое извлечение:</strong> PDF отправляется в AI целиком. Анонимизация — только результата.
+                  ⚠️ <strong>Quick extraction:</strong> PDF is sent to AI in full. Only the result is anonymized.
                   {pdfjsReady 
-                    ? <><br /><strong>Предпросмотр:</strong> страницы отобразятся как изображения — можно закрасить ФИО перед отправкой.</>
-                    : <> Для ручной анонимизации загрузите <strong>скриншоты страниц</strong> (JPG/PNG).</>
+                    ? <><br /><strong>Preview:</strong> pages will appear as images — you can redact PHI before sending.</>
+                    : <> For manual anonymization, upload <strong>page screenshots</strong> (JPG/PNG).</>
                   }
                 </p>
               </div>
@@ -796,9 +796,9 @@ export default function GeneticPage() {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <span className="font-semibold">Конвертация PDF в изображения...</span>
+            <span className="font-semibold">Converting PDF to images...</span>
           </div>
-          <p className="text-sm text-gray-500 mt-2">Подготовка страниц для предпросмотра и анонимизации</p>
+          <p className="text-sm text-gray-500 mt-2">Preparing pages for preview and anonymization</p>
         </div>
       )}
 
@@ -824,7 +824,7 @@ export default function GeneticPage() {
 
       {extractedData && !result && (
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">📊 Извлеченные генетические данные</h2>
+          <h2 className="text-xl font-semibold mb-4">📊 Extracted genetic data</h2>
           <div className="bg-gray-50 p-4 rounded-lg mb-6 max-h-96 overflow-y-auto">
             <div className="text-sm text-gray-800 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:mt-4 [&_h3]:mb-2 [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:space-y-1 [&_li]:marker:text-blue-600 [&_code]:bg-gray-200 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs [&_strong]:font-semibold [&_strong]:text-gray-900">
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
@@ -837,42 +837,42 @@ export default function GeneticPage() {
           <div className="space-y-4 mb-6">
             <div>
               <label htmlFor="clinicalContext" className="block text-sm font-semibold text-gray-700 mb-2">
-                👤 Клинический контекст пациента (опционально)
+                👤 Patient clinical context (optional)
               </label>
               <textarea
                 id="clinicalContext"
                 value={clinicalContext}
                 onChange={(e) => setClinicalContext(e.target.value)}
-                placeholder="Пример: Пациентка, 45 лет. Жалобы на повышенную утомляемость, головные боли. Семейный анамнез: у матери инфаркт миокарда в 60 лет. Принимает метформин, аспирин. Интересует влияние генетических вариантов на метаболизм препаратов и риски сердечно-сосудистых заболеваний."
+                placeholder="Example: Female patient, 45 y.o. Complaints: fatigue, headaches. Family history: mother had MI at 60. Taking metformin, aspirin. Interested in impact of genetic variants on drug metabolism and cardiovascular risk."
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-y min-h-[100px] text-sm"
                 rows={4}
               />
               <p className="mt-1 text-xs text-gray-500">
-                💡 Эта информация поможет генетику дать более точное и персонализированное заключение
+                💡 This information helps the genetics expert provide a more accurate and personalized conclusion.
               </p>
             </div>
 
             <div>
               <label htmlFor="question" className="block text-sm font-semibold text-gray-700 mb-2">
-                ❓ Дополнительный вопрос генетику (опционально)
+                ❓ Additional question for genetics expert (optional)
               </label>
               <textarea
                 id="question"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                placeholder="Пример: Особое внимание к фармакогеномике (метаболизм метформина, аспирина), рискам сердечно-сосудистых заболеваний, нутригеномике (витамины группы B, фолиевая кислота). Дайте конкретные рекомендации по дозировкам."
+                placeholder="Example: Focus on pharmacogenomics (metformin, aspirin metabolism), cardiovascular risks, nutrigenomics (B vitamins, folic acid). Provide specific dosage recommendations."
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[80px] text-sm"
                 rows={3}
               />
               <p className="mt-1 text-xs text-gray-500">
-                💡 Если не указано, будет выполнен стандартный анализ генетических данных
+                💡 If left empty, a standard genetics analysis will be performed.
               </p>
             </div>
 
             {/* Загрузка дополнительных файлов */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                📎 Дополнительные файлы (опционально)
+                📎 Additional files (optional)
               </label>
               <div className="border border-gray-300 rounded-lg p-4">
                 <input
@@ -905,7 +905,7 @@ export default function GeneticPage() {
                 )}
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                💡 Можно прикрепить дополнительные документы, анализы, изображения для более полного анализа
+                💡 You can attach additional documents, test results, and images for a more complete analysis.
               </p>
             </div>
           </div>
@@ -913,7 +913,7 @@ export default function GeneticPage() {
           {/* Выбор модели */}
           <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
             <label className="block text-sm font-semibold text-blue-900 mb-3">
-              👨‍⚕️ Выберите эксперта для анализа:
+              👨‍⚕️ Choose expert model:
             </label>
             <div className="flex flex-wrap gap-3">
               <button
@@ -926,7 +926,7 @@ export default function GeneticPage() {
               >
                 <div className="flex flex-col items-center gap-1">
                   <span className="text-base">🚀 GPT-5.2</span>
-                  <span className="text-[10px] uppercase opacity-60 font-bold">Самый мощный и выгодный</span>
+                  <span className="text-[10px] uppercase opacity-60 font-bold">Most powerful & cost-effective</span>
                 </div>
               </button>
               <button
@@ -939,7 +939,7 @@ export default function GeneticPage() {
               >
                 <div className="flex flex-col items-center gap-1">
                   <span className="text-base">🧠 Opus 4.6</span>
-                  <span className="text-[10px] uppercase opacity-60 font-bold">Экспертный (Макс. качество)</span>
+                  <span className="text-[10px] uppercase opacity-60 font-bold">Expert (Max. quality)</span>
                 </div>
               </button>
             </div>
@@ -950,7 +950,7 @@ export default function GeneticPage() {
             disabled={loading}
             className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white px-6 py-3 rounded-lg font-medium transition-colors text-base"
           >
-            {loading ? '⏳ Отправка генетику...' : '🧬 Отправить генетику'}
+            {loading ? '⏳ Sending to genetics AI...' : '🧬 Analyze genetics'}
           </button>
         </div>
       )}
@@ -976,7 +976,7 @@ export default function GeneticPage() {
       {/* Продолжение диалога с генетиком */}
       {result && chatHistory.length > 0 && (
         <div className="bg-white rounded-lg shadow-lg p-6 mt-6">
-          <h2 className="text-xl font-semibold mb-4">💬 Продолжение диалога с генетиком</h2>
+          <h2 className="text-xl font-semibold mb-4">💬 Continue dialogue with genetics AI</h2>
           
           {/* История диалога */}
           <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
@@ -993,10 +993,10 @@ export default function GeneticPage() {
                   }`}
                 >
                   <div className="text-xs font-semibold mb-1 opacity-70 flex justify-between items-center">
-                    <span>{msg.role === 'user' ? '👤 Вы' : '🧬 Генетик'}</span>
+                    <span>{msg.role === 'user' ? '👤 You' : '🧬 Genetics AI'}</span>
                     {msg.role === 'assistant' && msg.cost !== undefined && (
                       <span className="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded border border-teal-100 font-bold">
-                        💰 {msg.cost.toFixed(2)} ед.
+                        💰 {msg.cost.toFixed(2)} cr.
                       </span>
                     )}
                   </div>
@@ -1019,7 +1019,7 @@ export default function GeneticPage() {
                         {msg.content}
                       </ReactMarkdown>
                     ) : (
-                      chatLoading && index === chatHistory.length - 1 ? '⏳ Генетик печатает...' : ''
+                      chatLoading && index === chatHistory.length - 1 ? '⏳ Genetics AI is typing...' : ''
                     )}
                   </div>
                 </div>
@@ -1030,7 +1030,7 @@ export default function GeneticPage() {
                 <div className="bg-gray-100 rounded-lg p-4">
                   <div className="flex items-center space-x-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                    <span className="text-sm text-gray-600">Генетик печатает...</span>
+                    <span className="text-sm text-gray-600">Genetics AI is typing...</span>
                   </div>
                 </div>
               </div>
@@ -1085,7 +1085,7 @@ export default function GeneticPage() {
                     handleChatMessage()
                   }
                 }}
-                placeholder="Задайте дополнительный вопрос генетику..."
+                placeholder="Ask a follow-up question to the genetics AI..."
                 disabled={chatLoading}
                 className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
@@ -1099,7 +1099,7 @@ export default function GeneticPage() {
             </div>
           </div>
           <p className="mt-2 text-xs text-gray-500">
-            💡 Вы можете задавать дополнительные вопросы о генетическом анализе. Генетик будет учитывать предыдущий контекст.
+            💡 You can ask follow-up questions about the genetic analysis. Previous context will be used automatically.
           </p>
         </div>
       )}

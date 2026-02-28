@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
             await checkAndDeductBalance(
               context.email,
               -refund,
-              'Корректировка стоимости анализа (возврат)',
+              'Analysis cost adjustment (refund)',
               {
                 analysisId,
                 estimatedCost: estimated,
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
             }
           }
         } catch (e) {
-          console.error('[BILLING RECONCILE] Ошибка корректировки:', e);
+          console.error('[BILLING RECONCILE] Adjustment error:', e);
         }
         return undefined;
       };
@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
     const rl = checkRateLimit(rlKey, RATE_LIMIT_ANALYSIS);
     if (!rl.allowed) {
       return NextResponse.json(
-        { success: false, error: 'Превышен лимит запросов. Подождите.' },
+        { success: false, error: 'Rate limit exceeded. Please wait.' },
         { status: 429 }
       );
     }
@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
       
       if (!billing.allowed) {
         return NextResponse.json(
-          { success: false, error: billing.error || 'Недостаточно средств' },
+          { success: false, error: billing.error || 'Insufficient balance' },
           { status: 402 }
         );
       }
@@ -207,11 +207,11 @@ export async function POST(request: NextRequest) {
     // Проверка размера файлов
     if (file && file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { success: false, error: `Файл слишком большой (${(file.size / 1024 / 1024).toFixed(1)}MB). Максимум: 50MB.` },
+        { success: false, error: `File is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Максимум: 50MB.` },
         { status: 400 }
       );
     }
-    const prompt = anonymizeText(formData.get('prompt') as string || 'Проанализируйте медицинское изображение.');
+    const prompt = anonymizeText(formData.get('prompt') as string || 'Analyze the medical image.');
     const clinicalContext = anonymizeText(formData.get('clinicalContext') as string || '');
     const stage = (formData.get('stage') as string) || 'all';
     const imageType = (formData.get('imageType') as string) || 'universal';
@@ -305,7 +305,7 @@ export async function POST(request: NextRequest) {
           currentMimeType = enhanced.mimeType;
         } catch (e: any) {
           return NextResponse.json(
-            { success: false, error: e?.message || 'Не удалось обработать изображение' },
+            { success: false, error: e?.message || 'Failed to process image' },
             { status: 400 }
           );
         }
@@ -399,6 +399,6 @@ export async function POST(request: NextRequest) {
     }
   } catch (error: any) {
     const { safeErrorMessage } = await import('@/lib/safe-error');
-    return NextResponse.json({ success: false, error: safeErrorMessage(error, 'Ошибка анализа изображения') }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error, 'Image analysis error') }, { status: 500 });
   }
 }

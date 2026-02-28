@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     
     if (!session || !session.user?.email) {
       return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
+        { success: false, error: 'Authorization required' },
         { status: 401 }
       );
     }
@@ -17,14 +17,14 @@ export async function POST(request: NextRequest) {
     const result = await deleteUserAccount(session.user.email);
 
     if (result.success) {
-      return NextResponse.json({ success: true, message: 'Аккаунт успешно удален' });
+      return NextResponse.json({ success: true, message: 'Account deleted successfully' });
     } else {
-      throw new Error('Ошибка при удалении данных из БД');
+      throw new Error('Failed to delete account data from database');
     }
   } catch (error: any) {
-    console.error('❌ [DELETE ACCOUNT API] Ошибка:', error);
+    console.error('❌ [DELETE ACCOUNT API] Error:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка удаления аккаунта' },
+      { success: false, error: 'Account deletion error' },
       { status: 500 }
     );
   }

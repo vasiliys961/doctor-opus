@@ -54,9 +54,9 @@ export default function XRayPage() {
       
       if (isComparisonMode && archiveFile) {
         formData.append('archiveFile', archiveFile)
-        formData.append('prompt', 'ПРОВЕДИ СРАВНИТЕЛЬНЫЙ АНАЛИЗ ТЕКУЩЕГО И АРХИВНОГО СНИМКОВ РЕНТГЕНА. Опиши динамику изменений (улучшение, стабилизация, прогрессирование).')
+        formData.append('prompt', 'PERFORM A COMPARATIVE ANALYSIS OF THE CURRENT AND ARCHIVE X-RAY IMAGES. Describe the dynamics of changes (improvement, stabilization, progression).')
       } else {
-        formData.append('prompt', 'Проанализируйте рентгеновский снимок и сформируйте диагностический протокол.')
+        formData.append('prompt', 'Analyze the X-ray image and generate a diagnostic protocol.')
       }
       
       formData.append('clinicalContext', clinicalContext)
@@ -337,7 +337,7 @@ export default function XRayPage() {
               <textarea
                 value={clinicalContext}
                 onChange={(e) => setClinicalContext(e.target.value)}
-                placeholder="Пример: Пациент 40 лет, кашель в течение 2 недель, субфебрильная температура. Исключить пневмонию."
+                    placeholder="Example: Patient, 40 y.o., cough for 2 weeks, low-grade fever. Rule out pneumonia."
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4"
                 rows={3}
                 disabled={loading}

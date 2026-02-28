@@ -20,12 +20,12 @@ export async function POST(request: NextRequest) {
     const rawText = anonymizeText(rawIncomingText);
 
     if (!rawText || !rawText.trim()) {
-      return NextResponse.json({ success: false, error: 'Текст не предоставлен' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Text was not provided' }, { status: 400 });
     }
 
-    // Добавляем специфическую инструкцию специалиста в промпт
+    // Add specialist-specific instruction to the prompt
     const specialistDirective = universalPrompt
-      ? `СПЕЦИФИЧЕСКАЯ ИНСТРУКЦИЯ ДЛЯ ПРОФИЛЯ (${specialistName}): ${universalPrompt}\n\n`
+      ? `PROFILE-SPECIFIC INSTRUCTION (${specialistName}): ${universalPrompt}\n\n`
       : '';
     const safeRagExamples = Array.isArray(ragExamples)
       ? ragExamples
@@ -34,53 +34,58 @@ export async function POST(request: NextRequest) {
           .slice(0, 4)
       : [];
     const ragDirective = safeRagExamples.length > 0
-      ? `ПРИМЕРЫ ИЗ ПЕРСОНАЛЬНОЙ RAG-БИБЛИОТЕКИ (используй как образец структуры и стиля; факты бери только из входных данных):
-${safeRagExamples.map((chunk: string, index: number) => `--- ОБРАЗЕЦ #${index + 1} ---\n${chunk}`).join('\n\n')}
+      ? `EXAMPLES FROM PERSONAL RAG LIBRARY (use only as a style and structure reference; use facts only from the input data):
+${safeRagExamples.map((chunk: string, index: number) => `--- EXAMPLE #${index + 1} ---\n${chunk}`).join('\n\n')}
 
 `
       : '';
 
     const isEcgFunctionalConclusion = templateId === 'ecg-functional-conclusion';
 
-    // Для ЭКГ делаем отдельный режим: короткое формальное заключение функционалиста.
-    // Это специально, чтобы НЕ появлялись "клинические гипотезы", тактика и рассуждения.
+    // ECG mode: concise formal conclusion only.
+    // This prevents clinical hypotheses and management reasoning.
     const prompt = isEcgFunctionalConclusion
-      ? `Вы — врач функциональной диагностики (ЭКГ). Сформируй КОРОТКОЕ формальное заключение по ЭКГ на основании входного текста.
-${specialistDirective}ВХОДНЫЕ ДАННЫЕ (из анализа ЭКГ):
+      ? `You are a physician specialized in functional diagnostics (ECG). Create a SHORT formal ECG conclusion based on the input text.
+${specialistDirective}INPUT DATA (from ECG analysis):
 ${rawText}
 
-${ragDirective}СТРОГИЙ ШАБЛОН ДЛЯ ВЫВОДА (заполни по нему):
+${ragDirective}STRICT OUTPUT TEMPLATE (fill it exactly):
 ${customTemplate}
 
-ОГРАНИЧЕНИЯ (ОБЯЗАТЕЛЬНО):
-1. Выводи ТОЛЬКО заключение по шаблону. Без разделов "клинические гипотезы", "differential diagnosis", тактики, верификации, дисклеймеров и рассуждений.
-2. Длина: 4–6 строк (коротко).
-3. Не придумывай параметры. Числа (PQ/QRS/QTc, мм ST) указывай только если они явно есть во входном тексте. Если нет — пиши "нет данных".
-4. Не меняй знак ST: если написано "депрессия" — не пиши "элевация" и наоборот.
-5. Не ставь диагнозы ОКС/ИМ и не добавляй фразы про "ОКС нет", если этого нет во входном тексте.
-Язык: русский.`
-      : `Вы — опытный врач-специалист (${specialistName || 'Терапевт'}), экспертный интеллектуальный ассистент с компетенциями профессора клинической медицины и ведущий специалист университетской клиники с многолетним клиническим опытом.
-${specialistDirective}Вы совмещаете клиническую строгость и ответственность, обрабатывая несистемно изложенную информацию и облекая её в стандартный протокол осмотра с рекомендациями по обследованию и лечению.
+MANDATORY CONSTRAINTS:
+1. Output ONLY the template-based conclusion. No sections like "clinical hypotheses", differential diagnosis, management strategy, verification notes, disclaimers, or reasoning.
+2. Length: 4-6 lines (concise).
+3. Do not invent parameters. Include values (PQ/QRS/QTc, ST in mm) only if explicitly present in the input text. If absent, write "no data".
+4. Preserve ST direction exactly: if the input says "depression", do not output "elevation", and vice versa.
+5. Do not diagnose ACS/MI and do not add phrases like "no ACS" unless explicitly present in the input.
+6. Output language is STRICTLY English-only, regardless of the input language.
+7. If any non-English text appears, rewrite it to English before finalizing the answer.
+Language: English-only.`
+      : `You are an experienced physician (${specialistName || 'Internal Medicine Physician'}), an expert clinical assistant with the competence of a professor of clinical medicine and broad academic-hospital experience.
+${specialistDirective}You combine clinical rigor and responsibility, transforming unstructured information into a standard encounter protocol with evidence-based diagnostic and treatment recommendations.
 
-ВАША ЗАДАЧА:
-Создать полный и структурированный протокол осмотра на основании следующих данных:
+YOUR TASK:
+Create a complete and structured encounter protocol based on the following data:
 ${rawText}
 
-${ragDirective}СТРОГИЙ ШАБЛОН ДЛЯ ЗАПОЛНЕНИЯ:
+${ragDirective}STRICT TEMPLATE TO FILL:
 ${customTemplate}
 
-ОГРАНИЧЕНИЯ И ПРАВИЛА СТИЛЯ (ОБЯЗАТЕЛЬНО):
-1. Начало ответа: Начни СРАЗУ с заголовка "ПРОТОКОЛ ПРИЕМА". Без вводных слов и приветствий.
-2. Форматирование текста: Текст в разделах (жалобы, анамнез, осмотр) должен быть БЕЗ дополнительных абзацев и пустых строк. Пиши ЕДИНЫМ ПОЛОТНОМ внутри каждого раздела.
-3. Объективный осмотр: Не используй выражения "не проводилась". Описывай норму для всех основных систем, если нет данных о патологии.
-4. Диагноз: Выноси на основании российских классификаций болезней (МКБ-10).
-5. Рекомендации: Пиши по пунктам 1., 2., и т.д. Используй сокращения для длинных строк. Не делай пропусков между строками.
-6. Лекарства: Указывай международное название (МНН) и 2 коммерческих названия (бренд и копию/генерик), доступных в РФ. Без лишних пропусков.
-7. Объем: Придерживайся стиля, чтобы текст уместился на 2 страницы А4.
-8. Подвал: Тезис о согласии в конце сделай мелким шрифтом (используй тег <small> или просто выдели текстом в конце).
-9. Ссылки: Указывай ссылки на проверенные международные источники (UpToDate, PubMed, Cochrane, NCCN, ESC, WHO и др.) для ключевых шагов терапии (предпочтительно ≤5 лет).
+MANDATORY STYLE AND CONTENT RULES:
+1. Start the answer IMMEDIATELY with the heading "APPOINTMENT PROTOCOL". No greetings or intro phrases.
+2. Formatting: inside each section (complaints, history, examination), write as continuous prose with no extra blank lines.
+3. Physical exam: do not use phrases like "not performed". If pathology details are absent, provide clinically neutral normal findings for major systems.
+4. Diagnosis: use international ICD-10 coding conventions where applicable.
+5. Recommendations: use numbered points 1., 2., etc. Keep phrasing concise and practical.
+6. Medications: use international nonproprietary names (INN/generic). Add brand examples only when clinically justified and region-neutral.
+7. Length: keep the protocol compact and practical (about up to 2 A4 pages equivalent).
+8. Footer note: include a brief informed-consent acknowledgment at the end (can be plain text).
+9. References: cite trusted international sources (UpToDate, PubMed, Cochrane, NCCN, ESC, WHO, etc.), preferably recent (<=5 years), for key management decisions.
+10. Output language is STRICTLY English-only, regardless of the input language.
+11. Ignore non-English wording in user input and RAG examples for output language choice.
+12. If any non-English text appears, rewrite it to English before finalizing the answer.
 
-Стиль: строго профессиональный, клинически и технически точный. Язык: русский.`;
+Style: strictly professional, clinically and technically accurate. Language: English-only.`;
 
     const MODEL = model === 'opus' ? MODELS.OPUS : 
                  model === 'gpt52' ? MODELS.GPT_5_2 : 
@@ -100,6 +105,6 @@ ${customTemplate}
     let result = await sendTextRequest(prompt, []);
     return NextResponse.json({ success: true, protocol: result });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: 'Ошибка генерации протокола' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Protocol generation error' }, { status: 500 });
   }
 }

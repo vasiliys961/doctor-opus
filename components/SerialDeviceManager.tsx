@@ -87,8 +87,8 @@ export default function SerialDeviceManager() {
       setIsConnected(true)
       readFromPort(port)
     } catch (err) {
-      console.error('Ошибка подключения:', err)
-      alert('Не удалось подключиться к устройству. Убедитесь, что оно подключено и вы дали разрешение.')
+      console.error('Connection error:', err)
+      alert('Failed to connect to device. Make sure it is connected and permission has been granted.')
     } finally {
       setIsConnecting(false)
     }
@@ -129,7 +129,7 @@ export default function SerialDeviceManager() {
         }
       }
     } catch (err) {
-      console.error('Ошибка чтения:', err)
+      console.error('Read error:', err)
     } finally {
       reader.releaseLock()
     }
@@ -146,7 +146,7 @@ export default function SerialDeviceManager() {
       
       const formData = new FormData()
       formData.append('file', blob, 'ecg_live_capture.png')
-      formData.append('prompt', 'Проанализируйте этот фрагмент ЭКГ, полученный с прибора в реальном времени. Опишите ритм, наличие артефактов и любые отклонения.')
+      formData.append('prompt', 'Analyze this ECG fragment captured in real time from a device. Describe the rhythm, presence of artifacts, and any deviations.')
       formData.append('mode', 'optimized')
       formData.append('imageType', 'ecg')
 
@@ -159,11 +159,11 @@ export default function SerialDeviceManager() {
       if (data.success) {
         setAnalysisResult(data.result)
       } else {
-        alert('Ошибка анализа: ' + data.error)
+        alert('Analysis error: ' + data.error)
       }
     } catch (err) {
-      console.error('Ошибка:', err)
-      alert('Произошла ошибка при отправке данных на анализ.')
+      console.error('Error:', err)
+      alert('An error occurred while sending data for analysis.')
     } finally {
       setIsAnalyzing(false)
     }
@@ -172,10 +172,10 @@ export default function SerialDeviceManager() {
   if (!supported) {
     return (
       <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-xl text-center">
-        <h3 className="text-lg font-bold text-yellow-800 mb-2">Web Serial API не поддерживается</h3>
+        <h3 className="text-lg font-bold text-yellow-800 mb-2">Web Serial API is not supported</h3>
         <p className="text-yellow-700">
-          Ваш браузер не поддерживает прямое подключение USB-устройств. 
-          Пожалуйста, используйте <strong>Google Chrome</strong> или <strong>Microsoft Edge</strong> на ПК или Mac.
+          Your browser does not support direct USB device connection. 
+          Please use <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on PC or Mac.
         </p>
       </div>
     )
@@ -186,8 +186,8 @@ export default function SerialDeviceManager() {
       <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">🔌 Подключение оборудования</h2>
-            <p className="text-sm text-gray-500">Прямое считывание данных с ЭКГ, датчиков и анализаторов через USB</p>
+            <h2 className="text-2xl font-bold text-gray-900">🔌 Device Connection</h2>
+            <p className="text-sm text-gray-500">Direct data reading from ECG devices, sensors, and analyzers via USB</p>
           </div>
           <div className="flex items-center gap-3">
             {!isConnected ? (
@@ -208,7 +208,7 @@ export default function SerialDeviceManager() {
                   disabled={isConnecting}
                   className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition-all shadow-md disabled:opacity-50"
                 >
-                  {isConnecting ? '⏳ Подключение...' : '🔗 Подключить прибор'}
+                  {isConnecting ? '⏳ Connecting...' : '🔗 Connect device'}
                 </button>
               </>
             ) : (
@@ -216,7 +216,7 @@ export default function SerialDeviceManager() {
                 onClick={disconnect}
                 className="px-6 py-2 bg-red-100 text-red-600 hover:bg-red-200 rounded-lg font-bold transition-all border border-red-200"
               >
-                🔴 Отключить
+                🔴 Disconnect
               </button>
             )}
           </div>
@@ -228,7 +228,7 @@ export default function SerialDeviceManager() {
               <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-4 opacity-20">
                 <path d="M12 2v20M2 12h20"/>
               </svg>
-              <p>Ожидание подключения устройства...</p>
+              <p>Waiting for device connection...</p>
             </div>
           )}
           <canvas 
@@ -247,7 +247,7 @@ export default function SerialDeviceManager() {
 
         <div className="mt-6 flex justify-between items-center p-4 bg-indigo-50 rounded-xl border border-indigo-100">
           <div className="text-sm text-indigo-900">
-            <strong>Подсказка:</strong> Прибор должен передавать данные в текстовом формате (числа, разделенные новой строкой).
+            <strong>Tip:</strong> The device should transmit data in text format (numbers separated by newline).
           </div>
           <button
             onClick={analyzeCapture}
@@ -257,11 +257,11 @@ export default function SerialDeviceManager() {
             {isAnalyzing ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Обработка...
+                Processing...
               </>
             ) : (
               <>
-                🧠 Проанализировать текущий фрагмент
+                🧠 Analyze current fragment
               </>
             )}
           </button>

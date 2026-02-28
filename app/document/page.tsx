@@ -273,7 +273,7 @@ export default function DocumentPage() {
       }
 
       formData.append('isAnonymous', isAnonymous.toString())
-      formData.append('prompt', 'Отсканируйте и извлеките текст из медицинского документа, СОХРАНЯЯ СТРУКТУРУ: таблицы, списки, заголовки, форматирование.')
+      formData.append('prompt', 'Scan and extract text from the medical document, PRESERVING STRUCTURE: tables, lists, headings, formatting.')
 
       const response = await fetch('/api/scan/document', {
         method: 'POST',
@@ -418,7 +418,7 @@ export default function DocumentPage() {
                       isGrayscale ? 'bg-gray-800 text-white' : 'bg-gray-200 text-gray-600'
                     }`}
                   >
-                    {isGrayscale ? 'ВКЛ' : 'ВЫКЛ'}
+                    {isGrayscale ? 'ON' : 'OFF'}
                   </button>
                 </div>
               </div>

@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
         { status: 500 }
       );
     }
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
     if (!video1 || !video2) {
       return NextResponse.json(
-        { success: false, error: 'Необходимо два видео-файла для сравнения' },
+        { success: false, error: 'Two video files are required for comparison' },
         { status: 400 }
       );
     }
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const maxSizeBytes = 50 * 1024 * 1024;
     if (video1.size > maxSizeBytes || video2.size > maxSizeBytes) {
       return NextResponse.json(
-        { success: false, error: 'Каждое видео не должно превышать 50MB' },
+        { success: false, error: 'Each video must be <= 50MB' },
         { status: 400 }
       );
     }
@@ -63,9 +63,9 @@ export async function POST(request: NextRequest) {
       model,
     });
   } catch (error: any) {
-    console.error('❌ [VIDEO COMPARISON API] Ошибка:', error);
+    console.error('❌ [VIDEO COMPARISON API] Error:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка сравнительного анализа видео' },
+      { success: false, error: 'Video comparison analysis error' },
       { status: 500 }
     );
   }

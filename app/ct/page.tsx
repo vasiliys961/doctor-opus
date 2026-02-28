@@ -115,7 +115,7 @@ export default function CTPage() {
       const formData = new FormData()
       formData.append('file', file)
       // Специальный промпт для первого этапа (только описание)
-      formData.append('prompt', 'Проанализируйте КТ-исследование и сформируйте диагностический протокол.')
+      formData.append('prompt', 'Analyze the CT study and generate a diagnostic protocol.')
       formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', 'ct')

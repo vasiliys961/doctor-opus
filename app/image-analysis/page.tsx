@@ -109,7 +109,7 @@ export default function ImageAnalysisPage() {
     setCurrentCost(0)
 
     try {
-      const prompt = 'Проанализируйте медицинское изображение. Опишите все патологические изменения, локализацию, размеры, плотность, контуры.'
+      const prompt = 'Analyze the medical image. Describe all pathological changes, localization, size, density, and contours.'
 
       // Пытаемся получить изображение в base64 для кэша
       let imageBase64 = '';
@@ -405,13 +405,13 @@ export default function ImageAnalysisPage() {
                   />
                 </div>
                 <div className="mb-2 p-2 bg-amber-50 border border-amber-100 rounded text-[10px] text-amber-800">
-                  ⚠️ <strong>Важно:</strong> Do not enter patient name, date of birth, or other identifying information. 
+                  ⚠️ <strong>Important:</strong> Do not enter patient name, date of birth, or other identifying information. 
                   Use anonymized descriptions (e.g., "Male patient, 45 y.o.").
                 </div>
                 <textarea
                   value={clinicalContext}
                   onChange={(e) => setClinicalContext(e.target.value)}
-                  placeholder="Например: Пациент 60 лет, жалобы на одышку при нагрузке, в анамнезе ГБ 2 ст. Исключить застойные явления."
+                  placeholder="Example: Patient, 60 y.o., dyspnea on exertion, history of hypertension grade 2. Rule out congestive changes."
                   className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4 ${
                     /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
                     ? 'border-red-500 bg-red-50' 
@@ -581,7 +581,7 @@ export default function ImageAnalysisPage() {
           />
           {dicomAnalysisImage && (
             <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded text-green-700 text-sm flex items-center gap-2">
-              <span>✅ Снимок зафиксирован. Теперь выберите режим и нажмите кнопку анализа ниже.</span>
+              <span>✅ Image captured. Now select a mode and press the analysis button below.</span>
             </div>
           )}
         </div>
@@ -604,9 +604,9 @@ export default function ImageAnalysisPage() {
             </button>
           </div>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600 border-t pt-4">
-            <p><strong>Имя:</strong> {file.name}</p>
-            <p><strong>Размер:</strong> {(file.size / 1024 / 1024).toFixed(2)} MB</p>
-            <p><strong>Тип:</strong> {file.type || 'не указан'}</p>
+            <p><strong>Name:</strong> {file.name}</p>
+            <p><strong>Size:</strong> {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+            <p><strong>Type:</strong> {file.type || 'not specified'}</p>
           </div>
         </div>
       )}

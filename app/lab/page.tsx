@@ -172,7 +172,7 @@ export default function LabPage() {
             model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.6'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
-            prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
+            prompt: 'Analyze the laboratory data from all pages. Extract all parameters, their values, and reference ranges.',
             clinicalContext: clinicalContext
           }),
         })
@@ -253,7 +253,7 @@ export default function LabPage() {
             model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat') : 'anthropic/claude-opus-4.6'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
-            prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
+            prompt: 'Analyze the laboratory data from all pages. Extract all parameters, their values, and reference ranges.',
             clinicalContext: clinicalContext
           }),
         })
@@ -314,7 +314,7 @@ export default function LabPage() {
         formData.append('model', targetModelId)
         formData.append('useStreaming', useStreaming.toString())
         formData.append('isAnonymous', isAnonymous.toString())
-        formData.append('prompt', 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.')
+        formData.append('prompt', 'Analyze the laboratory data. Extract all parameters, their values, and reference ranges.')
         formData.append('clinicalContext', clinicalContext)
 
         const response = await fetch('/api/analyze/lab', {
@@ -416,7 +416,7 @@ export default function LabPage() {
             <textarea
               value={clinicalContext}
               onChange={(e) => setClinicalContext(e.target.value)}
-              placeholder="Пример: Пациент 40 лет, слабость, быстрая утомляемость. Подозрение на железодефицитную анемию."
+                placeholder="Example: Patient, 40 y.o., weakness, rapid fatigue. Suspected iron deficiency anemia."
               className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4 ${
                 /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
                 ? 'border-red-500 bg-red-50' 

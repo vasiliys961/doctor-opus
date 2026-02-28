@@ -83,7 +83,7 @@ export default function ClinicDashboardPage() {
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Package Balance</p>
                 <p className="text-3xl font-black text-indigo-600">
-                  {balance.currentCredits.toFixed(1)} <span className="text-sm font-normal text-slate-400">ед.</span>
+                  {balance.currentCredits.toFixed(1)} <span className="text-sm font-normal text-slate-400">cr.</span>
                 </p>
                 <div className="mt-4 w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                   <div 
@@ -96,7 +96,7 @@ export default function ClinicDashboardPage() {
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Total Spent</p>
                 <p className="text-3xl font-black text-slate-800">
-                  {balance.totalSpent.toFixed(1)} <span className="text-sm font-normal text-slate-400">ед.</span>
+                  {balance.totalSpent.toFixed(1)} <span className="text-sm font-normal text-slate-400">cr.</span>
                 </p>
                 <p className="text-[10px] text-slate-400 mt-2">Since activation: {formatDate(balance.purchaseDate)}</p>
               </div>
@@ -119,7 +119,7 @@ export default function ClinicDashboardPage() {
             {sortedStats.length === 0 ? (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-12 text-center">
                 <div className="text-4xl mb-4 opacity-20">📈</div>
-                <p className="text-slate-500 font-medium">Данные по специальностям пока отсутствуют.<br/>Они появятся после совершения новых операций.</p>
+                <p className="text-slate-500 font-medium">No specialty data yet.<br/>It will appear after new operations are performed.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4">

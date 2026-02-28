@@ -204,7 +204,7 @@ export default function ClinicalProtocolsPage() {
                 handleSearch()
               }
             }}
-            placeholder="Например: протокол лечения артериальной гипертензии&#10;&#10;Нажмите Ctrl+Enter для поиска"
+            placeholder="Example: hypertension management protocol&#10;&#10;Press Ctrl+Enter to search"
             rows={4}
             className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base resize-none touch-manipulation"
             disabled={loading}
@@ -438,16 +438,16 @@ export default function ClinicalProtocolsPage() {
       {!result && !loading && (
         <div className="bg-primary-50 rounded-lg p-4 sm:p-6">
           <h3 className="text-base sm:text-lg font-bold text-primary-900 mb-3">
-            💡 Примеры запросов:
+            💡 Example queries:
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             {[
-              'Клинический алгоритм при подозрении на ОКС',
-              'Дифференциальный анализ аритмий на ЭКГ',
-              'Пошаговая тактика при фибрилляции предсердий',
-              'Диагностические критерии и шкалы при ХСН',
-              'Алгоритм ведения пациента с внебольничной пневмонией',
-              'Дифференциальная диагностика болей в суставах',
+              'Clinical algorithm for suspected ACS',
+              'Differential analysis of arrhythmias on ECG',
+              'Step-by-step management of atrial fibrillation',
+              'Diagnostic criteria and scores for CHF',
+              'Management algorithm for community-acquired pneumonia',
+              'Differential diagnosis of joint pain',
             ].map((example, idx) => (
               <button
                 key={idx}

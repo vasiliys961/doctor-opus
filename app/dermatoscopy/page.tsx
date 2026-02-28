@@ -42,7 +42,7 @@ export default function DermatoscopyPage() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('prompt', 'Проанализируйте дерматоскопическое изображение. Опишите структуру, цвета, границы, признаки меланомы по ABCDE критериям.')
+      formData.append('prompt', 'Analyze the dermoscopy image. Describe the structure, colors, borders, and signs of melanoma using ABCDE criteria.')
       formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', 'dermatoscopy') // Указываем тип изображения

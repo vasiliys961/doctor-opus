@@ -146,7 +146,7 @@ export default function DeviceSync({ onImageReceived, currentImage }: DeviceSync
             onClick={() => setMode('none')}
             className="text-xs text-blue-600 hover:underline"
           >
-            Сброс
+            Reset
           </button>
         )}
       </div>

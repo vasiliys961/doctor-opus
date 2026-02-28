@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
+        { success: false, error: 'Authorization required' },
         { status: 401 }
       );
     }
@@ -40,18 +40,18 @@ export async function POST(request: NextRequest) {
     const isAnonymous = formData.get('isAnonymous') === 'true';
 
     if (!file) {
-      console.error('❌ [GENETIC] Файл не предоставлен');
+      console.error('❌ [GENETIC] File not provided');
       return NextResponse.json(
-        { success: false, error: 'Файл не предоставлен' },
+        { success: false, error: 'File not provided' },
         { status: 400 }
       );
     }
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      console.error('❌ [GENETIC] OPENROUTER_API_KEY не настроен');
+      console.error('❌ [GENETIC] OPENROUTER_API_KEY is not configured');
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
         { status: 500 }
       );
     }
@@ -299,7 +299,7 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
       return NextResponse.json(
         {
           success: false,
-          error: 'Не удалось извлечь данные из файла',
+          error: 'Failed to extract data from file',
         },
         { status: 400 }
       );
@@ -321,7 +321,7 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
     return NextResponse.json(
       {
         success: false,
-        error: 'Ошибка генетического анализа',
+        error: 'Genetic analysis error',
       },
       { status: 500 }
     );

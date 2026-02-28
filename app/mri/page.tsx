@@ -116,7 +116,7 @@ export default function MRIPage() {
       const formData = new FormData()
       formData.append('file', file)
       // Специальный промпт для первого этапа (только описание)
-      formData.append('prompt', 'Проанализируйте МРТ-исследование и сформируйте диагностический протокол.')
+      formData.append('prompt', 'Analyze the MRI study and generate a diagnostic protocol.')
       formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', 'mri') // Указываем тип изображения
@@ -274,7 +274,7 @@ export default function MRIPage() {
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Загрузите МРТ изображение или DICOM файл</h2>
+        <h2 className="text-xl font-semibold mb-4">Upload MRI image or DICOM file</h2>
         <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
       </div>
 

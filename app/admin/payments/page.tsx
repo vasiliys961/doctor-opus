@@ -201,7 +201,7 @@ export default function AdminPaymentsPage() {
                             disabled={refunding === p.id}
                             className="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg transition-all disabled:opacity-50 shadow-sm"
                           >
-                            {refunding === p.id ? '⏳...' : '🛑 Возврат'}
+                            {refunding === p.id ? '⏳...' : '🛑 Refund'}
                           </button>
                         ) : p.status === 'refunded' ? (
                           <span className="text-xs text-red-400 font-bold">Refunded</span>
@@ -221,7 +221,7 @@ export default function AdminPaymentsPage() {
           <p className="text-sm text-amber-800 leading-relaxed">
             <strong>How to use:</strong> When a user requests a refund (e.g., by email), find their payment in the table and click the <strong>«🛑 Refund»</strong> button. 
             The system will update the status in the DB and deduct credits from the balance. Then manually transfer the funds in your payment provider account. 
-            Когда платежная система будет полностью подключена, возврат будет выполняться автоматически через API.
+            Once the payment system is fully connected, refunds will be processed automatically via API.
           </p>
         </div>
       </div>

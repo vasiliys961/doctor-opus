@@ -86,7 +86,7 @@ export default function LibrarySearch({ query, isActive = false }: LibrarySearch
             href="/library" 
             className="mt-3 inline-block px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all"
           >
-            ➕ Загрузить PDF
+            ➕ Upload PDF
           </a>
         </div>
       )}

@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const prompt = anonymizeText(formData.get('prompt') as string || 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.');
+    const prompt = anonymizeText(formData.get('prompt') as string || 'Analyze the laboratory data. Extract all markers, their values, and reference ranges.');
     const clinicalContext = anonymizeText(formData.get('clinicalContext') as string || '');
     const mode = formData.get('mode') as string || 'fast';
     const model = formData.get('model') as string;
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
         { status: 500 }
       );
     }
@@ -114,9 +114,9 @@ export async function POST(request: NextRequest) {
           cost: mode === 'fast' ? 0.5 : (mode === 'optimized' ? 1.0 : 2.0)
         });
       } catch (imageError: any) {
-        console.error('❌ [LAB] Ошибка обработки изображения:', imageError);
+        console.error('❌ [LAB] Image processing error:', imageError);
         return NextResponse.json(
-          { success: false, error: `Ошибка обработки изображения: ${imageError.message}` },
+          { success: false, error: `Image processing error: ${imageError.message}` },
           { status: 500 }
         );
       }
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
     // PDF обрабатывается на клиенте
     if (fileType === 'pdf') {
       return NextResponse.json(
-        { success: false, error: 'PDF файлы должны обрабатываться на клиенте.' },
+        { success: false, error: 'PDF files must be processed on the client side.' },
         { status: 400 }
       );
     }
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
       } catch (excelError: any) {
         console.error('❌ [LAB] Ошибка обработки Excel:', excelError);
         return NextResponse.json(
-          { success: false, error: `Ошибка обработки Excel файла: ${excelError.message}` },
+          { success: false, error: `Excel processing error: ${excelError.message}` },
           { status: 500 }
         );
       }
@@ -206,13 +206,13 @@ export async function POST(request: NextRequest) {
 
     // Неподдерживаемый формат
     return NextResponse.json(
-      { success: false, error: `Неподдерживаемый формат файла: ${fileType}.` },
+      { success: false, error: `Unsupported file format: ${fileType}.` },
       { status: 400 }
     );
   } catch (error: any) {
     console.error('❌ [LAB] Общая ошибка анализа:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка анализа лабораторных данных' },
+      { success: false, error: 'Lab data analysis error' },
       { status: 500 }
     );
   }

@@ -1,26 +1,25 @@
 /**
- * Структура данных медицинских протоколов
- * Перенесена из modules/streamlit_enhanced_pages.py
+ * Medical protocol data structure
  */
 
 export type ProtocolCategory = 
-  | 'Кардиология'
-  | 'Пульмонология'
-  | 'Ревматология'
-  | 'Гастроэнтерология'
-  | 'Эндокринология'
-  | 'Неврология'
-  | 'Нефрология'
-  | 'Гематология'
-  | 'Прочие';
+  | 'Cardiology'
+  | 'Pulmonology'
+  | 'Rheumatology'
+  | 'Gastroenterology'
+  | 'Endocrinology'
+  | 'Neurology'
+  | 'Nephrology'
+  | 'Hematology'
+  | 'Other';
 
-export type UrgencyLevel = 'экстренно' | 'срочно' | 'планово';
+export type UrgencyLevel = 'emergent' | 'urgent' | 'routine';
 
 export interface Protocol {
-  описание: string;
-  ключевые_точки: string[];
-  код_мкб: string[];
-  срочность: UrgencyLevel;
+  description: string;
+  key_points: string[];
+  icd_codes: string[];
+  urgency: UrgencyLevel;
 }
 
 export interface ProtocolsData {
@@ -30,447 +29,446 @@ export interface ProtocolsData {
 }
 
 export const PROTOCOLS: ProtocolsData = {
-  'Кардиология': {
-    'Острый коронарный синдром (ОКС)': {
-      описание: 'Клинический анализ и ведение при подозрении на ОКС',
-      ключевые_точки: [
-        'Дифф. анализ: исключить ТЭЛА, расслоение аорты, пневмоторакс',
-        'STEMI: Элевация ST > 1 мм; NSTEMI: Депрессия ST или инверсия T',
-        'Шкала GRACE для оценки риска госпитальной летальности',
-        'Тактика: ЭКГ в динамике (15 мин), нагрузочные дозы антиагрегантов',
-        'Мониторинг: Тропонины I/T (High-sensitivity) в динамике',
-        'Красные флаги: кардиогенный шок, отек легких, аритмии'
+  'Cardiology': {
+    'Acute Coronary Syndrome (ACS)': {
+      description: 'Clinical evaluation and management of suspected ACS',
+      key_points: [
+        'DDx: rule out PE, aortic dissection, pneumothorax',
+        'STEMI: ST elevation > 1 mm; NSTEMI: ST depression or T-wave inversion',
+        'GRACE score for in-hospital mortality risk stratification',
+        'Management: serial ECGs (q15 min), loading doses of antiplatelet agents',
+        'Monitoring: high-sensitivity Troponin I/T serial measurements',
+        'Red flags: cardiogenic shock, pulmonary edema, arrhythmias'
       ],
-      код_мкб: ['I21', 'I20.0'],
-      срочность: 'экстренно'
+      icd_codes: ['I21', 'I20.0'],
+      urgency: 'emergent'
     },
-    'Артериальная гипертензия': {
-      описание: 'Диагностика и лечение артериальной гипертензии',
-      ключевые_точки: [
-        'АД ≥140/90 мм рт.ст. при повторных измерениях',
-        'Суточное мониторирование АД (СМАД)',
-        'Оценка факторов риска и поражения органов-мишеней',
-        'Немедикаментозная терапия (диета, физическая активность)',
-        'Медикаментозная терапия: ИАПФ, БРА, БКК, диуретики'
+    'Arterial Hypertension': {
+      description: 'Diagnosis and management of arterial hypertension',
+      key_points: [
+        'BP ≥140/90 mmHg on repeated measurements',
+        'Ambulatory blood pressure monitoring (ABPM)',
+        'Risk factor assessment and target organ damage evaluation',
+        'Non-pharmacological therapy (diet, physical activity)',
+        'Pharmacotherapy: ACE inhibitors, ARBs, CCBs, diuretics'
       ],
-      код_мкб: ['I10', 'I11', 'I12', 'I13', 'I15'],
-      срочность: 'планово'
+      icd_codes: ['I10', 'I11', 'I12', 'I13', 'I15'],
+      urgency: 'routine'
     },
-    'Хроническая сердечная недостаточность': {
-      описание: 'Диагностика и лечение ХСН',
-      ключевые_точки: [
-        'Клинические признаки: одышка, отеки, утомляемость',
-        'ЭхоКГ: ФВ ЛЖ < 40% (систолическая дисфункция)',
-        'BNP/NT-proBNP для диагностики',
-        'Ингибиторы АПФ/БРА, бета-блокаторы, антагонисты альдостерона',
-        'Диуретики при застойных явлениях'
+    'Chronic Heart Failure (CHF)': {
+      description: 'Diagnosis and management of CHF',
+      key_points: [
+        'Clinical features: dyspnea, edema, fatigue',
+        'Echo: LVEF < 40% (systolic dysfunction)',
+        'BNP/NT-proBNP for diagnosis',
+        'ACE inhibitors/ARBs, beta-blockers, aldosterone antagonists',
+        'Diuretics for congestion'
       ],
-      код_мкб: ['I50'],
-      срочность: 'срочно'
+      icd_codes: ['I50'],
+      urgency: 'urgent'
     },
-    'Фибрилляция предсердий': {
-      описание: 'Тактика ведения и контроль риска при фибрилляции предсердий',
-      ключевые_точки: [
-        'Дифф. анализ: трепетание предсердий, наджелудочковая тахикардия',
-        'Шкала CHA2DS2-VASc (риск инсульта) - выбор антикоагулянта',
-        'Шкала HAS-BLED (риск кровотечений) - оценка безопасности',
-        'Стратегия: контроль ритма vs контроль ЧСС',
-        'Тактика: DOAC (ривароксабан, апиксабан) предпочтительнее варфарина',
-        'Мониторинг: контроль МНО (если варфарин), ЭхоКГ каждые 12 мес.'
+    'Atrial Fibrillation': {
+      description: 'Management and risk control in atrial fibrillation',
+      key_points: [
+        'DDx: atrial flutter, supraventricular tachycardia',
+        'CHA2DS2-VASc score (stroke risk) — anticoagulant selection',
+        'HAS-BLED score (bleeding risk) — safety assessment',
+        'Strategy: rhythm control vs. rate control',
+        'Preferred: DOACs (rivaroxaban, apixaban) over warfarin',
+        'Monitoring: INR if warfarin; Echo q12 months'
       ],
-      код_мкб: ['I48'],
-      срочность: 'срочно'
+      icd_codes: ['I48'],
+      urgency: 'urgent'
     }
   },
-  'Пульмонология': {
-    'Внебольничная пневмония': {
-      описание: 'Диагностика и лечение внебольничной пневмонии',
-      ключевые_точки: [
-        'Клинические признаки: кашель, лихорадка, одышка',
-        'Рентгенография ОГК: инфильтративные изменения',
-        'ОАК: лейкоцитоз, сдвиг влево',
-        'СРБ, прокальцитонин для оценки тяжести',
-        'Антибактериальная терапия (амоксициллин/клавуланат, макролиды)',
-        'Оценка по шкале CURB-65/CRB-65'
+  'Pulmonology': {
+    'Community-Acquired Pneumonia (CAP)': {
+      description: 'Diagnosis and treatment of community-acquired pneumonia',
+      key_points: [
+        'Clinical features: cough, fever, dyspnea',
+        'Chest X-ray: infiltrative changes',
+        'CBC: leukocytosis with left shift',
+        'CRP, procalcitonin for severity assessment',
+        'Antibiotic therapy (amoxicillin-clavulanate, macrolides)',
+        'Severity scoring: CURB-65/CRB-65'
       ],
-      код_мкб: ['J13', 'J14', 'J15', 'J16', 'J18'],
-      срочность: 'срочно'
+      icd_codes: ['J13', 'J14', 'J15', 'J16', 'J18'],
+      urgency: 'urgent'
     },
-    'ХОБЛ (обострение)': {
-      описание: 'Диагностика и лечение обострения ХОБЛ',
-      ключевые_точки: [
-        'Усиление одышки, кашля, увеличение объема мокроты',
-        'Спирометрия: ОФВ1 < 80% от должного',
-        'Рентгенография для исключения пневмонии, пневмоторакса',
-        'Бронходилататоры (сальбутамол, ипратропий)',
-        'Системные ГКС при тяжелом обострении',
-        'Антибиотики при признаках бактериальной инфекции'
+    'COPD Exacerbation': {
+      description: 'Diagnosis and management of COPD exacerbation',
+      key_points: [
+        'Worsening dyspnea, cough, increased sputum volume',
+        'Spirometry: FEV1 < 80% predicted',
+        'Chest X-ray to rule out pneumonia, pneumothorax',
+        'Bronchodilators (salbutamol, ipratropium)',
+        'Systemic corticosteroids for severe exacerbation',
+        'Antibiotics if signs of bacterial infection'
       ],
-      код_мкб: ['J44'],
-      срочность: 'срочно'
+      icd_codes: ['J44'],
+      urgency: 'urgent'
     },
-    'Бронхиальная астма': {
-      описание: 'Диагностика и лечение бронхиальной астмы',
-      ключевые_точки: [
-        'Обратимая бронхообструкция (спирография с бронхолитиком)',
-        'Клинические признаки: одышка, свистящие хрипы, кашель',
-        'Оценка контроля астмы (ACT, GINA)',
-        'Ингаляционные ГКС + бета-2-агонисты длительного действия',
-        'Короткодействующие бета-2-агонисты для купирования'
+    'Bronchial Asthma': {
+      description: 'Diagnosis and management of bronchial asthma',
+      key_points: [
+        'Reversible bronchial obstruction (spirometry with bronchodilator)',
+        'Clinical features: dyspnea, wheezing, cough',
+        'Asthma control assessment (ACT, GINA)',
+        'Inhaled corticosteroids + long-acting beta-2 agonists',
+        'Short-acting beta-2 agonists for rescue therapy'
       ],
-      код_мкб: ['J45', 'J46'],
-      срочность: 'срочно'
+      icd_codes: ['J45', 'J46'],
+      urgency: 'urgent'
     },
-    'Тромбоэмболия легочной артерии (ТЭЛА)': {
-      описание: 'Диагностика и лечение ТЭЛА',
-      ключевые_точки: [
-        'Клинические признаки: одышка, боль в груди, кровохарканье',
-        'D-димер для скрининга',
-        'КТ-ангиография легочных артерий (золотой стандарт)',
-        'Оценка по шкале Уэллса',
-        'Антикоагулянтная терапия (гепарин, DOAC)',
-        'Тромболизис при массивной ТЭЛА'
+    'Pulmonary Embolism (PE)': {
+      description: 'Diagnosis and treatment of pulmonary embolism',
+      key_points: [
+        'Clinical features: dyspnea, chest pain, hemoptysis',
+        'D-dimer for screening',
+        'CT pulmonary angiography (gold standard)',
+        'Wells score for pre-test probability',
+        'Anticoagulation (heparin, DOACs)',
+        'Thrombolysis for massive PE'
       ],
-      код_мкб: ['I26'],
-      срочность: 'экстренно'
+      icd_codes: ['I26'],
+      urgency: 'emergent'
     }
   },
-  'Ревматология': {
-    'Ревматоидный артрит': {
-      описание: 'Диагностика и лечение ревматоидного артрита',
-      ключевые_точки: [
-        'Клинические признаки: симметричный полиартрит, утренняя скованность',
-        'РФ, АЦЦП (антитела к цитруллинированному пептиду)',
-        'Рентгенография: эрозии, сужение суставных щелей',
-        'Оценка активности по DAS28',
-        'БМАРП (метотрексат, сульфасалазин, лефлуномид)',
-        'ГИБП при неэффективности БМАРП'
+  'Rheumatology': {
+    'Rheumatoid Arthritis': {
+      description: 'Diagnosis and management of rheumatoid arthritis',
+      key_points: [
+        'Clinical features: symmetric polyarthritis, morning stiffness',
+        'RF, anti-CCP antibodies',
+        'X-ray: erosions, joint space narrowing',
+        'Disease activity assessment: DAS28',
+        'DMARDs (methotrexate, sulfasalazine, leflunomide)',
+        'Biologics for inadequate DMARD response'
       ],
-      код_мкб: ['M05', 'M06'],
-      срочность: 'планово'
+      icd_codes: ['M05', 'M06'],
+      urgency: 'routine'
     },
-    'Системная красная волчанка (СКВ)': {
-      описание: 'Диагностика и лечение СКВ',
-      ключевые_точки: [
-        'Критерии ACR/EULAR 2019: кожные проявления, артрит, серозиты',
-        'АНА, анти-dsDNA, анти-Sm антитела',
-        'ОАК: лейкопения, тромбоцитопения, анемия',
-        'Оценка активности по SLEDAI',
-        'ГКС, гидроксихлорохин, иммуносупрессанты',
-        'Биологические препараты при тяжелом течении'
+    'Systemic Lupus Erythematosus (SLE)': {
+      description: 'Diagnosis and management of SLE',
+      key_points: [
+        'ACR/EULAR 2019 criteria: skin, arthritis, serositis',
+        'ANA, anti-dsDNA, anti-Sm antibodies',
+        'CBC: leukopenia, thrombocytopenia, anemia',
+        'Disease activity: SLEDAI score',
+        'Corticosteroids, hydroxychloroquine, immunosuppressants',
+        'Biologics for severe disease'
       ],
-      код_мкб: ['M32'],
-      срочность: 'срочно'
+      icd_codes: ['M32'],
+      urgency: 'urgent'
     },
-    'Остеоартроз': {
-      описание: 'Диагностика и лечение остеоартроза',
-      ключевые_точки: [
-        'Клинические признаки: боль, крепитация, ограничение движений',
-        'Рентгенография: сужение суставной щели, остеофиты',
-        'Оценка по шкале WOMAC, VAS',
-        'НПВП для купирования боли',
-        'Хондропротекторы (хондроитин, глюкозамин)',
-        'Внутрисуставные инъекции ГКС, гиалуроновой кислоты'
+    'Osteoarthritis': {
+      description: 'Diagnosis and management of osteoarthritis',
+      key_points: [
+        'Clinical features: pain, crepitus, limited range of motion',
+        'X-ray: joint space narrowing, osteophytes',
+        'WOMAC, VAS scales for assessment',
+        'NSAIDs for pain relief',
+        'Chondroprotectors (chondroitin, glucosamine)',
+        'Intra-articular injections: corticosteroids, hyaluronic acid'
       ],
-      код_мкб: ['M15', 'M16', 'M17', 'M18', 'M19'],
-      срочность: 'планово'
+      icd_codes: ['M15', 'M16', 'M17', 'M18', 'M19'],
+      urgency: 'routine'
     },
-    'Подагра': {
-      описание: 'Диагностика и лечение подагры',
-      ключевые_точки: [
-        'Острый артрит (часто I плюснефаланговый сустав)',
-        'Гиперурикемия (мочевая кислота > 420 мкмоль/л)',
-        'Идентификация кристаллов уратов в синовиальной жидкости',
-        'Купирование острого приступа: НПВП, колхицин, ГКС',
-        'Уратснижающая терапия (аллопуринол, фебуксостат)',
-        'Диета: ограничение пуринов, алкоголя'
+    'Gout': {
+      description: 'Diagnosis and management of gout',
+      key_points: [
+        'Acute arthritis (often 1st MTP joint)',
+        'Hyperuricemia (uric acid > 420 µmol/L)',
+        'Urate crystal identification in synovial fluid',
+        'Acute attack management: NSAIDs, colchicine, corticosteroids',
+        'Urate-lowering therapy (allopurinol, febuxostat)',
+        'Diet: reduce purines, alcohol'
       ],
-      код_мкб: ['M10'],
-      срочность: 'срочно'
+      icd_codes: ['M10'],
+      urgency: 'urgent'
     }
   },
-  'Гастроэнтерология': {
-    'Язвенная болезнь желудка и ДПК': {
-      описание: 'Диагностика и лечение язвенной болезни',
-      ключевые_точки: [
-        'Клинические признаки: боль в эпигастрии, изжога',
-        'ЭГДС: визуализация язвенного дефекта',
-        'Тест на H. pylori (дыхательный, кал, биопсия)',
-        'ИПП (омепразол, пантопразол) 4-8 недель',
-        'Эрадикация H. pylori (тройная/четверная схема)',
-        'Исключение НПВП при возможности'
+  'Gastroenterology': {
+    'Peptic Ulcer Disease': {
+      description: 'Diagnosis and management of peptic ulcer disease',
+      key_points: [
+        'Clinical features: epigastric pain, heartburn',
+        'EGD: visualization of ulcer defect',
+        'H. pylori testing (breath test, stool antigen, biopsy)',
+        'PPI (omeprazole, pantoprazole) 4–8 weeks',
+        'H. pylori eradication (triple/quadruple therapy)',
+        'Discontinue NSAIDs when possible'
       ],
-      код_мкб: ['K25', 'K26', 'K27', 'K28'],
-      срочность: 'срочно'
+      icd_codes: ['K25', 'K26', 'K27', 'K28'],
+      urgency: 'urgent'
     },
-    'Гастроэзофагеальная рефлюксная болезнь (ГЭРБ)': {
-      описание: 'Диагностика и лечение ГЭРБ',
-      ключевые_точки: [
-        'Клинические признаки: изжога, регургитация',
-        'ЭГДС: эзофагит, пищевод Барретта',
-        'pH-метрия пищевода (при необходимости)',
-        'ИПП (омепразол, эзомепразол) 4-8 недель',
-        'Антациды, альгинаты для симптоматического лечения',
-        'Модификация образа жизни: диета, снижение веса'
+    'Gastroesophageal Reflux Disease (GERD)': {
+      description: 'Diagnosis and management of GERD',
+      key_points: [
+        'Clinical features: heartburn, regurgitation',
+        'EGD: esophagitis, Barrett\'s esophagus',
+        'Esophageal pH-metry when needed',
+        'PPI (omeprazole, esomeprazole) 4–8 weeks',
+        'Antacids, alginates for symptom relief',
+        'Lifestyle modification: diet, weight loss'
       ],
-      код_мкб: ['K21'],
-      срочность: 'планово'
+      icd_codes: ['K21'],
+      urgency: 'routine'
     },
-    'Воспалительные заболевания кишечника (ВЗК)': {
-      описание: 'Диагностика и лечение ВЗК (болезнь Крона, язвенный колит)',
-      ключевые_точки: [
-        'Клинические признаки: диарея, боль в животе, кровь в стуле',
-        'Колоноскопия с биопсией',
-        'Кальпротектин в кале, СРБ, ОАК',
-        'Оценка активности по индексам (Mayo, CDAI)',
-        '5-АСК препараты, ГКС, иммуносупрессанты',
-        'Биологические препараты (инфликсимаб, адалимумаб)'
+    'Inflammatory Bowel Disease (IBD)': {
+      description: 'Diagnosis and management of IBD (Crohn\'s disease, ulcerative colitis)',
+      key_points: [
+        'Clinical features: diarrhea, abdominal pain, blood in stool',
+        'Colonoscopy with biopsy',
+        'Fecal calprotectin, CRP, CBC',
+        'Disease activity: Mayo score, CDAI',
+        '5-ASA agents, corticosteroids, immunosuppressants',
+        'Biologics (infliximab, adalimumab)'
       ],
-      код_мкб: ['K50', 'K51'],
-      срочность: 'срочно'
+      icd_codes: ['K50', 'K51'],
+      urgency: 'urgent'
     },
-    'Острый панкреатит': {
-      описание: 'Диагностика и лечение острого панкреатита',
-      ключевые_точки: [
-        'Клинические признаки: боль в эпигастрии, тошнота, рвота',
-        'Амилаза, липаза крови (повышение в 3 раза)',
-        'КТ брюшной полости: отек поджелудочной железы',
-        'Оценка тяжести по шкале Ranson, APACHE II',
-        'Голод, инфузионная терапия, обезболивание',
-        'Антибиотики при некротизирующем панкреатите'
+    'Acute Pancreatitis': {
+      description: 'Diagnosis and management of acute pancreatitis',
+      key_points: [
+        'Clinical features: epigastric pain, nausea, vomiting',
+        'Serum amylase, lipase (>3x upper limit)',
+        'Abdominal CT: pancreatic edema',
+        'Severity scoring: Ranson, APACHE II',
+        'NPO, fluid resuscitation, analgesia',
+        'Antibiotics for necrotizing pancreatitis'
       ],
-      код_мкб: ['K85'],
-      срочность: 'экстренно'
+      icd_codes: ['K85'],
+      urgency: 'emergent'
     }
   },
-  'Эндокринология': {
-    'Сахарный диабет 2 типа': {
-      описание: 'Диагностика и лечение СД 2 типа',
-      ключевые_точки: [
-        'Глюкоза плазмы натощак ≥ 7.0 ммоль/л или HbA1c ≥ 6.5%',
-        'ОГТТ при сомнительных результатах',
-        'Оценка осложнений: ретинопатия, нефропатия, нейропатия',
-        'Метформин как препарат первой линии',
-        'Ингибиторы ДПП-4, агонисты ГПП-1, ингибиторы SGLT2',
-        'Инсулинотерапия при неэффективности пероральных препаратов'
+  'Endocrinology': {
+    'Type 2 Diabetes Mellitus': {
+      description: 'Diagnosis and management of T2DM',
+      key_points: [
+        'Fasting plasma glucose ≥ 7.0 mmol/L or HbA1c ≥ 6.5%',
+        'OGTT for borderline results',
+        'Complication screening: retinopathy, nephropathy, neuropathy',
+        'Metformin as first-line agent',
+        'DPP-4 inhibitors, GLP-1 agonists, SGLT2 inhibitors',
+        'Insulin therapy when oral agents fail'
       ],
-      код_мкб: ['E11'],
-      срочность: 'планово'
+      icd_codes: ['E11'],
+      urgency: 'routine'
     },
-    'Гипотиреоз': {
-      описание: 'Диагностика и лечение гипотиреоза',
-      ключевые_точки: [
-        'Клинические признаки: утомляемость, увеличение веса, зябкость',
-        'ТТГ повышен, свободный T4 снижен',
-        'Антитела к ТПО, ТГ (при аутоиммунном тиреоидите)',
-        'Заместительная терапия левотироксином',
-        'Контроль ТТГ каждые 6-12 недель до нормализации',
-        'Поддержание ТТГ в целевом диапазоне (0.5-2.5 мЕд/л)'
+    'Hypothyroidism': {
+      description: 'Diagnosis and management of hypothyroidism',
+      key_points: [
+        'Clinical features: fatigue, weight gain, cold intolerance',
+        'TSH elevated, free T4 low',
+        'Anti-TPO, anti-TG antibodies (autoimmune thyroiditis)',
+        'Levothyroxine replacement therapy',
+        'TSH recheck q6–12 weeks until normalized',
+        'Maintain TSH within target range (0.5–2.5 mIU/L)'
       ],
-      код_мкб: ['E03', 'E03.9'],
-      срочность: 'планово'
+      icd_codes: ['E03', 'E03.9'],
+      urgency: 'routine'
     },
-    'Гипертиреоз': {
-      описание: 'Диагностика и лечение гипертиреоза',
-      ключевые_точки: [
-        'Клинические признаки: тахикардия, тремор, снижение веса',
-        'ТТГ снижен, свободный T4/T3 повышены',
-        'Антитела к рецептору ТТГ (при болезни Грейвса)',
-        'Тиреостатические препараты (тиамазол, пропилтиоурацил)',
-        'Бета-блокаторы для симптоматического лечения',
-        'Радиойодтерапия или хирургическое лечение при необходимости'
+    'Hyperthyroidism': {
+      description: 'Diagnosis and management of hyperthyroidism',
+      key_points: [
+        'Clinical features: tachycardia, tremor, weight loss',
+        'TSH low, free T4/T3 elevated',
+        'TSH receptor antibodies (Graves\' disease)',
+        'Antithyroid drugs (methimazole, propylthiouracil)',
+        'Beta-blockers for symptomatic relief',
+        'Radioiodine or surgery when needed'
       ],
-      код_мкб: ['E05'],
-      срочность: 'срочно'
+      icd_codes: ['E05'],
+      urgency: 'urgent'
     },
-    'Метаболический синдром': {
-      описание: 'Диагностика и лечение метаболического синдрома',
-      ключевые_точки: [
-        'Критерии: абдоминальное ожирение, АГ, дислипидемия, гипергликемия',
-        'Окружность талии: > 94 см (мужчины), > 80 см (женщины)',
-        'Липидограмма: ТГ ≥ 1.7, ЛПВП < 1.0 (мужчины) / < 1.3 (женщины)',
-        'Модификация образа жизни: диета, физическая активность',
-        'Статины при дислипидемии, антигипертензивные препараты',
-        'Метформин при нарушении толерантности к глюкозе'
+    'Metabolic Syndrome': {
+      description: 'Diagnosis and management of metabolic syndrome',
+      key_points: [
+        'Criteria: abdominal obesity, hypertension, dyslipidemia, hyperglycemia',
+        'Waist circumference: > 94 cm (men), > 80 cm (women)',
+        'Lipid panel: TG ≥ 1.7, HDL < 1.0 (men) / < 1.3 (women)',
+        'Lifestyle modification: diet, physical activity',
+        'Statins for dyslipidemia, antihypertensive agents',
+        'Metformin for impaired glucose tolerance'
       ],
-      код_мкб: ['E88.9'],
-      срочность: 'планово'
+      icd_codes: ['E88.9'],
+      urgency: 'routine'
     }
   },
-  'Неврология': {
-    'Острое нарушение мозгового кровообращения (ОНМК)': {
-      описание: 'Диагностика и лечение ОНМК (инсульт)',
-      ключевые_точки: [
-        'Клинические признаки: внезапная слабость, нарушение речи, асимметрия лица',
-        'КТ головного мозга без контраста (исключение геморрагии)',
-        'Оценка по шкале NIHSS',
-        'Тромболитическая терапия в течение 4.5 часов от начала',
-        'Антиагреганты (аспирин), статины',
-        'Контроль АД, глюкозы, температуры'
+  'Neurology': {
+    'Acute Ischemic Stroke (CVA)': {
+      description: 'Diagnosis and management of acute ischemic stroke',
+      key_points: [
+        'Clinical features: sudden weakness, speech disturbance, facial asymmetry',
+        'Non-contrast head CT (rule out hemorrhage)',
+        'NIHSS for severity assessment',
+        'Thrombolysis within 4.5 hours of symptom onset',
+        'Antiplatelet agents (aspirin), statins',
+        'BP, glucose, temperature management'
       ],
-      код_мкб: ['I63', 'I64', 'I61', 'I62'],
-      срочность: 'экстренно'
+      icd_codes: ['I63', 'I64', 'I61', 'I62'],
+      urgency: 'emergent'
     },
-    'Эпилепсия': {
-      описание: 'Диагностика и лечение эпилепсии',
-      ключевые_точки: [
-        'Клинические признаки: судорожные приступы, абсансы',
-        'ЭЭГ: эпилептиформная активность',
-        'МРТ головного мозга (исключение структурных изменений)',
-        'Антиэпилептические препараты (вальпроаты, карбамазепин, леветирацетам)',
-        'Монотерапия предпочтительна, комбинация при резистентности',
-        'Контроль уровня препаратов в крови'
+    'Epilepsy': {
+      description: 'Diagnosis and management of epilepsy',
+      key_points: [
+        'Clinical features: seizures, absence attacks',
+        'EEG: epileptiform activity',
+        'Brain MRI (rule out structural lesions)',
+        'Antiepileptic drugs (valproate, carbamazepine, levetiracetam)',
+        'Monotherapy preferred; combination for refractory cases',
+        'Drug level monitoring'
       ],
-      код_мкб: ['G40'],
-      срочность: 'срочно'
+      icd_codes: ['G40'],
+      urgency: 'urgent'
     },
-    'Мигрень': {
-      описание: 'Диагностика и лечение мигрени',
-      ключевые_точки: [
-        'Критерии: односторонняя пульсирующая головная боль, фото/фонофобия',
-        'Длительность 4-72 часа',
-        'Оценка частоты приступов',
-        'Купирование: НПВП, триптаны',
-        'Профилактика: бета-блокаторы, антиконвульсанты, антидепрессанты',
-        'Исключение триггеров: стресс, нерегулярный сон, продукты'
+    'Migraine': {
+      description: 'Diagnosis and management of migraine',
+      key_points: [
+        'Criteria: unilateral throbbing headache, photo/phonophobia',
+        'Duration 4–72 hours',
+        'Attack frequency assessment',
+        'Acute treatment: NSAIDs, triptans',
+        'Prophylaxis: beta-blockers, anticonvulsants, antidepressants',
+        'Trigger avoidance: stress, irregular sleep, diet'
       ],
-      код_мкб: ['G43'],
-      срочность: 'планово'
+      icd_codes: ['G43'],
+      urgency: 'routine'
     },
-    'Болезнь Паркинсона': {
-      описание: 'Диагностика и лечение болезни Паркинсона',
-      ключевые_точки: [
-        'Клинические признаки: тремор покоя, ригидность, брадикинезия',
-        'Оценка по шкале UPDRS',
-        'МРТ для исключения вторичного паркинсонизма',
-        'Леводопа/карбидопа как основной препарат',
-        'Агонисты дофаминовых рецепторов, ингибиторы МАО-Б',
-        'Физическая реабилитация, логопедия'
+    'Parkinson\'s Disease': {
+      description: 'Diagnosis and management of Parkinson\'s disease',
+      key_points: [
+        'Clinical features: resting tremor, rigidity, bradykinesia',
+        'UPDRS scale for assessment',
+        'MRI to rule out secondary parkinsonism',
+        'Levodopa/carbidopa as primary agent',
+        'Dopamine agonists, MAO-B inhibitors',
+        'Physical rehabilitation, speech therapy'
       ],
-      код_мкб: ['G20'],
-      срочность: 'планово'
+      icd_codes: ['G20'],
+      urgency: 'routine'
     }
   },
-  'Нефрология': {
-    'Острое повреждение почек (ОПП)': {
-      описание: 'Диагностика и лечение ОПП',
-      ключевые_точки: [
-        'Повышение креатинина ≥ 0.3 мг/дл или ≥ 1.5x от исходного',
-        'Снижение диуреза < 0.5 мл/кг/ч в течение 6 часов',
-        'Оценка по критериям KDIGO',
-        'Исключение преренальных и постренальных причин',
-        'Коррекция гиповолемии, отмена нефротоксичных препаратов',
-        'Заместительная почечная терапия при необходимости'
+  'Nephrology': {
+    'Acute Kidney Injury (AKI)': {
+      description: 'Diagnosis and management of AKI',
+      key_points: [
+        'Creatinine rise ≥ 0.3 mg/dL or ≥ 1.5x from baseline',
+        'Urine output < 0.5 mL/kg/h for 6 hours',
+        'KDIGO criteria staging',
+        'Rule out pre-renal and post-renal causes',
+        'Correct hypovolemia, discontinue nephrotoxic agents',
+        'Renal replacement therapy when indicated'
       ],
-      код_мкб: ['N17'],
-      срочность: 'экстренно'
+      icd_codes: ['N17'],
+      urgency: 'emergent'
     },
-    'Хроническая болезнь почек (ХБП)': {
-      описание: 'Диагностика и лечение ХБП',
-      ключевые_точки: [
-        'Снижение СКФ < 60 мл/мин/1.73 м² или альбуминурия ≥ 30 мг/г',
-        'Стадирование по СКФ (G1-G5) и альбуминурии (A1-A3)',
-        'Оценка причины: СД, АГ, гломерулонефрит',
-        'Контроль АД (цель < 130/80), ИАПФ/БРА',
-        'Коррекция анемии, фосфорно-кальциевого обмена',
-        'Подготовка к заместительной почечной терапии при СКФ < 15'
+    'Chronic Kidney Disease (CKD)': {
+      description: 'Diagnosis and management of CKD',
+      key_points: [
+        'GFR < 60 mL/min/1.73 m² or albuminuria ≥ 30 mg/g',
+        'Staging by GFR (G1–G5) and albuminuria (A1–A3)',
+        'Identify etiology: DM, HTN, glomerulonephritis',
+        'BP target < 130/80, ACE inhibitors/ARBs',
+        'Manage anemia, calcium-phosphate balance',
+        'Prepare for RRT when GFR < 15'
       ],
-      код_мкб: ['N18'],
-      срочность: 'планово'
+      icd_codes: ['N18'],
+      urgency: 'routine'
     },
-    'Гломерулонефрит': {
-      описание: 'Диагностика и лечение гломерулонефрита',
-      ключевые_точки: [
-        'Протеинурия, гематурия, отеки, АГ',
-        'Биопсия почки для верификации типа',
-        'ОАМ: протеинурия, эритроцитурия, цилиндры',
-        'Иммунологическое обследование: АНЦА, анти-GBM, комплемент',
-        'ГКС, цитостатики при необходимости',
-        'ИАПФ/БРА для снижения протеинурии'
+    'Glomerulonephritis': {
+      description: 'Diagnosis and management of glomerulonephritis',
+      key_points: [
+        'Proteinuria, hematuria, edema, hypertension',
+        'Renal biopsy for type verification',
+        'Urinalysis: proteinuria, RBC casts',
+        'Immunological workup: ANCA, anti-GBM, complement',
+        'Corticosteroids, cytotoxic agents when indicated',
+        'ACE inhibitors/ARBs to reduce proteinuria'
       ],
-      код_мкб: ['N00', 'N01', 'N02', 'N03', 'N04', 'N05'],
-      срочность: 'срочно'
+      icd_codes: ['N00', 'N01', 'N02', 'N03', 'N04', 'N05'],
+      urgency: 'urgent'
     },
-    'Инфекция мочевыводящих путей (ИМП)': {
-      описание: 'Диагностика и лечение ИМП',
-      ключевые_точки: [
-        'Клинические признаки: дизурия, частое мочеиспускание, боль',
-        'ОАМ: лейкоцитурия, бактериурия',
-        'Посев мочи с определением чувствительности',
-        'Антибактериальная терапия (фосфомицин, нитрофурантоин, фторхинолоны)',
-        'Длительность терапии: 3-7 дней (неосложненная), 7-14 дней (осложненная)',
-        'Профилактика рецидивов при частых ИМП'
+    'Urinary Tract Infection (UTI)': {
+      description: 'Diagnosis and management of UTI',
+      key_points: [
+        'Clinical features: dysuria, frequency, pain',
+        'Urinalysis: pyuria, bacteriuria',
+        'Urine culture with sensitivity',
+        'Antibiotic therapy (fosfomycin, nitrofurantoin, fluoroquinolones)',
+        'Duration: 3–7 days (uncomplicated), 7–14 days (complicated)',
+        'Prophylaxis for recurrent UTIs'
       ],
-      код_мкб: ['N30', 'N39.0'],
-      срочность: 'срочно'
+      icd_codes: ['N30', 'N39.0'],
+      urgency: 'urgent'
     }
   },
-  'Гематология': {
-    'Железодефицитная анемия': {
-      описание: 'Диагностика и лечение железодефицитной анемии',
-      ключевые_точки: [
-        'ОАК: снижение Hb, MCV, MCH, MCHC',
-        'Сывороточное железо снижено, ферритин < 15 нг/мл',
-        'ОЖСС повышена, коэффициент насыщения трансферрина < 15%',
-        'Поиск причины кровопотери (ЖКТ, гинекология)',
-        'Препараты железа (перорально или внутривенно)',
-        'Контроль ОАК через 2-4 недели, продолжение до нормализации ферритина'
+  'Hematology': {
+    'Iron Deficiency Anemia': {
+      description: 'Diagnosis and management of iron deficiency anemia',
+      key_points: [
+        'CBC: low Hb, MCV, MCH, MCHC',
+        'Serum iron low, ferritin < 15 ng/mL',
+        'TIBC elevated, transferrin saturation < 15%',
+        'Identify source of blood loss (GI, gynecological)',
+        'Iron supplementation (oral or IV)',
+        'Recheck CBC at 2–4 weeks; continue until ferritin normalized'
       ],
-      код_мкб: ['D50'],
-      срочность: 'планово'
+      icd_codes: ['D50'],
+      urgency: 'routine'
     },
-    'В12-дефицитная анемия': {
-      описание: 'Диагностика и лечение В12-дефицитной анемии',
-      ключевые_точки: [
-        'ОАК: макроцитарная анемия, гиперсегментация нейтрофилов',
-        'В12 сыворотки < 200 пг/мл',
-        'Гомоцистеин, метилмалоновая кислота повышены',
-        'Антитела к внутреннему фактору Касла, париетальным клеткам',
-        'Заместительная терапия цианокобаламином (внутримышечно)',
-        'Поиск причины: атрофический гастрит, резекция желудка, веганство'
+    'Vitamin B12 Deficiency Anemia': {
+      description: 'Diagnosis and management of B12 deficiency anemia',
+      key_points: [
+        'CBC: macrocytic anemia, hypersegmented neutrophils',
+        'Serum B12 < 200 pg/mL',
+        'Elevated homocysteine, methylmalonic acid',
+        'Anti-intrinsic factor, anti-parietal cell antibodies',
+        'Replacement therapy: cyanocobalamin (IM)',
+        'Identify cause: atrophic gastritis, gastrectomy, veganism'
       ],
-      код_мкб: ['D51'],
-      срочность: 'планово'
+      icd_codes: ['D51'],
+      urgency: 'routine'
     },
-    'Тромбоцитопения': {
-      описание: 'Диагностика и лечение тромбоцитопении',
-      ключевые_точки: [
-        'Тромбоциты < 150×10⁹/л',
-        'Оценка клинических проявлений: кровоточивость, петехии',
-        'Исключение вторичных причин: лекарства, инфекции, ДВС',
-        'Иммунная тромбоцитопеническая пурпура (ИТП): антитела к тромбоцитам',
-        'ГКС, внутривенный иммуноглобулин при ИТП',
-        'Спленэктомия при рефрактерной ИТП'
+    'Thrombocytopenia': {
+      description: 'Diagnosis and management of thrombocytopenia',
+      key_points: [
+        'Platelets < 150×10⁹/L',
+        'Assess clinical manifestations: bleeding, petechiae',
+        'Rule out secondary causes: drugs, infections, DIC',
+        'ITP: antiplatelet antibodies',
+        'Corticosteroids, IV immunoglobulin for ITP',
+        'Splenectomy for refractory ITP'
       ],
-      код_мкб: ['D69'],
-      срочность: 'срочно'
+      icd_codes: ['D69'],
+      urgency: 'urgent'
     },
-    'Венозные тромбозы': {
-      описание: 'Диагностика и лечение венозных тромбозов',
-      ключевые_точки: [
-        'Клинические признаки: отек, боль, покраснение конечности',
-        'D-димер для скрининга',
-        'УЗДГ вен (компрессионный тест)',
-        'Оценка по шкале Уэллса',
-        'Антикоагулянтная терапия (гепарин, DOAC)',
-        'Длительность: 3 месяца (провоцированный), длительно (непровоцированный)'
+    'Venous Thrombosis (DVT/PE)': {
+      description: 'Diagnosis and management of venous thrombosis',
+      key_points: [
+        'Clinical features: swelling, pain, erythema of limb',
+        'D-dimer for screening',
+        'Venous duplex ultrasound (compression test)',
+        'Wells score for pre-test probability',
+        'Anticoagulation (heparin, DOACs)',
+        'Duration: 3 months (provoked), long-term (unprovoked)'
       ],
-      код_мкб: ['I80', 'I82'],
-      срочность: 'экстренно'
+      icd_codes: ['I80', 'I82'],
+      urgency: 'emergent'
     }
   },
-  'Прочие': {}
+  'Other': {}
 };
 
 export const PROTOCOL_CATEGORIES: ProtocolCategory[] = [
-  'Кардиология',
-  'Пульмонология',
-  'Ревматология',
-  'Гастроэнтерология',
-  'Эндокринология',
-  'Неврология',
-  'Нефрология',
-  'Гематология',
-  'Прочие'
+  'Cardiology',
+  'Pulmonology',
+  'Rheumatology',
+  'Gastroenterology',
+  'Endocrinology',
+  'Neurology',
+  'Nephrology',
+  'Hematology',
+  'Other'
 ];
-

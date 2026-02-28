@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
+        { success: false, error: 'Authorization required' },
         { status: 401 }
       );
     }
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
         { status: 500 }
       );
     }
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     if (!analysis || typeof analysis !== 'string' || analysis.trim().length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Нет исходного анализа/данных для интерпретации' },
+        { success: false, error: 'No source analysis/data provided for interpretation' },
         { status: 400 }
       );
     }
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       // Продолжение диалога - используем историю
       const contextBlock =
         clinicalContext && clinicalContext.trim().length > 0
-          ? `КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext.trim()}\n\n`
+          ? `PATIENT CLINICAL CONTEXT:\n${clinicalContext.trim()}\n\n`
           : '';
       
       const systemPrompt = `${contextBlock}ИССХОДНЫЕ ДАННЫЕ ГЕНЕТИЧЕСКОГО АНАЛИЗА:\n\n${analysis}\n\n
@@ -335,7 +335,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Ошибка генетической консультации',
+        error: 'Genetics consultation error',
       },
       { status: 500 }
     );

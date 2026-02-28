@@ -21,6 +21,7 @@ import { saveDocument, getDocumentChunks, searchLibraryLocal } from '@/lib/libra
 const PROTOCOL_DRAFT_KEY = 'protocol_draft'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
 const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
+const CYRILLIC_REGEX = /[А-Яа-яЁё]/
 
 function chunkTemplateForRag(content: string, maxChunkLength: number = 1200): string[] {
   const clean = content.replace(/\r\n/g, '\n').trim()
@@ -82,12 +83,21 @@ export default function ProtocolPage() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
-        setCustomTemplate(parsed.template)
-        setSpecialistName(parsed.name || specialistName)
-        setIsEditingTemplate(true)
-        setIsTemplateLocked(Boolean(parsed.isTemplateLocked))
-        if (parsed.ragDocId) {
-          setTemplateRagDocId(parsed.ragDocId)
+        const hasLegacyRussianTemplate =
+          CYRILLIC_REGEX.test(parsed?.template || '') ||
+          CYRILLIC_REGEX.test(parsed?.name || '')
+
+        // Reset legacy RU template snapshot to keep EN-global branch consistent.
+        if (hasLegacyRussianTemplate) {
+          localStorage.removeItem('user_protocol_template')
+        } else {
+          setCustomTemplate(parsed.template)
+          setSpecialistName(parsed.name || specialistName)
+          setIsEditingTemplate(true)
+          setIsTemplateLocked(Boolean(parsed.isTemplateLocked))
+          if (parsed.ragDocId) {
+            setTemplateRagDocId(parsed.ragDocId)
+          }
         }
       } catch (e) {}
     }
@@ -392,7 +402,7 @@ export default function ProtocolPage() {
               <div className="animate-in fade-in slide-in-from-top-1">
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest">AI Instructions (editable):</label>
-                  <span className="text-[10px] text-gray-400 italic">Фокус: {UNIVERSAL_SPECIALIST_TEMPLATES[selectedUniversalKey].focus}</span>
+                  <span className="text-[10px] text-gray-400 italic">Focus: {UNIVERSAL_SPECIALIST_TEMPLATES[selectedUniversalKey].focus}</span>
                 </div>
                 <textarea
                   value={universalPrompt}
@@ -525,7 +535,7 @@ export default function ProtocolPage() {
               <h2 className="text-xl font-semibold">Generated Protocol</h2>
               {currentCost > 0 && (
                 <div className="mt-1 bg-teal-50 text-teal-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-teal-200 inline-block shadow-sm">
-                  💰 Service cost: {currentCost.toFixed(2)} ед.
+                  💰 Service cost: {currentCost.toFixed(2)} cr.
                 </div>
               )}
             </div>

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      throw new Error('OPENROUTER_API_KEY не настроен');
+      throw new Error('OPENROUTER_API_KEY is not configured');
     }
 
     const arrayBuffer = await file.arrayBuffer();
@@ -147,7 +147,7 @@ ${prompt}`;
   } catch (error: any) {
     console.error('Error scanning document:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка сканирования документа' },
+      { success: false, error: 'Document scanning error' },
       { status: 500 }
     );
   }

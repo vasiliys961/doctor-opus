@@ -287,19 +287,19 @@ function PatientsContent() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Пациент
+                    Patient
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Age
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Диагноз
+                    Diagnosis
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Последний визит
+                    Last Visit
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Действия
+                    Actions
                   </th>
                 </tr>
               </thead>
@@ -326,7 +326,7 @@ function PatientsContent() {
                         onClick={() => setSelectedPatient(patient)}
                         className="text-primary-600 hover:text-primary-900 mr-4"
                       >
-                        Просмотр
+                        View
                       </button>
                     </td>
                   </tr>
@@ -452,13 +452,13 @@ function PatientsContent() {
                   }}
                   className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Отмена
+                  Cancel
                 </button>
                 <button
                   onClick={addPatient}
                   className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold"
                 >
-                  Добавить
+                  Add
                 </button>
               </div>
             </div>
@@ -479,7 +479,7 @@ function PatientsContent() {
                     activeTab === 'info' ? 'bg-primary-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  Карта
+                  Chart
                 </button>
                 <button
                   onClick={() => setActiveTab('history')}
@@ -487,7 +487,7 @@ function PatientsContent() {
                     activeTab === 'history' ? 'bg-primary-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  📜 История ({history.length})
+                  📜 History ({history.length})
                 </button>
                 <button
                   onClick={() => setActiveTab('trends')}
@@ -495,7 +495,7 @@ function PatientsContent() {
                     activeTab === 'trends' ? 'bg-primary-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  📈 Динамика
+                  📈 Trends
                 </button>
                 <button
                   onClick={() => setActiveTab('timeline')}
@@ -503,7 +503,7 @@ function PatientsContent() {
                     activeTab === 'timeline' ? 'bg-primary-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  🕒 Таймлайн
+                  🕒 Timeline
                 </button>
               </div>
             </div>
@@ -646,7 +646,7 @@ function PatientsContent() {
                               }}
                               className="text-xs text-primary-600 font-semibold mt-2 hover:underline"
                             >
-                              Показать полностью
+                              Show full
                             </button>
                           )}
                         </div>
@@ -706,7 +706,7 @@ function PatientsContent() {
                                 </span>
                                 <span className="font-bold text-sm text-gray-800 uppercase tracking-tight">
                                   {record.type === 'ecg' ? 'ECG Analysis' : 
-                                   record.type === 'image' ? (record.imageType === 'xray' ? 'Рентген' : record.imageType === 'ct' ? 'КТ' : record.imageType === 'mri' ? 'МРТ' : 'Анализ снимка') : 
+                                   record.type === 'image' ? (record.imageType === 'xray' ? 'X-Ray' : record.imageType === 'ct' ? 'CT' : record.imageType === 'mri' ? 'MRI' : 'Image Analysis') : 
                                    record.type === 'lab' ? 'Laboratory Analysis' : 'Examination'}
                                 </span>
                               </div>
@@ -725,7 +725,7 @@ function PatientsContent() {
                         </div>
                         <div className="flex flex-col">
                           <span className="text-xs font-bold text-gray-400 mb-1">
-                            {new Date(selectedPatient.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            {new Date(selectedPatient.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
                           </span>
                           <div className="text-xs text-gray-400 italic">Patient record created</div>
                         </div>
@@ -738,10 +738,10 @@ function PatientsContent() {
                   <h3 className="font-bold text-gray-900 mb-4">Lab Value Trends</h3>
                   {Object.keys(labTrends).length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                      <p className="text-gray-500">Нет данных для построения графиков</p>
+                      <p className="text-gray-500">No trend data available</p>
                       <p className="text-xs text-gray-400 mt-1 italic">
-                        Загружайте анализы в разделе «Лабораторные данные» для этого пациента.
-                        <br />Система автоматически извлечет показатели (Гемоглобин, Глюкоза и др.)
+                        Upload lab results in the "Lab Data" section for this patient.
+                        <br />The system will automatically extract values (Hemoglobin, Glucose, etc.)
                       </p>
                     </div>
                   ) : (
@@ -765,21 +765,21 @@ function PatientsContent() {
                 onClick={() => handleDeletePatient(selectedPatient.id)}
                 className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-semibold"
               >
-                🗑️ Удалить пациента
+                🗑️ Delete patient
               </button>
               <div className="flex gap-3">
                 <button
                   onClick={() => setSelectedPatient(null)}
                   className="px-6 py-2 border border-gray-300 bg-white rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
                 >
-                  Закрыть
+                  Close
                 </button>
                 {activeTab === 'info' && (
                   <button
                     onClick={() => updatePatient(selectedPatient)}
                     className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors text-sm font-bold shadow-sm"
                   >
-                    Сохранить изменения
+                    Save changes
                   </button>
                 )}
               </div>
@@ -791,8 +791,8 @@ function PatientsContent() {
       {/* Информация */}
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="text-sm text-blue-800">
-          <strong>ℹ️ Примечание:</strong> Данные пациентов сохраняются локально в браузере. 
-          Для серверного хранения данных потребуется настройка базы данных.
+          <strong>ℹ️ Note:</strong> Patient data is stored locally in your browser. 
+          A database configuration is required for server-side storage.
         </p>
       </div>
     </div>

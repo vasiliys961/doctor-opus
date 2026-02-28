@@ -48,10 +48,10 @@ export default function PatientSelector({ onSelect, disabled = false }: PatientS
             const date = new Date(record.date).toLocaleDateString('ru-RU')
             context += `\n[${index + 1}] Date: ${date}, Study: ${record.imageType || record.type}\nConclusion: ${record.conclusion.substring(0, 600)}...`
           })
-          context += '\n\nINSTRUCTION: Perform a comparative analysis with the patient's history. Assess the dynamics (stabilization, progression, regression).'
+          context += `\n\nINSTRUCTION: Perform a comparative analysis with the patient's history. Assess the dynamics (stabilization, progression, regression).`
         }
       } catch (err) {
-        console.error('Ошибка при получении истории пациента:', err)
+        console.error('Error loading patient history:', err)
       }
 
       onSelect(context)

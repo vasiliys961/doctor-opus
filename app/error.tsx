@@ -16,9 +16,9 @@ export default function Error({
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold text-red-600 mb-4">⚠️ Произошла ошибка</h1>
+        <h1 className="text-3xl font-bold text-red-600 mb-4">⚠️ An error occurred</h1>
         <p className="text-gray-700 mb-4">
-          {error.message || 'Неизвестная ошибка'}
+          {error.message || 'Unknown error'}
         </p>
         <button
           onClick={reset}

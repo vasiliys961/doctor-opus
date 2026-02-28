@@ -795,21 +795,21 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
           <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-900">
             <div>
               <h3 className="text-xl font-bold text-white flex items-center">
-                <span className="mr-2">🏥</span> Профессиональный MPR Вьюер
+                <span className="mr-2">🏥</span> Professional MPR Viewer
               </h3>
               <p className="text-xs text-gray-400">
-                Мультипланарная реконструкция: Axial, Coronal, Sagittal
+                Multiplanar reconstruction: Axial, Coronal, Sagittal
               </p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={toggleBrowserFullscreen}
                 className="p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white"
-                title={isBrowserFullscreen ? 'Выйти из полноэкранного режима' : 'Полноэкранный режим браузера'}
+                title={isBrowserFullscreen ? 'Exit fullscreen' : 'Browser fullscreen'}
               >
                 <span className="text-lg">{isBrowserFullscreen ? '🗗' : '🗖'}</span>
               </button>
-              <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white" title="Закрыть">
+              <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white" title="Close">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -822,16 +822,16 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
             {loading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-10">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mb-4"></div>
-                <p className="text-white font-medium">Сборка 3D модели: {decodeProgress.current} из {decodeProgress.total}</p>
+                <p className="text-white font-medium">Building 3D model: {decodeProgress.current} of {decodeProgress.total}</p>
               </div>
             )}
             
             {error ? (
               <div className="absolute inset-0 flex items-center justify-center p-8 z-20 bg-gray-900">
                 <div className="text-red-500 text-center max-w-md">
-                  <p className="text-xl font-bold mb-4">Ошибка 3D</p>
+                  <p className="text-xl font-bold mb-4">3D Error</p>
                   <p className="text-sm">{error}</p>
-                  <button onClick={onClose} className="mt-6 px-6 py-2 bg-red-900 text-white rounded-lg">Закрыть</button>
+                  <button onClick={onClose} className="mt-6 px-6 py-2 bg-red-900 text-white rounded-lg">Close</button>
                 </div>
               </div>
             ) : (
@@ -874,7 +874,7 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
                   <button
                     onClick={() => setIsVolumeOnly(v => !v)}
                     className="absolute top-2 right-2 z-30 w-12 h-12 flex items-center justify-center text-2xl bg-black/80 hover:bg-black rounded-lg border border-gray-500 text-white shadow-lg transition-colors"
-                    title={isVolumeOnly ? 'Вернуть 4 окна' : 'Только 3D'}
+                    title={isVolumeOnly ? 'Show 4 panels' : '3D only'}
                     type="button"
                   >
                     ⤢
@@ -886,25 +886,25 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
                       onClick={() => (window as any).applyDicomPreset?.('default')}
                       className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${activePreset === 'default' ? 'bg-primary-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
                     >
-                      Ткани
+                      Tissue
                     </button>
                     <button 
                       onClick={() => (window as any).applyDicomPreset?.('bone')}
                       className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${activePreset === 'bone' ? 'bg-primary-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
                     >
-                      Кости
+                      Bone
                     </button>
                     <button 
                       onClick={() => (window as any).applyDicomPreset?.('brain')}
                       className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${activePreset === 'brain' ? 'bg-primary-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
                     >
-                      Мозг
+                      Brain
                     </button>
                     <button 
                       onClick={() => (window as any).applyDicomPreset?.('glow')}
                       className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${activePreset === 'glow' ? 'bg-cyan-600 text-white shadow-[0_0_10px_rgba(8,145,178,0.5)]' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
                     >
-                      Свечение ✨
+                      Glow ✨
                     </button>
                     <button 
                       onClick={() => (window as any).applyDicomPreset?.('mip')}
@@ -922,10 +922,10 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
 
           <div className="p-3 bg-gray-950 border-t border-gray-800 text-[10px] text-gray-500 flex justify-between items-center">
             <div className="flex flex-wrap gap-4">
-              <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-yellow-500 mr-1.5"></span> Скролл/2 пальца: Слои</span>
-              <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5"></span> ЛКМ/1 палец: Яркость</span>
-              <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-green-500 mr-1.5"></span> ПКМ/Пинч: Зум</span>
-              <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-purple-500 mr-1.5"></span> Shift+ЛКМ: Смещение</span>
+              <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-yellow-500 mr-1.5"></span> Scroll/2 fingers: Slices</span>
+              <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5"></span> LMB/1 finger: Brightness</span>
+              <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-green-500 mr-1.5"></span> RMB/Pinch: Zoom</span>
+              <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-purple-500 mr-1.5"></span> Shift+LMB: Pan</span>
             </div>
             <div className="hidden sm:block text-primary-600 font-bold uppercase tracking-widest opacity-50">
               Medical MPR Engine v1.1

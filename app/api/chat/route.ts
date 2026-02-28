@@ -10,6 +10,35 @@ import { checkRateLimit, RATE_LIMIT_CHAT, getRateLimitKey } from '@/lib/rate-lim
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
+const MAX_CHAT_FILES_PER_REQUEST = 4;
+const MAX_CHAT_TOTAL_BYTES_PER_REQUEST = 16 * 1024 * 1024;
+
+type ResponseLanguage = 'en' | 'ru';
+
+function detectResponseLanguage(message: string, history: any[]): ResponseLanguage {
+  const recentUserText = history
+    .filter((item: any) => item?.role === 'user' && typeof item?.content === 'string')
+    .slice(-4)
+    .map((item: any) => item.content)
+    .join('\n');
+
+  const combinedText = `${message}\n${recentUserText}`;
+  return /[\u0400-\u04FF]/.test(combinedText) ? 'ru' : 'en';
+}
+
+function buildLanguageInstruction(language: ResponseLanguage): string {
+  if (language === 'ru') {
+    return `RESPONSE LANGUAGE:
+- Reply in Russian.
+- Keep wording professional and concise.
+- Preserve standard international medical terminology where appropriate.`;
+  }
+
+  return `RESPONSE LANGUAGE:
+- Reply in English.
+- Keep wording professional and concise.
+- Preserve standard international medical terminology.`;
+}
 
 /**
  * API endpoint для ИИ-ассистента
@@ -20,7 +49,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
+        { success: false, error: 'Authorization required' },
         { status: 401 }
       );
     }
@@ -30,7 +59,7 @@ export async function POST(request: NextRequest) {
     const rl = checkRateLimit(rlKey, RATE_LIMIT_CHAT);
     if (!rl.allowed) {
       return NextResponse.json(
-        { success: false, error: 'Превышен лимит запросов. Подождите.' },
+        { success: false, error: 'Rate limit exceeded. Please wait.' },
         { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
       );
     }
@@ -75,6 +104,23 @@ export async function POST(request: NextRequest) {
       systemPrompt = body.systemPrompt;
     }
 
+    if (files.length > 0) {
+      const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+      if (files.length > MAX_CHAT_FILES_PER_REQUEST || totalBytes > MAX_CHAT_TOTAL_BYTES_PER_REQUEST) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Too many files for one request. Maximum: ${MAX_CHAT_FILES_PER_REQUEST} files and ${(MAX_CHAT_TOTAL_BYTES_PER_REQUEST / (1024 * 1024)).toFixed(0)} MB total.`,
+            details: {
+              files: files.length,
+              totalBytes
+            }
+          },
+          { status: 413 }
+        );
+      }
+    }
+
     const selectedModel = (model === 'gpt52' || model === MODELS.GPT_5_2)
       ? MODELS.GPT_5_2
       : (model === 'sonnet' || model === MODELS.SONNET) 
@@ -83,6 +129,8 @@ export async function POST(request: NextRequest) {
           ? MODELS.GEMINI_3_FLASH
           : MODELS.OPUS;
 
+    const responseLanguage = detectResponseLanguage(message, history);
+    const languageInstruction = buildLanguageInstruction(responseLanguage);
     const isClaudeAssistantModel = selectedModel === MODELS.SONNET || selectedModel === MODELS.OPUS;
     const assistantFormattingInstruction = `
 ФОРМАТ ОТВЕТА:
@@ -92,9 +140,13 @@ export async function POST(request: NextRequest) {
 - Не помещай таблицы в блоки кода.
 - Перед и после таблицы оставляй пустую строку.
 `;
-    const preparedMessage = isClaudeAssistantModel
+    const preparedMessageBase = isClaudeAssistantModel
       ? `${message}\n\n${assistantFormattingInstruction}`
       : message;
+    const preparedMessage = `${preparedMessageBase}\n\n${languageInstruction}`;
+    const effectiveSystemPrompt = systemPrompt
+      ? `${systemPrompt}\n\n${languageInstruction}`
+      : languageInstruction;
 
     if (!message && files.length === 0) {
       return NextResponse.json(
@@ -177,7 +229,13 @@ export async function POST(request: NextRequest) {
 
     // Если запрошен streaming без файлов, возвращаем поток
     if (useStreaming) {
-      const stream = await sendTextRequestStreaming(preparedMessage, formattedHistory, selectedModel, specialty as any, systemPrompt);
+      const stream = await sendTextRequestStreaming(
+        preparedMessage,
+        formattedHistory,
+        selectedModel,
+        specialty as any,
+        effectiveSystemPrompt
+      );
       return handleStreaming(stream);
     }
 

@@ -15,14 +15,14 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     
     if (!session?.user?.email || !isAdminEmail(session.user.email)) {
-      return NextResponse.json({ success: false, error: 'Доступ запрещен' }, { status: 403 });
+      return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 });
     }
 
     const body = await request.json();
     const { paymentId } = body;
 
     if (!paymentId) {
-      return NextResponse.json({ success: false, error: 'Не указан ID платежа' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Payment ID is missing' }, { status: 400 });
     }
 
     const { sql, initDatabase } = await import('@/lib/database');
@@ -36,13 +36,13 @@ export async function POST(request: NextRequest) {
     `;
 
     if (paymentRows.length === 0) {
-      return NextResponse.json({ success: false, error: 'Платеж не найден' }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'Payment not found' }, { status: 404 });
     }
 
     const payment = paymentRows[0];
 
     if (payment.status === 'refunded') {
-      return NextResponse.json({ success: false, error: 'Платеж уже был возвращен' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Payment has already been refunded' }, { status: 400 });
     }
 
     // 2. Обновляем статус платежа
@@ -81,6 +81,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('❌ [ADMIN REFUND] Ошибка:', error);
-    return NextResponse.json({ success: false, error: 'Ошибка обработки возврата' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Refund processing error' }, { status: 500 });
   }
 }

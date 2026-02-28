@@ -53,7 +53,7 @@ export default function VideoComparisonPage() {
     if (file) {
       const maxSize = 50 * 1024 * 1024
       if (file.size > maxSize) {
-        setError(`Видео #${index} превышает 50MB`)
+        setError(`Video #${index} exceeds 50MB`)
         return
       }
       
@@ -105,7 +105,7 @@ export default function VideoComparisonPage() {
         else setVideo2(selectedFile);
       }
     } catch (err: any) {
-      setError(`Ошибка при обработке DICOM #${index}: ` + err.message);
+      setError(`Error processing DICOM #${index}: ` + err.message);
     } finally {
       setExtracting(false);
     }
@@ -151,7 +151,7 @@ export default function VideoComparisonPage() {
           setAnalysisMode('frames');
         }
       } catch (err: any) {
-        setError(`Ошибка при обработке папки #${index}: ` + err.message);
+        setError(`Error processing folder #${index}: ` + err.message);
       } finally {
         setExtracting(false);
       }
@@ -172,7 +172,7 @@ export default function VideoComparisonPage() {
         }
         setError(null);
       } else {
-        setError(`В папке #${index} не найдено DICOM-файлов или видео`);
+        setError(`No DICOM files or videos found in folder #${index}`);
       }
     }
   }
@@ -180,7 +180,7 @@ export default function VideoComparisonPage() {
   // Извлечение кадров из обоих наборов (видео или папок)
   const handleExtractFrames = async () => {
     if (!video1 || !video2) {
-      setError('Загрузите данные в оба слота для сравнения')
+      setError('Upload data to both slots for comparison')
       return
     }
 
@@ -228,7 +228,7 @@ export default function VideoComparisonPage() {
       
     } catch (err: any) {
       console.error('❌ [VIDEO COMPARISON] Ошибка извлечения:', err)
-      setError(err.message || 'Ошибка при извлечении кадров')
+      setError(err.message || 'Error extracting frames')
     } finally {
       setExtracting(false)
     }
@@ -373,7 +373,7 @@ export default function VideoComparisonPage() {
   // Анализ кадров
   const handleAnalyzeFrames = async () => {
     if (frames1.length === 0 || frames2.length === 0) {
-      setError('Сначала извлеките кадры из обоих видео')
+      setError('Extract frames from both videos first')
       return
     }
 
@@ -400,11 +400,11 @@ export default function VideoComparisonPage() {
       
       // Добавляем метаинформацию о сравнении
       let comparisonPrompt = clinicalContext 
-        ? `Сравните динамику изменений между двумя видео. Если изображения идентичны - четко укажите это. Первые ${frames1.length} кадров — из архивного видео, следующие ${frames2.length} кадров — из текущего. ${clinicalContext}`
-        : `Сравните динамику изменений между двумя видео. Если изображения идентичны - четко укажите это, если есть различия - опишите их детально. Первые ${frames1.length} кадров — из архивного видео, следующие ${frames2.length} кадров — из текущего. Выявите все значимые отличия.`
+        ? `Compare the dynamic changes between two videos. If the images are identical — clearly state this. The first ${frames1.length} frames are from the archive video, the next ${frames2.length} frames are from the current video. ${clinicalContext}`
+        : `Compare the dynamic changes between two videos. If identical — clearly state this; if differences exist — describe them in detail. The first ${frames1.length} frames are from the archive video, the next ${frames2.length} frames are from the current video. Identify all significant differences.`
       
       if (playlist1.length > 1 || playlist2.length > 1) {
-        const batchInfo = `\n\nВНИМАНИЕ: Сравнение проводится между сериями видео-ракурсов. Архивный набор содержит ${playlist1.length || 1} видео, текущий набор содержит ${playlist2.length || 1} видео. Проанализируйте все ракурсы для выявления патологий.`
+        const batchInfo = `\n\nNOTE: Comparison is being made between series of video angles. Archive set contains ${playlist1.length || 1} videos, current set contains ${playlist2.length || 1} videos. Analyze all angles for pathology detection.`
         comparisonPrompt += batchInfo;
       }
 
@@ -423,7 +423,7 @@ export default function VideoComparisonPage() {
       const data = await response.json()
 
       if (data.success) {
-        setResult(data.result || 'Анализ выполнен')
+        setResult(data.result || 'Analysis complete')
         setCurrentCost(data.cost || 0)
         setModel(data.model || 'google/gemini-3-flash-preview')
         
@@ -434,30 +434,29 @@ export default function VideoComparisonPage() {
           outputTokens: data.usage?.completion_tokens || 0,
         })
       } else {
-        setError(data.error || 'Ошибка при анализе')
+        setError(data.error || 'Analysis error')
       }
     } catch (err: any) {
-      setError(err.message || 'Ошибка сервера')
+      setError(err.message || 'Server error')
     } finally {
       setAnalyzing(false)
       setLoading(false)
     }
   }
 
-  // Анализ полного видео (для анонимных файлов)
   const handleAnalyzeFullVideo = async () => {
     if (!video1 || !video2) {
-      setError('Загрузите оба видео для сравнения')
+      setError('Upload both videos for comparison')
       return
     }
 
     if (playlist1.length > 1 || playlist2.length > 1) {
-      setError('Сравнительный анализ полных видео поддерживает только по одному файлу в каждом слоте. Для сравнения папок (серий ракурсов) используйте "Безопасный режим (извлечение кадров)".')
+      setError('Full video comparison supports only one file per slot. For folder comparison (multi-angle series) use "Safe mode (frame extraction)".')
       return
     }
 
     if (!confirmNoPersonalData) {
-      setError('Необходимо подтвердить отсутствие персональных данных в обоих видео')
+      setError('Please confirm absence of personal data in both videos')
       return
     }
 
@@ -485,8 +484,8 @@ export default function VideoComparisonPage() {
 
       if (data.success) {
         let fullResult = ''
-        if (data.description) fullResult += `## 📝 ЭТАП 1: Сравнение динамики\n\n${data.description}\n\n`
-        if (data.analysis) fullResult += `## 🏥 ЭТАП 2: Клиническая директива\n\n${data.analysis}`
+        if (data.description) fullResult += `## 📝 STAGE 1: Dynamic comparison\n\n${data.description}\n\n`
+        if (data.analysis) fullResult += `## 🏥 STAGE 2: Clinical directive\n\n${data.analysis}`
         
         setResult(fullResult)
         setCurrentCost(data.cost || 0)
@@ -499,17 +498,17 @@ export default function VideoComparisonPage() {
           outputTokens: data.usage?.completion_tokens || 4000,
         })
       } else {
-        setError(data.error || 'Ошибка при анализе')
+        setError(data.error || 'Analysis error')
       }
     } catch (err: any) {
-      setError(err.message || 'Ошибка сервера')
+      setError(err.message || 'Server error')
     } finally {
       setAnalyzing(false)
       setLoading(false)
     }
   }
 
-  // Универсальный обработчик анализа
+  // Universal handler анализа
   const handleAnalyze = () => {
     if (analysisMode === 'frames') {
       return handleAnalyzeFrames()
@@ -520,18 +519,18 @@ export default function VideoComparisonPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 Сравнительный анализ видео</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 Comparative Video Analysis</h1>
       
       <AnalysisTips 
         content={{
-          fast: "Сравнение двух видео через извлечение синхронных кадров. Каждый кадр анонимизируется автоматически.",
+          fast: "Compares two videos by extracting synchronized frames. Each frame is anonymized automatically.",
           extra: [
-            "📽️ Загрузите два видеофайла (например, УЗИ до и после лечения).",
-            "🎞️ Система извлечет одинаковое количество кадров из ОБОИХ видео в синхронных позициях.",
-            "🛡️ Каждый кадр автоматически анонимизируется (черные полосы по краям).",
-            "👁️ Вы увидите preview всех кадров рядом для визуального сравнения.",
-            "🔍 ИИ сравнит кадры попарно и выявит динамику изменений.",
-            "⏱️ Максимальный размер каждого файла — 50MB."
+            "📽️ Upload two video files (e.g., ultrasound before and after treatment).",
+            "🎞️ The system will extract an equal number of frames from BOTH videos at synchronized positions.",
+            "🛡️ Each frame is automatically anonymized (black bars on edges).",
+            "👁️ You will see a side-by-side preview of all paired frames.",
+            "🔍 AI will compare frames pair by pair and identify dynamic changes.",
+            "⏱️ Maximum file size per video — 50MB."
           ]
         }}
       />
@@ -539,12 +538,12 @@ export default function VideoComparisonPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* Видео 1 */}
         <div className="bg-white rounded-lg shadow-lg p-6 border-2 border-dashed border-gray-300">
-          <h2 className="text-xl font-semibold mb-4 text-gray-600 italic">Видео 1 (Архив)</h2>
+          <h2 className="text-xl font-semibold mb-4 text-gray-600 italic">Video 1 (Archive)</h2>
           {preview1 ? (
             <video src={preview1} controls className="w-full h-64 bg-black rounded-lg mb-4" />
           ) : (
             <div className="w-full h-64 bg-gray-100 flex items-center justify-center rounded-lg mb-4">
-              <span className="text-gray-400">Нет видео</span>
+              <span className="text-gray-400">No video</span>
             </div>
           )}
           
@@ -573,14 +572,14 @@ export default function VideoComparisonPage() {
                   onClick={() => fileInputRef1.current?.click()}
                   className="text-primary-600 hover:text-primary-700 font-semibold underline text-sm"
                 >
-                  Выберите файл
+                  Choose file
                 </button>
-                <span className="text-gray-600 text-sm"> или </span>
+                <span className="text-gray-600 text-sm"> or </span>
                 <button
                   onClick={() => folderInputRef1.current?.click()}
                   className="text-primary-600 hover:text-primary-700 font-semibold underline text-sm"
                 >
-                  папку
+                  folder
                 </button>
               </div>
             </div>
@@ -590,7 +589,7 @@ export default function VideoComparisonPage() {
             <div className="mt-2 space-y-2">
               <p className="text-sm text-gray-600 text-center">
                 {playlist1.length > 1 
-                  ? `✅ Найдено в папке: ${playlist1.length} видео`
+                  ? `✅ Found in folder: ${playlist1.length} videos`
                   : `✅ ${video1.name} (${(video1.size / 1024 / 1024).toFixed(1)} MB)`
                 }
               </p>
@@ -605,12 +604,12 @@ export default function VideoComparisonPage() {
 
         {/* Видео 2 */}
         <div className="bg-white rounded-lg shadow-lg p-6 border-2 border-blue-200">
-          <h2 className="text-xl font-semibold mb-4 text-blue-600">Видео 2 (Текущее)</h2>
+          <h2 className="text-xl font-semibold mb-4 text-blue-600">Video 2 (Current)</h2>
           {preview2 ? (
             <video src={preview2} controls className="w-full h-64 bg-black rounded-lg mb-4" />
           ) : (
             <div className="w-full h-64 bg-gray-100 flex items-center justify-center rounded-lg mb-4">
-              <span className="text-gray-400">Нет видео</span>
+              <span className="text-gray-400">No video</span>
             </div>
           )}
           
@@ -639,14 +638,14 @@ export default function VideoComparisonPage() {
                   onClick={() => fileInputRef2.current?.click()}
                   className="text-primary-600 hover:text-primary-700 font-semibold underline text-sm"
                 >
-                  Выберите файл
+                  Choose file
                 </button>
-                <span className="text-gray-600 text-sm"> или </span>
+                <span className="text-gray-600 text-sm"> or </span>
                 <button
                   onClick={() => folderInputRef2.current?.click()}
                   className="text-primary-600 hover:text-primary-700 font-semibold underline text-sm"
                 >
-                  папку
+                  folder
                 </button>
               </div>
             </div>
@@ -656,7 +655,7 @@ export default function VideoComparisonPage() {
             <div className="mt-2 space-y-2">
               <p className="text-sm text-gray-600 text-center">
                 {playlist2.length > 1 
-                  ? `✅ Найдено в папке: ${playlist2.length} видео`
+                  ? `✅ Found in folder: ${playlist2.length} videos`
                   : `✅ ${video2.name} (${(video2.size / 1024 / 1024).toFixed(1)} MB)`
                 }
               </p>
@@ -675,7 +674,7 @@ export default function VideoComparisonPage() {
         <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
           {/* Режим анализа */}
           <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-            <p className="text-sm font-semibold text-gray-900 mb-2">Выберите режим анализа:</p>
+            <p className="text-sm font-semibold text-gray-900 mb-2">Select analysis mode:</p>
             <div className="space-y-2">
               <label className="flex items-start cursor-pointer">
                 <input
@@ -689,10 +688,10 @@ export default function VideoComparisonPage() {
                   className="mt-1 mr-3"
                 />
                 <div className="flex-1">
-                  <span className="font-semibold text-green-700">🛡️ Безопасный (извлечение кадров)</span>
+                  <span className="font-semibold text-green-700">🛡️ Safe (frame extraction)</span>
                   <p className="text-xs text-gray-600 mt-1">
-                    Система извлечет синхронные кадры из обоих видео, анонимизирует каждый, покажет preview попарно. 
-                    <strong>Рекомендуется по умолчанию.</strong>
+                    The system will extract synchronized frames from both videos, anonymize each one, and display them in pairs.
+                    <strong>Recommended by default.</strong>
                   </p>
                 </div>
               </label>
@@ -706,11 +705,11 @@ export default function VideoComparisonPage() {
                   className="mt-1 mr-3"
                 />
                 <div className="flex-1">
-                  <span className="font-semibold text-amber-700">⚡ Полное видео</span>
+                  <span className="font-semibold text-amber-700">⚡ Full video</span>
                   <p className="text-xs text-gray-600 mt-1">
-                    Оба видео отправляются целиком без обработки. Максимальная точность (100%), 
-                    но требует предварительной проверки на отсутствие ПД.
-                    <strong> Только для анонимных файлов!</strong>
+                    Both videos are sent in full without processing. Maximum accuracy (100%),
+                    but requires prior verification that no PHI is present.
+                    <strong> For anonymized files only!</strong>
                   </p>
                 </div>
               </label>
@@ -723,17 +722,17 @@ export default function VideoComparisonPage() {
               <div className="flex items-start space-x-2 mb-3">
                 <span className="text-2xl">⚠️</span>
                 <div>
-                  <p className="font-bold text-red-900 text-lg">ВНИМАНИЕ: Оба видео будут отправлены без анонимизации!</p>
+                  <p className="font-bold text-red-900 text-lg">WARNING: Both videos will be sent without anonymization!</p>
                   <p className="text-red-800 text-sm mt-1">
-                    В режиме "Полное видео" кадры НЕ анонимизируются. 
-                    Если на ЛЮБОМ из видео присутствуют ПД - 
-                    <strong> это нарушение ФЗ-152!</strong>
+                    In "Full video" mode, frames are NOT anonymized.
+                    If ANY PHI is present in either video —
+                    <strong> this is a HIPAA/GDPR violation!</strong>
                   </p>
                   <ul className="text-red-700 text-xs mt-2 ml-4 list-disc space-y-1">
-                    <li>Оба видео будут отправлены в OpenRouter (США) целиком</li>
-                    <li>Все кадры попадут в обработку без изменений</li>
-                    <li>Более высокая стоимость (~$1.00 vs $0.15)</li>
-                    <li>Время обработки: 60-120 секунд</li>
+                    <li>Both videos will be sent to OpenRouter (USA) in full</li>
+                    <li>All frames will be processed without modification</li>
+                    <li>Higher cost (~$1.00 vs $0.15)</li>
+                    <li>Processing time: 60–120 seconds</li>
                   </ul>
                 </div>
               </div>
@@ -747,8 +746,8 @@ export default function VideoComparisonPage() {
                   required
                 />
                 <span className="text-sm font-semibold text-red-900">
-                  Подтверждаю: я просмотрел ОБА видео и удостоверяю, что они НЕ содержат 
-                  персональных данных пациента. Я беру на себя ответственность за соблюдение ФЗ-152.
+                  I confirm: I have reviewed BOTH videos and certify they do NOT contain
+                  any patient personal data. I take full responsibility for HIPAA/GDPR compliance.
                 </span>
               </label>
             </div>
@@ -763,12 +762,12 @@ export default function VideoComparisonPage() {
                 className="w-full px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {extracting 
-                  ? `⏳ Извлечение кадров... ${extractionProgress.current}/${extractionProgress.total}` 
-                  : '🎞️ Извлечь и анонимизировать кадры из обоих видео'
+                  ? `⏳ Extracting frames... ${extractionProgress.current}/${extractionProgress.total}` 
+                  : '🎞️ Extract and anonymize frames from both videos'
                 }
               </button>
               <p className="text-sm text-gray-600 mt-2 text-center">
-                Будет извлечено одинаковое количество кадров из каждого видео в синхронных позициях
+                An equal number of frames will be extracted from each video at synchronized positions
               </p>
             </>
           )}
@@ -780,7 +779,7 @@ export default function VideoComparisonPage() {
         <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-green-900">
-              ✅ Извлечено {frames1.length} кадров из каждого видео (синхронно)
+              ✅ Extracted {frames1.length} frames from each video (synchronized)
             </h3>
             <button
               onClick={() => {
@@ -790,7 +789,7 @@ export default function VideoComparisonPage() {
               }}
               className="text-sm text-green-700 hover:text-green-900 underline"
             >
-              🔄 Переизвлечь
+              🔄 Re-extract
             </button>
           </div>
 
@@ -801,7 +800,7 @@ export default function VideoComparisonPage() {
               return (
                 <div key={index} className="border border-green-200 rounded-lg p-3 bg-green-50">
                   <p className="text-sm font-semibold text-green-900 mb-2">
-                    Кадр {index + 1}: {formatTimestamp(frame1.timestamp)} ↔ {formatTimestamp(frame2.timestamp)}
+                    Frame {index + 1}: {formatTimestamp(frame1.timestamp)} ↔ {formatTimestamp(frame2.timestamp)}
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     {/* Кадр из видео 1 */}
@@ -809,7 +808,7 @@ export default function VideoComparisonPage() {
                       <div className="aspect-video bg-gray-100 rounded overflow-hidden border-2 border-gray-400">
                         <img 
                           src={frame1.preview} 
-                          alt={`Видео 1 - Кадр ${index + 1}`}
+                          alt={`Video 1 - Frame ${index + 1}`}
                           className="w-full h-full object-cover"
                         />
                       </div>
@@ -818,10 +817,10 @@ export default function VideoComparisonPage() {
                           onClick={() => setEditingFrame({ videoIndex: 1, frameIndex: index })}
                           className="opacity-0 group-hover:opacity-100 bg-white text-gray-900 px-2 py-1 rounded text-xs font-semibold shadow-lg transition-opacity"
                         >
-                          🎨 Редактировать
+                          🎨 Edit
                         </button>
                       </div>
-                      <p className="text-xs text-center text-gray-600 mt-1">Архив</p>
+                      <p className="text-xs text-center text-gray-600 mt-1">Archive</p>
                     </div>
 
                     {/* Кадр из видео 2 */}
@@ -829,7 +828,7 @@ export default function VideoComparisonPage() {
                       <div className="aspect-video bg-gray-100 rounded overflow-hidden border-2 border-blue-400">
                         <img 
                           src={frame2.preview} 
-                          alt={`Видео 2 - Кадр ${index + 1}`}
+                          alt={`Video 2 - Frame ${index + 1}`}
                           className="w-full h-full object-cover"
                         />
                       </div>
@@ -838,10 +837,10 @@ export default function VideoComparisonPage() {
                           onClick={() => setEditingFrame({ videoIndex: 2, frameIndex: index })}
                           className="opacity-0 group-hover:opacity-100 bg-white text-gray-900 px-2 py-1 rounded text-xs font-semibold shadow-lg transition-opacity"
                         >
-                          🎨 Редактировать
+                          🎨 Edit
                         </button>
                       </div>
-                      <p className="text-xs text-center text-blue-600 mt-1">Текущее</p>
+                      <p className="text-xs text-center text-blue-600 mt-1">Current</p>
                     </div>
                   </div>
                 </div>
@@ -850,17 +849,17 @@ export default function VideoComparisonPage() {
           </div>
 
           <p className="text-xs text-green-700 mt-4">
-            💡 Наведите на кадр, чтобы дополнительно отредактировать его вручную
+            💡 Hover over a frame to manually edit it
           </p>
         </div>
       )}
 
       <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-        <h2 className="text-lg font-semibold mb-3">📝 Клиническая информация</h2>
+        <h2 className="text-lg font-semibold mb-3">📝 Clinical Information</h2>
         <PatientSelector onSelect={setClinicalContext} disabled={loading} />
         <div className="mt-4">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-gray-700">Дополнительные детали</span>
+            <span className="text-sm font-medium text-gray-700">Additional details</span>
             <VoiceInput onTranscript={(t) => setClinicalContext(p => p ? `${p} ${t}` : t)} disabled={loading} />
           </div>
           <textarea
@@ -869,7 +868,7 @@ export default function VideoComparisonPage() {
             className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary-500"
             rows={3}
             disabled={loading}
-            placeholder="Опишите, на что ИИ должен обратить внимание при сравнении..."
+            placeholder="Describe what the AI should focus on during comparison..."
           />
         </div>
       </div>
@@ -885,15 +884,15 @@ export default function VideoComparisonPage() {
         className="w-full py-4 bg-primary-600 text-white rounded-xl font-bold text-xl shadow-lg hover:bg-primary-700 disabled:opacity-50 transition-all"
       >
         {analyzing 
-          ? '⌛ Идет сравнительный анализ...' 
+          ? '⌛ Comparative analysis in progress...' 
           : analysisMode === 'frames'
             ? (frames1.length > 0 && frames2.length > 0
-                ? `📤 Сравнить ${frames1.length + frames2.length} кадров`
-                : '🔍 Сначала извлеките кадры'
+                ? `📤 Compare ${frames1.length + frames2.length} frames`
+                : '🔍 Extract frames first'
               )
             : (confirmNoPersonalData
-                ? '⚡ Сравнить полные видео'
-                : '⚠️ Подтвердите отсутствие ПД'
+                ? '⚡ Compare full videos'
+                : '⚠️ Confirm absence of PHI'
               )
         }
       </button>

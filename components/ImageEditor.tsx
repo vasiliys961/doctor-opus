@@ -139,7 +139,7 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
         }
       } catch (err) {
         console.error('Ошибка сохранения изображения:', err)
-        alert('Не удалось сохранить изменения. Попробуйте уменьшить область закрашивания.')
+        alert('Failed to save changes. Try reducing the redacted area.')
         setIsSaving(false)
       }
     }, 100)
@@ -149,7 +149,7 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-6xl max-h-[90vh] overflow-auto">
         <div className="p-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Точная анонимизация</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Precision anonymization</h3>
           <p className="text-sm text-gray-600 mt-1">
             Закрасьте черной кистью области с персональными данными
           </p>
@@ -221,7 +221,7 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
                     Сохранение...
                   </>
                 ) : (
-                  '✓ Применить'
+                  '✓ Apply'
                 )}
               </button>
             </div>
@@ -230,7 +230,7 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
                 onClick={handleSave}
                 disabled={isSaving}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
-                title="Применит ту же маску ко всем загруженным кадрам"
+                title="Apply the same mask to all uploaded frames"
               >
                 {isSaving ? (
                   <>
@@ -238,7 +238,7 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
                     Применяю...
                   </>
                 ) : (
-                  '🔗 Применить ко всем'
+                  '🔗 Apply to all'
                 )}
               </button>
             )}

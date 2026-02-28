@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const { history, patientName } = await request.json();
 
     if (!history || !Array.isArray(history) || history.length === 0) {
-      return NextResponse.json({ success: false, error: 'История пуста' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'History is empty' }, { status: 400 });
     }
 
     const apiKey = process.env.OPENROUTER_API_KEY;
@@ -52,6 +52,6 @@ ${history.map((h: any) => `[${h.date}] ${h.type.toUpperCase()}: ${h.conclusion.s
 
     return NextResponse.json({ success: true, summary });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: 'Ошибка формирования сводки' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to generate summary' }, { status: 500 });
   }
 }

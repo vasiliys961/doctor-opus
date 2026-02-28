@@ -820,7 +820,7 @@ export default function VideoPage() {
                     <div className={`aspect-video bg-gray-100 rounded overflow-hidden border-2 ${isManualCaptureMode ? 'border-blue-300' : 'border-green-300'}`}>
                       <img 
                         src={frame.preview} 
-                        alt={`Кадр ${frame.index + 1}`}
+                        alt={`Frame ${frame.index + 1}`}
                         className="w-full h-full object-cover"
                       />
                     </div>
@@ -829,7 +829,7 @@ export default function VideoPage() {
                         onClick={() => setEditingFrameIndex(frame.index)}
                         className="opacity-0 group-hover:opacity-100 bg-white text-gray-900 px-2 py-1 rounded text-xs font-semibold shadow-lg transition-opacity"
                       >
-                        🎨 Редактировать
+                        🎨 Edit
                       </button>
                     </div>
                     <p className={`text-xs text-center mt-1 ${isManualCaptureMode ? 'text-blue-700' : 'text-green-700'}`}>
@@ -890,14 +890,14 @@ export default function VideoPage() {
             className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
           >
             {analyzing 
-              ? '⏳ Анализ...' 
+              ? '⏳ Analyzing...' 
               : analysisMode === 'frames'
                 ? (extractedFrames.length > 0
-                    ? `📤 Отправить ${extractedFrames.length} frames на анализ`
-                    : '🎬 Сначала извлеките кадры'
+                    ? `📤 Submit ${extractedFrames.length} frames for analysis`
+                    : '🎬 Extract frames first'
                   )
                 : (confirmNoPersonalData
-                    ? '⚡ Отправить полное видео на анализ'
+                    ? '⚡ Submit full video for analysis'
                     : '⚠️ Confirm absence of PHI'
                   )
             }
@@ -915,7 +915,7 @@ export default function VideoPage() {
         <div className="bg-primary-50 border border-primary-200 text-primary-800 px-4 py-3 rounded mb-6">
           <div className="flex items-center">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600 mr-3"></div>
-            <span>Анализ видео может занять 30-60 секунд...</span>
+            <span>Video analysis may take 30–60 seconds...</span>
           </div>
         </div>
       )}
@@ -936,11 +936,11 @@ export default function VideoPage() {
             onClick={() => setShowTechnicalData(prev => !prev)}
             className="px-3 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
           >
-            {showTechnicalData ? 'Скрыть техданные (Этап 1)' : 'Показать техданные (Этап 1)'}
+            {showTechnicalData ? 'Hide technical data (Stage 1)' : 'Show technical data (Stage 1)'}
           </button>
           {showTechnicalData && (
             <div className="mt-3 border border-gray-200 rounded-lg bg-gray-50 p-3">
-              <p className="text-xs font-semibold text-gray-600 mb-2">Этап 1: описание видео (технический вывод модели)</p>
+              <p className="text-xs font-semibold text-gray-600 mb-2">Stage 1: video description (technical model output)</p>
               <pre className="text-xs whitespace-pre-wrap break-words text-gray-800">{stage1TechnicalData}</pre>
             </div>
           )}

@@ -19,6 +19,19 @@ const MODELS = {
   GEMINI_3_PRO: 'google/gemini-3.1-pro-preview'          // Gemini 3.1 Pro Preview
 };
 
+function isNetworkStage2Error(error: any): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('fetch failed') ||
+    message.includes('und_err_connect_timeout') ||
+    message.includes('etimedout') ||
+    message.includes('econnreset') ||
+    message.includes('econnrefused') ||
+    message.includes('enotfound') ||
+    message.includes('network')
+  );
+}
+
 /**
  * Вспомогательная функция для преобразования потока с добавлением расчета стоимости
  */
@@ -200,7 +213,7 @@ export async function analyzeImageFastStreaming(
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
 
   const allImages = Array.isArray(imagesBase64) ? imagesBase64 : [imagesBase64];
 
@@ -215,7 +228,7 @@ export async function analyzeImageFastStreaming(
       const padding = ': ' + ' '.repeat(2048) + '\n\n';
       await writer.write(encoder.encode(padding));
 
-      const loadingHeader = `## 🩺 БЫСТРЫЙ АНАЛИЗ (${allImages.length} изображений)...\n\n> *Извлечение данных через Gemini Vision...*\n\n---\n\n`;
+      const loadingHeader = `## 🩺 FAST ANALYSIS (${allImages.length} image${allImages.length !== 1 ? 's' : ''})...\n\n> *Extracting data via Gemini Vision...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: loadingHeader } }] })}\n\n`));
 
       // 2. Запускаем фоновый Heartbeat на весь период анализа
@@ -246,15 +259,15 @@ export async function analyzeImageFastStreaming(
       const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
       let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
       
-      const mainPrompt = `Ниже приведены данные из изображения. Как экспертный ассистент с компетенциями профессора медицины, проанализируй их.
+      const mainPrompt = `Below are the extracted image data. As an expert medical AI assistant with professor-level competency, analyze them.
     
-=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ ОТ GEMINI 3.0 ===
+=== STRUCTURED DATA FROM GEMINI 3.0 ===
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-=== КОНТЕКСТ ===
-${clinicalContext || 'Нет'}
+=== CONTEXT ===
+${clinicalContext || 'None'}
 
-=== ИНСТРУКЦИЯ ===
+=== INSTRUCTION ===
 ${directivePrompt}`;
 
       const model = MODELS.GEMINI_3_FLASH;
@@ -321,7 +334,7 @@ export async function analyzeImageOpusTwoStageStreaming(
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -339,18 +352,18 @@ export async function analyzeImageOpusTwoStageStreaming(
       let loadingSeconds = 0;
       const getLoadingHeader = (sec: number) => {
         const dots = '.'.repeat((sec % 3) + 1);
-        return `## 🩺 ПОДГОТОВКА К АНАЛИЗУ${dots}\n\n> *Этап 1: Извлечение структурированных данных через Gemini Vision... (${sec}с)*\n\n---\n\n`;
+        return `## 🩺 PREPARING ANALYSIS${dots}\n\n> *Stage 1: Extracting structured data via Gemini Vision... (${sec}s)*\n\n---\n\n`;
       };
 
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: getLoadingHeader(0) } }] })}\n\n`));
 
       // 2. Умная индикация загрузки с ротацией сообщений (каждые 4 секунды)
       const stage1Messages = [
-        "🔍 Анализ анатомических структур",
-        "📏 Измерение размеров образований",
-        "⚡ Оценка плотности тканей (HU)",
-        "🩺 Проверка контрастного усиления",
-        "🔬 Детализация патологических изменений"
+        "🔍 Analyzing anatomical structures",
+        "📏 Measuring lesion dimensions",
+        "⚡ Evaluating tissue density (HU)",
+        "🩺 Checking contrast enhancement",
+        "🔬 Detailing pathological changes"
       ];
       
       loadingInterval = setInterval(async () => {
@@ -390,23 +403,23 @@ export async function analyzeImageOpusTwoStageStreaming(
       // Показываем краткую сводку извлеченных данных
       const findingsCount = jsonExtraction?.findings?.length || 0;
       const metricsCount = Object.keys(jsonExtraction?.metrics || {}).length || 0;
-      const summaryLine = `\n\n✅ **Данные извлечены:** ${findingsCount} находок, ${metricsCount} метрик\n`;
+      const summaryLine = `\n\n✅ **Data extracted:** ${findingsCount} findings, ${metricsCount} metrics\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
       // Обновляем статус перед запуском второй модели
-      const stage2Header = `\n> *Этап 2: Клинический разбор через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
+      const stage2Header = `\n> *Stage 2: Clinical analysis via ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
       const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
       // Формируем единый контекст для основной модели
-      const mainPrompt = `ИНСТРУКЦИЯ: ${directivePrompt}
+      const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
-### ТЕХНИЧЕСКИЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЯ (JSON):
+### TECHNICAL IMAGE DATA (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.`;
+${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.`;
 
       // Настройка системного промпта
       const { TITAN_CONTEXTS } = await import('./prompts');
@@ -418,16 +431,45 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
       }
 
       console.log(`📡 [OPTIMIZED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 секунд таймаут на запуск модели
+      const stage2TimeoutMs = 45000; // hard-timeout for primary model in stage 2
+      const fallbackModel = model === MODELS.SONNET ? MODELS.GPT_5_2 : null;
+      let stage2ModelUsed = model;
+
+      const runStage2Request = async (targetModel: string) => {
+        return fetch(OPENROUTER_API_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://doctor-opus.online',
+            'X-Title': 'Doctor Opus'
+          },
+          body: JSON.stringify({
+            model: targetModel,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: mainPrompt },
+                  { type: 'image_url', image_url: { url: `data:image/png;base64,${imageBase64}` } }
+                ]
+              }
+            ],
+            max_tokens: 8000, // Оптимизировано: одно изображение, достаточно для экспертного протокола
+            temperature: 0.1,
+            stream: true,
+            stream_options: { include_usage: true }
+          })
+        });
+      };
 
       // Запускаем второй интервал для Этапа 2 с ротацией сообщений
       const stage2Messages = [
-        "📝 Формирование диагностического протокола",
-        "🧠 Построение дифференциальной диагностики",
-        "⚕️ Оценка клинической значимости",
-        "📊 Синтез клинических гипотез"
+        "📝 Generating diagnostic protocol",
+        "🧠 Building differential diagnosis",
+        "⚕️ Evaluating clinical significance",
+        "📊 Synthesizing clinical hypotheses"
       ];
       
       let stage2Seconds = 0;
@@ -444,37 +486,22 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
           }
         } catch (e) {}
       }, 2000);
+      let response: Response;
+      try {
+        response = await runStage2Request(model);
+      } catch (primaryError: any) {
+        const shouldFallback = !!fallbackModel && isNetworkStage2Error(primaryError);
+        if (!shouldFallback) {
+          throw primaryError;
+        }
 
-      const response = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.online',
-          'X-Title': 'Doctor Opus'
-        },
-        body: JSON.stringify(        {
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { 
-              role: 'user', 
-              content: [
-                { type: 'text', text: mainPrompt },
-                { type: 'image_url', image_url: { url: `data:image/png;base64,${imageBase64}` } }
-              ]
-            }
-          ],
-          max_tokens: 8000, // Оптимизировано: одно изображение, достаточно для экспертного протокола
-          temperature: 0.1,
-          stream: true,
-          stream_options: { include_usage: true }
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-      clearInterval(stage2Interval);
+        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to GPT-5.2 fallback...\n\n`;
+        await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
+        stage2ModelUsed = fallbackModel!;
+        response = await runStage2Request(stage2ModelUsed);
+      } finally {
+        clearInterval(stage2Interval);
+      }
 
       // Останавливаем Heartbeat только в блоке finally
       if (!response.ok) {
@@ -483,7 +510,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
       }
 
       // Перенаправляем поток через наш трансформер с учетом начальных токенов Gemini
-      const transformer = createTransformWithUsage(response.body!, model, initialUsage);
+      const transformer = createTransformWithUsage(response.body!, stage2ModelUsed, initialUsage);
       const reader = transformer.getReader();
 
       while (true) {
@@ -523,7 +550,7 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -541,19 +568,19 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       const getLoadingHeader = (sec: number) => {
         const dots = '.'.repeat((sec % 3) + 1);
         return isComparative
-          ? `## 🩺 ПОДГОТОВКА К СРАВНИТЕЛЬНОМУ АНАЛИЗУ${dots}\n\n> *Этап 1: Сбор и анализ данных из нескольких изображений через Gemini Vision... (${sec}с)*\n\n---\n\n`
-          : `## 🩺 ПОДГОТОВКА К АНАЛИЗУ СЕРИИ СРЕЗОВ${dots}\n\n> *Этап 1: Сбор и анализ данных из нескольких изображений одного исследования... (${sec}с)*\n\n---\n\n`;
+          ? `## 🩺 PREPARING COMPARATIVE ANALYSIS${dots}\n\n> *Stage 1: Collecting and analyzing data from multiple images via Gemini Vision... (${sec}s)*\n\n---\n\n`
+          : `## 🩺 PREPARING SLICE SERIES ANALYSIS${dots}\n\n> *Stage 1: Collecting data from multiple images of a single study... (${sec}s)*\n\n---\n\n`;
       };
 
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: getLoadingHeader(0) } }] })}\n\n`));
 
       // 2. Умная индикация загрузки с ротацией сообщений
       const stage1Messages = [
-        "🔍 Анализ серии изображений",
-        "📏 Сравнение структурных изменений",
-        "⚡ Оценка динамики процесса",
-        "🩺 Выявление новых находок",
-        "🔬 Сопоставление метрических данных"
+        "🔍 Analyzing image series",
+        "📏 Comparing structural changes",
+        "⚡ Evaluating process dynamics",
+        "🩺 Detecting new findings",
+        "🔬 Correlating metric data"
       ];
       
       loadingInterval = setInterval(async () => {
@@ -598,23 +625,23 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       // Показываем краткую сводку
       const findingsCount = jsonExtraction?.findings?.length || 0;
       const metricsCount = Object.keys(jsonExtraction?.metrics || {}).length || 0;
-      const summaryLine = `\n\n✅ **Данные извлечены:** ${findingsCount} находок, ${metricsCount} метрик из ${imagesBase64.length} изображений\n`;
+      const summaryLine = `\n\n✅ **Data extracted:** ${findingsCount} findings, ${metricsCount} metrics from ${imagesBase64.length} images\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
       const stage2Header = isComparative
-        ? `\n> *Этап 2: Детальный клинический разбор и сравнение через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`
-        : `\n> *Этап 2: Детальный клинический разбор серии через ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
+        ? `\n> *Stage 2: Detailed clinical comparison via ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`
+        : `\n> *Stage 2: Detailed series analysis via ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
       const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
-      const mainPrompt = `ИНСТРУКЦИЯ: ${directivePrompt}
+      const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
-### ${isComparative ? 'СРАВНИТЕЛЬНЫЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЙ' : 'ДАННЫЕ ИЗ НЕСКОЛЬКИХ ИЗОБРАЖЕНИЙ ОДНОГО ИССЛЕДОВАНИЯ'} (JSON):
+### ${isComparative ? 'COMPARATIVE IMAGE DATA' : 'DATA FROM MULTIPLE IMAGES OF A SINGLE STUDY'} (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.`;
+${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.`;
 
       // Настройка системного промпта
       const { TITAN_CONTEXTS } = await import('./prompts');
@@ -628,10 +655,10 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
       console.log(`📡 [MULTI-OPTIMIZED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
       
       const stage2Messages = [
-        "📝 Формирование сравнительного протокола",
-        "🧠 Оценка динамики изменений",
-        "⚕️ Анализ прогрессирования/регрессии",
-        "📊 Синтез клинических выводов"
+        "📝 Generating comparative protocol",
+        "🧠 Evaluating change dynamics",
+        "⚕️ Analyzing progression/regression",
+        "📊 Synthesizing clinical conclusions"
       ];
       
       let stage2Seconds = 0;
@@ -728,7 +755,7 @@ export async function analyzeMultipleImagesWithJSONStreaming(
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -745,18 +772,18 @@ export async function analyzeMultipleImagesWithJSONStreaming(
       let loadingSeconds = 0;
       const getLoadingHeader = (sec: number) => {
         const dots = '.'.repeat((sec % 3) + 1);
-        return `## 🩺 ПОДГОТОВКА К ЭКСПЕРТНОМУ АНАЛИЗУ${dots}\n\n> *Этап 1: Сбор данных через Gemini Vision... (${sec}с)*\n\n---\n\n`;
+        return `## 🩺 PREPARING EXPERT ANALYSIS${dots}\n\n> *Stage 1: Collecting data via Gemini Vision... (${sec}s)*\n\n---\n\n`;
       };
 
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: getLoadingHeader(0) } }] })}\n\n`));
 
       // 2. Умная индикация загрузки с ротацией сообщений
       const stage1MessagesValidated = [
-        "🔍 Детальный анализ всех изображений",
-        "📏 Прецизионное измерение структур",
-        "⚡ Перекрестная верификация данных",
-        "🩺 Углубленная оценка находок",
-        "🔬 Финальная валидация метрик"
+        "🔍 Detailed analysis of all images",
+        "📏 Precision measurement of structures",
+        "⚡ Cross-verification of data",
+        "🩺 In-depth evaluation of findings",
+        "🔬 Final metric validation"
       ];
       
       loadingInterval = setInterval(async () => {
@@ -793,21 +820,21 @@ export async function analyzeMultipleImagesWithJSONStreaming(
       
       const findingsCount = jsonExtraction?.findings?.length || 0;
       const metricsCount = Object.keys(jsonExtraction?.metrics || {}).length || 0;
-      const summaryLine = `\n\n✅ **Данные проверены:** ${findingsCount} находок, ${metricsCount} метрик из ${imagesBase64.length} изображений\n`;
+      const summaryLine = `\n\n✅ **Data verified:** ${findingsCount} findings, ${metricsCount} metrics from ${imagesBase64.length} images\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
-      const stage2Header = `\n> *Этап 2: Профессорский разбор через Opus 4.6 (максимальная точность)...*\n\n---\n\n`;
+      const stage2Header = `\n> *Stage 2: Expert analysis via Opus 4.6 (maximum precision)...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt } = await import('./prompts');
       const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
-      const mainPrompt = `ИНСТРУКЦИЯ: ${directivePrompt}
+      const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
 ### СТРУКТУРИРОВАННЫЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЙ (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ЭКСПЕРТНЫЙ ОТЧЕТ.`;
+${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE EXPERT REPORT.`;
 
       const { TITAN_CONTEXTS } = await import('./prompts');
       // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
@@ -820,10 +847,10 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
       console.log(`📡 [MULTI-VALIDATED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
       
       const stage2MessagesValidated = [
-        "📝 Экспертное формирование протокола",
-        "🧠 Глубокий дифференциальный анализ",
-        "⚕️ Критическая оценка находок",
-        "📊 Синтез клинических заключений"
+        "📝 Expert protocol generation",
+        "🧠 Deep differential analysis",
+        "⚕️ Critical evaluation of findings",
+        "📊 Synthesizing clinical conclusions"
       ];
       
       let stage2SecondsValidated = 0;
@@ -909,7 +936,7 @@ ${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТ�
 export async function analyzeImageWithJSONStreaming(
   jsonExtractionWrapper: any,
   imageBase64: string,
-  prompt: string = 'Проанализируйте медицинское изображение.',
+  prompt: string = 'Analyze the medical image.',
   mimeType: string = 'image/png',
   imageType?: ImageType,
   clinicalContext?: string,
@@ -919,7 +946,7 @@ export async function analyzeImageWithJSONStreaming(
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
 
   const jsonExtraction = jsonExtractionWrapper.data || jsonExtractionWrapper;
   const initialUsage = jsonExtractionWrapper.usage;
@@ -927,12 +954,12 @@ export async function analyzeImageWithJSONStreaming(
   const { getDirectivePrompt } = await import('./prompts');
   const directivePrompt = getDirectivePrompt(imageType || 'universal', prompt, specialty);
 
-  const mainPrompt = `ИНСТРУКЦИЯ: ${directivePrompt}
+  const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
-### ТЕХНИЧЕСКИЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЯ (JSON):
+### TECHNICAL IMAGE DATA (JSON):
 ${JSON.stringify(jsonExtraction, null, 2)}
 
-${clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ.`;
+${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.`;
 
   const { TITAN_CONTEXTS } = await import('./prompts');
   // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
@@ -990,7 +1017,7 @@ export async function sendTextRequestStreaming(
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -1043,23 +1070,62 @@ export async function sendTextRequestStreaming(
         mode: 'chat'
       });
 
-      const response = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://openrouter.ai',
-            'X-Title': 'Medical AI'
-          },
-        body: JSON.stringify({
-          model,
-          messages,
-          max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от длины диалога
-          temperature: 0.1,
-          stream: true,
-          stream_options: { include_usage: true }
-        })
-      });
+      const REQUEST_TIMEOUT_MS = 45000;
+      const MAX_RETRIES = 2;
+      let response: Response | null = null;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+        try {
+          response = await fetch(OPENROUTER_API_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://openrouter.ai',
+                'X-Title': 'Medical AI'
+              },
+            body: JSON.stringify({
+              model,
+              messages,
+              max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от длины диалога
+              temperature: 0.1,
+              stream: true,
+              stream_options: { include_usage: true }
+            }),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          break;
+        } catch (err: any) {
+          clearTimeout(timeoutId);
+          const message = String(err?.message || '').toLowerCase();
+          const isTransientNetworkError =
+            err?.name === 'AbortError' ||
+            err?.name === 'TimeoutError' ||
+            message.includes('fetch failed') ||
+            message.includes('und_err_connect_timeout') ||
+            message.includes('etimedout') ||
+            message.includes('econnreset') ||
+            message.includes('econnrefused') ||
+            message.includes('enotfound') ||
+            message.includes('network');
+
+          if (!isTransientNetworkError || attempt === MAX_RETRIES) {
+            throw err;
+          }
+
+          const backoffMs = 1200 * (attempt + 1);
+          console.warn(`⚠️ [TEXT STREAM RETRY] transient network error (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms`);
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+        }
+      }
+
+      if (!response) {
+        throw new Error('OpenRouter streaming request failed: no response received');
+      }
 
       const initialPromptTokens = estimateTokens(systemPrompt + prompt + history.map(m => m.content).join(' '));
       const initialUsage = { prompt_tokens: initialPromptTokens, completion_tokens: 0 };
@@ -1106,7 +1172,7 @@ export async function analyzeImageStreaming(
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
 
   const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
   
@@ -1120,7 +1186,7 @@ export async function analyzeImageStreaming(
 
   let fullPrompt = prompt;
   if (clinicalContext) {
-    fullPrompt = `${prompt}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${clinicalContext}`;
+    fullPrompt = `${prompt}\n\n=== PATIENT CLINICAL CONTEXT ===\n${clinicalContext}`;
   }
 
   const { readable, writable } = new TransformStream();
@@ -1201,7 +1267,7 @@ export async function analyzeImageStreaming(
 }
 
 /**
- * Streaming анализ множественных изображений
+ * Streaming анализ множественных images
  */
 export async function analyzeMultipleImagesStreaming(
   prompt: string,
@@ -1215,7 +1281,7 @@ export async function analyzeMultipleImagesStreaming(
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
 
   const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
   
@@ -1229,7 +1295,7 @@ export async function analyzeMultipleImagesStreaming(
 
   let fullPrompt = prompt;
   if (clinicalContext) {
-    fullPrompt = `${prompt}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${clinicalContext}`;
+    fullPrompt = `${prompt}\n\n=== PATIENT CLINICAL CONTEXT ===\n${clinicalContext}`;
   }
 
   const contentItems: any[] = [{ type: 'text', text: fullPrompt }];

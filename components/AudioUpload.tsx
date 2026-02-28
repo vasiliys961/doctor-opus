@@ -235,7 +235,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
                 onClick={stopRecording}
                 className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-semibold"
               >
-                ⏹️ Остановить запись
+                ⏹️ Stop recording
               </button>
             </>
           ) : (
@@ -248,14 +248,14 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
                   onClick={startRecording}
                   className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-semibold flex items-center gap-2"
                 >
-                  🎙️ Записать с микрофона
+                  🎙️ Record from microphone
                 </button>
-                <span className="text-gray-500">или</span>
+                <span className="text-gray-500">or</span>
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   className="px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold flex items-center gap-2"
                 >
-                  📁 Загрузить файл
+                  📁 Upload file
                 </button>
               </div>
               
@@ -266,7 +266,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
               <p className="text-sm text-gray-500">
                 Supported formats: MP3, WAV, M4A, WEBM, OGG, FLAC
                 <br />
-                Максимальный размер: {maxSize}MB
+                Max size: {maxSize}MB
               </p>
               <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
                 Do not dictate patient names, addresses, or ID data. Audio may be processed by an external transcription service.

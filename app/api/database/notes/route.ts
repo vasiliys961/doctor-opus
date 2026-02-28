@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error saving note:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка работы с заметками' },
+      { success: false, error: 'Notes operation error' },
       { status: 500 }
     );
   }
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error fetching notes:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка работы с заметками' },
+      { success: false, error: 'Notes operation error' },
       { status: 500 }
     );
   }

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: 'OPENROUTER_API_KEY не настроен. Проверьте .env.local.',
+          error: 'OPENROUTER_API_KEY is not configured. Check .env.local.',
         },
         { status: 500 },
       );
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json(
-        { success: false, error: 'Видео-файл не передан' },
+        { success: false, error: 'Video file not provided' },
         { status: 400 },
       );
     }

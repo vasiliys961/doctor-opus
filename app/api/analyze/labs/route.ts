@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
+        { success: false, error: 'Authorization required' },
         { status: 401 }
       );
     }
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     const file = formData.get('file') as File;
     
     if (!file) {
-      return NextResponse.json({ error: 'Файл не предоставлен' }, { status: 400 });
+      return NextResponse.json({ error: 'File not provided' }, { status: 400 });
     }
 
     const bytes = await file.arrayBuffer();
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error('Labs analysis error:', error);
-    return NextResponse.json({ error: 'Ошибка анализа лабораторных данных' }, { status: 500 });
+    return NextResponse.json({ error: 'Lab data analysis error' }, { status: 500 });
   }
 }
 

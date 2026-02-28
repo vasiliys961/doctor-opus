@@ -65,7 +65,7 @@ export default function DicomViewer({ file, onAnalysisImageReady }: DicomViewerP
         
         setLoading(false)
       } catch (err) {
-        console.error('Ошибка загрузки DICOM:', err)
+        console.error('DICOM loading error:', err)
         setLoading(false)
       }
     }
@@ -133,39 +133,39 @@ export default function DicomViewer({ file, onAnalysisImageReady }: DicomViewerP
             onClick={() => setTool('Wwwc')} 
             className={`px-3 py-1 rounded text-xs font-bold transition-colors ${activeTool === 'Wwwc' ? 'bg-indigo-600 text-white' : 'bg-white border hover:bg-gray-50'}`}
           >
-            🖱️ Окно (ЛКМ)
+            🖱️ Window (LMB)
           </button>
           <button 
             onClick={() => setTool('Pan')} 
             className={`px-3 py-1 rounded text-xs font-bold transition-colors ${activeTool === 'Pan' ? 'bg-indigo-600 text-white' : 'bg-white border hover:bg-gray-50'}`}
           >
-            ✋ Панорама
+            ✋ Pan
           </button>
           <button 
             onClick={() => setTool('Zoom')} 
             className={`px-3 py-1 rounded text-xs font-bold transition-colors ${activeTool === 'Zoom' ? 'bg-indigo-600 text-white' : 'bg-white border hover:bg-gray-50'}`}
           >
-            🔍 Зум
+            🔍 Zoom
           </button>
           <button 
             onClick={() => setTool('Magnify')} 
             className={`px-3 py-1 rounded text-xs font-bold transition-colors ${activeTool === 'Magnify' ? 'bg-indigo-600 text-white' : 'bg-white border hover:bg-gray-50'}`}
           >
-            🔎 Лупа
+            🔎 Magnify
           </button>
           <button 
             onClick={() => setTool('Length')} 
             className={`px-3 py-1 rounded text-xs font-bold transition-colors ${activeTool === 'Length' ? 'bg-indigo-600 text-white' : 'bg-white border hover:bg-gray-50'}`}
           >
-            📏 Линейка
+            📏 Ruler
           </button>
         </div>
 
-        <h4 className="font-bold text-gray-800">Настройка окна (Windowing)</h4>
+        <h4 className="font-bold text-gray-800">Window Settings (Windowing)</h4>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Центр (WC): {wc}</label>
+            <label className="block text-sm text-gray-600 mb-1">Center (WC): {wc}</label>
             <input 
               type="range" 
               min="-1000" max="2000" 
@@ -175,7 +175,7 @@ export default function DicomViewer({ file, onAnalysisImageReady }: DicomViewerP
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Ширина (WW): {ww}</label>
+            <label className="block text-sm text-gray-600 mb-1">Width (WW): {ww}</label>
             <input 
               type="range" 
               min="1" max="4000" 
@@ -191,19 +191,19 @@ export default function DicomViewer({ file, onAnalysisImageReady }: DicomViewerP
             onClick={() => handleWindowChange(40, 400)} 
             className="px-3 py-1 bg-white border rounded text-xs hover:bg-gray-50"
           >
-            Мягкие ткани (40/400)
+            Soft tissue (40/400)
           </button>
           <button 
             onClick={() => handleWindowChange(400, 1800)} 
             className="px-3 py-1 bg-white border rounded text-xs hover:bg-gray-50"
           >
-            Кости (400/1800)
+            Bone (400/1800)
           </button>
           <button 
             onClick={() => handleWindowChange(-600, 1500)} 
             className="px-3 py-1 bg-white border rounded text-xs hover:bg-gray-50"
           >
-            Легкие (-600/1500)
+            Lung (-600/1500)
           </button>
         </div>
 
@@ -211,7 +211,7 @@ export default function DicomViewer({ file, onAnalysisImageReady }: DicomViewerP
           onClick={captureImage}
           className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-bold shadow-md"
         >
-          ✅ Подтвердить вид и отправить на анализ
+          ✅ Confirm view and send for analysis
         </button>
       </div>
     </div>

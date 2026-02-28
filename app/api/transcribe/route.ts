@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     // Проверка размера файла (максимум 500MB)
     if (file.size > 500 * 1024 * 1024) {
       return NextResponse.json(
-        { success: false, error: 'Файл слишком большой (максимум 500MB)' },
+        { success: false, error: 'File is too large (maximum 500MB)' },
         { status: 400 }
       );
     }
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error transcribing audio:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка транскрипции аудио' },
+      { success: false, error: 'Audio transcription error' },
       { status: 500 }
     );
   }

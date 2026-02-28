@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
         { status: 500 }
       );
     }
@@ -189,7 +189,7 @@ ${pagePrompt}`;
   } catch (error: any) {
     console.error('❌ [DOC IMAGES] Общая ошибка:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка обработки изображений документа' },
+      { success: false, error: 'Document image processing error' },
       { status: 500 }
     );
   }

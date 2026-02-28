@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: false, error: 'Invalid action or missing data' }, { status: 400 });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: 'Ошибка синхронизации' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Sync error' }, { status: 500 });
   }
 }
 

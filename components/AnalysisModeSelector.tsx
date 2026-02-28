@@ -100,7 +100,7 @@ export default function AnalysisModeSelector({
                 }`}
               >
                 Claude Sonnet 4.6
-                <div className="text-[9px] font-normal opacity-80">Standard (~90 sec)</div>
+                <div className="text-[9px] font-normal opacity-80">Recommended: best speed/quality balance</div>
               </button>
               <button
                 onClick={() => onOptimizedModelChange('gpt52')}
@@ -112,7 +112,7 @@ export default function AnalysisModeSelector({
                 }`}
               >
                 GPT-5.2 ⚡️
-                <div className="text-[9px] font-normal opacity-80">Test drive (~15 sec)</div>
+                <div className="text-[9px] font-normal opacity-80">Deeper reasoning for complex cases</div>
               </button>
             </div>
           </div>

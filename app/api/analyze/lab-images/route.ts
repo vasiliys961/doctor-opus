@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
         { status: 500 }
       );
     }
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ [LAB IMAGES] Общая ошибка:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка анализа лабораторных изображений' },
+      { success: false, error: 'Lab image analysis error' },
       { status: 500 }
     );
   }

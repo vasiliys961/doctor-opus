@@ -330,21 +330,21 @@ export default function FileUpload({
                   onClick={() => fileInputRef.current?.click()}
                   className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold"
                 >
-                  📁 Выбрать файлы
+                  📁 Choose files
                 </button>
 
                 <button
                   onClick={() => folderInputRef.current?.click()}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-semibold"
                 >
-                  📂 Выбрать папку
+                  📂 Choose folder
                 </button>
                 
                 <button
                   onClick={() => cameraInputRef.current?.click()}
                   className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold"
                 >
-                  📷 Сделать фото
+                  📷 Take photo
                 </button>
               </div>
               
@@ -355,7 +355,7 @@ export default function FileUpload({
           <p className="text-sm text-gray-500">
             Supported: DICOM series (.dcm), images (JPG, PNG), PDF, documents
             <br />
-            Максимальный размер файла: {maxSize}MB
+            Max file size: {maxSize}MB
             {multiple && ' • Multiple files can be uploaded'}
           </p>
         </div>

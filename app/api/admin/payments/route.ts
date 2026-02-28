@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
     
     if (!session?.user?.email || !isAdminEmail(session.user.email)) {
-      return NextResponse.json({ success: false, error: 'Доступ запрещен' }, { status: 403 });
+      return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 });
     }
 
     // Проверяем наличие подключения к БД

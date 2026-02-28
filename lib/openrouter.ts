@@ -536,7 +536,7 @@ export async function extractImageJSON(options: {
   const apiKey = rawKey?.trim();
   
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+    throw new Error('OPENROUTER_API_KEY is not configured');
   }
 
   const modality = options.modality || 'unknown';
@@ -544,7 +544,7 @@ export async function extractImageJSON(options: {
   const allImages = options.imagesBase64 || (options.imageBase64 ? [options.imageBase64] : []);
   
   if (allImages.length === 0) {
-    throw new Error('Не предоставлено ни одного изображения для извлечения JSON');
+    throw new Error('No images were provided for JSON extraction');
   }
   
   const smartRoutingEnabled = (options.enableSmartRouting ?? true) && isTruthyEnv(process.env.SMART_ROUTING_ENABLED, false);
@@ -574,7 +574,7 @@ export async function extractImageJSON(options: {
   });
 
   const callModel = async (model: string, timeoutMs: number = 60000) => {
-    safeLog(`📡 [GEMINI JSON] Пробую модель: ${model}`);
+    safeLog(`📡 [VISION JSON] Trying model: ${model}`);
 
     const payload = {
       model,
@@ -607,7 +607,7 @@ export async function extractImageJSON(options: {
     const inputTokens = resultData.usage?.prompt_tokens || Math.floor(tokensUsed / 2);
     const outputTokens = resultData.usage?.completion_tokens || Math.floor(tokensUsed / 2);
 
-    safeLog(`✅ [GEMINI JSON] JSON извлечен успешно через ${model}`);
+    safeLog(`✅ [VISION JSON] JSON extracted successfully via ${model}`);
     if (tokensUsed > 0) {
       safeLog(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
     }
@@ -633,7 +633,13 @@ export async function extractImageJSON(options: {
     };
   };
 
-  // Быстрый путь для fast-режима и принудительного выбора модели
+  const nonGeminiFallbackModels = [
+    MODELS.SONNET,
+    MODELS.HAIKU,
+    MODELS.GPT_5_2,
+  ];
+
+  // Fast path for forced model and non-smart routing
   if (!smartRoutingEnabled || preferModel !== MODELS.GEMINI_3_FLASH) {
     const orderedModels = [
       preferModel,
@@ -648,21 +654,44 @@ export async function extractImageJSON(options: {
       try {
         return await callModel(model, model === MODELS.GEMINI_3_PRO ? 90000 : 60000);
       } catch (error: any) {
-        safeWarn(`⚠️ [GEMINI JSON] Ошибка с ${model}: ${error.message}, пробую следующую модель...`);
+        safeWarn(`⚠️ [VISION JSON] Error with ${model}: ${error.message}, trying next model...`);
         if (String(error.message).includes('[429]')) await sleep(1500);
         continue;
       }
     }
-    throw new Error('Не удалось извлечь JSON ни через одну модель Gemini');
+
+    for (const model of nonGeminiFallbackModels) {
+      try {
+        return await callModel(model, 90000);
+      } catch (error: any) {
+        safeWarn(`⚠️ [VISION JSON] Fallback error with ${model}: ${error.message}, trying next model...`);
+        if (String(error.message).includes('[429]')) await sleep(1500);
+      }
+    }
+
+    throw new Error('Failed to extract JSON via all available vision models');
   }
 
-  // Smart-routing: сначала Flash, потом условная эскалация до Pro 3.1.
+  // Smart routing: start with Flash, then escalate to Pro if needed.
   let flashResult: any;
   try {
     flashResult = await callModel(MODELS.GEMINI_3_FLASH, 60000);
   } catch (error: any) {
-    safeWarn(`⚠️ [SMART ROUTER] Flash недоступен, fallback на Pro: ${error.message}`);
-    return await callModel(MODELS.GEMINI_3_PRO, 90000);
+    safeWarn(`⚠️ [SMART ROUTER] Flash unavailable, trying Pro: ${error.message}`);
+    try {
+      return await callModel(MODELS.GEMINI_3_PRO, 90000);
+    } catch (proError: any) {
+      safeWarn(`⚠️ [SMART ROUTER] Pro unavailable, using non-Gemini fallbacks: ${proError.message}`);
+      for (const model of nonGeminiFallbackModels) {
+        try {
+          return await callModel(model, 90000);
+        } catch (fallbackError: any) {
+          safeWarn(`⚠️ [SMART ROUTER] Fallback error with ${model}: ${fallbackError.message}`);
+          if (String(fallbackError.message).includes('[429]')) await sleep(1500);
+        }
+      }
+      throw new Error('Failed to extract JSON via all available vision models');
+    }
   }
 
   const routing = extractRoutingMetadata(flashResult.data);
@@ -697,7 +726,7 @@ export async function extractImageJSON(options: {
       router: { decision: 'pro', reasons: decision.reasons, fallback_model: MODELS.GEMINI_3_FLASH }
     };
   } catch (error: any) {
-    safeWarn(`⚠️ [SMART ROUTER] Pro недоступен, используем Flash: ${error.message}`);
+    safeWarn(`⚠️ [SMART ROUTER] Pro unavailable, returning Flash result: ${error.message}`);
     return {
       ...flashResult,
       router: { decision: 'flash_fallback', reasons: decision.reasons }
@@ -1012,14 +1041,47 @@ export async function sendTextRequest(
       promptLength: prompt.length
     });
 
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
+    const REQUEST_TIMEOUT_MS = 45000;
+    const MAX_RETRIES = 2;
+    let response: Response | null = null;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        response = await fetchWithTimeout(OPENROUTER_API_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        }, REQUEST_TIMEOUT_MS);
+        break;
+      } catch (err: any) {
+        const message = String(err?.message || '').toLowerCase();
+        const isTransientNetworkError =
+          err?.name === 'AbortError' ||
+          err?.name === 'TimeoutError' ||
+          message.includes('fetch failed') ||
+          message.includes('und_err_connect_timeout') ||
+          message.includes('etimedout') ||
+          message.includes('econnreset') ||
+          message.includes('econnrefused') ||
+          message.includes('enotfound') ||
+          message.includes('network');
+
+        if (!isTransientNetworkError || attempt === MAX_RETRIES) {
+          throw err;
+        }
+
+        const backoffMs = 1200 * (attempt + 1);
+        safeWarn(`OpenRouter text request transient network error (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms`);
+        await sleep(backoffMs);
+      }
+    }
+
+    if (!response) {
+      throw new Error('OpenRouter text request failed: no response received');
+    }
 
     safeLog('OpenRouter API response status:', response.status);
 
@@ -1058,7 +1120,15 @@ export async function sendTextRequest(
       throw new Error('Превышено время ожидания ответа от OpenRouter API. Попробуйте позже.');
     }
     
-    if (error.message.includes('fetch failed') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+    if (
+      error.message.includes('fetch failed') ||
+      error.message.includes('network') ||
+      error.message.includes('ECONNREFUSED') ||
+      error.message.includes('ENOTFOUND') ||
+      error.message.includes('UND_ERR_CONNECT_TIMEOUT') ||
+      error.message.includes('ETIMEDOUT') ||
+      error.message.includes('ECONNRESET')
+    ) {
       throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки сервера.');
     }
     

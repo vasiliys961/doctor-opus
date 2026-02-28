@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
+        { success: false, error: 'Authorization required' },
         { status: 401 }
       );
     }
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Изображения не предоставлены' },
+        { success: false, error: 'Images were not provided' },
         { status: 400 }
       );
     }
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
         { status: 500 }
       );
     }
@@ -50,40 +50,39 @@ export async function POST(request: NextRequest) {
       console.log(`🧬 [GENETIC IMAGES] Первое изображение: длина base64 = ${firstImage?.length || 0} символов`);
       if (!firstImage || firstImage.length < 100) {
         return NextResponse.json(
-          { success: false, error: 'Изображения имеют некорректный формат или пусты' },
+          { success: false, error: 'Images have an invalid format or are empty' },
           { status: 400 }
         );
       }
     }
 
-    const extractionPrompt = `Ты — специализированный OCR-движок для извлечения генетических данных из таблиц медицинских отчетов.
+    const extractionPrompt = `You are a specialized OCR engine for extracting genetic data from medical report tables.
 
-ТВОЯ ЗАДАЧА: Извлечь ВСЕ генетические данные из таблиц на этом изображении.
+TASK: Extract ALL genetic records from the table(s) on this image.
 
-ФОРМАТ ВЫВОДА (ОБЯЗАТЕЛЬНО):
-- ТОЛЬКО строки с данными в формате: ГЕН;rsID;ГЕНОТИП;КОММЕНТАРИЙ
-- ОДНА СТРОКА = ОДИН ГЕНЕТИЧЕСКИЙ ВАРИАНТ
-- БЕЗ заголовков таблиц, описаний, вступлений
-- БЕЗ комментариев типа "на этой странице нет данных", "данные не найдены"
-- БЕЗ объяснений, только фактические данные
-- Если данных нет - верни ПУСТУЮ строку (ничего не пиши, даже пустую строку)
+OUTPUT FORMAT (MANDATORY):
+- ONLY data lines in the format: GENE;rsID;GENOTYPE;COMMENT
+- ONE LINE = ONE GENETIC VARIANT
+- NO table headers, introductions, or explanations
+- NO comments like "no data on this page" or "data not found"
+- If there are no genetic table records on this page, return an EMPTY string
 
-ЧТО ИЗВЛЕКАТЬ:
-- Название гена (MTHFR, APOE, COMT, CYP2D6, CYP2C19, VDR, FTO и т.д.)
-- rsID (rs1801133, rs4680, rs699, rs429358, rs7412 и т.д.)
-- Генотип (AA, AG, GG, TT, CT, CC, AT, GT и т.д.)
-- Комментарий/значение/фенотип (если есть в таблице)
+WHAT TO EXTRACT:
+- Gene symbol (MTHFR, APOE, COMT, CYP2D6, CYP2C19, VDR, FTO, etc.)
+- rsID (rs1801133, rs4680, rs699, rs429358, rs7412, etc.)
+- Genotype (AA, AG, GG, TT, CT, CC, AT, GT, etc.)
+- Comment/value/phenotype (if present)
 
-ПРИМЕРЫ ПРАВИЛЬНОГО ФОРМАТА:
-MTHFR;rs1801133;CT;сниженная активность фермента
-APOE;rs429358;CC;генотип E4/E4
-COMT;rs4680;GG;нормальная активность
-CYP2D6;rs1065852;AA;нормальный метаболизм
+VALID EXAMPLES:
+MTHFR;rs1801133;CT;reduced enzyme activity
+APOE;rs429358;CC;genotype E4/E4
+COMT;rs4680;GG;normal activity
+CYP2D6;rs1065852;AA;normal metabolism
 
-ВАЖНО: 
-- Если на странице НЕТ таблиц с генетическими данными - верни ПУСТУЮ СТРОКУ
-- НЕ пиши никаких комментариев, объяснений или сообщений об отсутствии данных
-- Извлекай данные ТОЧНО как они указаны в таблице`;
+IMPORTANT:
+- If no genetic table data exists on the page, return an EMPTY STRING
+- Do not output any extra text
+- Extract values exactly as shown in the table`;
 
     // Используем Gemini 3.0 Flash для извлечения JSON
     let extractionModel = 'google/gemini-3-flash-preview';
@@ -337,7 +336,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
     return NextResponse.json(
       {
         success: false,
-        error: 'Ошибка извлечения генетических данных',
+        error: 'Genetic data extraction error',
       },
       { status: 500 }
     );

@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     const rl = checkRateLimit(rlKey, RATE_LIMIT_BILLING);
     if (!rl.allowed) {
       return NextResponse.json(
-        { error: 'Too many requests', message: 'Подождите перед следующей операцией.' },
+        { error: 'Too many requests', message: 'Please wait before the next operation.' },
         { status: 429 }
       );
     }

@@ -70,7 +70,7 @@ export default function UltrasoundPage() {
         }
       }
 
-      formData.append('prompt', 'Проанализируйте УЗИ-исследование и сформируйте диагностический протокол.')
+      formData.append('prompt', 'Analyze the ultrasound study and generate a diagnostic protocol.')
       formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', 'ultrasound')
@@ -213,11 +213,11 @@ export default function UltrasoundPage() {
       
       <AnalysisTips 
         content={{
-          fast: "быстрый разбор УЗИ-снимков или захваченных кадров петли.",
+          fast: "quick analysis of ultrasound images or captured cine-loop frames.",
           optimized: "Recommended mode for detailed assessment of echo structures.",
           validated: "Expert analysis for complex cases (Gemini + Opus).",
           extra: [
-            "📹 **Cine-loop**: Вы можете загрузить видео УЗИ и захватить конкретные кадры для анализа.",
+            "📹 **Cine-loop**: You can upload an ultrasound video and capture specific frames for analysis.",
             "🖱️ Use «Manual Capture» to select the exact frame (e.g., valve opening).",
             "🛡️ All captured frames can be manually anonymized before submission."
           ]
@@ -225,7 +225,7 @@ export default function UltrasoundPage() {
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6 text-center">
-        <h2 className="text-xl font-semibold mb-4 text-left">Загрузите УЗИ (снимок или видео-петлю)</h2>
+        <h2 className="text-xl font-semibold mb-4 text-left">Upload Ultrasound (image or cine-loop)</h2>
         <ImageUpload onUpload={handleUpload} accept="image/*,video/*,.dcm,.dicom" maxSize={100} />
       </div>
 
@@ -241,7 +241,7 @@ export default function UltrasoundPage() {
                     className="absolute bottom-16 right-4 px-6 py-3 bg-blue-600/90 hover:bg-blue-600 text-white font-black rounded-2xl shadow-2xl transform active:scale-95 transition-all flex items-center gap-2 backdrop-blur-sm z-10 border border-blue-400"
                   >
                     <span className="text-2xl">📸</span>
-                    ЗАХВАТИТЬ
+                    CAPTURE
                   </button>
                 )}
               </div>
@@ -321,7 +321,7 @@ export default function UltrasoundPage() {
             <div>
               <PatientSelector onSelect={setClinicalContext} disabled={loading} />
               <div className="flex items-center justify-between mb-2 mt-4">
-                <label className="text-sm font-bold text-gray-700">👤 Клинический контекст</label>
+                <label className="text-sm font-bold text-gray-700">👤 Clinical context</label>
                 <VoiceInput onTranscript={(t) => setClinicalContext(p => p ? `${p} ${t}` : t)} disabled={loading} />
               </div>
               <textarea
