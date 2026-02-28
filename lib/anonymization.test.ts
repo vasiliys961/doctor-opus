@@ -47,4 +47,16 @@ describe('anonymizeText', () => {
     expect(result).not.toContain('4509 123456');
     expect(result).not.toContain('123-456-789 12');
   });
+
+  it('masks medical staff names with initials', () => {
+    const source = 'Врач: МАЛЫШЕНКО_Е.О.; Фельдшер: КУНИКИНА Д.В.; Водитель: Иванян А.П.';
+    const result = anonymizeText(source);
+
+    expect(result).toContain('Врач: [ФИО]');
+    expect(result).toContain('Фельдшер: [ФИО]');
+    expect(result).toContain('Водитель: [ФИО]');
+    expect(result).not.toContain('МАЛЫШЕНКО_Е.О.');
+    expect(result).not.toContain('КУНИКИНА Д.В.');
+    expect(result).not.toContain('Иванян А.П.');
+  });
 });
