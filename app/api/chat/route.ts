@@ -10,6 +10,8 @@ import { checkRateLimit, RATE_LIMIT_CHAT, getRateLimitKey } from '@/lib/rate-lim
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
+const MAX_CHAT_FILES_PER_REQUEST = 4;
+const MAX_CHAT_TOTAL_BYTES_PER_REQUEST = 16 * 1024 * 1024;
 
 /**
  * API endpoint для ИИ-ассистента
@@ -73,6 +75,23 @@ export async function POST(request: NextRequest) {
       model = body.model;
       specialty = body.specialty;
       systemPrompt = body.systemPrompt;
+    }
+
+    if (files.length > 0) {
+      const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+      if (files.length > MAX_CHAT_FILES_PER_REQUEST || totalBytes > MAX_CHAT_TOTAL_BYTES_PER_REQUEST) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Too many files for one request. Maximum: ${MAX_CHAT_FILES_PER_REQUEST} files and ${(MAX_CHAT_TOTAL_BYTES_PER_REQUEST / (1024 * 1024)).toFixed(0)} MB total.`,
+            details: {
+              files: files.length,
+              totalBytes
+            }
+          },
+          { status: 413 }
+        );
+      }
     }
 
     const selectedModel = (model === 'gpt52' || model === MODELS.GPT_5_2)
