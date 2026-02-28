@@ -1,8 +1,6 @@
-name: Deploy to Timeweb VPS
+name: Deploy to Timeweb VPS (manual only)
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
