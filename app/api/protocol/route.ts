@@ -4,6 +4,66 @@ import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
 import { formatCostLog } from '@/lib/cost-calculator';
 import { anonymizeText } from '@/lib/anonymization';
 
+function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffer = '';
+
+  const sanitizeEventBlock = (block: string): string => {
+    const lines = block.split('\n');
+    const sanitizedLines = lines.map((line) => {
+      if (!line.startsWith('data: ')) return line;
+
+      const payload = line.slice(6).trim();
+      if (payload === '[DONE]') return line;
+
+      try {
+        const parsed = JSON.parse(payload);
+        const content = parsed?.choices?.[0]?.delta?.content;
+        if (typeof content === 'string' && content.length > 0) {
+          parsed.choices[0].delta.content = anonymizeText(content);
+        }
+        return `data: ${JSON.stringify(parsed)}`;
+      } catch {
+        return line;
+      }
+    });
+    return sanitizedLines.join('\n');
+  };
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          let delimiterIndex = buffer.indexOf('\n\n');
+          while (delimiterIndex !== -1) {
+            const eventBlock = buffer.slice(0, delimiterIndex);
+            buffer = buffer.slice(delimiterIndex + 2);
+            const sanitized = sanitizeEventBlock(eventBlock);
+            controller.enqueue(encoder.encode(`${sanitized}\n\n`));
+            delimiterIndex = buffer.indexOf('\n\n');
+          }
+        }
+
+        if (buffer.length > 0) {
+          const sanitized = sanitizeEventBlock(buffer);
+          controller.enqueue(encoder.encode(sanitized));
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      } finally {
+        reader.releaseLock();
+      }
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -17,7 +77,7 @@ export async function POST(request: NextRequest) {
       universalPrompt = '',
       ragExamples = []
     } = body;
-    const rawText = anonymizeText(rawIncomingText);
+    const rawText = anonymizeText(String(rawIncomingText ?? ''));
 
     if (!rawText || !rawText.trim()) {
       return NextResponse.json({ success: false, error: 'Текст не предоставлен' }, { status: 400 });
@@ -88,7 +148,8 @@ ${customTemplate}
     
     if (useStreaming) {
       const stream = await sendTextRequestStreaming(prompt, [], MODEL);
-      return new Response(stream, {
+      const sanitizedStream = sanitizeProtocolSse(stream);
+      return new Response(sanitizedStream, {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
@@ -98,6 +159,7 @@ ${customTemplate}
     }
 
     let result = await sendTextRequest(prompt, []);
+    result = anonymizeText(result);
     return NextResponse.json({ success: true, protocol: result });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: 'Ошибка генерации протокола' }, { status: 500 });

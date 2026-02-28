@@ -17,6 +17,7 @@ import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { saveDocument, getDocumentChunks, searchLibraryLocal } from '@/lib/library-db'
+import { anonymizeText } from '@/lib/anonymization'
 
 const PROTOCOL_DRAFT_KEY = 'protocol_draft'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
@@ -203,18 +204,19 @@ export default function ProtocolPage() {
     };
 
     const finalModel = modelsMap[model] || MODELS.SONNET;
+    const safeRawText = anonymizeText(rawText.trim())
 
     try {
       let ragExamples: string[] = []
       if (templateRagDocId) {
         ragExamples = await getDocumentChunks(templateRagDocId, 4)
       }
-      if (ragExamples.length === 0 && rawText.trim()) {
-        ragExamples = await searchLibraryLocal(`${specialistName} ${rawText}`, 3)
+      if (ragExamples.length === 0 && safeRawText) {
+        ragExamples = await searchLibraryLocal(`${specialistName} ${safeRawText}`, 3)
       }
 
       const payload = {
-        rawText,
+        rawText: safeRawText,
         useStreaming: useStreaming,
         model: model,
         templateId: selectedTemplateId,

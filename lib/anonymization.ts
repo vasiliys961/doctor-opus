@@ -29,23 +29,21 @@ export function anonymizeText(text: string): string {
 
   let result = text;
 
-  // 1. ФИО русские (Фамилия Имя Отчество)
-  const fioRegex = /\b([А-ЯЁ][а-яё]{1,20})\s+([А-ЯЁ][а-яё]{1,20})(\s+[А-ЯЁ][а-яё]{1,20})?\b/g;
-  result = result.replace(fioRegex, (match) => {
-    const words = match.split(/\s+/);
-    const hasException = words.some(word => 
-      MEDICAL_EXCEPTIONS.includes(word) || word.length <= 2
-    );
-    return hasException ? match : '[ФИО]';
+  // 1. Поля с явными метками (самый надежный слой)
+  const labeledPatterns: Array<{ pattern: RegExp; token: string }> = [
+    { pattern: /(\b(?:ФИО|Ф\.?\s*И\.?\s*О\.?|Пациент|Фамилия(?:\s+Имя(?:\s+Отчество)?)?|Patient(?:\s*Name)?|Name)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[ФИО]' },
+    { pattern: /(\b(?:Дата\s*рождения|DOB|Birth\s*Date)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[ДАТА]' },
+    { pattern: /(\b(?:Адрес|Address)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[АДРЕС]' },
+    { pattern: /(\b(?:Телефон|Phone|Mobile)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[ТЕЛЕФОН]' },
+    { pattern: /(\b(?:Email|E-mail|Эл\.?\s*почта)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[EMAIL]' },
+    { pattern: /(\b(?:Паспорт|Passport|Серия\s*и\s*номер)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[ПАСПОРТ]' },
+    { pattern: /(\b(?:СНИЛС|ОМС|Полис|Policy)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[ДОКУМЕНТ]' },
+  ];
+  labeledPatterns.forEach(({ pattern, token }) => {
+    result = result.replace(pattern, `$1${token}`);
   });
 
-  // 2. ФИО латинские (John Smith)
-  result = result.replace(
-    /\b([A-Z][a-z]{2,20})\s+([A-Z][a-z]{2,20})(\s+[A-Z][a-z]{2,20})?\b/g,
-    '[NAME]'
-  );
-
-  // 3. Даты рождения (различные форматы)
+  // 2. Даты рождения (различные форматы)
   result = result.replace(
     /\b(0?[1-9]|[12][0-9]|3[01])[./-](0?[1-9]|1[0-2])[./-](19|20)?\d{2}\b/g,
     '[ДАТА]'
@@ -56,13 +54,13 @@ export function anonymizeText(text: string): string {
     '[ДАТА]'
   );
 
-  // 4. Паспортные данные (XXXX XXXXXX)
+  // 3. Паспортные данные (XXXX XXXXXX)
   result = result.replace(
     /\b\d{4}\s?\d{6}\b/g,
     '[ПАСПОРТ]'
   );
 
-  // 5. ИНН (10 или 12 цифр)
+  // 4. ИНН (10 или 12 цифр)
   result = result.replace(
     /\b\d{10,12}\b/g,
     (match) => {
@@ -74,13 +72,13 @@ export function anonymizeText(text: string): string {
     }
   );
 
-  // 6. СНИЛС (XXX-XXX-XXX XX)
+  // 5. СНИЛС (XXX-XXX-XXX XX)
   result = result.replace(
     /\b\d{3}-\d{3}-\d{3}\s?\d{2}\b/g,
     '[СНИЛС]'
   );
 
-  // 7. Телефоны (различные форматы)
+  // 6. Телефоны (различные форматы)
   // +7 (XXX) XXX-XX-XX
   result = result.replace(
     /(\+7|8)[\s-]?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}/g,
@@ -92,19 +90,39 @@ export function anonymizeText(text: string): string {
     '[ТЕЛЕФОН]'
   );
 
-  // 8. Email адреса
+  // 7. Email адреса
   result = result.replace(
     /\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b/g,
     '[EMAIL]'
   );
 
-  // 10. Адреса (упрощенно - город, улица, дом)
+  // 8. ФИО русские (Фамилия Имя Отчество)
+  const fioRegex = /\b([А-ЯЁ][а-яё]{1,20})\s+([А-ЯЁ][а-яё]{1,20})(\s+[А-ЯЁ][а-яё]{1,20})?\b/g;
+  result = result.replace(fioRegex, (match) => {
+    const words = match.split(/\s+/);
+    const hasException = words.some(word =>
+      MEDICAL_EXCEPTIONS.includes(word) || word.length <= 2
+    );
+    return hasException ? match : '[ФИО]';
+  });
+
+  // 9. ФИО с инициалами: Иванов И.И. / Ivanov I.I.
+  result = result.replace(/\b[А-ЯЁ][а-яё]{1,30}\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.\b/g, '[ФИО]');
+  result = result.replace(/\b[A-Z][a-z]{1,30}\s+[A-Z]\.\s*[A-Z]\.\b/g, '[NAME]');
+
+  // 10. ФИО латинские (John Smith)
+  result = result.replace(
+    /\b([A-Z][a-z]{2,20})\s+([A-Z][a-z]{2,20})(\s+[A-Z][a-z]{2,20})?\b/g,
+    '[NAME]'
+  );
+
+  // 11. Адреса (упрощенно - город, улица, дом)
   result = result.replace(
     /(г\.|город|ул\.|улица|пр\.|проспект|д\.|дом|кв\.|квартира)\s+[А-ЯЁа-яё\d\s,.-]{3,50}/gi,
     '[АДРЕС]'
   );
 
-  // 11. Подписи и одобрения (врач, лаборант)
+  // 12. Подписи и одобрения (врач, лаборант)
   const approvalPatterns = [
     /(Результаты\s+одобрил|Одобрил|Врач|Врач\s+КДЛ|Подпись|Лаборант|Исследование\s+выполнил):?\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\.?\s*[А-ЯЁ]\.?/gi,
     /(Результаты\s+одобрил|Одобрил|Врач|Врач\s+КДЛ|Подпись|Лаборант|Исследование\s+выполнил):?\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+/gi,
