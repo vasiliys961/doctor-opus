@@ -34,14 +34,20 @@ export function anonymizeText(text: string): string {
     { pattern: /(\b(?:ФИО|Ф\.?\s*И\.?\s*О\.?|Пациент|Фамилия(?:\s+Имя(?:\s+Отчество)?)?|Patient(?:\s*Name)?|Name)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[ФИО]' },
     { pattern: /(\b(?:Дата\s*рождения|DOB|Birth\s*Date)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[ДАТА]' },
     { pattern: /(\b(?:Адрес|Address)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[АДРЕС]' },
-    { pattern: /(\b(?:Телефон|Phone|Mobile)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[ТЕЛЕФОН]' },
-    { pattern: /(\b(?:Email|E-mail|Эл\.?\s*почта)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[EMAIL]' },
+    { pattern: /(\b(?:Телефон|Phone|Mobile)\s*[:：]\s*)([^\n\r;,]+)/gi, token: '[ТЕЛЕФОН]' },
+    { pattern: /(\b(?:Email|E-mail|Эл\.?\s*почта)\s*[:：]\s*)([^\n\r;,]+)/gi, token: '[EMAIL]' },
     { pattern: /(\b(?:Паспорт|Passport|Серия\s*и\s*номер)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[ПАСПОРТ]' },
     { pattern: /(\b(?:СНИЛС|ОМС|Полис|Policy)\s*[:：]\s*)([^\n\r;]+)/gi, token: '[ДОКУМЕНТ]' },
   ];
   labeledPatterns.forEach(({ pattern, token }) => {
     result = result.replace(pattern, `$1${token}`);
   });
+
+  // Частый клинический паттерн без двоеточия: "Пациент Иванов Иван Иванович ..."
+  result = result.replace(
+    /((?:^|[\s,;:()])Пациент\s+)([А-ЯЁ][а-яё]{1,20}\s+[А-ЯЁ][а-яё]{1,20}(?:\s+[А-ЯЁ][а-яё]{1,20})?)(?=$|[\s,;:().])/gu,
+    '$1[ФИО]'
+  );
 
   // 2. Даты рождения (различные форматы)
   result = result.replace(
@@ -97,17 +103,17 @@ export function anonymizeText(text: string): string {
   );
 
   // 8. ФИО русские (Фамилия Имя Отчество)
-  const fioRegex = /\b([А-ЯЁ][а-яё]{1,20})\s+([А-ЯЁ][а-яё]{1,20})(\s+[А-ЯЁ][а-яё]{1,20})?\b/g;
-  result = result.replace(fioRegex, (match) => {
-    const words = match.split(/\s+/);
+  const fioRegex = /(^|[\s,;:()])([А-ЯЁ][а-яё]{1,20}\s+[А-ЯЁ][а-яё]{1,20}(?:\s+[А-ЯЁ][а-яё]{1,20})?)(?=$|[\s,;:().])/gu;
+  result = result.replace(fioRegex, (match, prefix: string, fullName: string) => {
+    const words = fullName.split(/\s+/);
     const hasException = words.some(word =>
       MEDICAL_EXCEPTIONS.includes(word) || word.length <= 2
     );
-    return hasException ? match : '[ФИО]';
+    return hasException ? match : `${prefix}[ФИО]`;
   });
 
   // 9. ФИО с инициалами: Иванов И.И. / Ivanov I.I.
-  result = result.replace(/\b[А-ЯЁ][а-яё]{1,30}\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.\b/g, '[ФИО]');
+  result = result.replace(/(^|[\s,;:()])[А-ЯЁ][а-яё]{1,30}\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.(?=$|[\s,;:().])/gu, '$1[ФИО]');
   result = result.replace(/\b[A-Z][a-z]{1,30}\s+[A-Z]\.\s*[A-Z]\.\b/g, '[NAME]');
 
   // 10. ФИО латинские (John Smith)
