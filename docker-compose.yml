@@ -1,33 +1,33 @@
 services:
-  db:
+  db-en:
     image: postgres:15-alpine
-    container_name: doctor-opus-db
+    container_name: doctor-opus-db-en
     restart: always
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-neondb_owner}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password_here}
-      - POSTGRES_DB=${POSTGRES_DATABASE:-neondb}
+      - POSTGRES_DB=${POSTGRES_DATABASE:-neondb_en}
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+      - ./postgres_data_en:/var/lib/postgresql/data
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-  medical-assistant:
+  medical-assistant-en:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: doctor-opus-app
-    expose:
-      - "3000"
+    container_name: doctor-opus-app-en
+    ports:
+      - "3001:3000"
     environment:
       # === ОБЯЗАТЕЛЬНЫЕ ===
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL}
-      - POSTGRES_URL=postgres://${POSTGRES_USER:-neondb_owner}:${POSTGRES_PASSWORD:-password_here}@db:5432/${POSTGRES_DATABASE:-neondb}
+      - POSTGRES_URL=postgres://${POSTGRES_USER:-neondb_owner}:${POSTGRES_PASSWORD:-password_here}@db-en:5432/${POSTGRES_DATABASE:-neondb_en}
       
       # === АВТОРИЗАЦИЯ И БЕЗОПАСНОСТЬ (v3.42.0) ===
       - ADMIN_EMAILS=${ADMIN_EMAILS:-}
@@ -53,11 +53,10 @@ services:
       - SMTP_PASS=${SMTP_PASS:-}
       - SMTP_FROM=${SMTP_FROM:-}
       
-      # === ПЛАТЕЖИ (PayAnyWay) ===
-      - PAYMENT_PROVIDER=payanyway
-      - PAYANYWAY_MNT_ID=${PAYANYWAY_MNT_ID:-}
-      - PAYANYWAY_SECRET=${PAYANYWAY_SECRET:-}
-      - PAYANYWAY_TEST_MODE=${PAYANYWAY_TEST_MODE:-0}
+      # === ПЛАТЕЖИ (NOWPayments) ===
+      - PAYMENT_PROVIDER=nowpayments
+      - NOWPAYMENTS_API_KEY=${NOWPAYMENTS_API_KEY:-}
+      - NOWPAYMENTS_IPN_SECRET_KEY=${NOWPAYMENTS_IPN_SECRET_KEY:-}
       
       # === ПОДПИСКА ===
       - NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE=${NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE:-false}
@@ -67,7 +66,7 @@ services:
       - NODE_ENV=production
     restart: always
     depends_on:
-      - db
+      - db-en
     logging:
       driver: "json-file"
       options:
@@ -76,21 +75,3 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./exports:/app/exports
-
-  nginx:
-    image: nginx:stable-alpine
-    container_name: doctor-opus-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - medical-assistant
-    restart: always
