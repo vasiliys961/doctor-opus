@@ -18,6 +18,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Медицинский ИИ-Ассистент',
   description: 'Единый ИИ-центр для анализа медицинских изображений, ЭКГ, лабораторных данных и генетики',
+  other: {
+    google: 'notranslate',
+    'content-language': 'ru',
+  },
   verification: {
     other: {
       enot: '2873357f',
@@ -50,8 +54,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="ru" className={inter.variable}>
-      <body className="antialiased">
+    <html lang="ru" className={inter.variable} translate="no">
+      <body className="antialiased notranslate" translate="no">
         {/* 
           iOS/Safari: фиксированные баннеры легко перекрывают мобильную шапку и "крадут" тапы/скролл.
           Держим дисклеймер ниже мобильной шапки (<lg) и увеличиваем top padding основного контента.

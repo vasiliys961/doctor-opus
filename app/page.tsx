@@ -2,8 +2,13 @@ import Link from 'next/link'
 import SpendingSummary from '@/components/SpendingSummary'
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { unstable_noStore as noStore } from 'next/cache'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export default async function HomePage() {
+  noStore()
   let session = null
   try {
     session = await getServerSession(authOptions)
