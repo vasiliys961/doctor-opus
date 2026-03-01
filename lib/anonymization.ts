@@ -98,6 +98,26 @@ export function anonymizeText(text: string): string {
     '[EMAIL]'
   );
 
+  // 9. Names with initials (RU/EN): Ivanov I.I. / Ivanov I. I.
+  result = result.replace(
+    /(^|[\s,;:()])[А-ЯЁ][а-яё]{1,30}\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.(?=$|[\s,;:().])/gu,
+    '$1[ФИО]'
+  );
+  result = result.replace(
+    /\b[A-Z][a-z]{1,30}\s+[A-Z]\.\s*[A-Z]\.\b/g,
+    '[NAME]'
+  );
+  // Uppercase/special separators: KUNIKINA D.V. / MALYSHENKO_E.O.
+  result = result.replace(
+    /(^|[\s,;:()_])[А-ЯЁ]{2,40}[_\s]+[А-ЯЁ]\.\s*[А-ЯЁ]\.(?=$|[\s,;:()._])/gu,
+    '$1[ФИО]'
+  );
+  // Staff role signatures: Doctor/Nurse/Driver + full name/initials
+  result = result.replace(
+    /(\b(?:Doctor|Physician|Nurse|Paramedic|Driver|Врач|Фельдшер|Водитель)\s*[:\-]?\s*)([A-ZА-ЯЁ][A-ZА-ЯЁa-zа-яё-]{1,40}(?:[_\s]+[A-ZА-ЯЁ]\.\s*[A-ZА-ЯЁ]\.|\s+[A-ZА-ЯЁ][a-zа-яё]{1,30}(?:\s+[A-ZА-ЯЁ][a-zа-яё]{1,30})?))/gu,
+    '$1[NAME]'
+  );
+
   // 10. Адреса (упрощенно - город, улица, дом)
   result = result.replace(
     /(г\.|город|ул\.|улица|пр\.|проспект|д\.|дом|кв\.|квартира)\s+[А-ЯЁа-яё\d\s,.-]{3,50}/gi,

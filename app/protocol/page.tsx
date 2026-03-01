@@ -17,6 +17,14 @@ import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { saveDocument, getDocumentChunks, searchLibraryLocal } from '@/lib/library-db'
+import { anonymizeText } from '@/lib/anonymization'
+import mammoth from 'mammoth'
+
+declare global {
+  interface Window {
+    pdfjsLib: any
+  }
+}
 
 const PROTOCOL_DRAFT_KEY = 'protocol_draft'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
@@ -70,12 +78,33 @@ export default function ProtocolPage() {
   const [isEditingTemplate, setIsEditingTemplate] = useState(false)
   const [templateRagDocId, setTemplateRagDocId] = useState<string | null>(null)
   const [isTemplateLocked, setIsTemplateLocked] = useState(false)
+  const [strictTemplateMode, setStrictTemplateMode] = useState(true)
 
   // Универсальные промпты
   const [selectedUniversalKey, setSelectedUniversalKey] = useState<string>('')
   const [universalPrompt, setUniversalPrompt] = useState<string>('')
+  const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.pdfjsLib) {
+      const script = document.createElement('script')
+      script.src = '/pdfjs/pdf.min.js'
+      script.onload = () => {
+        if (window.pdfjsLib) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js'
+          setPdfJsLoaded(true)
+        }
+      }
+      script.onerror = () => {
+        console.warn('⚠️ Failed to load PDF.js on protocol page')
+      }
+      document.head.appendChild(script)
+    } else if (window.pdfjsLib) {
+      setPdfJsLoaded(true)
+    }
+  }, [])
 
   // Загрузка пользовательского шаблона при старте
   useEffect(() => {
@@ -95,6 +124,7 @@ export default function ProtocolPage() {
           setSpecialistName(parsed.name || specialistName)
           setIsEditingTemplate(true)
           setIsTemplateLocked(Boolean(parsed.isTemplateLocked))
+          setStrictTemplateMode(parsed.strictTemplateMode !== false)
           if (parsed.ragDocId) {
             setTemplateRagDocId(parsed.ragDocId)
           }
@@ -149,49 +179,215 @@ export default function ProtocolPage() {
       template: customTemplate,
       name: specialistName,
       ragDocId: templateRagDocId,
-      isTemplateLocked
+      isTemplateLocked,
+      strictTemplateMode
     }
     localStorage.setItem('user_protocol_template', JSON.stringify(data))
     alert('Template saved as your personal standard!')
   }
 
+  const readTextFile = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (event) => resolve((event.target?.result as string) || '')
+      reader.onerror = () => reject(new Error('Failed to read text file'))
+      reader.readAsText(file)
+    })
+
+  const normalizeInlineText = (value: string): string =>
+    value.replace(/\s+/g, ' ').trim()
+
+  const escapeMdCell = (value: string): string =>
+    normalizeInlineText(value).replace(/\|/g, '\\|')
+
+  const tableToMarkdown = (table: HTMLTableElement): string => {
+    const rows = Array.from(table.querySelectorAll('tr'))
+      .map((row) =>
+        Array.from(row.querySelectorAll('th, td')).map((cell) => escapeMdCell(cell.textContent || ''))
+      )
+      .filter((cells) => cells.length > 0)
+
+    if (rows.length === 0) return ''
+
+    const columnCount = Math.max(...rows.map((r) => r.length))
+    const normalizeRow = (row: string[]) =>
+      [...row, ...new Array(Math.max(0, columnCount - row.length)).fill('')].slice(0, columnCount)
+
+    const header = normalizeRow(rows[0])
+    const bodyRows = rows.slice(1).map(normalizeRow)
+    const ensuredBodyRows = bodyRows.length > 0 ? bodyRows : [new Array(columnCount).fill('')]
+
+    const headerLine = `| ${header.join(' | ')} |`
+    const separatorLine = `| ${new Array(columnCount).fill('---').join(' | ')} |`
+    const bodyLines = ensuredBodyRows.map((row) => `| ${row.join(' | ')} |`)
+
+    return [headerLine, separatorLine, ...bodyLines].join('\n')
+  }
+
+  const htmlToTemplateText = (html: string): string => {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, 'text/html')
+    const blocks: string[] = []
+
+    const pushBlock = (text: string) => {
+      const normalized = text.replace(/\u00A0/g, ' ').replace(/\s+\n/g, '\n').trim()
+      if (normalized) blocks.push(normalized)
+    }
+
+    const walk = (element: Element) => {
+      const tag = element.tagName.toLowerCase()
+
+      if (tag === 'table') {
+        const mdTable = tableToMarkdown(element as HTMLTableElement)
+        pushBlock(mdTable)
+        return
+      }
+
+      if (tag === 'ul') {
+        const items = Array.from(element.querySelectorAll(':scope > li'))
+          .map((li) => normalizeInlineText(li.textContent || ''))
+          .filter(Boolean)
+          .map((item) => `- ${item}`)
+        pushBlock(items.join('\n'))
+        return
+      }
+
+      if (tag === 'ol') {
+        const items = Array.from(element.querySelectorAll(':scope > li'))
+          .map((li) => normalizeInlineText(li.textContent || ''))
+          .filter(Boolean)
+          .map((item, index) => `${index + 1}. ${item}`)
+        pushBlock(items.join('\n'))
+        return
+      }
+
+      if (/^h[1-6]$/.test(tag)) {
+        const level = Number(tag.slice(1))
+        const text = normalizeInlineText(element.textContent || '')
+        if (text) pushBlock(`${'#'.repeat(level)} ${text}`)
+        return
+      }
+
+      if (tag === 'p') {
+        const text = normalizeInlineText(element.textContent || '')
+        if (text) pushBlock(text)
+        return
+      }
+
+      const children = Array.from(element.children)
+      if (children.length === 0) {
+        const text = normalizeInlineText(element.textContent || '')
+        if (text) pushBlock(text)
+        return
+      }
+
+      children.forEach(walk)
+    }
+
+    Array.from(doc.body.children).forEach(walk)
+    return blocks.join('\n\n').trim()
+  }
+
+  const extractWordTemplate = async (file: File): Promise<string> => {
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const htmlResult = await mammoth.convertToHtml({ arrayBuffer })
+      const structured = htmlToTemplateText(htmlResult.value || '')
+      if (structured) return structured
+
+      const fallbackText = await mammoth.extractRawText({ arrayBuffer })
+      return fallbackText.value?.trim() || ''
+    } catch (error) {
+      console.error('Word extract error:', error)
+      throw new Error('Failed to read Word file. For .doc, prefer .docx.')
+    }
+  }
+
+  const extractPdfTemplate = async (file: File): Promise<string> => {
+    if (!pdfJsLoaded || !window.pdfjsLib) {
+      throw new Error('PDF module is still loading. Wait 2-3 seconds and try again.')
+    }
+
+    const pdfjs = window.pdfjsLib
+    const arrayBuffer = await file.arrayBuffer()
+    const loadingTask = pdfjs.getDocument({ data: arrayBuffer, verbosity: 0 })
+    const pdf = await loadingTask.promise
+    const maxPages = Math.min(pdf.numPages, 15)
+    const pages: string[] = []
+
+    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+      const page = await pdf.getPage(pageNum)
+      const textContent = await page.getTextContent()
+      const items = (textContent.items || []) as Array<{ str?: string }>
+      const pageText = items
+        .map((item) => item.str || '')
+        .join(' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+
+      if (pageText) {
+        pages.push(`=== Page ${pageNum} ===\n${pageText}`)
+      }
+    }
+
+    return pages.join('\n\n')
+  }
+
+  const extractTemplateContent = async (file: File): Promise<string> => {
+    const name = file.name.toLowerCase()
+
+    if (name.endsWith('.txt') || file.type.startsWith('text/')) {
+      return readTextFile(file)
+    }
+
+    if (name.endsWith('.docx') || name.endsWith('.doc')) {
+      return extractWordTemplate(file)
+    }
+
+    if (name.endsWith('.pdf') || file.type === 'application/pdf') {
+      return extractPdfTemplate(file)
+    }
+
+    throw new Error('Supported formats: .txt, .doc/.docx, .pdf')
+  }
+
   const handleLoadFromFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const content = event.target?.result as string
-      if (!content) return
 
-      void (async () => {
-        setCustomTemplate(content)
-        setIsEditingTemplate(true)
-        setIsTemplateLocked(true)
+    void (async () => {
+      const content = (await extractTemplateContent(file)).trim()
+      if (!content) {
+        throw new Error('File was read, but template content is empty.')
+      }
 
-        const chunks = chunkTemplateForRag(content)
-        if (chunks.length === 0) return
+      setCustomTemplate(content)
+      setIsEditingTemplate(true)
+      setIsTemplateLocked(true)
 
-        const docId = `protocol-template-${Date.now()}`
-        await saveDocument(
-          {
-            id: docId,
-            name: `Protocol template: ${file.name}`,
-            size: file.size,
-            uploaded_at: new Date().toISOString(),
-            chunksCount: chunks.length,
-          },
-          chunks
-        )
-        setTemplateRagDocId(docId)
-        localStorage.setItem(PROTOCOL_TEMPLATE_RAG_KEY, docId)
-        alert('Template loaded and saved to library as RAG sample.')
-      })().catch((error) => {
-        console.error('RAG save error:', error)
-        alert('File loaded to template, but could not save to RAG library.')
-      })
-    }
-    reader.readAsText(file)
+      const chunks = chunkTemplateForRag(content)
+      if (chunks.length === 0) return
+
+      const docId = `protocol-template-${Date.now()}`
+      await saveDocument(
+        {
+          id: docId,
+          name: `Protocol template: ${file.name}`,
+          size: file.size,
+          uploaded_at: new Date().toISOString(),
+          chunksCount: chunks.length,
+        },
+        chunks
+      )
+      setTemplateRagDocId(docId)
+      localStorage.setItem(PROTOCOL_TEMPLATE_RAG_KEY, docId)
+      alert('Template loaded and saved to library as RAG sample.')
+    })().catch((error) => {
+      console.error('Template load error:', error)
+      alert(error?.message || 'Failed to load template file.')
+    }).finally(() => {
+      e.target.value = ''
+    })
   }
 
   const handleGenerateProtocol = async () => {
@@ -213,18 +409,18 @@ export default function ProtocolPage() {
     };
 
     const finalModel = modelsMap[model] || MODELS.SONNET;
+    const safeRawText = anonymizeText(rawText.trim())
 
     try {
       let ragExamples: string[] = []
       if (templateRagDocId) {
-        ragExamples = await getDocumentChunks(templateRagDocId, 4)
-      }
-      if (ragExamples.length === 0 && rawText.trim()) {
-        ragExamples = await searchLibraryLocal(`${specialistName} ${rawText}`, 3)
+        ragExamples = await getDocumentChunks(templateRagDocId, 8)
+      } else if (safeRawText) {
+        ragExamples = await searchLibraryLocal(`${specialistName} ${safeRawText}`, 3)
       }
 
       const payload = {
-        rawText,
+        rawText: safeRawText,
         useStreaming: useStreaming,
         model: model,
         templateId: selectedTemplateId,
@@ -233,6 +429,7 @@ export default function ProtocolPage() {
         // Добавляем универсальный промпт, если он есть
         universalPrompt: universalPrompt,
         ragExamples,
+        strictTemplateMode,
       };
 
       if (useStreaming) {
@@ -458,6 +655,15 @@ export default function ProtocolPage() {
                   />
                   🔒 Pin my template (do not overwrite when changing specialist)
                 </label>
+                <label className="inline-flex items-center gap-2 text-[10px] font-semibold text-indigo-700">
+                  <input
+                    type="checkbox"
+                    checked={strictTemplateMode}
+                    onChange={(e) => setStrictTemplateMode(e.target.checked)}
+                    className="w-3.5 h-3.5"
+                  />
+                  🧷 Strictly preserve template structure
+                </label>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={handleSaveAsDefault}
@@ -469,13 +675,13 @@ export default function ProtocolPage() {
                     onClick={() => fileInputRef.current?.click()}
                     className="px-3 py-1.5 bg-gray-600 text-white rounded-lg text-[10px] font-bold hover:bg-gray-700 transition-colors shadow-sm"
                   >
-                    📁 Load from file (.txt)
+                    📁 Load from file (.txt/.docx/.pdf)
                   </button>
                   <input 
                     type="file"
                     ref={fileInputRef}
                     onChange={handleLoadFromFile}
-                    accept=".txt"
+                    accept=".txt,.doc,.docx,.pdf,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     className="hidden"
                   />
                 </div>
