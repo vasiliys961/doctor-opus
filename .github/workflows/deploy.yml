@@ -15,7 +15,7 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         password: ${{ secrets.SERVER_PASSWORD }}
         script: |
-          cd /home/doctor-opus
+                    cd /home/doctor-opus-en
           
           echo "📥 Получение изменений с GitHub..."
           git pull origin main
@@ -30,7 +30,7 @@ jobs:
           # Миграция через API с секретом из .env
           MIGRATION_SECRET=$(grep -oP 'MIGRATION_SECRET=\K.*' .env 2>/dev/null || echo "")
           if [ -n "$MIGRATION_SECRET" ]; then
-            RESULT=$(curl -s -X POST http://localhost:3000/api/admin/migrate \
+                            RESULT=$(curl -s -X POST http://localhost:3001/api/admin/migrate \
               -H "Content-Type: application/json" \
               -d "{\"secret\": \"$MIGRATION_SECRET\"}" || echo '{"error":"curl failed"}')
             echo "Миграция: $RESULT"
