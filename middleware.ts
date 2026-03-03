@@ -39,7 +39,10 @@ export async function middleware(request: NextRequest) {
   // Публичные API (без токена)
   const publicApiPaths = [
     '/api/auth',              // NextAuth (login, session, providers) + /api/auth/register
-    '/api/payment/payanyway', // Webhook для платежей PayAnyWay (Moneta.ru)
+    '/api/payment/webhook',   // NOWPayments IPN webhook (должен быть публичным)
+    '/api/webhooks/nowpayments', // Совместимость со старым NOWPayments webhook URL
+    '/api/analyze/image',     // Публичный анализ изображений с optional session/billing
+    '/api/protocols/search',  // Публичный поиск международных протоколов
   ];
   
   // Проверка публичных путей

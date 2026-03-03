@@ -1,4 +1,5 @@
 import { PaymentProvider } from '../types';
+import crypto from 'crypto';
 
 /**
  * NOWPayments crypto/fiat payment gateway provider
@@ -76,24 +77,42 @@ export class NowPaymentsProvider implements PaymentProvider {
     signature?: string;
     raw?: any;
   }> {
-    // TODO: Implement HMAC-SHA512 signature verification
-    // 1. Sort the received IPN notification fields alphabetically by key
-    // 2. Serialize to JSON
-    // 3. Compute HMAC-SHA512 with this.ipnSecret
-    // 4. Compare with x-nowpayments-sig header value
-    //
-    // NOWPayments IPN payload includes:
-    // payment_id, payment_status, pay_address, price_amount, price_currency,
-    // pay_amount, pay_currency, order_id, order_description, purchase_id,
-    // created_at, updated_at, outcome_amount, outcome_currency
+    // HMAC-SHA512(sorted_json_body, NOWPAYMENTS_IPN_SECRET_KEY)
+    // Подпись передаём через служебное поле _signature из route handler.
+    const signature = String(data?._signature || '').trim();
+    if (!signature || !this.ipnSecret) {
+      return {
+        isValid: false,
+        orderId: String(data?.order_id || ''),
+        amount: Number.parseFloat(String(data?.price_amount || '0')) || 0,
+        signature,
+        raw: data,
+      };
+    }
 
-    const isValid = true; // PLACEHOLDER — implement real HMAC verification before going live
+    // Исключаем служебные поля из проверки.
+    const payload = Object.fromEntries(
+      Object.entries(data || {}).filter(([k]) => !k.startsWith('_'))
+    );
+    const sortedPayload = Object.fromEntries(
+      Object.entries(payload).sort(([a], [b]) => a.localeCompare(b))
+    );
+    const serialized = JSON.stringify(sortedPayload);
+    const expectedSig = crypto
+      .createHmac('sha512', this.ipnSecret)
+      .update(serialized)
+      .digest('hex');
+
+    const sigBuf = Buffer.from(signature.toLowerCase(), 'utf8');
+    const expBuf = Buffer.from(expectedSig.toLowerCase(), 'utf8');
+    const isValid =
+      sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
 
     return {
       isValid,
       orderId: data.order_id as string,
       amount: parseFloat(data.price_amount),
-      signature: data.signature,
+      signature,
       raw: data,
     };
   }

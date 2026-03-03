@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { paymentService } from '@/lib/payment/payment-service';
-import { initDatabase, getPaymentByOrderId, updatePaymentStatus, addCredits } from '@/lib/database';
+import { confirmPayment, initDatabase, sql } from '@/lib/database';
 
 /**
  * NOWPayments IPN (Instant Payment Notification) Webhook Handler
@@ -29,28 +29,15 @@ import { initDatabase, getPaymentByOrderId, updatePaymentStatus, addCredits } fr
  */
 export async function POST(request: NextRequest) {
   try {
-    // TODO: Step 1 — Extract and verify HMAC signature
-    // const signature = request.headers.get('x-nowpayments-sig');
-    // if (!signature) {
-    //   return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
-    // }
+    const signature = request.headers.get('x-nowpayments-sig') || '';
+    if (!signature) {
+      return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
+    }
 
     const body = await request.json();
 
-    // TODO: Step 2 — Implement HMAC-SHA512 signature verification
-    // import crypto from 'crypto';
-    // const sortedBody = Object.fromEntries(Object.entries(body).sort());
-    // const serialized = JSON.stringify(sortedBody);
-    // const hmac = crypto.createHmac('sha512', process.env.NOWPAYMENTS_IPN_SECRET_KEY || '');
-    // hmac.update(serialized);
-    // const expectedSig = hmac.digest('hex');
-    // const isValid = crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig));
-    // if (!isValid) {
-    //   return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-    // }
-
     const provider = paymentService.getProvider();
-    const validationResult = await provider.validateNotification(body);
+    const validationResult = await provider.validateNotification({ ...body, _signature: signature });
 
     if (!validationResult.isValid) {
       console.warn('⚠️ [WEBHOOK] Invalid NOWPayments signature');
@@ -62,38 +49,32 @@ export async function POST(request: NextRequest) {
 
     console.log(`📦 [WEBHOOK] NOWPayments IPN: order=${orderId}, status=${paymentStatus}, amount=${amount} USD`);
 
-    // TODO: Step 3 — Handle payment status transitions
+    const paymentId = Number.parseInt(String(orderId), 10);
+    if (!Number.isFinite(paymentId) || paymentId <= 0) {
+      return NextResponse.json({ error: 'Invalid order_id' }, { status: 400 });
+    }
+
     if (paymentStatus === 'finished') {
       await initDatabase();
-
-      // TODO: Implement getPaymentByOrderId in database.ts if not present
-      // const payment = await getPaymentByOrderId(orderId);
-      // if (!payment) {
-      //   console.error(`❌ [WEBHOOK] Payment not found: order=${orderId}`);
-      //   return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
-      // }
-
-      // TODO: Prevent double-crediting — check if already processed
-      // if (payment.status === 'completed') {
-      //   console.log(`ℹ️ [WEBHOOK] Already processed: order=${orderId}`);
-      //   return NextResponse.json({ ok: true });
-      // }
-
-      // TODO: Credit the user
-      // await updatePaymentStatus(orderId, 'completed');
-      // await addCredits(payment.email, payment.units);
-      // console.log(`✅ [WEBHOOK] Credited ${payment.units} credits to ${payment.email}`);
+      const txId = String(body.payment_id || body.purchase_id || orderId);
+      const result = await confirmPayment(paymentId, txId);
+      if (!result.success) {
+        return NextResponse.json({ error: 'Failed to confirm payment' }, { status: 500 });
+      }
+      if ((result as any).alreadyProcessed) {
+        console.log(`ℹ️ [WEBHOOK] Already processed: order=${orderId}`);
+      } else {
+        console.log(`✅ [WEBHOOK] Payment confirmed and credits added: order=${orderId}`);
+      }
     }
 
     if (paymentStatus === 'failed' || paymentStatus === 'expired') {
-      // TODO: Mark payment as failed in DB
-      // await updatePaymentStatus(orderId, 'failed');
+      await sql`UPDATE payments SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ${paymentId} AND status = 'pending'`;
       console.log(`❌ [WEBHOOK] Payment ${paymentStatus}: order=${orderId}`);
     }
 
     if (paymentStatus === 'refunded') {
-      // TODO: Deduct credits if already issued
-      // await updatePaymentStatus(orderId, 'refunded');
+      await sql`UPDATE payments SET status = 'refunded', updated_at = CURRENT_TIMESTAMP WHERE id = ${paymentId}`;
       console.log(`↩️ [WEBHOOK] Refunded: order=${orderId}`);
     }
 

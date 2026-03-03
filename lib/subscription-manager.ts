@@ -43,7 +43,7 @@ export const SUBSCRIPTION_PACKAGES = {
   starter: { 
     name: 'Starter', 
     credits: 50,
-    priceUsd: 9.99,
+    priceUsd: 14.99,
     bonusPercent: 0,
     description: 'Try the full capabilities of AI-powered medical analysis',
     recommended: false,
@@ -51,8 +51,8 @@ export const SUBSCRIPTION_PACKAGES = {
   },
   standard: { 
     name: 'Standard', 
-    credits: 150,
-    priceUsd: 24.99,
+    credits: 180,
+    priceUsd: 39.99,
     bonusPercent: 0,
     description: 'For regular clinical use — covers weeks of active practice',
     recommended: false,
@@ -60,8 +60,8 @@ export const SUBSCRIPTION_PACKAGES = {
   },
   pro: { 
     name: 'Pro', 
-    credits: 500,
-    priceUsd: 69.99,
+    credits: 600,
+    priceUsd: 99.99,
     bonusPercent: 0,
     description: 'The working tool for the practicing physician',
     recommended: true,
@@ -70,8 +70,8 @@ export const SUBSCRIPTION_PACKAGES = {
   // === TEAM PACKAGES (for clinics) ===
   department: { 
     name: 'Department', 
-    credits: 2000,
-    priceUsd: 199.99,
+    credits: 2200,
+    priceUsd: 299.00,
     bonusPercent: 0,
     description: 'Shared pool for 2–5 physicians with usage analytics',
     recommended: false,
@@ -79,8 +79,8 @@ export const SUBSCRIPTION_PACKAGES = {
   },
   clinic: { 
     name: 'Clinic', 
-    credits: 5000,
-    priceUsd: 449.99,
+    credits: 6000,
+    priceUsd: 699.00,
     bonusPercent: 0,
     description: 'For teams up to 10 physicians with priority support',
     recommended: false,
@@ -88,8 +88,8 @@ export const SUBSCRIPTION_PACKAGES = {
   },
   center: { 
     name: 'Medical Center', 
-    credits: 12000,
-    priceUsd: 999.99,
+    credits: 14000,
+    priceUsd: 1299.00,
     bonusPercent: 0,
     description: 'For large centers up to 20 physicians',
     recommended: false,
@@ -147,7 +147,7 @@ export function getBalance(): SubscriptionBalance | null {
         currentCredits: ANONYMOUS_BALANCE,
         totalSpent: 0,
         packageName: 'Пробный (Анонимный)',
-        packagePriceRub: 0,
+        packagePriceUsd: 0,
         purchaseDate: new Date().toISOString(),
         expiryDate: null,
       };
@@ -244,7 +244,7 @@ export function initializeBalance(packageKey: keyof typeof SUBSCRIPTION_PACKAGES
       currentCredits: newTotalCredits,
       totalSpent: existingBalance ? existingBalance.totalSpent : 0,
       packageName: pkg.name,
-      packagePriceRub: pkg.priceRub,
+      packagePriceUsd: pkg.priceUsd,
       purchaseDate: new Date().toISOString(),
       expiryDate: null,
     };
@@ -402,13 +402,13 @@ export function clearBalance(): void {
 }
 
 /**
- * Стоимость 1 единицы в рублях
+ * Стоимость 1 единицы в USD
  */
-export function getCreditPriceInRub(packageKey: keyof typeof SUBSCRIPTION_PACKAGES): number {
+export function getCreditPriceInUsd(packageKey: keyof typeof SUBSCRIPTION_PACKAGES): number {
   try {
     const pkg = SUBSCRIPTION_PACKAGES[packageKey];
     const creditsWithBonus = Math.floor(pkg.credits * (1 + pkg.bonusPercent / 100));
-    return pkg.priceRub / creditsWithBonus;
+    return pkg.priceUsd / creditsWithBonus;
   } catch {
     return 0;
   }
