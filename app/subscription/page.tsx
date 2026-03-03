@@ -70,6 +70,12 @@ export default function SubscriptionPage() {
             disabled={!selectedPackage}
             onClick={() => {
               if (!selectedPackage) return;
+              // Open tab immediately on user gesture to avoid popup blockers.
+              const paymentWindow = window.open('', '_blank', 'noopener,noreferrer');
+              if (!paymentWindow) {
+                alert('Popup was blocked by your browser. Please allow popups for this site and try again.');
+                return;
+              }
               fetch('/api/payment/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -77,10 +83,17 @@ export default function SubscriptionPage() {
               })
                 .then(r => r.json())
                 .then(data => {
-                  if (data.paymentUrl) window.open(data.paymentUrl, '_blank');
-                  else alert(data.error || 'Payment error. Please try again.');
+                  if (data.paymentUrl) {
+                    paymentWindow.location.href = data.paymentUrl;
+                  } else {
+                    paymentWindow.close();
+                    alert(data.error || 'Payment error. Please try again.');
+                  }
                 })
-                .catch(() => alert('Connection error. Please try again.'));
+                .catch(() => {
+                  paymentWindow.close();
+                  alert('Connection error. Please try again.');
+                });
             }}
             className="shrink-0 bg-gradient-to-r from-teal-500 to-emerald-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-teal-600 hover:to-emerald-700 transition shadow-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
