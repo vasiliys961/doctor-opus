@@ -9,6 +9,11 @@ export default function SubscriptionPage() {
   const [selectedPackage, setSelectedPackage] = useState<keyof typeof SUBSCRIPTION_PACKAGES | null>(null)
   const [currentBalance, setCurrentBalance] = useState<SubscriptionBalance | null>(null)
   const [mounted, setMounted] = useState(false)
+  const paymentLogos = [
+    { src: '/payment-logos/visa.svg', alt: 'Visa', width: 96 },
+    { src: '/payment-logos/mastercard.svg', alt: 'Mastercard', width: 120 },
+    { src: '/payment-logos/MIR.svg', alt: 'MIR', width: 96 },
+  ] as const
 
   useEffect(() => {
     setMounted(true)
@@ -37,7 +42,7 @@ export default function SubscriptionPage() {
     <div className="bg-gray-100 animate-pulse border border-gray-200 rounded-lg p-4 mb-8 h-14"></div>
   );
 
-  const startPayment = (provider: 'capitalist' | 'nowpayments') => {
+  const startPayment = (provider: 'capitalist' | 'nowpayments' | 'arsenalpay') => {
     if (!selectedPackage) return;
 
     fetch('/api/payment/create', {
@@ -85,10 +90,17 @@ export default function SubscriptionPage() {
           <div>
             <h2 className="text-xl font-bold text-gray-800 mb-1">💳 Ready to top up your balance?</h2>
             <p className="text-sm text-gray-500">
-              Choose payment method: card via Capitalist or crypto via NOWPayments. Credits are credited automatically.
+              Choose payment method: card via ArsenalPay/Capitalist or crypto via NOWPayments. Credits are credited automatically.
             </p>
           </div>
           <div className="shrink-0 flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <button
+              disabled={!selectedPackage}
+              onClick={() => startPayment('arsenalpay')}
+              className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-4 rounded-xl font-bold text-base hover:from-cyan-600 hover:to-blue-700 transition shadow-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {selectedPackage ? '💳 Pay by Card (Visa/MC/MIR) →' : 'Select a package first'}
+            </button>
             <button
               disabled={!selectedPackage}
               onClick={() => startPayment('capitalist')}
@@ -103,6 +115,23 @@ export default function SubscriptionPage() {
             >
               {selectedPackage ? '₿ Pay with Crypto →' : 'Select a package first'}
             </button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 mb-10">
+          <p className="text-xs text-gray-500 mb-3">Supported cards:</p>
+          <div className="flex flex-wrap items-center gap-3">
+            {paymentLogos.map((logo) => (
+              <img
+                key={logo.alt}
+                src={logo.src}
+                alt={logo.alt}
+                width={logo.width}
+                height={32}
+                className="h-8 w-auto rounded-md border border-gray-200 bg-white p-1"
+                loading="lazy"
+              />
+            ))}
           </div>
         </div>
 
@@ -264,6 +293,24 @@ export default function SubscriptionPage() {
             high-risk modalities, the system may automatically engage Gemini Pro to improve accuracy,
             which increases the credit cost of the analysis.
           </p>
+        </div>
+
+        {/* Footer payment logos */}
+        <div className="mt-10 pt-6 border-t border-gray-200">
+          <p className="text-xs text-gray-500 mb-3">Supported cards:</p>
+          <div className="flex flex-wrap items-center gap-3">
+            {paymentLogos.map((logo) => (
+              <img
+                key={`footer-${logo.alt}`}
+                src={logo.src}
+                alt={logo.alt}
+                width={logo.width}
+                height={32}
+                className="h-8 w-auto rounded-md border border-gray-200 bg-white p-1"
+                loading="lazy"
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>

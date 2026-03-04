@@ -32,10 +32,16 @@ export async function POST(request: NextRequest) {
       params[key] = value.toString();
     });
 
-    safeLog(`💰 [PAYMENT RESULT] Получены данные от ${paymentService.getActiveProviderName()}`);
+    const path = request.nextUrl.pathname;
+    const providerName =
+      path.includes('/api/webhooks/arsenalpay')
+        ? 'arsenalpay'
+        : path.includes('/api/webhooks/capitalist')
+          ? 'capitalist'
+          : (paymentService.getActiveProviderName() as 'nowpayments' | 'capitalist' | 'arsenalpay');
+    const provider = paymentService.getProviderByName(providerName);
 
-    const providerName = paymentService.getActiveProviderName();
-    const provider = paymentService.getProvider();
+    safeLog(`💰 [PAYMENT RESULT] Получены данные от ${providerName}`);
     const { isValid, orderId, amount, signature } = await provider.validateNotification(params);
 
     if (!isValid) {
@@ -69,6 +75,39 @@ export async function POST(request: NextRequest) {
 
       if (!isSuccess) {
         // Игнорируем промежуточные статусы, но подтверждаем webhook 200.
+        const response = provider.getSuccessResponse(orderId);
+        return typeof response === 'string'
+          ? new Response(response, { status: 200 })
+          : NextResponse.json(response);
+      }
+    }
+
+    // Для ArsenalPay подтверждаем баланс только при успешном платеже.
+    if (providerName === 'arsenalpay') {
+      const paymentState = (
+        params.payment_state ||
+        params.status ||
+        params.result ||
+        params.state ||
+        ''
+      ).toLowerCase();
+      const isSuccess = ['success', 'paid', 'completed', 'ok', 'approved'].includes(paymentState);
+      const isFailure = ['fail', 'failed', 'cancelled', 'canceled', 'expired', 'declined'].includes(paymentState);
+
+      if (isFailure) {
+        const paymentId = Number.parseInt(String(orderId), 10);
+        if (Number.isFinite(paymentId) && paymentId > 0) {
+          await initDatabase();
+          await sql`UPDATE payments SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ${paymentId} AND status = 'pending'`;
+        }
+        const response = provider.getSuccessResponse(orderId);
+        return typeof response === 'string'
+          ? new Response(response, { status: 200 })
+          : NextResponse.json(response);
+      }
+
+      if (!isSuccess) {
+        // Промежуточные статусы подтверждаем 200, но баланс не начисляем.
         const response = provider.getSuccessResponse(orderId);
         return typeof response === 'string'
           ? new Response(response, { status: 200 })

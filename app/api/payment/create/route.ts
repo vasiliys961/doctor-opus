@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     const invId = paymentResult.paymentId;
 
     const providerName: PaymentProviderType =
-      provider === 'capitalist' || provider === 'nowpayments'
+      provider === 'capitalist' || provider === 'nowpayments' || provider === 'arsenalpay'
         ? provider
         : (paymentService.getActiveProviderName() as PaymentProviderType);
 

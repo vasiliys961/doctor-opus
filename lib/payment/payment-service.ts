@@ -1,6 +1,7 @@
 import { PaymentProvider, PaymentProviderType } from './types';
 import { NowPaymentsProvider } from './providers/nowpayments';
 import { CapitalistProvider } from './providers/capitalist';
+import { ArsenalPayProvider } from './providers/arsenalpay';
 
 class PaymentService {
   private providers: Record<PaymentProviderType, PaymentProvider>;
@@ -10,6 +11,7 @@ class PaymentService {
     this.providers = {
       nowpayments: new NowPaymentsProvider(),
       capitalist: new CapitalistProvider(),
+      arsenalpay: new ArsenalPayProvider(),
     };
 
     this.activeProvider = (process.env.PAYMENT_PROVIDER as PaymentProviderType) || 'nowpayments';
