@@ -109,7 +109,18 @@ export default function ImageAnalysisPage() {
     setCurrentCost(0)
 
     try {
-      const prompt = 'Проанализируйте медицинское изображение. Опишите все патологические изменения, локализацию, размеры, плотность, контуры.'
+      // Для модальностей со специализированными разделами используем профильные промпты.
+      // Для остальных типов сохраняем прежний универсальный сценарий.
+      const modalityPromptMap: Partial<Record<ImageModality, string>> = {
+        ecg: 'Проанализируйте изображение ЭКГ и сформируйте диагностический протокол.',
+        xray: 'Проанализируйте рентгеновский снимок и сформируйте диагностический протокол.',
+        ct: 'Проанализируйте КТ-исследование и сформируйте диагностический протокол.',
+        mri: 'Проанализируйте МРТ-исследование и сформируйте диагностический протокол.',
+        ultrasound: 'Проанализируйте УЗИ-исследование и сформируйте диагностический протокол.',
+        dermatoscopy: 'Проанализируйте дерматоскопическое изображение. Опишите структуру, цвета, границы, признаки меланомы по ABCDE критериям.',
+      }
+      const hasSpecializedCompetency = Boolean(modalityPromptMap[imageType])
+      const prompt = modalityPromptMap[imageType] || 'Проанализируйте медицинское изображение. Опишите все патологические изменения, локализацию, размеры, плотность, контуры.'
 
       // Пытаемся получить изображение в base64 для кэша
       let imageBase64 = '';
@@ -180,6 +191,9 @@ export default function ImageAnalysisPage() {
       formData.append('useStreaming', useStream.toString())
       formData.append('useLibrary', useLibrary.toString())
       formData.append('isAnonymous', isAnonymous.toString())
+      if (hasSpecializedCompetency) {
+        formData.append('isTwoStage', 'true')
+      }
 
       if (additionalFiles.length > 0) {
         additionalFiles.forEach((f, i) => {
