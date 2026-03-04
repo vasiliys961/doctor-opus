@@ -46,6 +46,9 @@ jobs:
               echo "⚠️ MIGRATION_SECRET не задан в .env, пропускаем миграцию"
             fi
 
+            echo "🧹 Очистка dangling-образов..."
+            docker image prune -f || true
+
             echo "✅ RU деплой завершен!"
 
   deploy-en:
@@ -100,5 +103,8 @@ jobs:
             else
               echo "⚠️ MIGRATION_SECRET не задан в .env, пропускаем миграцию"
             fi
+
+            echo "🧹 Очистка dangling-образов..."
+            docker image prune -f || true
 
             echo "✅ EN автодеплой завершен!"
