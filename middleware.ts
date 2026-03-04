@@ -40,7 +40,10 @@ export async function middleware(request: NextRequest) {
   const publicApiPaths = [
     '/api/auth',              // NextAuth (login, session, providers) + /api/auth/register
     '/api/payment/webhook',   // NOWPayments IPN webhook (должен быть публичным)
+    '/api/payment/result',    // Payment provider result webhook (Capitalist/others)
+    '/api/payment/payanyway', // PayAnyWay webhook
     '/api/webhooks/nowpayments', // Совместимость со старым NOWPayments webhook URL
+    '/api/webhooks/capitalist',  // Capitalist webhook URL
     '/api/analyze/image',     // Публичный анализ изображений с optional session/billing
     '/api/protocols/search',  // Публичный поиск международных протоколов
   ];
