@@ -80,7 +80,17 @@ export async function POST(request: NextRequest) {
       } else {
         // Одиночное изображение
         if (mode === 'optimized' || mode === 'validated') {
-          stream = await analyzeImageOpusTwoStageStreaming(prompt, images[0], 'universal', clinicalContext, undefined, modelToUse);
+          stream = await analyzeImageOpusTwoStageStreaming(
+            prompt,
+            images[0],
+            'universal',
+            clinicalContext,
+            undefined,
+            modelToUse,
+            [],
+            false,
+            'image/png'
+          );
         } else {
           stream = await analyzeImageStreaming(prompt, images[0], modelToUse, 'image/png', clinicalContext);
         }

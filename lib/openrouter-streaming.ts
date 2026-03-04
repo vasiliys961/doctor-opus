@@ -32,6 +32,24 @@ function isNetworkStage2Error(error: any): boolean {
   );
 }
 
+function isAnthropicModel(model: string): boolean {
+  const normalized = String(model || '').toLowerCase();
+  return normalized.startsWith('anthropic/') || normalized.includes('claude');
+}
+
+function isAnthropicGeoRestrictionError(errorText: string): boolean {
+  const normalized = String(errorText || '').toLowerCase();
+  return (
+    normalized.includes('access to anthropic models is not allowed') ||
+    normalized.includes('unsupported countries') ||
+    normalized.includes('unsupported countries, regions, or territories')
+  );
+}
+
+function getStage2FallbackModel(primaryModel: string): string | null {
+  return isAnthropicModel(primaryModel) ? MODELS.GPT_5_2 : null;
+}
+
 /**
  * Вспомогательная функция для преобразования потока с добавлением расчета стоимости
  */
@@ -330,7 +348,8 @@ export async function analyzeImageOpusTwoStageStreaming(
   specialty?: Specialty,
   model: string = MODELS.SONNET,
   history: any[] = [],
-  isRadiologyOnly: boolean = false
+  isRadiologyOnly: boolean = false,
+  mimeType: string = 'image/png'
 ): Promise<ReadableStream<Uint8Array>> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -431,8 +450,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
       }
 
       console.log(`📡 [OPTIMIZED STREAMING] Шаг 2: Запуск ${model} (единый поток)...`);
-      const stage2TimeoutMs = 45000; // hard-timeout for primary model in stage 2
-      const fallbackModel = model === MODELS.SONNET ? MODELS.GPT_5_2 : null;
+      const fallbackModel = getStage2FallbackModel(model);
       let stage2ModelUsed = model;
 
       const runStage2Request = async (targetModel: string) => {
@@ -452,7 +470,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
                 role: 'user',
                 content: [
                   { type: 'text', text: mainPrompt },
-                  { type: 'image_url', image_url: { url: `data:image/png;base64,${imageBase64}` } }
+                  { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }
                 ]
               }
             ],
@@ -503,7 +521,19 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
         clearInterval(stage2Interval);
       }
 
-      // Останавливаем Heartbeat только в блоке finally
+      if (!response.ok) {
+        const errorText = await response.text();
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && isAnthropicGeoRestrictionError(errorText);
+        if (shouldFallback) {
+          const switchMsg = `\n\n> Claude is temporarily unavailable in the current provider region. Switching to GPT-5.2 fallback...\n\n`;
+          await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
+          stage2ModelUsed = fallbackModel!;
+          response = await runStage2Request(stage2ModelUsed);
+        } else {
+          throw new Error(`Main model failed: ${response.status} - ${errorText}`);
+        }
+      }
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Main model failed: ${response.status} - ${errorText}`);
@@ -683,41 +713,74 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
         }))
       ];
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000); // 180 секунд для сравнения
+      const fallbackModel = getStage2FallbackModel(model);
+      let stage2ModelUsed = model;
+      const runStage2Request = async (targetModel: string) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 180000); // 180 секунд для сравнения
+        try {
+          return await fetch(OPENROUTER_API_URL, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://doctor-opus.online',
+              'X-Title': 'Doctor Opus'
+            },
+            body: JSON.stringify({
+              model: targetModel,
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: contentItems }
+              ],
+              max_tokens: 12000, // Оптимизировано: множественные изображения, сравнительный анализ
+              temperature: 0.1,
+              stream: true,
+              stream_options: { include_usage: true }
+            }),
+            signal: controller.signal
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      };
 
-      const response = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.online',
-          'X-Title': 'Doctor Opus'
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: contentItems }
-          ],
-          max_tokens: 12000, // Оптимизировано: множественные изображения, сравнительный анализ
-          temperature: 0.1,
-          stream: true,
-          stream_options: { include_usage: true }
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-      clearInterval(stage2Interval);
+      let response: Response;
+      try {
+        response = await runStage2Request(model);
+      } catch (primaryError: any) {
+        const shouldFallback = !!fallbackModel && isNetworkStage2Error(primaryError);
+        if (!shouldFallback) {
+          throw primaryError;
+        }
+        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to GPT-5.2 fallback...\n\n`;
+        await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
+        stage2ModelUsed = fallbackModel!;
+        response = await runStage2Request(stage2ModelUsed);
+      } finally {
+        clearInterval(stage2Interval);
+      }
 
       // Heartbeat остановится в finally
+      if (!response.ok) {
+        const errorText = await response.text();
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && isAnthropicGeoRestrictionError(errorText);
+        if (shouldFallback) {
+          const switchMsg = `\n\n> Claude is temporarily unavailable in the current provider region. Switching to GPT-5.2 fallback...\n\n`;
+          await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
+          stage2ModelUsed = fallbackModel!;
+          response = await runStage2Request(stage2ModelUsed);
+        } else {
+          throw new Error(`Main model failed: ${response.status} - ${errorText}`);
+        }
+      }
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Main model failed: ${response.status} - ${errorText}`);
       }
 
-      const transformer = createTransformWithUsage(response.body!, model, initialUsage);
+      const transformer = createTransformWithUsage(response.body!, stage2ModelUsed, initialUsage);
       const reader = transformer.getReader();
 
       while (true) {
@@ -875,40 +938,73 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
         }))
       ];
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 240000); // 4 минуты для супер-точного Opus
+      const fallbackModel = getStage2FallbackModel(model);
+      let stage2ModelUsed = model;
+      const runStage2Request = async (targetModel: string) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 240000); // 4 минуты для супер-точного Opus
+        try {
+          return await fetch(OPENROUTER_API_URL, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://doctor-opus.online',
+              'X-Title': 'Doctor Opus'
+            },
+            body: JSON.stringify({
+              model: targetModel,
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: contentItems }
+              ],
+              max_tokens: 10000, // Оптимизировано: validated режим с JSON-контекстом
+              temperature: 0.1,
+              stream: true,
+              stream_options: { include_usage: true }
+            }),
+            signal: controller.signal
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      };
 
-      const response = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.online',
-          'X-Title': 'Doctor Opus'
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: contentItems }
-          ],
-          max_tokens: 10000, // Оптимизировано: validated режим с JSON-контекстом
-          temperature: 0.1,
-          stream: true,
-          stream_options: { include_usage: true }
-        }),
-        signal: controller.signal
-      });
+      let response: Response;
+      try {
+        response = await runStage2Request(model);
+      } catch (primaryError: any) {
+        const shouldFallback = !!fallbackModel && isNetworkStage2Error(primaryError);
+        if (!shouldFallback) {
+          throw primaryError;
+        }
+        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to GPT-5.2 fallback...\n\n`;
+        await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
+        stage2ModelUsed = fallbackModel!;
+        response = await runStage2Request(stage2ModelUsed);
+      } finally {
+        clearInterval(stage2Interval);
+      }
 
-      clearTimeout(timeoutId);
-      clearInterval(stage2Interval);
+      if (!response.ok) {
+        const errorText = await response.text();
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && isAnthropicGeoRestrictionError(errorText);
+        if (shouldFallback) {
+          const switchMsg = `\n\n> Claude is temporarily unavailable in the current provider region. Switching to GPT-5.2 fallback...\n\n`;
+          await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
+          stage2ModelUsed = fallbackModel!;
+          response = await runStage2Request(stage2ModelUsed);
+        } else {
+          throw new Error(`Main model failed: ${response.status} - ${errorText}`);
+        }
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Main model failed: ${response.status} - ${errorText}`);
       }
 
-      const transformer = createTransformWithUsage(response.body!, model, initialUsage);
+      const transformer = createTransformWithUsage(response.body!, stage2ModelUsed, initialUsage);
       const reader = transformer.getReader();
 
       while (true) {
@@ -970,39 +1066,56 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
     systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
   }
 
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://doctor-opus.online',
-      'X-Title': 'Doctor Opus'
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { 
-          role: 'user', 
-          content: [
-            { type: 'text', text: mainPrompt },
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }
-          ]
-        }
-      ],
-      max_tokens: 8000, // Оптимизировано: одно изображение, базовый протокол
-      temperature: 0.1,
-      stream: true,
-      stream_options: { include_usage: true }
-    })
-  });
+  const fallbackModel = getStage2FallbackModel(model);
+  let modelUsed = model;
+
+  const runRequest = async (targetModel: string) => {
+    return fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://doctor-opus.online',
+        'X-Title': 'Doctor Opus'
+      },
+      body: JSON.stringify({
+        model: targetModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { 
+            role: 'user', 
+            content: [
+              { type: 'text', text: mainPrompt },
+              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }
+            ]
+          }
+        ],
+        max_tokens: 8000, // Оптимизировано: одно изображение, базовый протокол
+        temperature: 0.1,
+        stream: true,
+        stream_options: { include_usage: true }
+      })
+    });
+  };
+
+  let response = await runRequest(model);
+  if (!response.ok) {
+    const errorText = await response.text();
+    const shouldFallback = !!fallbackModel && isAnthropicGeoRestrictionError(errorText);
+    if (shouldFallback) {
+      modelUsed = fallbackModel!;
+      response = await runRequest(modelUsed);
+    } else {
+      throw new Error(`Main model failed: ${response.status} - ${errorText}`);
+    }
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Main model failed: ${response.status} - ${errorText}`);
   }
 
-  return createTransformWithUsage(response.body!, model, initialUsage);
+  return createTransformWithUsage(response.body!, modelUsed, initialUsage);
 }
 
 /**

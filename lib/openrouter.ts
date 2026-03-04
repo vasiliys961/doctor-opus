@@ -85,6 +85,24 @@ function isRateLimit(status: number, errorText?: string) {
   return text.includes('rate-limited') || text.includes('rate limited');
 }
 
+function isAnthropicModel(model: string): boolean {
+  const normalized = String(model || '').toLowerCase();
+  return normalized.startsWith('anthropic/') || normalized.includes('claude');
+}
+
+function isAnthropicGeoRestrictionError(errorText: string): boolean {
+  const normalized = String(errorText || '').toLowerCase();
+  return (
+    normalized.includes('access to anthropic models is not allowed') ||
+    normalized.includes('unsupported countries') ||
+    normalized.includes('unsupported countries, regions, or territories')
+  );
+}
+
+function getStage2FallbackModel(primaryModel: string): string | null {
+  return isAnthropicModel(primaryModel) ? MODELS.GPT_5_2 : null;
+}
+
 type RoutingImageQuality = 'good' | 'moderate' | 'poor';
 
 interface RoutingMetadata {
@@ -449,6 +467,8 @@ export async function analyzeImageOpusTwoStage(options: {
     
     // Шаг 2: Целевая модель (Opus, Sonnet или GPT-5.2)
     const textModel = options.targetModel || MODELS.SONNET;
+    let stage2ModelUsed = textModel;
+    const fallbackModel = getStage2FallbackModel(textModel);
     
     const mainPrompt = `ИНСТРУКЦИЯ: ${directiveCriteria}
 
@@ -465,21 +485,36 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
 
     safeLog(`🚀 [TWO-STAGE] Шаг 2: ${textModel} анализирует данные (JSON)...`);
     
-    const textResponse = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.online',
-        'X-Title': 'Doctor Opus'
-      },
-      body: JSON.stringify({
-        model: textModel,
-        messages: messages,
-        max_tokens: 10000, // Оптимизировано: двухэтапный анализ
-        temperature: 0.1,
-      })
-    });
+    const runStage2Request = async (targetModel: string) => {
+      return fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://doctor-opus.online',
+          'X-Title': 'Doctor Opus'
+        },
+        body: JSON.stringify({
+          model: targetModel,
+          messages: messages,
+          max_tokens: 10000, // Оптимизировано: двухэтапный анализ
+          temperature: 0.1,
+        })
+      });
+    };
+
+    let textResponse = await runStage2Request(textModel);
+    if (!textResponse.ok) {
+      const errorText = await textResponse.text();
+      const shouldFallback = !!fallbackModel && isAnthropicGeoRestrictionError(errorText);
+      if (shouldFallback) {
+        safeWarn(`⚠️ [TWO-STAGE] Региональная недоступность Claude, переключение на ${fallbackModel}`);
+        stage2ModelUsed = fallbackModel!;
+        textResponse = await runStage2Request(stage2ModelUsed);
+      } else {
+        throw new Error(`OpenRouter API error: ${textResponse.status} - ${errorText.substring(0, 500)}`);
+      }
+    }
 
     if (!textResponse.ok) {
       const errorText = await textResponse.text();
@@ -501,7 +536,7 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
         completion_tokens: initialUsage?.completion_tokens || 0,
       },
       {
-        model: textModel,
+        model: stage2ModelUsed,
         prompt_tokens: textInputTokens,
         completion_tokens: textOutputTokens,
       }
@@ -775,6 +810,8 @@ export async function analyzeMultipleImagesTwoStage(options: {
     const directiveCriteria = getDirectivePrompt(imageType, options.prompt, specialty);
     
     const textModel = options.targetModel || MODELS.SONNET;
+    let stage2ModelUsed = textModel;
+    const fallbackModel = getStage2FallbackModel(textModel);
     
     const contextPrompt = `${options.isComparative
       ? 'Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. Проведи сравнительную клиническую интерпретацию данных по НЕСКОЛЬКИМ изображениям, полученных от Специалиста.'
@@ -789,29 +826,47 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
 ${directiveCriteria}`;
     
     const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
-    const textPayload = {
-      model: textModel,
-      messages: [
-        { role: 'system' as const, content: basePrompt },
-        { role: 'user' as const, content: contextPrompt }
-      ],
-      max_tokens: 12000, // Оптимизировано: множественные изображения
-      temperature: 0.1,
+    safeLog(`🚀 [MULTI-TWO-STAGE] Шаг 2: ${textModel} анализирует данные (JSON)...`);
+
+    const runStage2Request = async (targetModel: string) => {
+      return fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://doctor-opus.online',
+          'X-Title': 'Doctor Opus'
+        },
+        body: JSON.stringify({
+          model: targetModel,
+          messages: [
+            { role: 'system' as const, content: basePrompt },
+            { role: 'user' as const, content: contextPrompt }
+          ],
+          max_tokens: 12000, // Оптимизировано: множественные изображения
+          temperature: 0.1,
+        })
+      });
     };
 
-    safeLog(`🚀 [MULTI-TWO-STAGE] Шаг 2: ${textModel} анализирует данные (JSON)...`);
-    const textResponse = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.online',
-        'X-Title': 'Doctor Opus'
-      },
-      body: JSON.stringify(textPayload)
-    });
+    let textResponse = await runStage2Request(textModel);
+    if (!textResponse.ok) {
+      const errorText = await textResponse.text();
+      const shouldFallback = !!fallbackModel && isAnthropicGeoRestrictionError(errorText);
+      if (shouldFallback) {
+        safeWarn(`⚠️ [MULTI-TWO-STAGE] Региональная недоступность Claude, переключение на ${fallbackModel}`);
+        stage2ModelUsed = fallbackModel!;
+        textResponse = await runStage2Request(stage2ModelUsed);
+      } else {
+        throw new Error(`OpenRouter error: ${textResponse.status} - ${errorText.substring(0, 300)}`);
+      }
+    }
 
-    if (!textResponse.ok) throw new Error(`OpenRouter error: ${textResponse.status}`);
+    if (!textResponse.ok) {
+      const errorText = await textResponse.text();
+      throw new Error(`OpenRouter error: ${textResponse.status} - ${errorText.substring(0, 300)}`);
+    }
+
     const textData = await textResponse.json();
     const result = textData.choices[0].message.content || '';
 
@@ -823,7 +878,7 @@ ${directiveCriteria}`;
         completion_tokens: initialUsage?.completion_tokens || 0,
       },
       {
-        model: textModel,
+        model: stage2ModelUsed,
         prompt_tokens: textData.usage?.prompt_tokens || 0,
         completion_tokens: textData.usage?.completion_tokens || 0,
       }
