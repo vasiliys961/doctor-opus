@@ -81,6 +81,16 @@ jobs:
             git reset --hard FETCH_HEAD
             git clean -fd
 
+            echo "🧹 Проверка docker-сети EN..."
+            if docker network inspect doctor-opus-en_default >/dev/null 2>&1; then
+              NET_LABEL=$(docker network inspect doctor-opus-en_default -f '{{ index .Labels "com.docker.compose.network" }}' || true)
+              if [ "$NET_LABEL" != "doctor-opus-en" ]; then
+                echo "⚠️ Сеть doctor-opus-en_default с неправильной меткой: $NET_LABEL. Пересоздаём..."
+                docker compose down --remove-orphans || true
+                docker network rm doctor-opus-en_default || true
+              fi
+            fi
+
             echo "🚀 Сборка и перезапуск только EN-контейнера..."
             docker compose up -d --build medical-assistant-en
 
