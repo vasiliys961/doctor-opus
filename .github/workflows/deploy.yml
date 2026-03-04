@@ -1,41 +1,90 @@
-name: Deploy to Timeweb VPS (manual only)
+name: Deploy RU/EN to Timeweb VPS
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - en-version-global
+
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  deploy-ru:
+    if: github.ref_name == 'main'
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Deploy to server
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        password: ${{ secrets.SERVER_PASSWORD }}
-        script: |
-                    cd /home/doctor-opus-en
-          
-          echo "📥 Получение изменений с GitHub..."
-          git pull origin main
-          
-          echo "🚀 Сборка и перезапуск через Docker Compose..."
-          docker compose up -d --build
-          
-          echo "⏳ Ожидание запуска приложения (30 сек)..."
-          sleep 30
-          
-          echo "🔄 Запуск миграции БД..."
-          # Миграция через API с секретом из .env
-          MIGRATION_SECRET=$(grep -oP 'MIGRATION_SECRET=\K.*' .env 2>/dev/null || echo "")
-          if [ -n "$MIGRATION_SECRET" ]; then
-                            RESULT=$(curl -s -X POST http://localhost:3001/api/admin/migrate \
-              -H "Content-Type: application/json" \
-              -d "{\"secret\": \"$MIGRATION_SECRET\"}" || echo '{"error":"curl failed"}')
-            echo "Миграция: $RESULT"
-          else
-            echo "⚠️ MIGRATION_SECRET не задан в .env, пропускаем миграцию"
-          fi
-          
-          echo "✅ Деплой v3.42.0 завершен!"
+      - name: Deploy RU branch to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            set -e
+            cd /home/doctor-opus
+
+            echo "📥 Получение RU-ветки с GitHub..."
+            git pull origin main
+
+            echo "🚀 Сборка и перезапуск только RU-контейнера..."
+            docker compose up -d --build medical-assistant
+
+            echo "⏳ Ожидание запуска приложения (30 сек)..."
+            sleep 30
+
+            echo "🔄 Запуск миграции БД RU..."
+            MIGRATION_SECRET=$(grep -oP 'MIGRATION_SECRET=\K.*' .env 2>/dev/null || echo "")
+            if [ -n "$MIGRATION_SECRET" ]; then
+              RESULT=$(curl -s -X POST http://localhost:3000/api/admin/migrate \
+                -H "Content-Type: application/json" \
+                -d "{\"secret\": \"$MIGRATION_SECRET\"}" || echo '{"error":"curl failed"}')
+              echo "Миграция RU: $RESULT"
+            else
+              echo "⚠️ MIGRATION_SECRET не задан в .env, пропускаем миграцию"
+            fi
+
+            echo "✅ RU деплой завершен!"
+
+  deploy-en:
+    if: github.ref_name == 'en-version-global'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy EN branch to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            set -e
+            cd /home/doctor-opus-en
+
+            echo "📥 Получение EN-ветки с GitHub..."
+            if git ls-remote --exit-code --heads origin en-version-global >/dev/null 2>&1; then
+              git pull origin en-version-global
+            else
+              git pull doctor-opus en-version-global
+            fi
+
+            echo "🚀 Сборка и перезапуск только EN-контейнера..."
+            docker compose up -d --build medical-assistant-en
+
+            echo "⏳ Ожидание запуска приложения (30 сек)..."
+            sleep 30
+
+            echo "🔄 Запуск миграции БД EN..."
+            MIGRATION_SECRET=$(grep -oP 'MIGRATION_SECRET=\K.*' .env 2>/dev/null || echo "")
+            if [ -n "$MIGRATION_SECRET" ]; then
+              RESULT=$(curl -s -X POST http://localhost:3001/api/admin/migrate \
+                -H "Content-Type: application/json" \
+                -d "{\"secret\": \"$MIGRATION_SECRET\"}" || echo '{"error":"curl failed"}')
+              echo "Миграция EN: $RESULT"
+            else
+              echo "⚠️ MIGRATION_SECRET не задан в .env, пропускаем миграцию"
+            fi
+
+            echo "✅ EN автодеплой завершен!"
