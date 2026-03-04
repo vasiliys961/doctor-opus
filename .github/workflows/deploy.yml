@@ -64,11 +64,18 @@ jobs:
             cd /home/doctor-opus-en
 
             echo "📥 Получение EN-ветки с GitHub..."
-            if git ls-remote --exit-code --heads origin en-version-global >/dev/null 2>&1; then
-              git pull origin en-version-global
+            git remote get-url doctor-opus >/dev/null 2>&1 || git remote add doctor-opus https://github.com/vasiliys961/doctor-opus.git
+            git remote get-url origin >/dev/null 2>&1 || git remote add origin https://github.com/vasiliys961/doctor-opus-global.git
+
+            if git ls-remote --exit-code --heads doctor-opus en-version-global >/dev/null 2>&1; then
+              git fetch --depth 1 doctor-opus en-version-global
+            elif git ls-remote --exit-code --heads origin en-version-global >/dev/null 2>&1; then
+              git fetch --depth 1 origin en-version-global
             else
-              git pull doctor-opus en-version-global
+              echo "❌ Ветка en-version-global не найдена ни в doctor-opus, ни в origin"
+              exit 1
             fi
+            git checkout -B en-version-global FETCH_HEAD
 
             echo "🚀 Сборка и перезапуск только EN-контейнера..."
             docker compose up -d --build medical-assistant-en
