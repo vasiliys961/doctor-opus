@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { paymentService } from "@/lib/payment/payment-service";
-import { confirmPayment, initDatabase } from "@/lib/database";
+import { confirmPayment, initDatabase, sql } from "@/lib/database";
 import { safeLog, safeError, safeWarn } from '@/lib/logger';
 
 // IP-адреса платежных систем (из env, через запятую)
@@ -34,12 +34,40 @@ export async function POST(request: NextRequest) {
 
     safeLog(`💰 [PAYMENT RESULT] Получены данные от ${paymentService.getActiveProviderName()}`);
 
+    const providerName = paymentService.getActiveProviderName();
     const provider = paymentService.getProvider();
     const { isValid, orderId, amount, signature } = await provider.validateNotification(params);
 
     if (!isValid) {
       safeError('❌ [PAYMENT RESULT] Неверная подпись!');
       return new Response('bad sign', { status: 200 });
+    }
+
+    // Для Capitalist подтверждаем баланс только при успешном состоянии платежа.
+    if (providerName === 'capitalist') {
+      const paymentState = (params.payment_state || params.status || '').toLowerCase();
+      const isSuccess = ['success', 'paid', 'completed', 'finished'].includes(paymentState);
+      const isFailure = ['fail', 'failed', 'cancelled', 'canceled', 'expired'].includes(paymentState);
+
+      if (isFailure) {
+        const paymentId = Number.parseInt(String(orderId), 10);
+        if (Number.isFinite(paymentId) && paymentId > 0) {
+          await initDatabase();
+          await sql`UPDATE payments SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ${paymentId} AND status = 'pending'`;
+        }
+        const response = provider.getSuccessResponse(orderId);
+        return typeof response === 'string'
+          ? new Response(response, { status: 200 })
+          : NextResponse.json(response);
+      }
+
+      if (!isSuccess) {
+        // Игнорируем промежуточные статусы, но подтверждаем webhook 200.
+        const response = provider.getSuccessResponse(orderId);
+        return typeof response === 'string'
+          ? new Response(response, { status: 200 })
+          : NextResponse.json(response);
+      }
     }
 
     // Инициализация БД

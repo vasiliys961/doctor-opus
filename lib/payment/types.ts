@@ -38,6 +38,6 @@ export interface PaymentProvider {
   }>;
 }
 
-export type PaymentProviderType = 'nowpayments';
+export type PaymentProviderType = 'nowpayments' | 'capitalist';
 
 export type RefundStatus = 'pending' | 'approved' | 'completed' | 'rejected';

@@ -37,6 +37,28 @@ export default function SubscriptionPage() {
     <div className="bg-gray-100 animate-pulse border border-gray-200 rounded-lg p-4 mb-8 h-14"></div>
   );
 
+  const startPayment = (provider: 'capitalist' | 'nowpayments') => {
+    if (!selectedPackage) return;
+
+    fetch('/api/payment/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ packageId: selectedPackage, provider }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.paymentUrl) {
+          const opened = window.open(data.paymentUrl, '_blank', 'noopener,noreferrer');
+          if (!opened) window.location.href = data.paymentUrl;
+        } else {
+          alert(data.error || 'Payment error. Please try again.');
+        }
+      })
+      .catch(() => {
+        alert('Connection error. Please try again.');
+      });
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-emerald-50 p-6">
       <div className="max-w-6xl mx-auto">
@@ -63,42 +85,25 @@ export default function SubscriptionPage() {
           <div>
             <h2 className="text-xl font-bold text-gray-800 mb-1">💳 Ready to top up your balance?</h2>
             <p className="text-sm text-gray-500">
-              Secure crypto/fiat payment via NOWPayments. Enter your Doctor Opus email — credits are credited automatically.
+              Choose payment method: card via Capitalist or crypto via NOWPayments. Credits are credited automatically.
             </p>
           </div>
-          <button
-            disabled={!selectedPackage}
-            onClick={() => {
-              if (!selectedPackage) return;
-              // Open tab immediately on user gesture to avoid popup blockers.
-              const paymentWindow = window.open('', '_blank', 'noopener,noreferrer');
-              if (!paymentWindow) {
-                alert('Popup was blocked by your browser. Please allow popups for this site and try again.');
-                return;
-              }
-              fetch('/api/payment/create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ packageId: selectedPackage }),
-              })
-                .then(r => r.json())
-                .then(data => {
-                  if (data.paymentUrl) {
-                    paymentWindow.location.href = data.paymentUrl;
-                  } else {
-                    paymentWindow.close();
-                    alert(data.error || 'Payment error. Please try again.');
-                  }
-                })
-                .catch(() => {
-                  paymentWindow.close();
-                  alert('Connection error. Please try again.');
-                });
-            }}
-            className="shrink-0 bg-gradient-to-r from-teal-500 to-emerald-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-teal-600 hover:to-emerald-700 transition shadow-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {selectedPackage ? `Pay with NOWPayments →` : 'Select a package first'}
-          </button>
+          <div className="shrink-0 flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <button
+              disabled={!selectedPackage}
+              onClick={() => startPayment('capitalist')}
+              className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-4 rounded-xl font-bold text-base hover:from-emerald-600 hover:to-teal-700 transition shadow-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {selectedPackage ? '💳 Pay by Card (Visa/MC) →' : 'Select a package first'}
+            </button>
+            <button
+              disabled={!selectedPackage}
+              onClick={() => startPayment('nowpayments')}
+              className="bg-gradient-to-r from-indigo-500 to-blue-600 text-white px-6 py-4 rounded-xl font-bold text-base hover:from-indigo-600 hover:to-blue-700 transition shadow-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {selectedPackage ? '₿ Pay with Crypto →' : 'Select a package first'}
+            </button>
+          </div>
         </div>
 
         {/* Individual packages */}

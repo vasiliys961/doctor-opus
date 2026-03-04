@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { paymentService } from "@/lib/payment/payment-service";
+import type { PaymentProviderType } from "@/lib/payment/types";
 import { SUBSCRIPTION_PACKAGES } from "@/lib/subscription-manager";
 import { initDatabase, createPayment } from "@/lib/database";
 
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { packageId } = await request.json();
+    const { packageId, provider } = await request.json();
 
     if (!packageId || !SUBSCRIPTION_PACKAGES[packageId as keyof typeof SUBSCRIPTION_PACKAGES]) {
       return NextResponse.json(
@@ -42,8 +43,13 @@ export async function POST(request: NextRequest) {
 
     const invId = paymentResult.paymentId;
 
-    const provider = paymentService.getProvider();
-    const paymentUrl = await provider.generatePaymentUrl({
+    const providerName: PaymentProviderType =
+      provider === 'capitalist' || provider === 'nowpayments'
+        ? provider
+        : (paymentService.getActiveProviderName() as PaymentProviderType);
+
+    const paymentProvider = paymentService.getProviderByName(providerName);
+    const paymentUrl = await paymentProvider.generatePaymentUrl({
       amount: priceUsd,
       orderId: invId,
       description: `Doctor Opus — ${pkg.name} package (${pkg.credits} credits) for ${session.user.email}`,
@@ -52,7 +58,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      paymentUrl
+      paymentUrl,
+      provider: providerName,
     });
 
   } catch (error: any) {
