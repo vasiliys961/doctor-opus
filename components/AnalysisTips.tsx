@@ -73,6 +73,14 @@ export default function AnalysisTips({
               ))}
             </div>
           )}
+
+          <div className="mt-4 pt-4 border-t border-amber-200 bg-amber-50 rounded-lg p-3 text-xs text-amber-900">
+            <p className="font-semibold mb-1">⚠️ Service availability notice</p>
+            <p>
+              Some AI providers may be temporarily unavailable due to regional restrictions and provider routing.
+              Users outside Russia may still use Claude, but availability is not guaranteed in every region. If Claude is unavailable, switch to GPT-5.2 in Optimized mode.
+            </p>
+          </div>
         </div>
       </details>
     </div>

@@ -383,7 +383,8 @@ export async function POST(request: NextRequest) {
           undefined,  // specialty
           modelToUse, 
           [],         // history
-          isTwoStage
+          isTwoStage,
+          mimeTypes[0] || 'image/png'
         );
         return handleStreamingResponse(stream, modelToUse);
       }

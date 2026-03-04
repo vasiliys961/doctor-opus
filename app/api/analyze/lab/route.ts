@@ -94,7 +94,17 @@ export async function POST(request: NextRequest) {
         if (useStreaming) {
           let stream: ReadableStream;
           if (mode === 'optimized' || mode === 'validated') {
-            stream = await analyzeImageOpusTwoStageStreaming(fullPrompt, base64Image, 'lab', clinicalContext, undefined, modelToUse);
+            stream = await analyzeImageOpusTwoStageStreaming(
+              fullPrompt,
+              base64Image,
+              'lab',
+              clinicalContext,
+              undefined,
+              modelToUse,
+              [],
+              false,
+              file.type || 'image/png'
+            );
           } else {
             stream = await analyzeImageStreaming(fullPrompt, base64Image, modelToUse, file.type, clinicalContext);
           }
