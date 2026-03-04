@@ -40,10 +40,11 @@ const USD_TO_CREDITS_RATE = parseInt(process.env.NEXT_PUBLIC_USD_TO_CREDITS || '
 // Team packages: higher per-credit cost (includes multi-user access and analytics)
 export const SUBSCRIPTION_PACKAGES = {
   // === INDIVIDUAL PACKAGES ===
+  // Beta pricing: lowered entry barrier to speed up early adoption.
   starter: { 
     name: 'Starter', 
     credits: 50,
-    priceUsd: 14.99,
+    priceUsd: 9.99,
     bonusPercent: 0,
     description: 'Try the full capabilities of AI-powered medical analysis',
     recommended: false,
@@ -52,7 +53,7 @@ export const SUBSCRIPTION_PACKAGES = {
   standard: { 
     name: 'Standard', 
     credits: 180,
-    priceUsd: 39.99,
+    priceUsd: 29.99,
     bonusPercent: 0,
     description: 'For regular clinical use — covers weeks of active practice',
     recommended: false,
@@ -61,7 +62,7 @@ export const SUBSCRIPTION_PACKAGES = {
   pro: { 
     name: 'Pro', 
     credits: 600,
-    priceUsd: 99.99,
+    priceUsd: 79.99,
     bonusPercent: 0,
     description: 'The working tool for the practicing physician',
     recommended: true,

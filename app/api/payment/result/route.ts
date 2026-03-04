@@ -45,6 +45,12 @@ export async function POST(request: NextRequest) {
 
     // Для Capitalist подтверждаем баланс только при успешном состоянии платежа.
     if (providerName === 'capitalist') {
+      const expectedMerchantId = process.env.CAPITALIST_MERCHANT_ID || '';
+      const incomingMerchantId = String(params.merchant_id || params.merchantid || '');
+      if (expectedMerchantId && incomingMerchantId && incomingMerchantId !== expectedMerchantId) {
+        return new Response('bad merchant', { status: 200 });
+      }
+
       const paymentState = (params.payment_state || params.status || '').toLowerCase();
       const isSuccess = ['success', 'paid', 'completed', 'finished'].includes(paymentState);
       const isFailure = ['fail', 'failed', 'cancelled', 'canceled', 'expired'].includes(paymentState);
