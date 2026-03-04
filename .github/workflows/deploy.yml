@@ -75,7 +75,11 @@ jobs:
               echo "❌ Ветка en-version-global не найдена ни в doctor-opus, ни в origin"
               exit 1
             fi
-            git checkout -B en-version-global FETCH_HEAD
+            # EN deploy должен быть идемпотентным даже при локальных правках на сервере.
+            # Принудительно синхронизируем рабочее дерево с удалённой веткой.
+            git checkout -B en-version-global
+            git reset --hard FETCH_HEAD
+            git clean -fd
 
             echo "🚀 Сборка и перезапуск только EN-контейнера..."
             docker compose up -d --build medical-assistant-en
