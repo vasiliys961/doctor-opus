@@ -81,9 +81,8 @@ jobs:
             git reset --hard FETCH_HEAD
             git clean -fd
 
-            echo "🧹 Принудительная пересборка EN-сети..."
-            docker compose down --remove-orphans || true
-            docker network rm doctor-opus-en_default || true
+            echo "🌐 Проверка EN-сети..."
+            docker network inspect doctor-opus-en_default >/dev/null 2>&1 || docker network create doctor-opus-en_default
 
             echo "🚀 Сборка и перезапуск только EN-контейнера..."
             docker compose up -d --build medical-assistant-en

@@ -96,6 +96,7 @@ services:
 
 networks:
   doctor-opus-en:
+    external: true
     name: doctor-opus-en_default
   doctor-opus-shared:
     external: true
