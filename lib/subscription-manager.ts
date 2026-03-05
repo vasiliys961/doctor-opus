@@ -4,6 +4,7 @@
  */
 
 import { calculateCost } from './cost-calculator';
+import { isOnboardingBonusGranted, markOnboardingBonusGranted } from './onboarding';
 
 // Глобальный флаг включения системы (Всегда включено для учета, блокировка зависит от env)
 const SUBSCRIPTION_ENABLED = true;
@@ -273,6 +274,39 @@ export function initializeBalance(packageKey: keyof typeof SUBSCRIPTION_PACKAGES
   } catch (error) {
     console.error('❌ [SUBSCRIPTION] Error initializing balance:', error);
     return false;
+  }
+}
+
+/**
+ * Локальный бонус за завершение onboarding-тура (+5 ед.) с защитой от повторного начисления.
+ */
+export function grantOnboardingBonus(credits = 5): { granted: boolean; currentCredits: number | null } {
+  try {
+    if (typeof window === 'undefined') {
+      return { granted: false, currentCredits: null };
+    }
+
+    if (isOnboardingBonusGranted()) {
+      const existingBalance = getBalance();
+      return { granted: false, currentCredits: existingBalance?.currentCredits ?? null };
+    }
+
+    const balance = getBalance();
+    if (!balance) {
+      return { granted: false, currentCredits: null };
+    }
+
+    balance.currentCredits += credits;
+    balance.initialCredits += credits;
+    localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
+    markOnboardingBonusGranted();
+
+    window.dispatchEvent(new Event('balanceUpdated'));
+
+    return { granted: true, currentCredits: balance.currentCredits };
+  } catch (error) {
+    console.error('❌ [SUBSCRIPTION] Error granting onboarding bonus:', error);
+    return { granted: false, currentCredits: null };
   }
 }
 

@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import 'shepherd.js/dist/css/shepherd.css'
 import Navigation from '@/components/Navigation'
 import { Providers } from '@/components/Providers'
 import LegalFooter from '@/components/LegalFooter'
 import CookieBanner from '@/components/CookieBanner'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import OnboardingTour from '@/components/OnboardingTour'
 
 // Next.js скачивает шрифт при сборке и раздает с сервера — без запросов к Google в runtime
 const inter = Inter({
@@ -69,6 +71,7 @@ export default function RootLayout({
           </span>
         </div>
         <Providers>
+          <OnboardingTour />
           <div className="flex min-h-screen">
             {/* Навигация - адаптивная для всех устройств */}
             <Navigation />
