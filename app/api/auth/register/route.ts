@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, RATE_LIMIT_AUTH, getRateLimitKey } from '@/lib/rate-limiter';
 import { safeErrorMessage } from '@/lib/safe-error';
+import { BILLING_CONFIG } from '@/lib/config';
 
 /**
  * POST /api/auth/register
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
     const rl = checkRateLimit(rlKey, RATE_LIMIT_AUTH);
     if (!rl.allowed) {
       return NextResponse.json(
-        { error: 'Слишком много попыток. Подождите.' },
+        { error: 'Too many attempts. Please wait.' },
         { status: 429 }
       );
     }
@@ -29,15 +30,15 @@ export async function POST(request: NextRequest) {
 
     // Валидация
     if (!email || typeof email !== 'string' || !email.includes('@')) {
-      return NextResponse.json({ error: 'Укажите корректный email' }, { status: 400 });
+      return NextResponse.json({ error: 'Please provide a valid email' }, { status: 400 });
     }
 
     if (!password || typeof password !== 'string' || password.length < 8) {
-      return NextResponse.json({ error: 'Пароль должен быть не менее 8 символов' }, { status: 400 });
+      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
     }
 
     if (password.length > 128) {
-      return NextResponse.json({ error: 'Пароль слишком длинный' }, { status: 400 });
+      return NextResponse.json({ error: 'Password is too long' }, { status: 400 });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     // Проверка БД
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
       return NextResponse.json(
-        { error: 'База данных не подключена. Регистрация невозможна.' },
+        { error: 'Database is not connected. Registration is unavailable.' },
         { status: 503 }
       );
     }
@@ -53,13 +54,24 @@ export async function POST(request: NextRequest) {
     const { sql, initDatabase } = await import('@/lib/database');
     await initDatabase();
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS guest_balances (
+        id SERIAL PRIMARY KEY,
+        guest_key VARCHAR(255) UNIQUE NOT NULL,
+        balance DECIMAL(10,2) DEFAULT 10.00 CHECK (balance >= -5.00),
+        total_spent DECIMAL(10,2) DEFAULT 0.00,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     // Проверяем, не существует ли уже
     const { rows: existing } = await sql`
       SELECT id FROM users WHERE email = ${normalizedEmail}
     `;
 
     if (existing.length > 0) {
-      return NextResponse.json({ error: 'Пользователь с таким email уже зарегистрирован' }, { status: 409 });
+      return NextResponse.json({ error: 'A user with this email already exists' }, { status: 409 });
     }
 
     // Хэшируем пароль
@@ -73,11 +85,30 @@ export async function POST(request: NextRequest) {
       RETURNING id
     `;
 
-    // Создаём начальный баланс (50 ед.)
+    // Переносим остаток гостевого trial (до 10 ед.) и добавляем +20 за регистрацию.
+    // Итоговый старт зарегистрированного пользователя: 20..30 ед.
+    const guestKey = getRateLimitKey(request);
+    const { rows: guestRows } = await sql`
+      SELECT balance FROM guest_balances WHERE guest_key = ${guestKey}
+    `;
+    const guestBalanceRaw = guestRows.length > 0
+      ? parseFloat(guestRows[0].balance)
+      : BILLING_CONFIG.guestTrialBalance;
+    const guestCarry = Math.max(0, Math.min(BILLING_CONFIG.guestTrialBalance, guestBalanceRaw));
+    const startingBalance = BILLING_CONFIG.registeredBonus + guestCarry;
+
+    // Создаём стартовый баланс зарегистрированного пользователя
     await sql`
       INSERT INTO user_balances (email, balance, is_test_account)
-      VALUES (${normalizedEmail}, 50.00, false)
+      VALUES (${normalizedEmail}, ${startingBalance}, false)
       ON CONFLICT (email) DO NOTHING
+    `;
+
+    // Чтобы не использовать trial повторно с того же гостевого ключа, обнуляем его.
+    await sql`
+      INSERT INTO guest_balances (guest_key, balance, total_spent)
+      VALUES (${guestKey}, 0, 0)
+      ON CONFLICT (guest_key) DO UPDATE SET balance = 0, updated_at = CURRENT_TIMESTAMP
     `;
 
     // Отправляем приветственное письмо асинхронно
@@ -85,16 +116,16 @@ export async function POST(request: NextRequest) {
       sendWelcomeEmail(normalizedEmail).catch(() => {});
     });
 
-    console.log(`✅ [AUTH] Зарегистрирован новый пользователь: ${normalizedEmail}, id: ${rows[0].id}`);
+    console.log(`✅ [AUTH] Registered new user: ${normalizedEmail}, id: ${rows[0].id}`);
 
     return NextResponse.json({
       success: true,
-      message: 'Регистрация успешна. Теперь вы можете войти.',
+      message: 'Registration successful. You can now sign in.',
     });
   } catch (error: any) {
-    console.error('❌ [AUTH] Ошибка регистрации:', error);
+    console.error('❌ [AUTH] Registration error:', error);
     return NextResponse.json(
-      { error: safeErrorMessage(error, 'Ошибка регистрации') },
+      { error: safeErrorMessage(error, 'Registration error') },
       { status: 500 }
     );
   }

@@ -27,8 +27,12 @@ export const AUTH_CONFIG = {
 
 // ==================== БИЛЛИНГ ====================
 export const BILLING_CONFIG = {
-  /** Начальный баланс нового пользователя (единицы) */
-  initialBalance: parseFloat(process.env.INITIAL_BALANCE || '50'),
+  /** Гостевой пробный баланс (без регистрации) */
+  guestTrialBalance: parseFloat(process.env.GUEST_TRIAL_BALANCE || '10'),
+  /** Бонус после регистрации */
+  registeredBonus: parseFloat(process.env.REGISTERED_BONUS || '20'),
+  /** Базовый баланс нового зарегистрированного пользователя */
+  initialBalance: parseFloat(process.env.INITIAL_BALANCE || '20'),
   /** Мягкий лимит (разрешённый овердрафт) */
   softLimit: parseFloat(process.env.BILLING_SOFT_LIMIT || '-5'),
   /** Макс. списание за одну операцию */

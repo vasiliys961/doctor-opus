@@ -1,33 +1,49 @@
 services:
-  db:
+  nginx:
+    image: nginx:stable-alpine
+    container_name: doctor-opus-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${LETSENCRYPT_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
+    depends_on:
+      - medical-assistant-en
+    networks:
+      - doctor-opus-en
+      - doctor-opus-shared
+
+  db-en:
     image: postgres:15-alpine
-    container_name: doctor-opus-db
+    container_name: doctor-opus-db-en
     restart: always
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-neondb_owner}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password_here}
-      - POSTGRES_DB=${POSTGRES_DATABASE:-neondb}
+      - POSTGRES_DB=${POSTGRES_DATABASE:-neondb_en}
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+      - ./postgres_data_en:/var/lib/postgresql/data
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-  medical-assistant:
+  medical-assistant-en:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: doctor-opus-app
-    expose:
-      - "3000"
+    container_name: doctor-opus-app-en
+    ports:
+      - "3001:3000"
     environment:
       # === ОБЯЗАТЕЛЬНЫЕ ===
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL}
-      - POSTGRES_URL=postgres://${POSTGRES_USER:-neondb_owner}:${POSTGRES_PASSWORD:-password_here}@db:5432/${POSTGRES_DATABASE:-neondb}
+      - POSTGRES_URL=postgres://${POSTGRES_USER:-neondb_owner}:${POSTGRES_PASSWORD:-password_here}@db-en:5432/${POSTGRES_DATABASE:-neondb_en}
       
       # === АВТОРИЗАЦИЯ И БЕЗОПАСНОСТЬ (v3.42.0) ===
       - ADMIN_EMAILS=${ADMIN_EMAILS:-}
@@ -53,21 +69,31 @@ services:
       - SMTP_PASS=${SMTP_PASS:-}
       - SMTP_FROM=${SMTP_FROM:-}
       
-      # === ПЛАТЕЖИ (PayAnyWay) ===
-      - PAYMENT_PROVIDER=payanyway
-      - PAYANYWAY_MNT_ID=${PAYANYWAY_MNT_ID:-}
-      - PAYANYWAY_SECRET=${PAYANYWAY_SECRET:-}
-      - PAYANYWAY_TEST_MODE=${PAYANYWAY_TEST_MODE:-0}
+      # === ПЛАТЕЖИ ===
+      - PAYMENT_PROVIDER=${PAYMENT_PROVIDER:-nowpayments}
+      - NEXT_PUBLIC_PAYMENT_PROVIDER=${NEXT_PUBLIC_PAYMENT_PROVIDER:-nowpayments}
+      - NOWPAYMENTS_API_KEY=${NOWPAYMENTS_API_KEY:-}
+      - NOWPAYMENTS_IPN_SECRET_KEY=${NOWPAYMENTS_IPN_SECRET_KEY:-}
+      - CAPITALIST_MERCHANT_ID=${CAPITALIST_MERCHANT_ID:-}
+      - CAPITALIST_SECRET=${CAPITALIST_SECRET:-}
+      - ARSENALPAY_WIDGET_ID=${ARSENALPAY_WIDGET_ID:-}
+      - ARSENALPAY_WIDGET_KEY=${ARSENALPAY_WIDGET_KEY:-}
+      - ARSENALPAY_CALLBACK_KEY=${ARSENALPAY_CALLBACK_KEY:-}
+      - ARSENALPAY_WIDGET_URL=${ARSENALPAY_WIDGET_URL:-}
       
       # === ПОДПИСКА ===
-      - NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE=${NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE:-false}
+      - NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE=${NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE:-true}
+      - GUEST_TRIAL_BALANCE=${GUEST_TRIAL_BALANCE:-10}
+      - REGISTERED_BONUS=${REGISTERED_BONUS:-20}
+      - INITIAL_BALANCE=${INITIAL_BALANCE:-20}
+      - BILLING_SOFT_LIMIT=${BILLING_SOFT_LIMIT:--5}
       
       # === СИСТЕМНЫЕ ===
       - PYTHONUNBUFFERED=1
       - NODE_ENV=production
     restart: always
     depends_on:
-      - db
+      - db-en
     logging:
       driver: "json-file"
       options:
@@ -76,21 +102,13 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./exports:/app/exports
+    networks:
+      - doctor-opus-en
 
-  nginx:
-    image: nginx:stable-alpine
-    container_name: doctor-opus-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - medical-assistant
-    restart: always
+networks:
+  doctor-opus-en:
+    external: true
+    name: doctor-opus-en_default
+  doctor-opus-shared:
+    external: true
+    name: doctor-opus_default

@@ -113,9 +113,21 @@ export async function initDatabase() {
       CREATE TABLE IF NOT EXISTS user_balances (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
-        balance DECIMAL(10,2) DEFAULT 50.00 CHECK (balance >= -5.00),
+        balance DECIMAL(10,2) DEFAULT 20.00 CHECK (balance >= -5.00),
         total_spent DECIMAL(10,2) DEFAULT 0.00,
         is_test_account BOOLEAN DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // Гостевые пробные балансы (без регистрации)
+    await sql`
+      CREATE TABLE IF NOT EXISTS guest_balances (
+        id SERIAL PRIMARY KEY,
+        guest_key VARCHAR(255) UNIQUE NOT NULL,
+        balance DECIMAL(10,2) DEFAULT 10.00 CHECK (balance >= -5.00),
+        total_spent DECIMAL(10,2) DEFAULT 0.00,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );

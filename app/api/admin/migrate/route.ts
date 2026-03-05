@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       CREATE TABLE IF NOT EXISTS user_balances (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
-        balance DECIMAL(10,2) DEFAULT 50.00 CHECK (balance >= -5.00),
+        balance DECIMAL(10,2) DEFAULT 20.00 CHECK (balance >= -5.00),
         total_spent DECIMAL(10,2) DEFAULT 0.00,
         is_test_account BOOLEAN DEFAULT true,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -82,6 +82,20 @@ export async function POST(request: NextRequest) {
     } catch (e: any) { /* constraint update skipped */ }
     
     await sql`CREATE INDEX IF NOT EXISTS idx_user_balances_email ON user_balances(email)`;
+
+    // guest_balances (trial without registration)
+    safeLog('📊 [MIGRATION] Creating guest_balances table...');
+    await sql`
+      CREATE TABLE IF NOT EXISTS guest_balances (
+        id SERIAL PRIMARY KEY,
+        guest_key VARCHAR(255) UNIQUE NOT NULL,
+        balance DECIMAL(10,2) DEFAULT 10.00 CHECK (balance >= -5.00),
+        total_spent DECIMAL(10,2) DEFAULT 0.00,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_guest_balances_key ON guest_balances(guest_key)`;
     
     // credit_transactions
     safeLog('📊 [MIGRATION] Creating credit_transactions table...');
@@ -133,7 +147,7 @@ export async function POST(request: NextRequest) {
     const tables = await sql`
       SELECT tablename FROM pg_tables 
       WHERE schemaname = 'public' 
-      AND tablename IN ('user_balances', 'credit_transactions', 'users', 'payments', 'consents')
+      AND tablename IN ('user_balances', 'guest_balances', 'credit_transactions', 'users', 'payments', 'consents')
       ORDER BY tablename
     `;
     
@@ -198,11 +212,11 @@ export async function GET(request: NextRequest) {
     const tables = await sql`
       SELECT tablename FROM pg_tables 
       WHERE schemaname = 'public' 
-      AND tablename IN ('user_balances', 'credit_transactions', 'users', 'payments', 'consents')
+      AND tablename IN ('user_balances', 'guest_balances', 'credit_transactions', 'users', 'payments', 'consents')
     `;
     
     const existingTables = tables.rows.map(t => t.tablename);
-    const requiredTables = ['user_balances', 'credit_transactions', 'users'];
+    const requiredTables = ['user_balances', 'guest_balances', 'credit_transactions', 'users'];
     const missingTables = requiredTables.filter(t => !existingTables.includes(t));
     
     const stats: Record<string, number> = {};

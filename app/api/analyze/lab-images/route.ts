@@ -10,6 +10,8 @@ import {
 } from '@/lib/openrouter-streaming';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 
 // Максимальное время выполнения (5 минут)
 export const maxDuration = 300;
@@ -36,7 +38,10 @@ export async function POST(request: NextRequest) {
   };
 
   try {
-    // ... (auth check remains commented out)
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
+
     const body = await request.json();
     const { images, prompt, clinicalContext, mode, useStreaming, model } = body;
 
@@ -47,10 +52,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const estimatedCost = getAnalysisCost(mode || 'optimized', images.length);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Lab images analysis', { mode: mode || 'optimized', imageCount: images.length })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: lab images analysis', { mode: mode || 'optimized', imageCount: images.length });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Insufficient balance' },
+        { status: 402 }
+      );
+    }
+
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
         { status: 500 }
       );
     }
@@ -156,7 +172,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ [LAB IMAGES] Общая ошибка:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка анализа лабораторных изображений' },
+      { success: false, error: 'Lab image analysis error' },
       { status: 500 }
     );
   }
