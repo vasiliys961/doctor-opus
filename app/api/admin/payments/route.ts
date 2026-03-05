@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions, isAdminEmail } from "@/lib/auth";
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/admin/payments — Список всех платежей для админ-панели
  */
