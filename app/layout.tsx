@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import 'shepherd.js/dist/css/shepherd.css'
 import Navigation from '@/components/Navigation'
 import { Providers } from '@/components/Providers'
 import LegalFooter from '@/components/LegalFooter'
 import CookieBanner from '@/components/CookieBanner'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import OnboardingTour from '@/components/OnboardingTour'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -55,6 +57,7 @@ export default function RootLayout({
           </span>
         </div>
         <Providers>
+          <OnboardingTour />
           <div className="flex min-h-screen">
             <Navigation />
             <main className="flex-1 flex flex-col pt-24 sm:pt-20 lg:pt-0 p-4 sm:p-6 lg:p-8">
