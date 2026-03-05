@@ -13,9 +13,23 @@ export default function SubscriptionPage() {
   const [canOpenPayments, setCanOpenPayments] = useState(false)
 
   useEffect(() => {
+    const refreshOnboardingGate = () => {
+      setCanOpenPayments(isOnboardingCompleted())
+    }
+
     setMounted(true)
     setCurrentBalance(getBalance())
-    setCanOpenPayments(isOnboardingCompleted())
+    refreshOnboardingGate()
+
+    window.addEventListener('onboardingCompleted', refreshOnboardingGate)
+    window.addEventListener('focus', refreshOnboardingGate)
+    document.addEventListener('visibilitychange', refreshOnboardingGate)
+
+    return () => {
+      window.removeEventListener('onboardingCompleted', refreshOnboardingGate)
+      window.removeEventListener('focus', refreshOnboardingGate)
+      document.removeEventListener('visibilitychange', refreshOnboardingGate)
+    }
   }, [])
 
   // Если система отключена
