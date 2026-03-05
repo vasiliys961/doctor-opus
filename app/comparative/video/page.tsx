@@ -7,6 +7,7 @@ import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import PatientSelector from '@/components/PatientSelector'
 import ImageEditor, { type DrawingPath } from '@/components/ImageEditor'
+import BillingErrorNotice from '@/components/BillingErrorNotice'
 import { logUsage } from '@/lib/simple-logger'
 import { 
   extractAndAnonymizeFrames, 
@@ -189,7 +190,7 @@ export default function VideoComparisonPage() {
     setExtractionProgress({ current: 0, total: 0 })
 
     try {
-      console.log('🎬 [VIDEO COMPARISON] Начало пакетного извлечения кадров...')
+      console.log('🎬 [VIDEO COMPARISON] Starting batch frame extraction...')
       
       const files1 = playlist1.length > 0 ? playlist1 : [video1];
       const files2 = playlist2.length > 0 ? playlist2 : [video2];
@@ -224,10 +225,10 @@ export default function VideoComparisonPage() {
       setFrames1(allFrames1.map((f, i) => ({ ...f, index: i })));
       setFrames2(allFrames2.map((f, i) => ({ ...f, index: i })));
       
-      console.log(`✅ [VIDEO COMPARISON] Извлечено ${allFrames1.length} и ${allFrames2.length} кадров`)
+      console.log(`✅ [VIDEO COMPARISON] Extracted ${allFrames1.length} and ${allFrames2.length} frames`)
       
     } catch (err: any) {
-      console.error('❌ [VIDEO COMPARISON] Ошибка извлечения:', err)
+      console.error('❌ [VIDEO COMPARISON] Extraction error:', err)
       setError(err.message || 'Error extracting frames')
     } finally {
       setExtracting(false)
@@ -413,7 +414,7 @@ export default function VideoComparisonPage() {
       formData.append('isTwoStage', 'true') // Включаем режим радиологического протокола
       formData.append('isComparative', 'true')
 
-      console.log(`🎬 [VIDEO COMPARISON] Отправка ${frames1.length + frames2.length} кадров на анализ...`)
+      console.log(`🎬 [VIDEO COMPARISON] Sending ${frames1.length + frames2.length} frames for analysis...`)
       
       const response = await fetch('/api/analyze/image', {
         method: 'POST',
@@ -472,8 +473,8 @@ export default function VideoComparisonPage() {
       formData.append('video2', video2)
       if (clinicalContext) formData.append('prompt', clinicalContext)
 
-      console.log('🎬 [VIDEO COMPARISON] Отправка ПОЛНЫХ видео на анализ...')
-      console.warn('⚠️ [VIDEO COMPARISON] Режим без анонимизации - врач подтвердил отсутствие ПД')
+      console.log('🎬 [VIDEO COMPARISON] Sending FULL videos for analysis...')
+      console.warn('⚠️ [VIDEO COMPARISON] Non-anonymized mode enabled - clinician confirmed absence of PHI')
 
       const response = await fetch('/api/analyze/video-comparison', {
         method: 'POST',
@@ -897,7 +898,11 @@ export default function VideoComparisonPage() {
         }
       </button>
 
-      {error && <div className="mt-6 p-4 bg-red-100 text-red-700 rounded-lg">❌ {error}</div>}
+      {error && (
+        <div className="mt-6">
+          <BillingErrorNotice error={error} />
+        </div>
+      )}
 
       <AnalysisResult 
         result={result} 
@@ -972,7 +977,7 @@ export default function VideoComparisonPage() {
                 })
               }
             } catch (err) {
-              console.error('Ошибка при сохранении отредактированного кадра:', err);
+              console.error('Error saving edited frame:', err);
             }
             
             setEditingFrame(null);

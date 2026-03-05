@@ -8,6 +8,7 @@ import FeedbackForm from '@/components/FeedbackForm'
 import PatientSelector from '@/components/PatientSelector'
 import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import ImageEditor, { DrawingPath } from '@/components/ImageEditor'
+import BillingErrorNotice from '@/components/BillingErrorNotice'
 import { 
   extractAndAnonymizeFrames, 
   formatTimestamp, 
@@ -208,11 +209,11 @@ export default function VideoPage() {
       const filesToProcess = playlist.length > 0 ? playlist : [file!];
       const allExtractedFrames: ExtractedFrame[] = [];
       
-      console.log(`🎬 [VIDEO] Начало пакетного извлечения frames из ${filesToProcess.length} видео...`)
+      console.log(`🎬 [VIDEO] Starting batch frame extraction from ${filesToProcess.length} videos...`)
       
       for (let i = 0; i < filesToProcess.length; i++) {
         const currentFile = filesToProcess[i];
-        console.log(`🎞️ [VIDEO] Обработка видео ${i + 1}/${filesToProcess.length}: ${currentFile.name}`)
+        console.log(`🎞️ [VIDEO] Processing video ${i + 1}/${filesToProcess.length}: ${currentFile.name}`)
         
         const frames = await extractAndAnonymizeFrames(
           currentFile,
@@ -239,10 +240,10 @@ export default function VideoPage() {
       const finalFrames = allExtractedFrames.map((f, i) => ({ ...f, index: i }));
       
       setExtractedFrames(finalFrames)
-      console.log(`✅ [VIDEO] Успешно извлечено ${finalFrames.length} frames из всех ракурсов`)
+      console.log(`✅ [VIDEO] Successfully extracted ${finalFrames.length} frames across all angles`)
       
     } catch (err: any) {
-      console.error('❌ [VIDEO] Ошибка извлечения frames:', err)
+      console.error('❌ [VIDEO] Frame extraction error:', err)
       setError(err.message || 'Frame extraction error')
     } finally {
       setExtracting(false)
@@ -271,7 +272,7 @@ export default function VideoPage() {
   const applyMaskToAllFrames = async (drawingPaths: DrawingPath[], editedFirstFile: File) => {
     if (editingFrameIndex === null) return
     
-    console.log(`🎨 Применяю маску ко всем ${extractedFrames.length} кадрам...`)
+    console.log(`🎨 Applying mask to all ${extractedFrames.length} frames...`)
     
     const newFrames = [...extractedFrames]
     
@@ -288,7 +289,7 @@ export default function VideoPage() {
       
       try {
         const frame = newFrames[i]
-        console.log(`📦 Обработка кадра ${i + 1}/${newFrames.length}: ${frame.file.name}`)
+        console.log(`📦 Processing frame ${i + 1}/${newFrames.length}: ${frame.file.name}`)
         
         // Читаем файл как Data URL
         const fileDataUrl = await new Promise<string>((resolve, reject) => {
@@ -346,15 +347,15 @@ export default function VideoPage() {
           file: newFile,
           preview: URL.createObjectURL(newFile)
         }
-        console.log(`✅ Кадр ${i + 1} обработан`)
+        console.log(`✅ Frame ${i + 1} processed`)
       } catch (err) {
-        console.error(`❌ Ошибка обработки кадра ${i + 1}:`, err)
+        console.error(`❌ Frame processing error ${i + 1}:`, err)
       }
     }
     
     setExtractedFrames(newFrames)
     setEditingFrameIndex(null)
-    console.log(`✅ Все ${newFrames.length} frames обработаны!`)
+    console.log(`✅ All ${newFrames.length} frames processed!`)
   }
 
   // Анализ извлеченных frames
@@ -390,16 +391,16 @@ export default function VideoPage() {
       
       // Если у нас много видео, добавляем пояснение для ИИ
       if (playlist.length > 1) {
-        const batchContext = `Проанализируй серию из ${playlist.length} видео-ракурсов одного исследования. Кадры извлечены по порядку из каждого файла. Сформируй единый отчет по всем предоставленным визуальным данным.`
+        const batchContext = `Analyze a series of ${playlist.length} video angles from the same study. Frames are extracted in order from each file. Produce a single unified report across all provided visual data.`
         const existingPrompt = clinicalContext || '';
         // Перезаписываем промпт с учетом батча
-        formData.set('prompt', existingPrompt ? `${batchContext}\n\nКонтекст: ${existingPrompt}` : batchContext)
+        formData.set('prompt', existingPrompt ? `${batchContext}\n\nContext: ${existingPrompt}` : batchContext)
       }
 
       formData.append('imageType', imageType)
       formData.append('isTwoStage', 'true') // Включаем режим радиологического протокола
 
-      console.log(`🎬 [VIDEO] Отправка ${extractedFrames.length} frames на анализ...`)
+      console.log(`🎬 [VIDEO] Sending ${extractedFrames.length} frames for analysis...`)
       
       const response = await fetch('/api/analyze/image', {
         method: 'POST',
@@ -427,7 +428,7 @@ export default function VideoPage() {
         setError(data.error || 'Frame analysis error')
       }
     } catch (err: any) {
-      console.error('❌ [VIDEO] Ошибка:', err)
+      console.error('❌ [VIDEO] Error:', err)
       setError(err.message || 'An error occurred during analysis')
     } finally {
       setAnalyzing(false)
@@ -468,8 +469,8 @@ export default function VideoPage() {
       }
       formData.append('imageType', imageType)
 
-      console.log('🎬 [VIDEO] Отправка ПОЛНОГО видео на анализ...')
-      console.warn('⚠️ [VIDEO] Режим без анонимизации - врач подтвердил отсутствие ПД')
+      console.log('🎬 [VIDEO] Sending FULL video for analysis...')
+      console.warn('⚠️ [VIDEO] Non-anonymized mode enabled - clinician confirmed absence of PHI')
       
       const response = await fetch('/api/analyze/video', {
         method: 'POST',
@@ -499,7 +500,7 @@ export default function VideoPage() {
         setError(data.error || 'Video analysis error')
       }
     } catch (err: any) {
-      console.error('❌ [VIDEO] Ошибка:', err)
+      console.error('❌ [VIDEO] Error:', err)
       setError(err.message || 'An error occurred during analysis')
     } finally {
       setAnalyzing(false)
@@ -731,7 +732,7 @@ export default function VideoPage() {
                         className="absolute bottom-16 right-4 px-6 py-3 bg-blue-600/90 hover:bg-blue-600 text-white font-black rounded-2xl shadow-2xl transform active:scale-95 transition-all flex items-center gap-2 backdrop-blur-sm z-10 border border-blue-400"
                       >
                         <span className="text-2xl">📸</span>
-                        ЗАХВАТИТЬ
+                        CAPTURE
                       </button>
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-3">
@@ -905,11 +906,7 @@ export default function VideoPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-          ❌ {error}
-        </div>
-      )}
+      {error && <BillingErrorNotice error={error} />}
 
       {loading && (
         <div className="bg-primary-50 border border-primary-200 text-primary-800 px-4 py-3 rounded mb-6">
@@ -979,7 +976,7 @@ export default function VideoPage() {
                 handleFrameEditorSave(editedFile);
               }
             } catch (err) {
-              console.error('❌ Ошибка сохранения:', err);
+              console.error('❌ Save error:', err);
               setEditingFrameIndex(null);
             }
           }}

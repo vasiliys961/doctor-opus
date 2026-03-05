@@ -10,6 +10,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
 import { anonymizeImageBuffer } from "@/lib/server-image-processing";
+import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 import * as XLSX from 'xlsx';
 
 // Максимальное время выполнения (5 минут)
@@ -38,6 +40,10 @@ export async function POST(request: NextRequest) {
   };
 
   try {
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = anonymizeText(formData.get('prompt') as string || 'Analyze the laboratory data. Extract all markers, their values, and reference ranges.');
@@ -73,6 +79,17 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     let buffer = Buffer.from(arrayBuffer);
     const fileType = detectFileType(file.name);
+
+    const estimatedCost = getAnalysisCost(mode, 1);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Lab analysis', { mode, imageCount: 1, fileType })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: lab analysis', { mode, imageCount: 1, fileType });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Insufficient balance' },
+        { status: 402 }
+      );
+    }
 
     // Если анонимно и это изображение - анонимизируем буфер
     if (isAnonymous && (file.type.startsWith('image/') || fileType === 'jpg' || fileType === 'jpeg' || fileType === 'png')) {

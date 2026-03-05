@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSpeechProvider } from '@/lib/speech-provider';
-import { deductBalance } from '@/lib/subscription-manager';
 import { AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE } from '@/lib/cost-calculator';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 
 /**
  * API endpoint для транскрипции аудио.
@@ -10,6 +13,10 @@ import { AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE } from '@/lib/cost-calculator';
  */
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
@@ -32,6 +39,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'File is too large (maximum 500MB)' },
         { status: 400 }
+      );
+    }
+
+    // Резервируем оценочную стоимость до вызова внешнего провайдера.
+    // Консервативно: ~5 MB ≈ 1 минута аудио, затем после транскрипции делаем корректировку.
+    const estimatedMinutes = Math.max(1 / 6, file.size / (1024 * 1024 * 5));
+    const estimatedCost = Math.max(0.1, estimatedMinutes * AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE);
+    const reserve = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Audio transcription (reserve)', { estimatedMinutes, fileSize: file.size })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: audio transcription (reserve)', { estimatedMinutes, fileSize: file.size });
+    if (!reserve.allowed) {
+      return NextResponse.json(
+        { success: false, error: reserve.error || 'Insufficient balance' },
+        { status: 402 }
       );
     }
 
@@ -66,16 +87,28 @@ export async function POST(request: NextRequest) {
     // Расчет стоимости
     const durationMinutes = duration / 60;
     const cost = Math.max(0.1, durationMinutes * AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE);
-
-    // Списание с баланса
-    deductBalance({
-      section: 'audio',
-      sectionName: 'Транскрипция аудио',
-      model: `${provider.name.toLowerCase().replace(/\s+/g, '-')}-best`,
-      inputTokens: Math.round(duration),
-      outputTokens: 0,
-      operation: 'Audio Transcription'
-    });
+    const delta = cost - estimatedCost;
+    if (Math.abs(delta) > 0.01) {
+      const adjustResult = userEmail
+        ? await checkAndDeductBalance(
+            userEmail,
+            delta,
+            delta > 0 ? 'Audio transcription (extra charge)' : 'Audio transcription (refund)',
+            { duration, estimatedCost, actualCost: cost, provider: provider.name }
+          )
+        : await checkAndDeductGuestBalance(
+            guestKey!,
+            delta,
+            delta > 0 ? 'Guest trial: audio transcription (extra charge)' : 'Guest trial: audio transcription (refund)',
+            { duration, estimatedCost, actualCost: cost, provider: provider.name }
+          );
+      if (!adjustResult.allowed && delta > 0) {
+        return NextResponse.json(
+          { success: false, error: adjustResult.error || 'Insufficient balance' },
+          { status: 402 }
+        );
+      }
+    }
 
     console.log(`✅ Транскрипция завершена (${provider.name})`, { duration, cost })
 

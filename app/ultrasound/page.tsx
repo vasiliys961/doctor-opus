@@ -9,6 +9,7 @@ import PatientSelector from '@/components/PatientSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
 import FeedbackForm from '@/components/FeedbackForm'
+import BillingErrorNotice from '@/components/BillingErrorNotice'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { handleSSEStream } from '@/lib/streaming-utils'
@@ -381,7 +382,7 @@ export default function UltrasoundPage() {
         </div>
       )}
 
-      {error && <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 font-bold shadow-sm">❌ {error}</div>}
+      {error && <BillingErrorNotice error={error} />}
 
       <AnalysisResult 
         result={result} 

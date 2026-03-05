@@ -4,6 +4,8 @@ import { analyzeImageStreaming } from '@/lib/openrouter-streaming';
 import { formatCostLog } from '@/lib/cost-calculator';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 
 /**
  * API endpoint для анализа ЭКГ
@@ -11,16 +13,10 @@ import { authOptions } from "@/lib/auth";
  */
 export async function POST(request: NextRequest) {
   try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
     const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Authorization required' },
-        { status: 401 }
-      );
-    }
-    */
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = formData.get('prompt') as string || 'Проанализируйте ЭКГ. Опишите ритм, интервалы, сегменты, признаки ишемии, аритмии, блокады.';
@@ -30,6 +26,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'No file provided' },
         { status: 400 }
+      );
+    }
+
+    // Серверная проверка и резервирование стоимости до выполнения анализа
+    const estimatedCost = getAnalysisCost('optimized', 1);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'ECG analysis', { mode: 'optimized', imageCount: 1 })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: ECG analysis', { mode: 'optimized', imageCount: 1 });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Insufficient balance' },
+        { status: 402 }
       );
     }
 

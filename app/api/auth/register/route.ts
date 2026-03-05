@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, RATE_LIMIT_AUTH, getRateLimitKey } from '@/lib/rate-limiter';
 import { safeErrorMessage } from '@/lib/safe-error';
+import { BILLING_CONFIG } from '@/lib/config';
 
 /**
  * POST /api/auth/register
@@ -53,6 +54,17 @@ export async function POST(request: NextRequest) {
     const { sql, initDatabase } = await import('@/lib/database');
     await initDatabase();
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS guest_balances (
+        id SERIAL PRIMARY KEY,
+        guest_key VARCHAR(255) UNIQUE NOT NULL,
+        balance DECIMAL(10,2) DEFAULT 10.00 CHECK (balance >= -5.00),
+        total_spent DECIMAL(10,2) DEFAULT 0.00,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     // Проверяем, не существует ли уже
     const { rows: existing } = await sql`
       SELECT id FROM users WHERE email = ${normalizedEmail}
@@ -73,11 +85,30 @@ export async function POST(request: NextRequest) {
       RETURNING id
     `;
 
-    // Создаём начальный баланс (50 ед.)
+    // Переносим остаток гостевого trial (до 10 ед.) и добавляем +20 за регистрацию.
+    // Итоговый старт зарегистрированного пользователя: 20..30 ед.
+    const guestKey = getRateLimitKey(request);
+    const { rows: guestRows } = await sql`
+      SELECT balance FROM guest_balances WHERE guest_key = ${guestKey}
+    `;
+    const guestBalanceRaw = guestRows.length > 0
+      ? parseFloat(guestRows[0].balance)
+      : BILLING_CONFIG.guestTrialBalance;
+    const guestCarry = Math.max(0, Math.min(BILLING_CONFIG.guestTrialBalance, guestBalanceRaw));
+    const startingBalance = BILLING_CONFIG.registeredBonus + guestCarry;
+
+    // Создаём стартовый баланс зарегистрированного пользователя
     await sql`
       INSERT INTO user_balances (email, balance, is_test_account)
-      VALUES (${normalizedEmail}, 50.00, false)
+      VALUES (${normalizedEmail}, ${startingBalance}, false)
       ON CONFLICT (email) DO NOTHING
+    `;
+
+    // Чтобы не использовать trial повторно с того же гостевого ключа, обнуляем его.
+    await sql`
+      INSERT INTO guest_balances (guest_key, balance, total_spent)
+      VALUES (${guestKey}, 0, 0)
+      ON CONFLICT (guest_key) DO UPDATE SET balance = 0, updated_at = CURRENT_TIMESTAMP
     `;
 
     // Отправляем приветственное письмо асинхронно

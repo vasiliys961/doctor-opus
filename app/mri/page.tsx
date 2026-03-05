@@ -12,6 +12,7 @@ import AnalysisTips from '@/components/AnalysisTips'
 import dynamic from 'next/dynamic'
 const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
 import FeedbackForm from '@/components/FeedbackForm'
+import BillingErrorNotice from '@/components/BillingErrorNotice'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
@@ -420,9 +421,7 @@ export default function MRIPage() {
       )}
 
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-          {error}
-        </div>
+        <BillingErrorNotice error={error} />
       )}
 
       <AnalysisResult 

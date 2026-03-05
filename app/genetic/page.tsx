@@ -6,6 +6,7 @@ import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
+import BillingErrorNotice from '@/components/BillingErrorNotice'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
@@ -128,11 +129,11 @@ export default function GeneticPage() {
         if (window.pdfjsLib) {
           window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js'
           setPdfjsReady(true)
-          console.log('✅ PDF.js v3 загружен локально (ручная анонимизация доступна)')
+          console.log('✅ PDF.js v3 loaded locally (manual anonymization is available)')
         }
       }
       script.onerror = () => {
-        console.warn('⚠️ PDF.js не удалось загрузить')
+        console.warn('⚠️ Failed to load PDF.js')
       }
       document.head.appendChild(script)
     } else if (window.pdfjsLib) {
@@ -148,10 +149,10 @@ export default function GeneticPage() {
 
     try {
       const pdfjs = window.pdfjsLib
-      console.log('📄 [PDF] Начинаем конвертацию PDF в изображения...')
+      console.log('📄 [PDF] Starting PDF-to-image conversion...')
       
       const arrayBuffer = await pdfFile.arrayBuffer()
-      console.log(`📄 [PDF] Файл загружен, размер: ${arrayBuffer.byteLength} байт`)
+      console.log(`📄 [PDF] File loaded, size: ${arrayBuffer.byteLength} bytes`)
       
       const loadingTask = pdfjs.getDocument({ 
         data: arrayBuffer,
@@ -162,14 +163,14 @@ export default function GeneticPage() {
       const totalPages = pdf.numPages
       const maxPages = Math.min(totalPages, 7) // Первые 7 страниц
 
-      console.log(`📄 [PDF] Всего страниц: ${totalPages}, обрабатываем: ${maxPages}`)
+      console.log(`📄 [PDF] Total pages: ${totalPages}, processing: ${maxPages}`)
 
       const base64Images: string[] = []
 
       for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
         setConversionProgress({ current: pageNum, total: maxPages })
         
-        console.log(`📄 [PDF] Обработка страницы ${pageNum}/${maxPages}...`)
+        console.log(`📄 [PDF] Processing page ${pageNum}/${maxPages}...`)
         
         const page = await pdf.getPage(pageNum)
         const viewport = page.getViewport({ scale: 1.5 }) // Оптимизировано: 1.5 вместо 2.0 для экономии места
@@ -193,23 +194,23 @@ export default function GeneticPage() {
         const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1]
         
         if (!base64 || base64.length === 0) {
-          console.warn(`⚠️ [PDF] Страница ${pageNum} не была конвертирована (пустое изображение)`)
+          console.warn(`⚠️ [PDF] Page ${pageNum} was not converted (empty image)`)
           continue
         }
         
         base64Images.push(base64)
-        console.log(`✅ [PDF] Страница ${pageNum}/${maxPages} конвертирована (размер: ${Math.round(base64.length / 1024)} KB)`)
+        console.log(`✅ [PDF] Page ${pageNum}/${maxPages} converted (size: ${Math.round(base64.length / 1024)} KB)`)
       }
 
       if (base64Images.length === 0) {
         throw new Error('Failed to convert any PDF pages to images')
       }
 
-      console.log(`✅ [PDF] Конвертация завершена. Получено ${base64Images.length} изображений`)
+      console.log(`✅ [PDF] Conversion completed. Produced ${base64Images.length} images`)
       return base64Images
       
     } catch (error: any) {
-      console.error('❌ [PDF] Ошибка конвертации:', error)
+      console.error('❌ [PDF] Conversion error:', error)
       throw new Error(`PDF conversion error: ${error.message}`)
     }
   }
@@ -225,7 +226,7 @@ export default function GeneticPage() {
     try {
       // PDF — отправляется напрямую на сервер (Gemini Vision API читает PDF нативно)
       if (uploadedFile.type === 'application/pdf' || uploadedFile.name.toLowerCase().endsWith('.pdf')) {
-        console.log('📄 [GENETIC PAGE] PDF обнаружен — будет отправлен напрямую на сервер')
+        console.log('📄 [GENETIC PAGE] PDF detected - it will be sent directly to the server')
         setLoading(false)
         // processedImages остаётся пустым — отобразится блок «Extract Data»
         return
@@ -247,7 +248,7 @@ export default function GeneticPage() {
       setLoading(false)
 
     } catch (err: any) {
-      console.error('❌ [GENETIC PAGE] Ошибка:', err)
+      console.error('❌ [GENETIC PAGE] Error:', err)
       setError(err.message || 'An error occurred')
       setLoading(false)
       setConvertingPDF(false)
@@ -261,7 +262,7 @@ export default function GeneticPage() {
     setError(null)
 
     try {
-      console.log('🧬 [GENETIC PAGE] Запуск извлечения данных...')
+      console.log('🧬 [GENETIC PAGE] Starting data extraction...')
 
       if (processedImages.length > 0) {
         // Отправляем изображения (PDF или картинки)
@@ -327,7 +328,7 @@ export default function GeneticPage() {
       
       setLoading(false)
     } catch (err: any) {
-      console.error('❌ [GENETIC PAGE] Ошибка extraction:', err)
+      console.error('❌ [GENETIC PAGE] Extraction error:', err)
       setError(err.message || 'An error occurred during analysis')
       setLoading(false)
     }
@@ -345,14 +346,14 @@ export default function GeneticPage() {
 
     try {
       // ЭТАП 2: Отправка на консультацию генетика
-      console.log('🧬 [GENETIC PAGE] Этап 2: Отправка на консультацию генетика...')
+      console.log('🧬 [GENETIC PAGE] Stage 2: Sending for genetic consultation...')
 
       const useStreaming = true // Включаем стриминг для режима professor
 
       // Конвертируем файлы в base64 если есть
       let filesBase64: Array<{ name: string; type: string; base64: string }> = []
       if (additionalFiles.length > 0) {
-        console.log(`📎 [GENETIC PAGE] Конвертация ${additionalFiles.length} дополнительных файлов...`)
+        console.log(`📎 [GENETIC PAGE] Converting ${additionalFiles.length} additional files...`)
         filesBase64 = await convertFilesToBase64(additionalFiles)
       }
 
@@ -380,7 +381,7 @@ export default function GeneticPage() {
 
       if (useStreaming && consultResponse.body) {
         // Streaming режим
-        console.log('📡 [GENETIC PAGE] Запуск streaming режима...')
+        console.log('📡 [GENETIC PAGE] Starting streaming mode...')
         
         await handleSSEStream(consultResponse, {
           onChunk: (content: string, accumulatedText: string) => {
@@ -412,12 +413,12 @@ export default function GeneticPage() {
             })
           },
           onError: (error: Error) => {
-            console.error('❌ [GENETIC PAGE] Ошибка streaming:', error)
+            console.error('❌ [GENETIC PAGE] Streaming error:', error)
             setError(error.message || 'Error retrieving data')
             setLoading(false)
           },
           onComplete: (finalText: string) => {
-            console.log('✅ [GENETIC PAGE] Streaming завершён, получено:', finalText.length, 'символов')
+            console.log('✅ [GENETIC PAGE] Streaming completed, received:', finalText.length, 'characters')
             setResult(finalText)
             // Добавляем первый ответ в историю диалога с информацией о файлах
             setChatHistory([
@@ -459,7 +460,7 @@ export default function GeneticPage() {
         setLoading(false)
       }
     } catch (err: any) {
-      console.error('❌ [GENETIC PAGE] Ошибка:', err)
+      console.error('❌ [GENETIC PAGE] Error:', err)
       setError(err.message || 'An error occurred')
       setLoading(false)
     }
@@ -475,7 +476,7 @@ export default function GeneticPage() {
     // Конвертируем файлы в base64 если есть
     let filesBase64: Array<{ name: string; type: string; base64: string }> = []
     if (chatFiles.length > 0) {
-      console.log(`📎 [GENETIC PAGE] Конвертация ${chatFiles.length} файлов для чата...`)
+      console.log(`📎 [GENETIC PAGE] Converting ${chatFiles.length} files for chat...`)
       filesBase64 = await convertFilesToBase64(chatFiles)
       setChatFiles([]) // Очищаем файлы после конвертации
     }
@@ -566,14 +567,14 @@ export default function GeneticPage() {
             })
           },
           onError: (error: Error) => {
-            console.error('❌ [GENETIC PAGE] Ошибка streaming:', error)
+            console.error('❌ [GENETIC PAGE] Streaming error:', error)
             setError(error.message || 'Error retrieving data')
             setChatLoading(false)
             // Удаляем пустое сообщение при ошибке
             setChatHistory(prev => prev.slice(0, -1))
           },
           onComplete: (finalText: string) => {
-            console.log('✅ [GENETIC PAGE] Chat streaming завершён')
+            console.log('✅ [GENETIC PAGE] Chat streaming completed')
             setChatLoading(false)
           },
         })
@@ -597,7 +598,7 @@ export default function GeneticPage() {
         setChatLoading(false)
       }
     } catch (err: any) {
-      console.error('❌ [GENETIC PAGE] Ошибка chat:', err)
+      console.error('❌ [GENETIC PAGE] Chat error:', err)
       setError(err.message || 'An error occurred')
       setChatLoading(false)
       // Удаляем пустое сообщение при ошибке
@@ -817,8 +818,8 @@ export default function GeneticPage() {
       )}
 
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 whitespace-pre-wrap">
-          {error}
+        <div className="whitespace-pre-wrap">
+          <BillingErrorNotice error={error} />
         </div>
       )}
 

@@ -21,7 +21,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
 import { checkRateLimit, RATE_LIMIT_ANALYSIS, getRateLimitKey } from '@/lib/rate-limiter';
-import { checkAndDeductBalance, getAnalysisCost } from '@/lib/server-billing';
+import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
 
 const execPromise = promisify(exec);
 
@@ -165,8 +165,9 @@ export async function POST(request: NextRequest) {
   };
 
   try {
-    // Rate limiting
     const session = await getServerSession(authOptions);
+
+    // Rate limiting
     const rlKey = getRateLimitKey(request, session?.user?.email);
     const rl = checkRateLimit(rlKey, RATE_LIMIT_ANALYSIS);
     if (!rl.allowed) {
@@ -183,23 +184,26 @@ export async function POST(request: NextRequest) {
     const mode = (formData.get('mode') as string) || 'optimized';
 
     // Серверное списание юнитов (до выполнения анализа)
-    const userEmail = session?.user?.email;
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : rlKey;
+    // Считаем файлы для оценки стоимости
+    let imgCount = formData.get('file') ? 1 : 0;
+    let fi = 0;
+    while (formData.get(`additionalImage_${fi}`)) { imgCount++; fi++; }
+    
+    const estimatedCost = getAnalysisCost(mode, imgCount);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Анализ изображения', { mode, imageCount: imgCount })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: image analysis', { mode, imageCount: imgCount });
     if (userEmail) {
-      // Считаем файлы для оценки стоимости
-      let imgCount = formData.get('file') ? 1 : 0;
-      let fi = 0;
-      while (formData.get(`additionalImage_${fi}`)) { imgCount++; fi++; }
-      
-      const estimatedCost = getAnalysisCost(mode, imgCount);
-      const billing = await checkAndDeductBalance(userEmail, estimatedCost, 'Анализ изображения', { mode, imageCount: imgCount });
       billingContext = { email: userEmail, estimatedCost };
-      
-      if (!billing.allowed) {
-        return NextResponse.json(
-          { success: false, error: billing.error || 'Insufficient balance' },
-          { status: 402 }
-        );
-      }
+    }
+    
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Insufficient balance' },
+        { status: 402 }
+      );
     }
 
     const file = formData.get('file') as File;

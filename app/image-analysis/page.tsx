@@ -12,6 +12,7 @@ import PatientSelector from '@/components/PatientSelector'
 import DeviceSync from '@/components/DeviceSync'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
+import BillingErrorNotice from '@/components/BillingErrorNotice'
 
 const DicomViewer = dynamic(() => import('@/components/DicomViewer'), { ssr: false })
 const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
@@ -626,9 +627,7 @@ export default function ImageAnalysisPage() {
       )}
 
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-          {error}
-        </div>
+        <BillingErrorNotice error={error} />
       )}
 
       <AnalysisResult 

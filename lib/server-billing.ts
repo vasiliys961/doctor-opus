@@ -10,6 +10,7 @@
  */
 
 import { getDbClient } from '@/lib/database';
+import { BILLING_CONFIG } from '@/lib/config';
 
 /**
  * VIP-пользователи — из env (через запятую)
@@ -49,7 +50,7 @@ export async function checkAndDeductBalance(
     return { allowed: true };
   }
 
-  const SOFT_LIMIT = -5;
+  const SOFT_LIMIT = BILLING_CONFIG.softLimit;
   const client = await getDbClient();
 
   try {
@@ -64,12 +65,12 @@ export async function checkAndDeductBalance(
     let currentBalance = 0;
 
     if (rows.length === 0) {
-      // Новый пользователь — создаём запись с начальным балансом
+      // Новый пользователь — создаём запись с единым стартовым балансом из конфигурации
       await client.query(
-        `INSERT INTO user_balances (email, balance, total_spent) VALUES ($1, 50, 0) ON CONFLICT (email) DO NOTHING`,
-        [email]
+        `INSERT INTO user_balances (email, balance, total_spent) VALUES ($1, $2, 0) ON CONFLICT (email) DO NOTHING`,
+        [email, BILLING_CONFIG.initialBalance]
       );
-      currentBalance = 50;
+      currentBalance = BILLING_CONFIG.initialBalance;
     } else {
       currentBalance = parseFloat(rows[0].balance);
     }
@@ -81,7 +82,7 @@ export async function checkAndDeductBalance(
       return {
         allowed: false,
         balanceAfter: currentBalance,
-        error: `Недостаточно средств. Баланс: ${currentBalance.toFixed(2)} ед., требуется: ${amount.toFixed(2)} ед.`,
+        error: `Insufficient balance. Available: ${currentBalance.toFixed(2)} units, required: ${amount.toFixed(2)} units. Please subscribe to continue.`,
       };
     }
 
@@ -104,6 +105,94 @@ export async function checkAndDeductBalance(
     try { await client.query('ROLLBACK'); } catch {}
     console.error('❌ [SERVER-BILLING] Error:', error);
     // При ошибке биллинга — пропускаем (не блокируем врача)
+    return { allowed: true };
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Проверить и списать гостевой (анонимный) баланс по ключу (обычно IP).
+ * Используется для "хука" без регистрации.
+ */
+export async function checkAndDeductGuestBalance(
+  guestKey: string,
+  amount: number,
+  operation: string,
+  metadata: Record<string, any> = {}
+): Promise<{ allowed: boolean; balanceAfter?: number; error?: string }> {
+  if (!guestKey) {
+    return { allowed: false, error: 'Guest key is missing' };
+  }
+
+  // Если БД недоступна — не блокируем врача.
+  if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
+    return { allowed: true };
+  }
+
+  const SOFT_LIMIT = BILLING_CONFIG.softLimit;
+  const client = await getDbClient();
+
+  try {
+    await client.query('BEGIN');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS guest_balances (
+        id SERIAL PRIMARY KEY,
+        guest_key VARCHAR(255) UNIQUE NOT NULL,
+        balance DECIMAL(10,2) DEFAULT 10.00 CHECK (balance >= -5.00),
+        total_spent DECIMAL(10,2) DEFAULT 0.00,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const { rows } = await client.query(
+      `SELECT balance FROM guest_balances WHERE guest_key = $1 FOR UPDATE`,
+      [guestKey]
+    );
+
+    let currentBalance = 0;
+    if (rows.length === 0) {
+      await client.query(
+        `INSERT INTO guest_balances (guest_key, balance, total_spent) VALUES ($1, $2, 0) ON CONFLICT (guest_key) DO NOTHING`,
+        [guestKey, BILLING_CONFIG.guestTrialBalance]
+      );
+      currentBalance = BILLING_CONFIG.guestTrialBalance;
+    } else {
+      currentBalance = parseFloat(rows[0].balance);
+    }
+
+    const newBalance = currentBalance - amount;
+    if (newBalance < SOFT_LIMIT) {
+      await client.query('ROLLBACK');
+      return {
+        allowed: false,
+        balanceAfter: currentBalance,
+        error: `Your free trial is over. Sign up to get +20 credits and continue. Available: ${currentBalance.toFixed(2)} units, required: ${amount.toFixed(2)} units.`,
+      };
+    }
+
+    await client.query(
+      `UPDATE guest_balances
+       SET balance = balance - $1,
+           total_spent = total_spent + $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE guest_key = $2`,
+      [amount, guestKey]
+    );
+
+    await client.query(
+      `INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [`guest:${guestKey}`, amount, operation, JSON.stringify(metadata), newBalance]
+    );
+
+    await client.query('COMMIT');
+    return { allowed: true, balanceAfter: newBalance };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    console.error('❌ [SERVER-BILLING] Guest adjustment error:', error);
     return { allowed: true };
   } finally {
     client.release();
