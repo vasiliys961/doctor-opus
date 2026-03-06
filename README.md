@@ -21,7 +21,7 @@ A comprehensive web application for physicians and expert clinics, built on **Ne
 - **Multi-model Council:**
   - **Claude Opus 4.6:** Deep reasoning for complex clinical cases and genomics.
   - **Claude Sonnet 4.6:** Best-in-class for fractures and skeletal pathology (83% accuracy).
-  - **GPT-5.2:** Best choice for 80% of X-Ray, MRI, and general clinical analysis.
+  - **GPT-5.4:** Best choice for 80% of X-Ray, MRI, and general clinical analysis.
   - **Gemini 3.1 Flash:** High-speed data extraction (OCR) and screening.
 - **Two-stage Workflow:** Structured data extraction (JSON) → Clinical directive generation.
 - **Streaming (SSE):** Real-time token-by-token output for immediate feedback.
@@ -115,6 +115,8 @@ Open [http://localhost:3000](http://localhost:3000)
 ---
 
 ## 🐳 Deployment (Docker Compose)
+
+Before production operations, review branch/environment rules in [`DEPLOY.md`](DEPLOY.md).
 
 ### Prerequisites
 - Docker + Docker Compose installed on VPS

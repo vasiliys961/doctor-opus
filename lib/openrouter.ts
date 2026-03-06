@@ -17,7 +17,7 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const MODELS = {
   OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6
   SONNET: 'anthropic/claude-sonnet-4.6',                 // Claude Sonnet 4.6
-  GPT_5_2: 'openai/gpt-5.2-chat',                        // GPT-5.2 Chat
+  GPT_5_2: 'openai/gpt-5.4',                        // GPT-5.4 Chat
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
   GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
@@ -465,7 +465,7 @@ export async function analyzeImageOpusTwoStage(options: {
     const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
     const directiveCriteria = getDirectivePrompt(imageType, prompt, specialty);
     
-    // Шаг 2: Целевая модель (Opus, Sonnet или GPT-5.2)
+    // Шаг 2: Целевая модель (Opus, Sonnet или GPT-5.4)
     const textModel = options.targetModel || MODELS.SONNET;
     let stage2ModelUsed = textModel;
     const fallbackModel = getStage2FallbackModel(textModel);

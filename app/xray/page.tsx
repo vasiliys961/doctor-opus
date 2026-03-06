@@ -80,7 +80,7 @@ export default function XRayPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-4.6');
@@ -108,7 +108,7 @@ export default function XRayPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.6';
 
@@ -228,7 +228,7 @@ export default function XRayPage() {
           optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — ideal balance of accuracy and quality for X-Ray analysis.",
           validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for critical and complex cases.",
           extra: [
-            "✅ **GPT-5.2**: BEST choice for 80% of X-Ray cases (general analysis, MRI).",
+            "✅ **GPT-5.4**: BEST choice for 80% of X-Ray cases (general analysis, MRI).",
             "🦴 **Claude Sonnet 4.6**: EXCEPTION — BEST results on fractures (83% accuracy).",
             "⚠️ **Claude Opus 4.6**: NOT recommended for this section (weakest model for imaging).",
             "📸 You can upload an X-Ray file, take a photo with a camera, or use a URL.",

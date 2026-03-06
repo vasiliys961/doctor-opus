@@ -132,7 +132,7 @@ export default function CTPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-4.6');
@@ -155,7 +155,7 @@ export default function CTPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.6';
 
@@ -263,7 +263,7 @@ export default function CTPage() {
           optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — ideal balance of accuracy and quality for CT studies.",
           validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for critical and complex cases.",
           extra: [
-            "✅ **GPT-5.2**: BEST choice for 80% of CT studies (general analysis, CT anatomy).",
+            "✅ **GPT-5.4**: BEST choice for 80% of CT studies (general analysis, CT anatomy).",
             "🦴 **Claude Sonnet 4.6**: EXCEPTION — BEST results on fractures and fine structures.",
             "⚠️ **Claude Opus 4.6**: NOT recommended for this section (weaker model for imaging).",
             "📸 You can upload CT images, take a photo, or use a URL.",
