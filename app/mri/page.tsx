@@ -132,7 +132,7 @@ export default function MRIPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-4.6');
@@ -155,7 +155,7 @@ export default function MRIPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2-chat';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.6';
 
@@ -263,7 +263,7 @@ export default function MRIPage() {
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и качества для МРТ‑исследований.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев.",
           extra: [
-            "✅ **GPT-5.2**: ЛУЧШИЙ выбор для 80% исследований (общий анализ, МРТ).",
+            "✅ **GPT-5.4**: ЛУЧШИЙ выбор для 80% исследований (общий анализ, МРТ).",
             "🦴 **Claude Sonnet 4.6**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах и костных травмах.",
             "⚠️ **Claude Opus 4.6**: НЕ рекомендуем для этого раздела (слабая модель для изображений).",
             "📸 Вы можете загрузить снимки МРТ, сделать фото или использовать ссылку.",
