@@ -18,22 +18,22 @@ export default function SubscriptionPage() {
   const [canOpenPayments, setCanOpenPayments] = useState(false)
 
   useEffect(() => {
-    const refreshOnboardingGate = () => {
+    const refreshOnboardingStatus = () => {
       setCanOpenPayments(isOnboardingCompleted())
     }
 
     setMounted(true)
     setCurrentBalance(getBalance())
-    refreshOnboardingGate()
+    refreshOnboardingStatus()
 
-    window.addEventListener('onboardingCompleted', refreshOnboardingGate)
-    window.addEventListener('focus', refreshOnboardingGate)
-    document.addEventListener('visibilitychange', refreshOnboardingGate)
+    window.addEventListener('onboardingCompleted', refreshOnboardingStatus)
+    window.addEventListener('focus', refreshOnboardingStatus)
+    document.addEventListener('visibilitychange', refreshOnboardingStatus)
 
     return () => {
-      window.removeEventListener('onboardingCompleted', refreshOnboardingGate)
-      window.removeEventListener('focus', refreshOnboardingGate)
-      document.removeEventListener('visibilitychange', refreshOnboardingGate)
+      window.removeEventListener('onboardingCompleted', refreshOnboardingStatus)
+      window.removeEventListener('focus', refreshOnboardingStatus)
+      document.removeEventListener('visibilitychange', refreshOnboardingStatus)
     }
   }, [])
 
@@ -60,11 +60,6 @@ export default function SubscriptionPage() {
   );
 
   const startPayment = (provider: 'capitalist' | 'nowpayments' | 'arsenalpay') => {
-    if (!canOpenPayments) {
-      alert('Please complete the demo first: upload a file and run your first analysis in Lab.')
-      return
-    }
-
     if (!selectedPackage) return;
 
     fetch('/api/payment/create', {
@@ -85,7 +80,7 @@ export default function SubscriptionPage() {
         alert('Connection error. Please try again.');
       });
   };
-  const paymentLocked = mounted && !canOpenPayments
+  const showOnboardingBanner = mounted && !canOpenPayments
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-emerald-50 p-6">
@@ -100,16 +95,16 @@ export default function SubscriptionPage() {
 
         {balanceContent}
 
-        {paymentLocked && (
+        {showOnboardingBanner && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
             <p className="text-amber-800 text-sm">
-              🔒 Payments are temporarily locked for first-time onboarding. Complete the Lab demo first, then return to this page.
+              🎁 Complete a quick demo flow (AI Assistant → Visit Protocol → Image Analysis) and get <strong>+5 credits</strong>.
             </p>
             <Link
-              href="/lab"
+              href="/chat"
               className="inline-block mt-3 bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-amber-700 transition-colors"
             >
-              Go to Lab →
+              Start Demo →
             </Link>
           </div>
         )}
@@ -132,25 +127,25 @@ export default function SubscriptionPage() {
           </div>
           <div className="shrink-0 flex flex-col sm:flex-row gap-3 w-full md:w-auto">
             <button
-              disabled={!selectedPackage || paymentLocked}
+              disabled={!selectedPackage}
               onClick={() => startPayment('arsenalpay')}
               className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-4 rounded-xl font-bold text-base hover:from-cyan-600 hover:to-blue-700 transition shadow-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {paymentLocked ? 'Complete demo first' : selectedPackage ? '💳 Pay by Card (Visa/MC/MIR) →' : 'Select a package first'}
+              {selectedPackage ? '💳 Pay by Card (Visa/MC/MIR) →' : 'Select a package first'}
             </button>
             <button
-              disabled={!selectedPackage || paymentLocked}
+              disabled={!selectedPackage}
               onClick={() => startPayment('capitalist')}
               className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-4 rounded-xl font-bold text-base hover:from-emerald-600 hover:to-teal-700 transition shadow-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {paymentLocked ? 'Complete demo first' : selectedPackage ? '💳 Pay by Card (Visa/MC) →' : 'Select a package first'}
+              {selectedPackage ? '💳 Pay by Card (Visa/MC) →' : 'Select a package first'}
             </button>
             <button
-              disabled={!selectedPackage || paymentLocked}
+              disabled={!selectedPackage}
               onClick={() => startPayment('nowpayments')}
               className="bg-gradient-to-r from-indigo-500 to-blue-600 text-white px-6 py-4 rounded-xl font-bold text-base hover:from-indigo-600 hover:to-blue-700 transition shadow-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {paymentLocked ? 'Complete demo first' : selectedPackage ? '₿ Pay with Crypto →' : 'Select a package first'}
+              {selectedPackage ? '₿ Pay with Crypto →' : 'Select a package first'}
             </button>
           </div>
         </div>
@@ -186,14 +181,10 @@ export default function SubscriptionPage() {
               return (
                 <div
                   key={key}
-                  onClick={() => {
-                    if (!paymentLocked) {
-                      setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)
-                    }
-                  }}
+                  onClick={() => setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)}
                   className={`relative bg-white rounded-xl shadow-lg p-6 cursor-pointer transition-all hover:shadow-2xl hover:-translate-y-2 ${
                     isSelected ? 'ring-4 ring-teal-500' : ''
-                  } ${isRecommended ? 'ring-4 ring-yellow-400 scale-105' : ''} ${paymentLocked ? 'opacity-70' : ''}`}
+                  } ${isRecommended ? 'ring-4 ring-yellow-400 scale-105' : ''}`}
                 >
                   {isRecommended && (
                     <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
@@ -265,14 +256,10 @@ export default function SubscriptionPage() {
                 return (
                   <div
                     key={key}
-                  onClick={() => {
-                    if (!paymentLocked) {
-                      setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)
-                    }
-                  }}
+                  onClick={() => setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)}
                     className={`relative bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border-2 border-indigo-200 p-6 cursor-pointer transition-all hover:shadow-xl hover:-translate-y-1 ${
                       isSelected ? 'ring-4 ring-teal-500' : ''
-                  } ${paymentLocked ? 'opacity-70' : ''}`}
+                  }`}
                   >
                     <div className="text-center">
                       <h3 className="text-xl font-bold text-indigo-900 mb-3">
