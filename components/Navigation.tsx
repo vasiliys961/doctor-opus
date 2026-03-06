@@ -21,12 +21,12 @@ export default function Navigation() {
     { name: '📚 Клинические рекомендации', href: '/protocols' },
     { name: '📈 Оценка ЭКГ', href: '/ecg' },
     { name: '🔍 Изображение+синхронизация', href: '/image-analysis' },
-    { name: '🔬 Клинический разбор (Case Review)', href: '/advanced' },
-    { name: '📊 Сравнение с предыдущим (Follow-up)', href: '/comparative' },
+    { name: '🔬 Клинический разбор', href: '/advanced' },
+    { name: '📊 Сравнение с предыдущим', href: '/comparative' },
     { name: '🩻 Описание рентгена', href: '/xray' },
     { name: '🧠 Описание МРТ', href: '/mri' },
     { name: '🩻 Описание КТ', href: '/ct' },
-    { name: '🔬 3D Визуализация (Cinematic)', href: '/advanced-3d' },
+    { name: '🔬 3D-визуализация', href: '/advanced-3d' },
     { name: '🔊 Описание УЗИ', href: '/ultrasound' },
     { name: '🔬 Оценка дерматоскопии', href: '/dermatoscopy' },
     { name: '🔬 Оценка лабораторных данных', href: '/lab' },
@@ -63,7 +63,7 @@ export default function Navigation() {
             <button
               onClick={toggleMenu}
               className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors touch-manipulation"
-              aria-label="Toggle menu"
+              aria-label="Открыть или закрыть меню"
             >
               {isOpen ? (
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -185,12 +185,12 @@ export default function Navigation() {
           )}
           <div className="mt-6 p-4 bg-primary-800/50 rounded-lg text-sm border border-primary-700">
             <p className="font-semibold mb-1">Клинический Ассистент v3.50</p>
-            <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Clinical Edition</p>
+            <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Клиническая версия</p>
             <ul className="space-y-1 text-xs opacity-70">
               <li>• Opus 4.6 + Gemini 3.1</li>
-              <li>• DICOM Viewer + Measure</li>
-              <li>• Multi-modal (Images + Labs)</li>
-              <li>• Trend Analysis & RAG</li>
+              <li>• Просмотр DICOM + измерения</li>
+              <li>• Мультимодальный анализ (изображения + лаборатория)</li>
+              <li>• Анализ динамики и RAG</li>
               <li className="text-teal-400 font-bold mt-2">🛡️ Поддержка клинических решений</li>
             </ul>
           </div>

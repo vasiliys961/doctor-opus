@@ -30,7 +30,11 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    icon: '/icon-192.png', 
+    icon: [
+      { url: 'https://vrachirf.ru/favicon.png', type: 'image/png', sizes: '32x32' },
+    ],
+    shortcut: 'https://vrachirf.ru/favicon.png',
+    apple: 'https://vrachirf.ru/apple-touch-icon.png',
   },
   appleWebApp: {
     capable: true,

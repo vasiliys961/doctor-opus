@@ -33,6 +33,21 @@ export default async function HomePage() {
           </div>
         )}
       </div>
+
+      <a
+        href="https://vrachirf.ru"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mb-5 sm:mb-6 inline-flex items-center rounded-xl border border-primary-200 bg-white p-3 shadow-sm hover:shadow-md transition-shadow"
+      >
+        <div className="flex items-center gap-2 rounded-lg border border-primary-100 bg-white px-2 py-1">
+          <img
+            src="/vrachirf-logo.png"
+            alt="Врачи РФ"
+            className="h-8 w-auto"
+          />
+        </div>
+      </a>
       
       <SpendingSummary />
       {/* HERO-блок */}
