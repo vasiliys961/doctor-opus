@@ -154,7 +154,15 @@ export default function Navigation() {
                   key={page.href}
                   href={page.href}
                   onClick={closeMenu}
-                  data-tour={page.href === '/lab' ? 'menu-lab' : undefined}
+                  data-tour={
+                    page.href === '/chat'
+                      ? 'menu-chat'
+                      : page.href === '/protocol'
+                      ? 'menu-protocol'
+                      : page.href === '/image-analysis'
+                      ? 'menu-image-analysis'
+                      : undefined
+                  }
                   className={`block w-full text-left py-2.5 px-4 rounded-lg transition-all touch-manipulation text-sm ${
                     isActive
                       ? 'bg-primary-500 text-white font-bold shadow-md ring-2 ring-primary-300'

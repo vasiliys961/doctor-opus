@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 import dynamic from 'next/dynamic'
 import ImageUpload from '@/components/ImageUpload'
@@ -20,6 +20,8 @@ import { validateMedicalImage, ImageValidationResult } from '@/lib/image-validat
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-cache'
+import { getOnboardingStatus, isOnboardingCompleted, setOnboardingStatus } from '@/lib/onboarding'
+import { grantOnboardingBonus } from '@/lib/subscription-manager'
 
 export default function ImageAnalysisPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -46,6 +48,7 @@ export default function ImageAnalysisPage() {
   const [useLibrary, setUseLibrary] = useState(false)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
+  const [showOnboardingReward, setShowOnboardingReward] = useState(false)
 
   const dataUrlToFile = (dataUrl: string, filename: string) => {
     const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/)
@@ -338,11 +341,34 @@ export default function ImageAnalysisPage() {
     setFlashResult('')
     setError(null)
     setDicomAnalysisImage(null)
+
+    if (getOnboardingStatus() === 'protocol_done') {
+      setOnboardingStatus('image_uploaded')
+    }
   }
+
+  useEffect(() => {
+    if (loading || !result.trim()) return
+    if (isOnboardingCompleted()) return
+    if (getOnboardingStatus() !== 'image_uploaded') return
+
+    setOnboardingStatus('completed')
+    const bonus = grantOnboardingBonus(5)
+    window.dispatchEvent(new Event('onboardingCompleted'))
+    if (bonus.granted) {
+      setShowOnboardingReward(true)
+      window.setTimeout(() => setShowOnboardingReward(false), 7000)
+    }
+  }, [loading, result])
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🔍 Анализ медицинских изображений</h1>
+      {showOnboardingReward && (
+        <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
+          ✅ Обучение завершено. Начислено <strong>+5 единиц</strong> (локальный режим).
+        </div>
+      )}
       
       <DeviceSync 
         currentImage={imagePreview}
@@ -390,7 +416,9 @@ export default function ImageAnalysisPage() {
           Поддерживаемые типы: ЭКГ, Рентген, МРТ, КТ, УЗИ, Дерматоскопия, Гистология, Офтальмология, Маммография, DICOM (.dcm)
         </p>
         
-        <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
+        <div data-tour="image-upload-zone">
+          <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
+        </div>
 
         {validation && validation.warnings.length > 0 && (
           <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
@@ -554,6 +582,7 @@ export default function ImageAnalysisPage() {
               <div id="analysis-controls" className="flex flex-wrap gap-2">
                 <button
                   onClick={() => analyzeImage('fast', useStreaming)}
+                  data-tour="image-fast-analysis-button"
                   disabled={loading}
                   className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed font-bold"
                 >

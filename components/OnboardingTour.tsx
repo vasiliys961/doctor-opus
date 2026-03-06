@@ -42,17 +42,20 @@ export default function OnboardingTour() {
   const router = useRouter()
   const activeTourRef = useRef<Shepherd.Tour | null>(null)
 
-  const showCompletionStep = () => {
-    if (isOnboardingCompletionPromptSeen()) return
-
-    const completionTour = new Shepherd.Tour({
+  const createTour = () =>
+    new Shepherd.Tour({
       useModalOverlay: true,
       defaultStepOptions: {
         classes: 'shadow-xl',
         cancelIcon: { enabled: false },
-        scrollTo: false,
+        scrollTo: { behavior: 'smooth', block: 'center' },
       },
     })
+
+  const showCompletionStep = () => {
+    if (isOnboardingCompletionPromptSeen()) return
+
+    const completionTour = createTour()
 
     completionTour.addStep({
       id: 'completion-step',
@@ -94,7 +97,7 @@ export default function OnboardingTour() {
 
     const onboardingStatus = getOnboardingStatus()
     if (onboardingStatus === 'completed') {
-      if (pathname === '/lab' && !isOnboardingCompletionPromptSeen()) {
+      if (pathname === '/image-analysis' && !isOnboardingCompletionPromptSeen()) {
         showCompletionStep()
       }
       return
@@ -102,106 +105,191 @@ export default function OnboardingTour() {
 
     activeTourRef.current?.cancel()
 
-    if (pathname !== '/lab' && onboardingStatus === 'new') {
+    if (onboardingStatus === 'new' && pathname !== '/chat') {
       if (!canLaunchOnboarding()) return
 
-      const introTour = new Shepherd.Tour({
-        useModalOverlay: true,
-        defaultStepOptions: {
-          classes: 'shadow-xl',
-          cancelIcon: { enabled: false },
-          scrollTo: false,
-        },
-      })
-
-      introTour.addStep({
-        id: 'welcome-step',
-        title: 'Добро пожаловать в Doctor Opus',
-        text: 'Давайте выполним ваш первый лабораторный анализ примерно за 60 секунд.',
-        buttons: [
-          {
-            text: 'Начать',
-            action: introTour.next,
-          },
-        ],
-      })
-
-      introTour.addStep({
-        id: 'menu-step',
+      const navTour = createTour()
+      navTour.addStep({
+        id: 'open-chat',
         title: 'Шаг 1 из 4',
-        text: 'Откройте раздел «Интерпретация лабораторных данных». Нажмите кнопку ниже, и я сразу переведу вас туда.',
-        attachTo: { element: '[data-tour="menu-lab"]', on: 'right' },
-        beforeShowPromise: () => waitForElement('[data-tour="menu-lab"]'),
+        text: 'Откройте ИИ-Ассистент и задайте медицинский вопрос. Ответ формирует GPT‑5.',
+        attachTo: { element: '[data-tour="menu-chat"]', on: 'right' },
+        beforeShowPromise: () => waitForElement('[data-tour="menu-chat"]'),
         buttons: [
           {
-            text: 'Открыть Lab',
+            text: 'Открыть ИИ-Ассистент',
             action: () => {
-              setOnboardingStatus('menu_done')
-              introTour.complete()
-              router.push('/lab')
+              navTour.complete()
+              router.push('/chat')
             },
           },
         ],
       })
 
-      activeTourRef.current = introTour
-      registerOnboardingLaunch()
-      introTour.start()
+      activeTourRef.current = navTour
+      navTour.start()
       return
     }
 
-    if (pathname === '/lab' && (onboardingStatus === 'new' || onboardingStatus === 'menu_done' || onboardingStatus === 'file_uploaded')) {
+    if (onboardingStatus === 'new' && pathname === '/chat') {
       if (!canLaunchOnboarding()) return
 
-      if (onboardingStatus === 'new') {
-        setOnboardingStatus('menu_done')
-      }
-
-      const labTour = new Shepherd.Tour({
-        useModalOverlay: true,
-        defaultStepOptions: {
-          classes: 'shadow-xl',
-          cancelIcon: { enabled: false },
-          scrollTo: { behavior: 'smooth', block: 'center' },
-        },
+      const chatTour = createTour()
+      chatTour.addStep({
+        id: 'chat-input',
+        title: 'Шаг 1 из 4',
+        text: 'Введите медицинский вопрос в это поле.',
+        attachTo: { element: '[data-tour="chat-question-input"]', on: 'top' },
+        beforeShowPromise: () => waitForElement('[data-tour="chat-question-input"]'),
+        buttons: [{ text: 'Далее', action: chatTour.next }],
       })
 
-      labTour.addStep({
-        id: 'upload-step',
-        title: 'Шаг 2 из 4',
-        text: 'Загрузите любой лабораторный файл (PDF/CSV/изображение), затем продолжите.',
-        attachTo: { element: '[data-tour="lab-upload-zone"]', on: 'top' },
-        beforeShowPromise: () => waitForElement('[data-tour="lab-upload-zone"]'),
+      chatTour.addStep({
+        id: 'chat-send',
+        title: 'Шаг 1 из 4',
+        text: 'Нажмите «Отправить» и получите ответ GPT‑5, затем продолжите.',
+        attachTo: { element: '[data-tour="chat-send-button"]', on: 'top' },
+        beforeShowPromise: () => waitForElement('[data-tour="chat-send-button"]'),
         buttons: [
           {
-            text: 'Файл загружен',
+            text: 'К протоколу',
             action: () => {
-              const runButton = document.querySelector('[data-tour="lab-run-analysis"]')
-              if (!runButton) return
-              setOnboardingStatus('file_uploaded')
-              labTour.next()
+              setOnboardingStatus('chat_done')
+              chatTour.complete()
+              router.push('/protocol')
             },
           },
         ],
       })
 
-      labTour.addStep({
-        id: 'run-step',
-        title: 'Шаг 3 из 4',
-        text: 'Нажмите «Run Analysis». После успешного результата вы получите +5 единиц и откроется финальный шаг.',
-        attachTo: { element: '[data-tour="lab-run-analysis"]', on: 'top' },
-        beforeShowPromise: () => waitForElement('[data-tour="lab-run-analysis"]', 10000),
+      activeTourRef.current = chatTour
+      registerOnboardingLaunch()
+      chatTour.start()
+      return
+    }
+
+    if (onboardingStatus === 'chat_done' && pathname !== '/protocol') {
+      const navTour = createTour()
+      navTour.addStep({
+        id: 'open-protocol',
+        title: 'Шаг 2 из 4',
+        text: 'Откройте Протокол приёма. Внесите несколько фраз осмотра и сгенерируйте протокол.',
+        attachTo: { element: '[data-tour="menu-protocol"]', on: 'right' },
+        beforeShowPromise: () => waitForElement('[data-tour="menu-protocol"]'),
         buttons: [
           {
-            text: 'Понятно',
-            action: labTour.complete,
+            text: 'Открыть Протокол приёма',
+            action: () => {
+              navTour.complete()
+              router.push('/protocol')
+            },
           },
         ],
       })
 
-      activeTourRef.current = labTour
-      registerOnboardingLaunch()
-      labTour.start()
+      activeTourRef.current = navTour
+      navTour.start()
+      return
+    }
+
+    if (onboardingStatus === 'chat_done' && pathname === '/protocol') {
+      const protocolTour = createTour()
+      protocolTour.addStep({
+        id: 'protocol-input',
+        title: 'Шаг 2 из 4',
+        text: 'Введите 2–3 фразы осмотра пациента в это поле.',
+        attachTo: { element: '[data-tour="protocol-input"]', on: 'top' },
+        beforeShowPromise: () => waitForElement('[data-tour="protocol-input"]'),
+        buttons: [{ text: 'Далее', action: protocolTour.next }],
+      })
+
+      protocolTour.addStep({
+        id: 'protocol-generate',
+        title: 'Шаг 2 из 4',
+        text: 'Нажмите «Создать протокол». Когда результат появится, продолжите.',
+        attachTo: { element: '[data-tour="protocol-generate-button"]', on: 'top' },
+        beforeShowPromise: () => waitForElement('[data-tour="protocol-generate-button"]'),
+        buttons: [
+          {
+            text: 'К анализу изображений',
+            action: () => {
+              const ready = document.querySelector('[data-tour="protocol-generated-result"]')
+              if (!ready) {
+                window.alert('Сначала сгенерируйте протокол, затем продолжайте.')
+                return
+              }
+              setOnboardingStatus('protocol_done')
+              protocolTour.complete()
+              router.push('/image-analysis')
+            },
+          },
+        ],
+      })
+
+      activeTourRef.current = protocolTour
+      protocolTour.start()
+      return
+    }
+
+    if (onboardingStatus === 'protocol_done' && pathname !== '/image-analysis') {
+      const navTour = createTour()
+      navTour.addStep({
+        id: 'open-image-analysis',
+        title: 'Шаг 3 из 4',
+        text: 'Откройте раздел анализа изображений. Загрузите любое медицинское изображение и запустите быстрый анализ.',
+        attachTo: { element: '[data-tour="menu-image-analysis"]', on: 'right' },
+        beforeShowPromise: () => waitForElement('[data-tour="menu-image-analysis"]'),
+        buttons: [
+          {
+            text: 'Открыть Анализ изображений',
+            action: () => {
+              navTour.complete()
+              router.push('/image-analysis')
+            },
+          },
+        ],
+      })
+
+      activeTourRef.current = navTour
+      navTour.start()
+      return
+    }
+
+    if ((onboardingStatus === 'protocol_done' || onboardingStatus === 'image_uploaded') && pathname === '/image-analysis') {
+      const imageTour = createTour()
+      imageTour.addStep({
+        id: 'image-upload',
+        title: 'Шаг 3 из 4',
+        text: 'Загрузите любое медицинское изображение здесь.',
+        attachTo: { element: '[data-tour="image-upload-zone"]', on: 'top' },
+        beforeShowPromise: () => waitForElement('[data-tour="image-upload-zone"]'),
+        buttons: [
+          {
+            text: 'Изображение загружено',
+            action: () => {
+              const fastButton = document.querySelector('[data-tour="image-fast-analysis-button"]')
+              if (!fastButton) {
+                window.alert('Сначала загрузите изображение, чтобы активировать быстрый анализ.')
+                return
+              }
+              setOnboardingStatus('image_uploaded')
+              imageTour.next()
+            },
+          },
+        ],
+      })
+
+      imageTour.addStep({
+        id: 'image-fast-analysis',
+        title: 'Шаг 4 из 4',
+        text: 'Запустите быстрый анализ. После появления результата обучение завершится автоматически.',
+        attachTo: { element: '[data-tour="image-fast-analysis-button"]', on: 'top' },
+        beforeShowPromise: () => waitForElement('[data-tour="image-fast-analysis-button"]', 10000),
+        buttons: [{ text: 'Понятно', action: imageTour.complete }],
+      })
+
+      activeTourRef.current = imageTour
+      imageTour.start()
     }
   }, [pathname, router, sessionStatus])
 
@@ -209,7 +297,7 @@ export default function OnboardingTour() {
     if (sessionStatus !== 'authenticated') return
 
     const handler = () => {
-      if (pathname === '/lab') {
+      if (pathname === '/image-analysis') {
         showCompletionStep()
       }
     }

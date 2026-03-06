@@ -10,25 +10,25 @@ export default function SubscriptionPage() {
   const [selectedPackage, setSelectedPackage] = useState<keyof typeof SUBSCRIPTION_PACKAGES | null>(null)
   const [currentBalance, setCurrentBalance] = useState<SubscriptionBalance | null>(null)
   const [mounted, setMounted] = useState(false)
-  const [canOpenPayments, setCanOpenPayments] = useState(false)
+  const [isOnboardingDone, setIsOnboardingDone] = useState(false)
 
   useEffect(() => {
-    const refreshOnboardingGate = () => {
-      setCanOpenPayments(isOnboardingCompleted())
+    const refreshOnboardingStatus = () => {
+      setIsOnboardingDone(isOnboardingCompleted())
     }
 
     setMounted(true)
     setCurrentBalance(getBalance())
-    refreshOnboardingGate()
+    refreshOnboardingStatus()
 
-    window.addEventListener('onboardingCompleted', refreshOnboardingGate)
-    window.addEventListener('focus', refreshOnboardingGate)
-    document.addEventListener('visibilitychange', refreshOnboardingGate)
+    window.addEventListener('onboardingCompleted', refreshOnboardingStatus)
+    window.addEventListener('focus', refreshOnboardingStatus)
+    document.addEventListener('visibilitychange', refreshOnboardingStatus)
 
     return () => {
-      window.removeEventListener('onboardingCompleted', refreshOnboardingGate)
-      window.removeEventListener('focus', refreshOnboardingGate)
-      document.removeEventListener('visibilitychange', refreshOnboardingGate)
+      window.removeEventListener('onboardingCompleted', refreshOnboardingStatus)
+      window.removeEventListener('focus', refreshOnboardingStatus)
+      document.removeEventListener('visibilitychange', refreshOnboardingStatus)
     }
   }, [])
 
@@ -56,7 +56,7 @@ export default function SubscriptionPage() {
     <div className="bg-gray-100 animate-pulse border border-gray-200 rounded-lg p-4 mb-8 h-14"></div>
   );
 
-  const paymentLocked = mounted && !canOpenPayments
+  const showOnboardingBanner = mounted && !isOnboardingDone
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-emerald-50 p-6">
@@ -88,16 +88,16 @@ export default function SubscriptionPage() {
 
         {balanceContent}
 
-        {paymentLocked && (
+        {showOnboardingBanner && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
             <p className="text-amber-800 text-sm">
-              🔒 Оплата временно заблокирована до завершения демо. Пройдите первый сценарий в разделе Lab и вернитесь на эту страницу.
+              🎁 Пройдите быстрый демо-сценарий: ИИ-Ассистент → Протокол приёма → Анализ изображений и получите <strong>+5 единиц</strong>.
             </p>
             <Link
-              href="/lab"
+              href="/chat"
               className="inline-block mt-3 bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-amber-700 transition-colors"
             >
-              Перейти в Lab →
+              Пройти демо →
             </Link>
           </div>
         )}
@@ -118,23 +118,14 @@ export default function SubscriptionPage() {
               Безопасная оплата картой. Введите ваш email из Doctor Opus — единицы зачислятся автоматически.
             </p>
           </div>
-          {paymentLocked ? (
-            <Link
-              href="/lab"
-              className="shrink-0 bg-gradient-to-r from-amber-500 to-orange-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-amber-600 hover:to-orange-700 transition shadow-lg text-center"
-            >
-              Сначала пройти демо →
-            </Link>
-          ) : (
-            <a
-              href="https://self.payanyway.ru/17715342661162"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 bg-gradient-to-r from-teal-500 to-emerald-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-teal-600 hover:to-emerald-700 transition shadow-lg text-center"
-            >
-              Перейти к оплате →
-            </a>
-          )}
+          <a
+            href="https://self.payanyway.ru/17715342661162"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 bg-gradient-to-r from-teal-500 to-emerald-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-teal-600 hover:to-emerald-700 transition shadow-lg text-center"
+          >
+            Перейти к оплате →
+          </a>
         </div>
 
         {/* ИНДИВИДУАЛЬНЫЕ ПАКЕТЫ */}
@@ -150,14 +141,10 @@ export default function SubscriptionPage() {
               return (
                 <div
                   key={key}
-                  onClick={() => {
-                    if (!paymentLocked) {
-                      setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)
-                    }
-                  }}
+                  onClick={() => setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)}
                   className={`relative bg-white rounded-xl shadow-lg p-6 cursor-pointer transition-all hover:shadow-2xl hover:-translate-y-2 ${
                     isSelected ? 'ring-4 ring-teal-500' : ''
-                  } ${isRecommended ? 'ring-4 ring-yellow-400 scale-105' : ''} ${paymentLocked ? 'opacity-70' : ''}`}
+                  } ${isRecommended ? 'ring-4 ring-yellow-400 scale-105' : ''}`}
                 >
                   {isRecommended && (
                     <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
@@ -223,14 +210,10 @@ export default function SubscriptionPage() {
                 return (
                   <div
                     key={key}
-                  onClick={() => {
-                    if (!paymentLocked) {
-                      setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)
-                    }
-                  }}
+                  onClick={() => setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)}
                     className={`relative bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border-2 border-indigo-200 p-6 cursor-pointer transition-all hover:shadow-xl hover:-translate-y-1 ${
                       isSelected ? 'ring-4 ring-teal-500' : ''
-                  } ${paymentLocked ? 'opacity-70' : ''}`}
+                  }`}
                   >
                     <div className="text-center">
                       <h3 className="text-xl font-bold text-indigo-900 mb-3">

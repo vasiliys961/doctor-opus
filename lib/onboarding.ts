@@ -1,18 +1,22 @@
-export type OnboardingStatus = 'new' | 'menu_done' | 'file_uploaded' | 'completed'
+export type OnboardingStatus = 'new' | 'chat_done' | 'protocol_done' | 'image_uploaded' | 'completed'
 
 const ONBOARDING_STATUS_KEY = 'onboarding_status_v1'
 const ONBOARDING_BONUS_GRANTED_KEY = 'onboarding_bonus_granted_v1'
 const ONBOARDING_COMPLETION_PROMPT_SEEN_KEY = 'onboarding_completion_prompt_seen_v1'
 const ONBOARDING_LAUNCH_COUNT_KEY = 'onboarding_launch_count_v1'
-const ONBOARDING_MAX_LAUNCHES = 2
+const ONBOARDING_MAX_LAUNCHES = 1
 
 export function getOnboardingStatus(): OnboardingStatus {
   if (typeof window === 'undefined') return 'new'
 
   const rawValue = window.localStorage.getItem(ONBOARDING_STATUS_KEY)
-  if (rawValue === 'menu_done' || rawValue === 'file_uploaded' || rawValue === 'completed') {
+  if (rawValue === 'chat_done' || rawValue === 'protocol_done' || rawValue === 'image_uploaded' || rawValue === 'completed') {
     return rawValue
   }
+
+  // Совместимость со старой схемой статусов
+  if (rawValue === 'menu_done') return 'chat_done'
+  if (rawValue === 'file_uploaded') return 'image_uploaded'
 
   return 'new'
 }
