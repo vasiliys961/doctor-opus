@@ -703,6 +703,7 @@ export default function ProtocolPage() {
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
               placeholder="Enter examination data or use 🎤..."
+              data-tour="protocol-input"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none min-h-[300px]"
               disabled={loading}
             />
@@ -730,7 +731,7 @@ export default function ProtocolPage() {
             </select>
           </div>
 
-          <button onClick={handleGenerateProtocol} disabled={!rawText.trim() || loading} className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50 font-semibold shadow-md">
+          <button onClick={handleGenerateProtocol} data-tour="protocol-generate-button" disabled={!rawText.trim() || loading} className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50 font-semibold shadow-md">
             {loading ? '⏳ Generating...' : '📝 Generate Protocol'}
           </button>
         </div>
@@ -754,7 +755,7 @@ export default function ProtocolPage() {
           </div>
           
           {protocol ? (
-            <div className="prose prose-sm max-w-none border border-gray-200 rounded-lg p-6 bg-white overflow-y-auto max-h-[800px]">
+            <div data-tour="protocol-generated-result" className="prose prose-sm max-w-none border border-gray-200 rounded-lg p-6 bg-white overflow-y-auto max-h-[800px]">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{protocol}</ReactMarkdown>
             </div>
           ) : (

@@ -1177,12 +1177,14 @@ export default function ChatPage() {
             }
           }}
           placeholder="Enter your question..."
+          data-tour="chat-question-input"
           className="flex-1 px-4 py-3 sm:py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base touch-manipulation min-h-[50px] max-h-[200px] resize-y"
           disabled={loading}
           rows={1}
         />
         <button
           onClick={handleSend}
+          data-tour="chat-send-button"
           disabled={loading || isProcessingFiles || (!message.trim() && selectedFiles.length === 0)}
           className="px-6 py-3 sm:py-2 bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-medium touch-manipulation flex items-center justify-center gap-2"
         >

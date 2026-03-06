@@ -20,7 +20,15 @@ export const metadata: Metadata = {
   title: 'Doctor Opus — AI Medical Assistant',
   description: 'AI-powered Clinical Decision Support System for medical imaging analysis, ECG, lab data, and genomics',
   icons: {
-    icon: '/icon-192.png', 
+    icon: [
+      {
+        url: 'https://vrachirf.ru/apple-touch-icon.png',
+        type: 'image/png',
+        sizes: '180x180',
+      },
+    ],
+    shortcut: 'https://vrachirf.ru/apple-touch-icon.png',
+    apple: 'https://vrachirf.ru/apple-touch-icon.png',
   },
   appleWebApp: {
     capable: true,

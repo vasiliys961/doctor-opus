@@ -13,8 +13,6 @@ import BillingErrorNotice from '@/components/BillingErrorNotice'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { handleSSEStream } from '@/lib/streaming-utils'
-import { getOnboardingStatus, isOnboardingCompleted, setOnboardingStatus } from '@/lib/onboarding'
-import { grantOnboardingBonus } from '@/lib/subscription-manager'
 
 // Расширяем Window для PDF.js
 declare global {
@@ -63,7 +61,6 @@ export default function LabPage() {
   const [showEditor, setShowEditor] = useState(false)
   const [processedImages, setProcessedImages] = useState<string[]>([])
   const [currentEditorIndex, setCurrentEditorIndex] = useState(0)
-  const [showOnboardingReward, setShowOnboardingReward] = useState(false)
 
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
     if (!window.pdfjsLib) {
@@ -138,11 +135,6 @@ export default function LabPage() {
     setError(null)
     setProcessedImages([])
 
-    const onboardingStatus = getOnboardingStatus()
-    if (onboardingStatus === 'menu_done') {
-      setOnboardingStatus('file_uploaded')
-    }
-    
     if (uploadedFile.type.startsWith('image/')) {
       const reader = new FileReader()
       reader.onloadend = () => {
@@ -392,28 +384,10 @@ export default function LabPage() {
     handleFileSelect(uploadedFile)
   }
 
-  useEffect(() => {
-    if (loading || !result.trim()) return
-    if (isOnboardingCompleted()) return
-
-    setOnboardingStatus('completed')
-    const bonus = grantOnboardingBonus(5)
-    window.dispatchEvent(new Event('onboardingCompleted'))
-    if (bonus.granted) {
-      setShowOnboardingReward(true)
-      window.setTimeout(() => setShowOnboardingReward(false), 7000)
-    }
-  }, [loading, result])
-
   return (
     <>
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 Laboratory Data Analysis</h1>
-        {showOnboardingReward && (
-          <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
-            ✅ Onboarding complete. <strong>+5 credits</strong> added in local mode.
-          </div>
-        )}
         
         <AnalysisTips 
           content={{
@@ -509,9 +483,7 @@ export default function LabPage() {
           <p className="text-sm text-gray-600 mb-4">
             Supported formats: PDF, XLSX, XLS, CSV, images (JPG, PNG)
           </p>
-          <div data-tour="lab-upload-zone">
-            <ImageUpload onUpload={handleUpload} accept=".pdf,.xlsx,.xls,.csv,image/*" maxSize={50} />
-          </div>
+          <ImageUpload onUpload={handleUpload} accept=".pdf,.xlsx,.xls,.csv,image/*" maxSize={50} />
 
           {file && processedImages.length > 0 && (
             <div className="mt-6 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
@@ -599,7 +571,6 @@ export default function LabPage() {
               </div>
               <button
                 onClick={handleAnalyze}
-                data-tour="lab-run-analysis"
                 className="w-full sm:w-auto px-10 py-4 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 transition-all shadow-lg transform hover:scale-105 active:scale-95 flex items-center justify-center gap-3"
               >
                 <span className="text-xl">🚀</span>
