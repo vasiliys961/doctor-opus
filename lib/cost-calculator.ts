@@ -8,7 +8,6 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
   'anthropic/claude-sonnet-4.6': { input: 3.0, output: 15.0 },
   'openai/gpt-5.2-chat': { input: 2.5, output: 10.0 }, // Legacy pricing key (for historical logs)
-  'openai/gpt-5.2': { input: 2.5, output: 10.0 }, // GPT-5.2
   'openai/gpt-5.4': { input: 2.5, output: 10.0 }, // GPT-5.4 (update from GPT-5.2 path)
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
   'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },

@@ -8,7 +8,7 @@
 ## Стек технологий
 - **Frontend:** Next.js 14 (App Router), React, TypeScript, Tailwind CSS
 - **Backend:** Next.js API Routes (серверные функции)
-- **AI:** OpenRouter API → Claude Opus 4.6, Claude Sonnet 4.5, GPT-5.2, Gemini 3 Flash/Pro
+- **AI:** OpenRouter API → Claude Opus 4.6, Claude Sonnet 4.5, GPT-5.4, Gemini 3 Flash/Pro
 - **БД:** PostgreSQL (Neon на Vercel, локальная на Timeweb Docker)
 - **Auth:** NextAuth (CredentialsProvider), bcrypt
 - **Деплой:** Timeweb VPS (Docker + Nginx + GitHub Actions), Vercel (резервный)
@@ -33,7 +33,7 @@
 ```
 MODELS.OPUS = 'anthropic/claude-opus-4.6'
 MODELS.SONNET = 'anthropic/claude-sonnet-4.5'
-MODELS.GPT_5_2 = 'openai/gpt-5.2'
+MODELS.GPT_5_2 = 'openai/gpt-5.4'
 MODELS.HAIKU = 'anthropic/claude-haiku-4.5'
 MODELS.GEMINI_3_FLASH = 'google/gemini-3-flash-preview'
 MODELS.GEMINI_3_PRO = 'google/gemini-3.1-pro-preview'

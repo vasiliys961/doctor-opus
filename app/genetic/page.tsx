@@ -388,7 +388,7 @@ export default function GeneticPage() {
             setResult(accumulatedText)
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2' : 'anthropic/claude-opus-4.6');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.4' : 'anthropic/claude-opus-4.6');
             logUsage({
               section: 'genetic',
               model: model,
@@ -539,7 +539,7 @@ export default function GeneticPage() {
             })
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.2' : 'anthropic/claude-opus-4.6');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.4' : 'anthropic/claude-opus-4.6');
             logUsage({
               section: 'chat',
               model: model,
@@ -616,7 +616,7 @@ export default function GeneticPage() {
           validated: "второй этап: экспертное мнение «Ассистента-генетика» (Claude Opus 4.6) — самый точный клинический разбор рисков; экспертный режим.",
           extra: [
             "⭐ Рекомендуемый режим: «Экспертный» (Opus 4.6) — максимально глубокий анализ генетических данных.",
-            "🚀 Альтернатива: «GPT-5.2» — отличный баланс скорости, мощности и стоимости.",
+            "🚀 Альтернатива: «GPT-5.4» — отличный баланс скорости, мощности и стоимости.",
             "👤 Рекомендуется добавить клинический контекст для более точной интерпретации результатов.",
             "💬 После получения заключения вы можете продолжить диалог с генетиком для уточнения деталей.",
             "📎 Можно прикреплять дополнительные анализы и документы прямо в чат."
@@ -925,7 +925,7 @@ export default function GeneticPage() {
                 }`}
               >
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-base">🚀 GPT-5.2</span>
+                  <span className="text-base">🚀 GPT-5.4</span>
                   <span className="text-[10px] uppercase opacity-60 font-bold">Самый мощный и выгодный</span>
                 </div>
               </button>
@@ -958,7 +958,7 @@ export default function GeneticPage() {
       <AnalysisResult 
         result={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
         loading={loading} 
-        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.2' : 'anthropic/claude-opus-4.6')}
+        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.4' : 'anthropic/claude-opus-4.6')}
         mode="genetic"
         cost={totalCost}
         images={file?.type.startsWith('image/') ? [URL.createObjectURL(file)] : []}

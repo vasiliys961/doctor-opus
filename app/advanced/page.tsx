@@ -67,7 +67,7 @@ export default function AdvancedAnalysisPage() {
       const modelToUse = mode === 'fast' 
         ? 'google/gemini-3-flash-preview' 
         : mode === 'optimized' 
-          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2')
+          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4')
           : 'anthropic/claude-opus-4.6'
       
       const formData = new FormData()
