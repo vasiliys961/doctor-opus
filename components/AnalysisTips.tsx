@@ -78,7 +78,7 @@ export default function AnalysisTips({
             <p className="font-semibold mb-1">⚠️ Service availability notice</p>
             <p>
               Some AI providers may be temporarily unavailable due to regional restrictions and provider routing.
-              Users outside Russia may still use Claude, but availability is not guaranteed in every region. If Claude is unavailable, switch to GPT-5.4 in Optimized mode.
+              Users outside Russia may still use Claude, but availability is not guaranteed in every region. If Claude is unavailable, switch to GPT-5.2 in Optimized mode.
             </p>
           </div>
         </div>

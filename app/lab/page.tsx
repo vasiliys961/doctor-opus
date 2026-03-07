@@ -169,7 +169,7 @@ export default function LabPage() {
           body: JSON.stringify({
             images: processedImages,
             mode: mode,
-            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6'),
+            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2') : 'anthropic/claude-opus-4.6'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
             prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
@@ -250,7 +250,7 @@ export default function LabPage() {
           body: JSON.stringify({
             images: pdfImages,
             mode: mode,
-            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6'),
+            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2') : 'anthropic/claude-opus-4.6'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
             prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
@@ -310,7 +310,7 @@ export default function LabPage() {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('mode', mode)
-        const targetModelId = mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6');
+        const targetModelId = mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.2') : 'anthropic/claude-opus-4.6');
         formData.append('model', targetModelId)
         formData.append('useStreaming', useStreaming.toString())
         formData.append('isAnonymous', isAnonymous.toString())

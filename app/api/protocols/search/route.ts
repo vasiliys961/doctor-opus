@@ -297,7 +297,7 @@ ${specialty ? `Специальность: ${specialty}` : ''}
       content: content,
       tokensUsed: tokensUsed,
       model: modelMode === 'online' ? 'Perplexity Sonar (Online Search)' : 
-             modelMode === 'detailed' ? 'GPT-5.4 (Detailed)' : 
+             modelMode === 'detailed' ? 'GPT-5.2 (Detailed)' :
              'Gemini 3.0 Flash (Standard)'
     });
 
