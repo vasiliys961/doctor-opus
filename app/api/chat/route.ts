@@ -64,9 +64,18 @@ export async function POST(request: NextRequest) {
       useStreaming = formData.get('useStreaming') === 'true';
       model = formData.get('model') as string | undefined;
       
-      // Получаем файлы
-      const fileEntries = formData.getAll('files') as File[];
-      files = fileEntries.filter(f => f instanceof File && f.size > 0);
+      // Получаем файлы. На некоторых Node runtimes глобальный File отсутствует,
+      // поэтому нельзя использовать instanceof File.
+      const fileEntries = formData.getAll('files');
+      const isFileLike = (value: unknown): value is File => {
+        return !!value &&
+          typeof value === 'object' &&
+          typeof (value as any).name === 'string' &&
+          typeof (value as any).size === 'number' &&
+          typeof (value as any).arrayBuffer === 'function' &&
+          typeof (value as any).type === 'string';
+      };
+      files = fileEntries.filter(isFileLike).filter(f => f.size > 0);
     } else {
       const body = await request.json();
       message = anonymizeText(body.message || body.prompt || '');
