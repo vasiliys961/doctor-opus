@@ -14,6 +14,24 @@ const MAX_CHAT_FILES_PER_REQUEST = 4;
 const MAX_CHAT_TOTAL_BYTES_PER_REQUEST = 16 * 1024 * 1024;
 
 /**
+ * На некоторых Node runtime глобальный File отсутствует, из-за чего
+ * request.formData() может падать с ReferenceError: File is not defined.
+ */
+async function ensureFileGlobalForFormData(): Promise<void> {
+  if (typeof File !== 'undefined') return;
+
+  try {
+    const { File: BufferFile } = await import('buffer');
+    if (typeof BufferFile !== 'undefined') {
+      (globalThis as any).File = BufferFile;
+    }
+  } catch {
+    // Если полифилл недоступен, оставляем дефолтное поведение и
+    // возвращаем исходную ошибку из request.formData().
+  }
+}
+
+/**
  * API endpoint для ИИ-ассистента
  */
 export async function POST(request: NextRequest) {
@@ -49,6 +67,7 @@ export async function POST(request: NextRequest) {
 
     // Проверяем, является ли запрос FormData (с файлами) или JSON
     if (contentType.includes('multipart/form-data')) {
+      await ensureFileGlobalForFormData();
       const formData = await request.formData();
       message = anonymizeText((formData.get('message') as string) || '');
       specialty = formData.get('specialty') as string | undefined;
@@ -159,8 +178,9 @@ export async function POST(request: NextRequest) {
                   if (jsonStr === '[DONE]') continue;
                   const data = JSON.parse(jsonStr);
                   if (data.usage) {
+                    const usageModel = data.model || selectedModel;
                     console.log(formatCostLog(
-                      selectedModel,
+                      usageModel,
                       data.usage.prompt_tokens,
                       data.usage.completion_tokens,
                       data.usage.total_tokens

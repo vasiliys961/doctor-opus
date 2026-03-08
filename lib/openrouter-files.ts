@@ -54,6 +54,23 @@ function modelSupportsPDFNatively(model: string): boolean {
   return model.includes('gemini');
 }
 
+function isOpenAIGeoRestrictionError(errorText: string): boolean {
+  const normalized = String(errorText || '').toLowerCase();
+  return (
+    normalized.includes('unsupported_country_region_territory') ||
+    normalized.includes('country, region, or territory not supported') ||
+    normalized.includes('"provider_name":"openai"') ||
+    normalized.includes('"provider_name": "openai"')
+  );
+}
+
+function getChatFallbackModel(primaryModel: string): string | null {
+  if (primaryModel === MODELS.GPT_5_2) {
+    return MODELS.SONNET;
+  }
+  return null;
+}
+
 /**
  * Извлечение текста из PDF через Gemini Flash (Vision API)
  * Используется как fallback для моделей, не поддерживающих PDF нативно
@@ -292,32 +309,50 @@ export async function sendTextRequestWithFiles(
     mode: 'file-analysis'
   });
 
-  const payload = {
-    model,
-    messages,
-    max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от размера файлов
-    temperature: 0.1,
-  };
+  let modelUsed = model;
 
   try {
     console.log('Calling OpenRouter API with files:', {
-      model,
+      model: modelUsed,
       messageLength: prompt.length,
       filesCount: files.length,
       fileNames: files.map(f => f.name),
       adaptiveMaxTokens
     });
 
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus'
-      },
-      body: JSON.stringify(payload)
-    });
+    const runRequest = async (targetModel: string) => {
+      const payload = {
+        model: targetModel,
+        messages,
+        max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от размера файлов
+        temperature: 0.1,
+      };
+
+      return fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus'
+        },
+        body: JSON.stringify(payload)
+      });
+    };
+
+    let response = await runRequest(modelUsed);
+    if (!response.ok) {
+      const errorText = await response.text();
+      const fallbackModel = getChatFallbackModel(modelUsed);
+      const shouldFallback = !!fallbackModel && isOpenAIGeoRestrictionError(errorText);
+      if (shouldFallback) {
+        console.warn(`⚠️ [FILES FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
+        modelUsed = fallbackModel!;
+        response = await runRequest(modelUsed);
+      } else {
+        throw new Error(`OpenRouter API error: ${response.status} - ${errorText.substring(0, 500)}`);
+      }
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -336,8 +371,8 @@ export async function sendTextRequestWithFiles(
     const outputTokens = data.usage?.completion_tokens || Math.floor(tokensUsed / 2);
 
     if (tokensUsed > 0) {
-      console.log(`✅ [${model}] Запрос с файлами завершен`);
-      console.log(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
+      console.log(`✅ [${modelUsed}] Запрос с файлами завершен`);
+      console.log(`   📊 ${formatCostLog(modelUsed, inputTokens, outputTokens, tokensUsed)}`);
     }
 
     return data.choices[0].message.content || '';
@@ -402,14 +437,7 @@ export async function sendTextRequestStreamingWithFiles(
     mode: 'file-analysis'
   });
 
-  const payload = {
-    model,
-    messages,
-    max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от размера файлов
-    temperature: 0.1,
-    stream: true,
-    stream_options: { include_usage: true }
-  };
+  let modelUsed = model;
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -431,18 +459,43 @@ export async function sendTextRequestStreamingWithFiles(
         }
       }, 5000);
 
-      const response = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.ru',
-          'X-Title': 'Doctor Opus'
-        },
-        body: JSON.stringify(payload)
-      });
+      const runStreamingRequest = async (targetModel: string) => {
+        const payload = {
+          model: targetModel,
+          messages,
+          max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от размера файлов
+          temperature: 0.1,
+          stream: true,
+          stream_options: { include_usage: true }
+        };
+        return fetch(OPENROUTER_API_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://doctor-opus.ru',
+            'X-Title': 'Doctor Opus'
+          },
+          body: JSON.stringify(payload)
+        });
+      };
+
+      let response = await runStreamingRequest(modelUsed);
 
       // Heartbeat остановится в finally
+      if (!response.ok) {
+        const errorText = await response.text();
+        const fallbackModel = getChatFallbackModel(modelUsed);
+        const shouldFallback = !!fallbackModel && isOpenAIGeoRestrictionError(errorText);
+        if (shouldFallback) {
+          console.warn(`⚠️ [FILES STREAM FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
+          modelUsed = fallbackModel!;
+          response = await runStreamingRequest(modelUsed);
+        } else {
+          throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+        }
+      }
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);

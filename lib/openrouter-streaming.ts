@@ -50,6 +50,23 @@ function getStage2FallbackModel(primaryModel: string): string | null {
   return isAnthropicModel(primaryModel) ? MODELS.GPT_5_2 : null;
 }
 
+function isOpenAIGeoRestrictionError(errorText: string): boolean {
+  const normalized = String(errorText || '').toLowerCase();
+  return (
+    normalized.includes('unsupported_country_region_territory') ||
+    normalized.includes('country, region, or territory not supported') ||
+    normalized.includes('"provider_name":"openai"') ||
+    normalized.includes('"provider_name": "openai"')
+  );
+}
+
+function getChatFallbackModel(primaryModel: string): string | null {
+  if (primaryModel === MODELS.GPT_5_2) {
+    return MODELS.SONNET;
+  }
+  return null;
+}
+
 /**
  * Вспомогательная функция для преобразования потока с добавлением расчета стоимости
  */
@@ -1186,55 +1203,61 @@ export async function sendTextRequestStreaming(
       const REQUEST_TIMEOUT_MS = 45000;
       const MAX_RETRIES = 2;
       let response: Response | null = null;
+      let modelUsed = model;
 
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const runStreamingRequest = async (targetModel: string): Promise<Response> => {
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-        try {
-          response = await fetch(OPENROUTER_API_URL, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': 'https://openrouter.ai',
-                'X-Title': 'Medical AI'
-              },
-            body: JSON.stringify({
-              model,
-              messages,
-              max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от длины диалога
-              temperature: 0.1,
-              stream: true,
-              stream_options: { include_usage: true }
-            }),
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          break;
-        } catch (err: any) {
-          clearTimeout(timeoutId);
-          const message = String(err?.message || '').toLowerCase();
-          const isTransientNetworkError =
-            err?.name === 'AbortError' ||
-            err?.name === 'TimeoutError' ||
-            message.includes('fetch failed') ||
-            message.includes('und_err_connect_timeout') ||
-            message.includes('etimedout') ||
-            message.includes('econnreset') ||
-            message.includes('econnrefused') ||
-            message.includes('enotfound') ||
-            message.includes('network');
+          try {
+            const attemptResponse = await fetch(OPENROUTER_API_URL, {
+              method: 'POST',
+              headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                  'HTTP-Referer': 'https://openrouter.ai',
+                  'X-Title': 'Medical AI'
+                },
+              body: JSON.stringify({
+                model: targetModel,
+                messages,
+                max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от длины диалога
+                temperature: 0.1,
+                stream: true,
+                stream_options: { include_usage: true }
+              }),
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            return attemptResponse;
+          } catch (err: any) {
+            clearTimeout(timeoutId);
+            const message = String(err?.message || '').toLowerCase();
+            const isTransientNetworkError =
+              err?.name === 'AbortError' ||
+              err?.name === 'TimeoutError' ||
+              message.includes('fetch failed') ||
+              message.includes('und_err_connect_timeout') ||
+              message.includes('etimedout') ||
+              message.includes('econnreset') ||
+              message.includes('econnrefused') ||
+              message.includes('enotfound') ||
+              message.includes('network');
 
-          if (!isTransientNetworkError || attempt === MAX_RETRIES) {
-            throw err;
+            if (!isTransientNetworkError || attempt === MAX_RETRIES) {
+              throw err;
+            }
+
+            const backoffMs = 1200 * (attempt + 1);
+            console.warn(`⚠️ [TEXT STREAM RETRY] transient network error (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms`);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
           }
-
-          const backoffMs = 1200 * (attempt + 1);
-          console.warn(`⚠️ [TEXT STREAM RETRY] transient network error (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms`);
-          await new Promise(resolve => setTimeout(resolve, backoffMs));
         }
-      }
+        throw new Error('OpenRouter streaming request failed: no response received');
+      };
+
+      response = await runStreamingRequest(modelUsed);
 
       if (!response) {
         throw new Error('OpenRouter streaming request failed: no response received');
@@ -1246,10 +1269,23 @@ export async function sendTextRequestStreaming(
       // Heartbeat остановится в finally
       if (!response.ok) {
         const errorText = await response.text();
+        const fallbackModel = getChatFallbackModel(modelUsed);
+        const shouldFallback = !!fallbackModel && isOpenAIGeoRestrictionError(errorText);
+        if (shouldFallback) {
+          console.warn(`⚠️ [TEXT STREAM FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
+          modelUsed = fallbackModel!;
+          response = await runStreamingRequest(modelUsed);
+        } else {
+          throw new Error(`API error: ${response.status} - ${errorText}`);
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
         throw new Error(`API error: ${response.status} - ${errorText}`);
       }
 
-      const transformer = createTransformWithUsage(response.body!, model, initialUsage, true);
+      const transformer = createTransformWithUsage(response.body!, modelUsed, initialUsage, true);
       const reader = transformer.getReader();
 
       while (true) {
