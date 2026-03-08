@@ -4,7 +4,10 @@ FROM node:18-slim AS node-builder
 WORKDIR /app
 
 # Установка системных зависимостей для canvas и сборки (Node.js)
-RUN apt-get update && apt-get install -y \
+# На некоторых VPS HTTP-зеркала Debian дают invalid signature; принудительно используем HTTPS.
+RUN if [ -f /etc/apt/sources.list ]; then sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list; fi \
+    && if [ -f /etc/apt/sources.list.d/debian.sources ]; then sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources; fi \
+    && apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
@@ -39,7 +42,9 @@ LABEL version="3.42.0"
 WORKDIR /app
 
 # Установка системных зависимостей для Node.js, DICOM и обработки изображений
-RUN apt-get update && apt-get install -y \
+RUN if [ -f /etc/apt/sources.list ]; then sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list; fi \
+    && if [ -f /etc/apt/sources.list.d/debian.sources ]; then sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources; fi \
+    && apt-get update && apt-get install -y \
     curl \
     libgl1 \
     libglib2.0-0 \
