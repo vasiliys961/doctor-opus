@@ -47,7 +47,13 @@ function isAnthropicGeoRestrictionError(errorText: string): boolean {
 }
 
 function getStage2FallbackModel(primaryModel: string): string | null {
-  return isAnthropicModel(primaryModel) ? MODELS.GPT_5_2 : null;
+  if (isAnthropicModel(primaryModel)) {
+    return MODELS.GPT_5_2;
+  }
+  if (primaryModel === MODELS.GPT_5_2) {
+    return MODELS.SONNET;
+  }
+  return null;
 }
 
 function isOpenAIGeoRestrictionError(errorText: string): boolean {
@@ -65,6 +71,16 @@ function getChatFallbackModel(primaryModel: string): string | null {
     return MODELS.SONNET;
   }
   return null;
+}
+
+function shouldUseStage2GeoFallback(primaryModel: string, errorText: string): boolean {
+  if (isAnthropicModel(primaryModel)) {
+    return isAnthropicGeoRestrictionError(errorText);
+  }
+  if (primaryModel === MODELS.GPT_5_2) {
+    return isOpenAIGeoRestrictionError(errorText);
+  }
+  return false;
 }
 
 /**
@@ -530,7 +546,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
           throw primaryError;
         }
 
-        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to GPT-5.4 fallback...\n\n`;
+        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to ${fallbackModel} fallback...\n\n`;
         await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
         stage2ModelUsed = fallbackModel!;
         response = await runStage2Request(stage2ModelUsed);
@@ -540,9 +556,9 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
 
       if (!response.ok) {
         const errorText = await response.text();
-        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && isAnthropicGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, errorText);
         if (shouldFallback) {
-          const switchMsg = `\n\n> Claude is temporarily unavailable in the current provider region. Switching to GPT-5.4 fallback...\n\n`;
+          const switchMsg = `\n\n> Primary model is temporarily unavailable in the current provider region. Switching to ${fallbackModel} fallback...\n\n`;
           await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
           stage2ModelUsed = fallbackModel!;
           response = await runStage2Request(stage2ModelUsed);
@@ -770,7 +786,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
         if (!shouldFallback) {
           throw primaryError;
         }
-        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to GPT-5.4 fallback...\n\n`;
+        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to ${fallbackModel} fallback...\n\n`;
         await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
         stage2ModelUsed = fallbackModel!;
         response = await runStage2Request(stage2ModelUsed);
@@ -781,9 +797,9 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
       // Heartbeat остановится в finally
       if (!response.ok) {
         const errorText = await response.text();
-        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && isAnthropicGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, errorText);
         if (shouldFallback) {
-          const switchMsg = `\n\n> Claude is temporarily unavailable in the current provider region. Switching to GPT-5.4 fallback...\n\n`;
+          const switchMsg = `\n\n> Primary model is temporarily unavailable in the current provider region. Switching to ${fallbackModel} fallback...\n\n`;
           await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
           stage2ModelUsed = fallbackModel!;
           response = await runStage2Request(stage2ModelUsed);
@@ -995,7 +1011,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
         if (!shouldFallback) {
           throw primaryError;
         }
-        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to GPT-5.4 fallback...\n\n`;
+        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to ${fallbackModel} fallback...\n\n`;
         await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
         stage2ModelUsed = fallbackModel!;
         response = await runStage2Request(stage2ModelUsed);
@@ -1005,9 +1021,9 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
 
       if (!response.ok) {
         const errorText = await response.text();
-        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && isAnthropicGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, errorText);
         if (shouldFallback) {
-          const switchMsg = `\n\n> Claude is temporarily unavailable in the current provider region. Switching to GPT-5.4 fallback...\n\n`;
+          const switchMsg = `\n\n> Primary model is temporarily unavailable in the current provider region. Switching to ${fallbackModel} fallback...\n\n`;
           await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
           stage2ModelUsed = fallbackModel!;
           response = await runStage2Request(stage2ModelUsed);
@@ -1118,7 +1134,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
   let response = await runRequest(model);
   if (!response.ok) {
     const errorText = await response.text();
-    const shouldFallback = !!fallbackModel && isAnthropicGeoRestrictionError(errorText);
+    const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(model, errorText);
     if (shouldFallback) {
       modelUsed = fallbackModel!;
       response = await runRequest(modelUsed);
