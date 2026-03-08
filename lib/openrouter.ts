@@ -103,6 +103,23 @@ function getStage2FallbackModel(primaryModel: string): string | null {
   return isAnthropicModel(primaryModel) ? MODELS.GPT_5_2 : null;
 }
 
+function isOpenAIGeoRestrictionError(errorText: string): boolean {
+  const normalized = String(errorText || '').toLowerCase();
+  return (
+    normalized.includes('unsupported_country_region_territory') ||
+    normalized.includes('country, region, or territory not supported') ||
+    normalized.includes('"provider_name":"openai"') ||
+    normalized.includes('"provider_name": "openai"')
+  );
+}
+
+function getChatFallbackModel(primaryModel: string): string | null {
+  if (primaryModel === MODELS.GPT_5_2) {
+    return MODELS.SONNET;
+  }
+  return null;
+}
+
 type RoutingImageQuality = 'good' | 'moderate' | 'poor';
 
 interface RoutingMetadata {
@@ -1055,7 +1072,7 @@ export async function sendTextRequest(
     throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
   }
 
-  const selectedModel = model;
+  let selectedModel = model;
   const { TITAN_CONTEXTS } = await import('./prompts');
   
   // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
@@ -1081,13 +1098,6 @@ export async function sendTextRequest(
     }
   ];
 
-  const payload = {
-    model: selectedModel,
-    messages,
-    max_tokens: 10000, // Оптимизировано: текстовый запрос
-    temperature: 0.1,
-  };
-
   try {
     safeLog('Calling OpenRouter API for text:', {
       url: OPENROUTER_API_URL,
@@ -1099,46 +1109,71 @@ export async function sendTextRequest(
     const REQUEST_TIMEOUT_MS = 45000;
     const MAX_RETRIES = 2;
     let response: Response | null = null;
+    const sendWithRetries = async (targetModel: string): Promise<Response> => {
+      let attemptResponse: Response | null = null;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const payload = {
+          model: targetModel,
+          messages,
+          max_tokens: 10000, // Оптимизировано: текстовый запрос
+          temperature: 0.1,
+        };
+        try {
+          attemptResponse = await fetchWithTimeout(OPENROUTER_API_URL, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+          }, REQUEST_TIMEOUT_MS);
+          return attemptResponse;
+        } catch (err: any) {
+          const message = String(err?.message || '').toLowerCase();
+          const isTransientNetworkError =
+            err?.name === 'AbortError' ||
+            err?.name === 'TimeoutError' ||
+            message.includes('fetch failed') ||
+            message.includes('und_err_connect_timeout') ||
+            message.includes('etimedout') ||
+            message.includes('econnreset') ||
+            message.includes('econnrefused') ||
+            message.includes('enotfound') ||
+            message.includes('network');
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        response = await fetchWithTimeout(OPENROUTER_API_URL, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        }, REQUEST_TIMEOUT_MS);
-        break;
-      } catch (err: any) {
-        const message = String(err?.message || '').toLowerCase();
-        const isTransientNetworkError =
-          err?.name === 'AbortError' ||
-          err?.name === 'TimeoutError' ||
-          message.includes('fetch failed') ||
-          message.includes('und_err_connect_timeout') ||
-          message.includes('etimedout') ||
-          message.includes('econnreset') ||
-          message.includes('econnrefused') ||
-          message.includes('enotfound') ||
-          message.includes('network');
+          if (!isTransientNetworkError || attempt === MAX_RETRIES) {
+            throw err;
+          }
 
-        if (!isTransientNetworkError || attempt === MAX_RETRIES) {
-          throw err;
+          const backoffMs = 1200 * (attempt + 1);
+          safeWarn(`OpenRouter text request transient network error (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms`);
+          await sleep(backoffMs);
         }
-
-        const backoffMs = 1200 * (attempt + 1);
-        safeWarn(`OpenRouter text request transient network error (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms`);
-        await sleep(backoffMs);
       }
-    }
+      throw new Error('OpenRouter text request failed: no response received');
+    };
+
+    response = await sendWithRetries(selectedModel);
 
     if (!response) {
       throw new Error('OpenRouter text request failed: no response received');
     }
 
     safeLog('OpenRouter API response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      const fallbackModel = getChatFallbackModel(selectedModel);
+      const shouldFallback = !!fallbackModel && isOpenAIGeoRestrictionError(errorText);
+      if (shouldFallback) {
+        safeWarn(`⚠️ [CHAT FALLBACK] Модель ${selectedModel} недоступна по региону, переключаемся на ${fallbackModel}`);
+        selectedModel = fallbackModel!;
+        response = await sendWithRetries(selectedModel);
+      } else {
+        safeError('OpenRouter API error response:', errorText);
+        throw new Error(`OpenRouter API error: ${response.status} - ${errorText.substring(0, 500)}`);
+      }
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
