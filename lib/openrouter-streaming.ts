@@ -54,9 +54,7 @@ function isOpenAIGeoRestrictionError(errorText: string): boolean {
   const normalized = String(errorText || '').toLowerCase();
   return (
     normalized.includes('unsupported_country_region_territory') ||
-    normalized.includes('country, region, or territory not supported') ||
-    normalized.includes('"provider_name":"openai"') ||
-    normalized.includes('"provider_name": "openai"')
+    normalized.includes('country, region, or territory not supported')
   );
 }
 
