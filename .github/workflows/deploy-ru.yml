@@ -1,0 +1,41 @@
+name: Deploy RU (doctor-opus.ru)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to RU server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd /home/doctor-opus
+
+            echo "=== Git pull ==="
+            git pull origin main
+
+            echo "=== Docker build ==="
+            docker build -t doctor-opus-app-ru .
+
+            echo "=== Restart container ==="
+            docker stop doctor-opus-app-main95 || true
+            docker rm doctor-opus-app-main95 || true
+            docker run -d \
+              --name doctor-opus-app-main95 \
+              --restart always \
+              -p 3002:3000 \
+              -v /home/doctor-opus/uploads:/app/uploads \
+              -v /home/doctor-opus/exports:/app/exports \
+              --env-file /home/doctor-opus/.env \
+              doctor-opus-app-ru
+
+            echo "=== Done ==="
+            docker ps --filter name=doctor-opus-app-main95 --format "{{.Names}} {{.Status}}"
