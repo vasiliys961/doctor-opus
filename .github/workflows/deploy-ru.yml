@@ -6,10 +6,10 @@ on:
       - main
 
 jobs:
-  deploy:
+  deploy-ru:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to RU server via SSH
+      - name: Deploy RU branch to server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -20,14 +20,15 @@ jobs:
             set -e
             cd /home/doctor-opus
 
-            echo "=== Git pull ==="
+            echo "=== Git pull RU ==="
             git fetch origin main
             git reset --hard origin/main
 
-            echo "=== Docker build ==="
+            echo "=== Docker build RU ==="
+            docker network inspect doctor-opus_default >/dev/null 2>&1 || docker network create doctor-opus_default
             docker build -t doctor-opus-app-ru .
 
-            echo "=== Restart container ==="
+            echo "=== Restart RU container ==="
             docker stop doctor-opus-app-main95 || true
             docker rm doctor-opus-app-main95 || true
             docker run -d \
@@ -38,6 +39,19 @@ jobs:
               -v /home/doctor-opus/exports:/app/exports \
               --env-file /home/doctor-opus/.env \
               doctor-opus-app-ru
+
+            echo "=== Migration RU ==="
+            sleep 15
+            MIGRATION_SECRET=$(grep -oP 'MIGRATION_SECRET=\K.*' /home/doctor-opus/.env 2>/dev/null || echo "")
+            if [ -n "$MIGRATION_SECRET" ]; then
+              RESULT=$(curl -s -X POST http://localhost:3002/api/admin/migrate \
+                -H "Content-Type: application/json" \
+                -d "{\"secret\": \"$MIGRATION_SECRET\"}" || echo '{"error":"curl failed"}')
+              echo "Migration RU: $RESULT"
+            fi
+
+            echo "=== Cleanup ==="
+            docker image prune -f || true
 
             echo "=== Done ==="
             docker ps --filter name=doctor-opus-app-main95 --format "{{.Names}} {{.Status}}"

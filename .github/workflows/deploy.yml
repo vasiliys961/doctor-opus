@@ -1,43 +1,61 @@
-name: Deploy to Timeweb VPS
+name: Deploy EN (doctor-opus.online)
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches:
+      - en-version-global
 
 jobs:
-  deploy:
+  deploy-en:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Deploy to server
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        password: ${{ secrets.SERVER_PASSWORD }}
-        script: |
-          cd /home/doctor-opus
-          
-          echo "📥 Получение изменений с GitHub..."
-          git pull origin main
-          
-          echo "🚀 Сборка и перезапуск через Docker Compose..."
-          docker compose up -d --build
-          
-          echo "⏳ Ожидание запуска приложения (30 сек)..."
-          sleep 30
-          
-          echo "🔄 Запуск миграции БД..."
-          # Миграция через API с секретом из .env
-          MIGRATION_SECRET=$(grep -oP 'MIGRATION_SECRET=\K.*' .env 2>/dev/null || echo "")
-          if [ -n "$MIGRATION_SECRET" ]; then
-            RESULT=$(curl -s -X POST http://localhost:3000/api/admin/migrate \
-              -H "Content-Type: application/json" \
-              -d "{\"secret\": \"$MIGRATION_SECRET\"}" || echo '{"error":"curl failed"}')
-            echo "Миграция: $RESULT"
-          else
-            echo "⚠️ MIGRATION_SECRET не задан в .env, пропускаем миграцию"
-          fi
-          
-          echo "✅ Деплой v3.42.0 завершен!"
+      - name: Deploy EN branch to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 30m
+          script: |
+            set -e
+            cd /home/doctor-opus-en
+
+            echo "=== Git pull EN ==="
+            git remote get-url doctor-opus >/dev/null 2>&1 || git remote add doctor-opus https://github.com/vasiliys961/doctor-opus.git
+            if git ls-remote --exit-code --heads doctor-opus en-version-global >/dev/null 2>&1; then
+              git fetch --depth 1 doctor-opus en-version-global
+            else
+              git fetch --depth 1 origin en-version-global
+            fi
+            git checkout -B en-version-global
+            git reset --hard FETCH_HEAD
+            git clean -fd
+
+            echo "=== Docker build EN ==="
+            docker network inspect doctor-opus-en_default >/dev/null 2>&1 || docker network create doctor-opus-en_default
+            docker build -t doctor-opus-app-en .
+
+            echo "=== Restart EN container ==="
+            docker stop doctor-opus-app-en || true
+            docker rm doctor-opus-app-en || true
+            docker run -d \
+              --name doctor-opus-app-en \
+              --restart always \
+              -p 3001:3000 \
+              -v /home/doctor-opus-en/uploads:/app/uploads \
+              -v /home/doctor-opus-en/exports:/app/exports \
+              --env-file /home/doctor-opus-en/.env \
+              doctor-opus-app-en
+
+            echo "=== Migration EN ==="
+            sleep 15
+            MIGRATION_SECRET=$(grep -oP 'MIGRATION_SECRET=\K.*' /home/doctor-opus-en/.env 2>/dev/null || echo "")
+            if [ -n "$MIGRATION_SECRET" ]; then
+              RESULT=$(curl -s -X POST http://localhost:3001/api/admin/migrate \
+                -H "Content-Type: application/json" \
+                -d "{\"secret\": \"$MIGRATION_SECRET\"}" || echo '{"error":"curl failed"}')
+              echo "Migration EN: $RESULT"
+            fi
+
+            echo "=== Done ==="
+            docker ps --filter name=doctor-opus-app-en --format "{{.Names}} {{.Status}}"
