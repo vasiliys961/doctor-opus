@@ -1,13 +1,10 @@
 # Этап 1: Сборка Next.js фронтенда
-FROM node:18-slim AS node-builder
+FROM node:18-bullseye AS node-builder
 
 WORKDIR /app
 
 # Установка системных зависимостей для canvas и сборки (Node.js)
-# На некоторых VPS HTTP-зеркала Debian дают invalid signature; принудительно используем HTTPS.
-RUN if [ -f /etc/apt/sources.list ]; then sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list; fi \
-    && if [ -f /etc/apt/sources.list.d/debian.sources ]; then sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources; fi \
-    && apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
     g++ \
@@ -42,9 +39,7 @@ LABEL version="3.42.0"
 WORKDIR /app
 
 # Установка системных зависимостей для Node.js, DICOM и обработки изображений
-RUN if [ -f /etc/apt/sources.list ]; then sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list; fi \
-    && if [ -f /etc/apt/sources.list.d/debian.sources ]; then sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources; fi \
-    && apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libgl1 \
     libglib2.0-0 \
