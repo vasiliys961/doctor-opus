@@ -117,7 +117,7 @@ export default function OnboardingTour() {
         beforeShowPromise: () => waitForElement('[data-tour="menu-chat"]'),
         buttons: [
           {
-            text: 'Open AI Assistant',
+            text: 'Next',
             action: () => {
               navTour.complete()
               router.push('/chat')
@@ -151,7 +151,7 @@ export default function OnboardingTour() {
         beforeShowPromise: () => waitForElement('[data-tour="chat-send-button"]'),
         buttons: [
           {
-            text: 'Continue to Protocol',
+            text: 'Next',
             action: () => {
               setOnboardingStatus('chat_done')
               chatTour.complete()
@@ -177,7 +177,7 @@ export default function OnboardingTour() {
         beforeShowPromise: () => waitForElement('[data-tour="menu-protocol"]'),
         buttons: [
           {
-            text: 'Open Visit Protocol',
+            text: 'Next',
             action: () => {
               navTour.complete()
               router.push('/protocol')
@@ -205,18 +205,13 @@ export default function OnboardingTour() {
       protocolTour.addStep({
         id: 'protocol-generate',
         title: 'Step 2 of 4',
-        text: 'Click Generate Protocol. Once the result appears, continue.',
+        text: 'Click Generate Protocol when possible. You can continue now and return later.',
         attachTo: { element: '[data-tour="protocol-generate-button"]', on: 'top' },
         beforeShowPromise: () => waitForElement('[data-tour="protocol-generate-button"]'),
         buttons: [
           {
-            text: 'Continue to Image Analysis',
+            text: 'Next',
             action: () => {
-              const ready = document.querySelector('[data-tour="protocol-generated-result"]')
-              if (!ready) {
-                window.alert('Generate the protocol first, then continue.')
-                return
-              }
               setOnboardingStatus('protocol_done')
               protocolTour.complete()
               router.push('/image-analysis')
@@ -240,7 +235,7 @@ export default function OnboardingTour() {
         beforeShowPromise: () => waitForElement('[data-tour="menu-image-analysis"]'),
         buttons: [
           {
-            text: 'Open Image Analysis',
+            text: 'Next',
             action: () => {
               navTour.complete()
               router.push('/image-analysis')
@@ -259,18 +254,13 @@ export default function OnboardingTour() {
       imageTour.addStep({
         id: 'image-upload',
         title: 'Step 3 of 4',
-        text: 'Upload any medical image here.',
+        text: 'Upload any medical image here. If inconvenient now, you can continue and return later.',
         attachTo: { element: '[data-tour="image-upload-zone"]', on: 'top' },
         beforeShowPromise: () => waitForElement('[data-tour="image-upload-zone"]'),
         buttons: [
           {
-            text: 'Image Uploaded',
+            text: 'Next',
             action: () => {
-              const fastButton = document.querySelector('[data-tour="image-fast-analysis-button"]')
-              if (!fastButton) {
-                window.alert('Upload an image first to unlock Fast Analysis.')
-                return
-              }
               setOnboardingStatus('image_uploaded')
               imageTour.next()
             },
@@ -281,9 +271,9 @@ export default function OnboardingTour() {
       imageTour.addStep({
         id: 'image-fast-analysis',
         title: 'Step 4 of 4',
-        text: 'Run Fast Analysis. When the report is ready, onboarding will finish automatically.',
-        attachTo: { element: '[data-tour="image-fast-analysis-button"]', on: 'top' },
-        beforeShowPromise: () => waitForElement('[data-tour="image-fast-analysis-button"]', 10000),
+        text: 'Run Fast Analysis when convenient. Onboarding will complete automatically after the first successful analysis.',
+        attachTo: { element: '[data-tour="image-upload-zone"]', on: 'top' },
+        beforeShowPromise: () => waitForElement('[data-tour="image-upload-zone"]'),
         buttons: [{ text: 'Got It', action: imageTour.complete }],
       })
 
