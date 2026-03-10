@@ -117,7 +117,7 @@ export default function OnboardingTour() {
         beforeShowPromise: () => waitForElement('[data-tour="menu-chat"]'),
         buttons: [
           {
-            text: 'Открыть ИИ-Ассистент',
+            text: 'Далее',
             action: () => {
               navTour.complete()
               router.push('/chat')
@@ -152,7 +152,7 @@ export default function OnboardingTour() {
         beforeShowPromise: () => waitForElement('[data-tour="chat-send-button"]'),
         buttons: [
           {
-            text: 'К протоколу',
+            text: 'Далее',
             action: () => {
               setOnboardingStatus('chat_done')
               chatTour.complete()
@@ -178,7 +178,7 @@ export default function OnboardingTour() {
         beforeShowPromise: () => waitForElement('[data-tour="menu-protocol"]'),
         buttons: [
           {
-            text: 'Открыть Протокол приёма',
+            text: 'Далее',
             action: () => {
               navTour.complete()
               router.push('/protocol')
@@ -206,18 +206,13 @@ export default function OnboardingTour() {
       protocolTour.addStep({
         id: 'protocol-generate',
         title: 'Шаг 2 из 4',
-        text: 'Нажмите «Создать протокол». Когда результат появится, продолжите.',
+        text: 'Нажмите «Создать протокол» при возможности. Можно перейти дальше и вернуться позже.',
         attachTo: { element: '[data-tour="protocol-generate-button"]', on: 'top' },
         beforeShowPromise: () => waitForElement('[data-tour="protocol-generate-button"]'),
         buttons: [
           {
-            text: 'К анализу изображений',
+            text: 'Далее',
             action: () => {
-              const ready = document.querySelector('[data-tour="protocol-generated-result"]')
-              if (!ready) {
-                window.alert('Сначала сгенерируйте протокол, затем продолжайте.')
-                return
-              }
               setOnboardingStatus('protocol_done')
               protocolTour.complete()
               router.push('/image-analysis')
@@ -241,7 +236,7 @@ export default function OnboardingTour() {
         beforeShowPromise: () => waitForElement('[data-tour="menu-image-analysis"]'),
         buttons: [
           {
-            text: 'Открыть Анализ изображений',
+            text: 'Далее',
             action: () => {
               navTour.complete()
               router.push('/image-analysis')
@@ -260,18 +255,13 @@ export default function OnboardingTour() {
       imageTour.addStep({
         id: 'image-upload',
         title: 'Шаг 3 из 4',
-        text: 'Загрузите любое медицинское изображение здесь.',
+        text: 'Загрузите любое медицинское изображение здесь. Если неудобно сейчас, можно перейти дальше.',
         attachTo: { element: '[data-tour="image-upload-zone"]', on: 'top' },
         beforeShowPromise: () => waitForElement('[data-tour="image-upload-zone"]'),
         buttons: [
           {
-            text: 'Изображение загружено',
+            text: 'Далее',
             action: () => {
-              const fastButton = document.querySelector('[data-tour="image-fast-analysis-button"]')
-              if (!fastButton) {
-                window.alert('Сначала загрузите изображение, чтобы активировать быстрый анализ.')
-                return
-              }
               setOnboardingStatus('image_uploaded')
               imageTour.next()
             },
@@ -282,9 +272,9 @@ export default function OnboardingTour() {
       imageTour.addStep({
         id: 'image-fast-analysis',
         title: 'Шаг 4 из 4',
-        text: 'Запустите быстрый анализ. После появления результата обучение завершится автоматически.',
-        attachTo: { element: '[data-tour="image-fast-analysis-button"]', on: 'top' },
-        beforeShowPromise: () => waitForElement('[data-tour="image-fast-analysis-button"]', 10000),
+        text: 'Запустите быстрый анализ, когда будет удобно. Обучение завершится автоматически после первого успешного анализа.',
+        attachTo: { element: '[data-tour="image-upload-zone"]', on: 'top' },
+        beforeShowPromise: () => waitForElement('[data-tour="image-upload-zone"]'),
         buttons: [{ text: 'Понятно', action: imageTour.complete }],
       })
 
