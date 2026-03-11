@@ -17,7 +17,7 @@ export default function BalanceWidget() {
   const loadBalance = useCallback(async () => {
     try {
       if (session?.user?.email) {
-        const response = await fetch('/api/billing/balance', { cache: 'no-store' })
+        const response = await fetch('/api/billing/deduct', { cache: 'no-store' })
         if (response.ok) {
           const data = await response.json()
           if (data?.success) {
