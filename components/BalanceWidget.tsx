@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { getBalance, getUsagePercentage, isSubscriptionEnabled, upgradeBalanceToRegistered } from '@/lib/subscription-manager'
+import { useState, useEffect, useCallback } from 'react'
+import { getBalance, getUsagePercentage, isSubscriptionEnabled } from '@/lib/subscription-manager'
 import { getUsageBySections } from '@/lib/simple-logger'
 import type { SubscriptionBalance } from '@/lib/subscription-manager'
 import Link from 'next/link'
@@ -14,29 +14,35 @@ export default function BalanceWidget() {
   const [isVisible, setIsVisible] = useState(false)
   const [mounted, setMounted] = useState(false)
 
-  useEffect(() => {
-    setMounted(true)
-    if (!isSubscriptionEnabled()) {
-      setIsVisible(false)
-      return
-    }
-
-    if (session?.user?.email) {
-      upgradeBalanceToRegistered(session.user.email)
-    }
-
-    loadBalance()
-    
-    window.addEventListener('balanceUpdated', loadBalance)
-    const interval = setInterval(loadBalance, 10000)
-    return () => {
-      window.removeEventListener('balanceUpdated', loadBalance)
-      clearInterval(interval)
-    }
-  }, [session])
-
-  const loadBalance = () => {
+  const loadBalance = useCallback(async () => {
     try {
+      if (session?.user?.email) {
+        const response = await fetch('/api/billing/balance', { cache: 'no-store' })
+        if (response.ok) {
+          const data = await response.json()
+          if (data?.success) {
+            const currentCredits = Number(data.balance ?? 0)
+            const totalSpent = Number(data.totalSpent ?? 0)
+            const localBalance = getBalance()
+            const initialCredits = Math.max(currentCredits + totalSpent, localBalance?.initialCredits ?? 0, 10)
+
+            setBalance({
+              initialCredits,
+              currentCredits,
+              totalSpent,
+              packageName: localBalance?.packageName || 'Server Balance',
+              packagePriceRub: localBalance?.packagePriceRub || 0,
+              purchaseDate: localBalance?.purchaseDate || new Date().toISOString(),
+              expiryDate: null,
+              isUnlimited: localBalance?.isUnlimited,
+            })
+            setUsagePercent(initialCredits > 0 ? (totalSpent / initialCredits) * 100 : 0)
+            setIsVisible(true)
+            return
+          }
+        }
+      }
+
       const bal = getBalance()
       setBalance(bal)
       setUsagePercent(getUsagePercentage())
@@ -45,7 +51,29 @@ export default function BalanceWidget() {
       console.error('Error loading balance widget:', error)
       setIsVisible(false)
     }
-  }
+  }, [session?.user?.email])
+
+  useEffect(() => {
+    setMounted(true)
+    if (!isSubscriptionEnabled()) {
+      setIsVisible(false)
+      return
+    }
+
+    const handleBalanceUpdated = () => {
+      void loadBalance()
+    }
+
+    void loadBalance()
+    window.addEventListener('balanceUpdated', handleBalanceUpdated)
+    const interval = setInterval(() => {
+      void loadBalance()
+    }, 10000)
+    return () => {
+      window.removeEventListener('balanceUpdated', handleBalanceUpdated)
+      clearInterval(interval)
+    }
+  }, [loadBalance])
 
   if (!mounted || !isVisible) {
     return null
