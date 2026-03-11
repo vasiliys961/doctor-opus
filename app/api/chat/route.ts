@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
     let files: File[] = [];
     let specialty: string | undefined;
     let systemPrompt: string | undefined;
+    let responseStyle: 'brief' | 'detailed' = 'detailed';
 
     // Проверяем, является ли запрос FormData (с файлами) или JSON
     if (contentType.includes('multipart/form-data')) {
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
       }
       useStreaming = formData.get('useStreaming') === 'true';
       model = formData.get('model') as string | undefined;
+      responseStyle = ((formData.get('responseStyle') as string) === 'brief' ? 'brief' : 'detailed');
       
       // Получаем файлы. На некоторых Node runtimes глобальный File отсутствует,
       // поэтому нельзя использовать instanceof File.
@@ -103,6 +105,7 @@ export async function POST(request: NextRequest) {
       model = body.model;
       specialty = body.specialty;
       systemPrompt = body.systemPrompt;
+      responseStyle = body.responseStyle === 'brief' ? 'brief' : 'detailed';
     }
 
     if (files.length > 0) {
@@ -142,6 +145,9 @@ export async function POST(request: NextRequest) {
     const preparedMessage = isClaudeAssistantModel
       ? `${message}\n\n${assistantFormattingInstruction}`
       : message;
+    const styleInstruction = responseStyle === 'brief'
+      ? 'СТИЛЬ ОТВЕТА: Кратко. Дай только суть, без длинных объяснений. По возможности 3-6 пунктов и короткое заключение.'
+      : 'СТИЛЬ ОТВЕТА: Развернуто. Дай полный структурированный ответ с обоснованием и практическими шагами.';
 
     if (!message && files.length === 0) {
       return NextResponse.json(
@@ -155,6 +161,11 @@ export async function POST(request: NextRequest) {
       role: msg.role === 'user' ? 'user' : 'assistant',
       content: msg.content
     }));
+    const hasDialogueContext = formattedHistory.length > 0;
+    const dialogueInstruction = hasDialogueContext
+      ? 'РЕЖИМ ДИАЛОГА: Отвечай как продолжение текущей беседы. Учитывай входящие замечания пользователя и отвечай точечно по новому вопросу. Не повторяй полностью структуру и длинные блоки из первого ответа, если пользователь явно не попросил повторить.'
+      : 'РЕЖИМ ДИАЛОГА: Сформируй базовый первичный ответ по запросу.';
+    const finalMessage = `${preparedMessage}\n\n${styleInstruction}\n${dialogueInstruction}`;
 
     // Обработка стриминга с логированием
     const handleStreaming = async (stream: ReadableStream) => {
@@ -207,10 +218,10 @@ export async function POST(request: NextRequest) {
     // Если есть файлы, используем функции с поддержкой файлов
     if (files.length > 0) {
       if (useStreaming) {
-        const stream = await sendTextRequestStreamingWithFiles(preparedMessage, formattedHistory, files, selectedModel, specialty as any);
+        const stream = await sendTextRequestStreamingWithFiles(finalMessage, formattedHistory, files, selectedModel, specialty as any);
         return handleStreaming(stream);
       } else {
-        const result = await sendTextRequestWithFiles(preparedMessage, formattedHistory, files, selectedModel, specialty as any);
+        const result = await sendTextRequestWithFiles(finalMessage, formattedHistory, files, selectedModel, specialty as any);
         const { calculateCost } = await import('@/lib/cost-calculator');
         const costInfo = calculateCost(2000, 1500, selectedModel); // Оценочно для non-streaming
         
@@ -225,13 +236,13 @@ export async function POST(request: NextRequest) {
 
     // Если запрошен streaming без файлов, возвращаем поток
     if (useStreaming) {
-      const stream = await sendTextRequestStreaming(preparedMessage, formattedHistory, selectedModel, specialty as any, systemPrompt);
+      const stream = await sendTextRequestStreaming(finalMessage, formattedHistory, selectedModel, specialty as any, systemPrompt);
       return handleStreaming(stream);
     }
 
     // Обычный режим - полный ответ
     console.log('🚀 [CHAT API] Начало запроса к OpenRouter...');
-    const result = await sendTextRequest(preparedMessage, formattedHistory, selectedModel, specialty as any);
+    const result = await sendTextRequest(finalMessage, formattedHistory, selectedModel, specialty as any);
     console.log('✅ [CHAT API] Ответ от OpenRouter получен успешно.');
     
     const { calculateCost } = await import('@/lib/cost-calculator');

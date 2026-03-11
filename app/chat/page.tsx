@@ -18,6 +18,7 @@ import { anonymizeText } from '@/lib/anonymization'
 import mammoth from 'mammoth'
 
 type ModelType = 'opus' | 'sonnet'
+type ResponseStyle = 'brief' | 'detailed'
 const MAX_CHAT_FILES_PER_BATCH = 4;
 const MAX_CHAT_TOTAL_BYTES_PER_BATCH = 16 * 1024 * 1024;
 
@@ -54,6 +55,7 @@ export default function ChatPage() {
   const [useStreaming, setUseStreaming] = useState(true)
   const [useLibrary, setUseLibrary] = useState(false)
   const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('gpt52')
+  const [responseStyle, setResponseStyle] = useState<ResponseStyle>('brief')
   const [specialty, setSpecialty] = useState<Specialty>('universal')
   const [isCutOff, setIsCutOff] = useState(false)
   const [lastMessageIndex, setLastMessageIndex] = useState<number | null>(null)
@@ -226,6 +228,7 @@ export default function ChatPage() {
           useStreaming: true,
           model: modelName,
           specialty: specialty,
+          responseStyle,
         }),
       });
 
@@ -409,6 +412,7 @@ export default function ChatPage() {
             batchFormData.append('useStreaming', 'false');
             batchFormData.append('model', modelName);
             batchFormData.append('specialty', specialty);
+            batchFormData.append('responseStyle', responseStyle);
             batch.forEach(file => batchFormData.append('files', file));
 
             const batchResponse = await fetch('/api/chat', {
@@ -459,6 +463,7 @@ export default function ChatPage() {
         formData.append('useStreaming', useStreaming.toString())
         formData.append('model', modelName)
         formData.append('specialty', specialty)
+        formData.append('responseStyle', responseStyle)
         filesToSend.forEach(file => formData.append('files', file))
 
         if (useStreaming) {
@@ -622,6 +627,7 @@ export default function ChatPage() {
               useStreaming: true,
               model: modelName,
               specialty: specialty,
+              responseStyle,
             }),
           })
 
@@ -755,6 +761,7 @@ export default function ChatPage() {
               useStreaming: false,
               model: modelName,
               specialty: specialty,
+              responseStyle,
             }),
           })
 
@@ -1168,6 +1175,24 @@ export default function ChatPage() {
               <option value="sonnet">🤖 Sonnet 4.6</option>
               <option value="gemini">⚡ Gemini 3.1</option>
             </select>
+          </div>
+
+          <div className="w-full sm:w-auto rounded-lg border-2 border-teal-300 bg-teal-50 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-sm font-bold text-teal-800 whitespace-nowrap">Для врача: формат ответа</span>
+              <select
+                value={responseStyle}
+                onChange={(e) => setResponseStyle(e.target.value as ResponseStyle)}
+                className="flex-1 sm:flex-none px-3 py-2 border border-teal-300 rounded-lg text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 touch-manipulation"
+                disabled={loading}
+              >
+                <option value="brief">Кратко (по умолчанию)</option>
+                <option value="detailed">Развернуто</option>
+              </select>
+            </div>
+            <p className="mt-1 text-[10px] sm:text-xs text-teal-700">
+              Влияет на все следующие ответы в этом диалоге.
+            </p>
           </div>
         </div>
       </div>
