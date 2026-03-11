@@ -4,7 +4,6 @@
  */
 
 import { calculateCost } from './cost-calculator';
-import { isOnboardingBonusGranted, markOnboardingBonusGranted } from './onboarding';
 
 // Глобальный флаг включения системы (Всегда включено для учета, блокировка зависит от env)
 const SUBSCRIPTION_ENABLED = true;
@@ -12,8 +11,8 @@ const SUBSCRIPTION_STRICT_MODE = process.env.NEXT_PUBLIC_SUBSCRIPTION_STRICT_MOD
 
 // Настройки стартового баланса
 export const ANONYMOUS_BALANCE = 10; // 10 ед. анонимно
-export const REGISTERED_BONUS = 20;  // +20 ед. за регистрацию
-export const SOFT_LIMIT = -5;        // Разрешаем уходить в минус до -5 ед.
+export const REGISTERED_BONUS = 0;   // Дополнительного бонуса за регистрацию нет
+export const SOFT_LIMIT = 0;         // Овердрафт отключен
 
 // VIP-пользователи — из переменной окружения VIP_EMAILS (через запятую)
 function getVipEmails(): string[] {
@@ -172,7 +171,7 @@ export function getBalance(): SubscriptionBalance | null {
 }
 
 /**
- * Апгрейд баланса после регистрации (+20 ед) или установка безлимита для админов
+ * Апгрейд баланса после регистрации (без доп.бонуса) или установка безлимита для админов
  */
 export function upgradeBalanceToRegistered(email?: string | null): void {
   try {
@@ -197,15 +196,13 @@ export function upgradeBalanceToRegistered(email?: string | null): void {
 
     const targetTotal = ANONYMOUS_BALANCE + REGISTERED_BONUS;
 
-    // Если пакет все еще анонимный или начальный (со старым балансом), корректируем до 30 ед.
+    // Единый стартовый бонус: 10 ед. без дополнительной надбавки после регистрации.
     if (balance.packageName.includes('Анонимный') || balance.packageName.includes('Free')) {
-      // Чтобы не было 50 (30 старых + 20 новых), устанавливаем ровно 30 итого
       if (balance.initialCredits < targetTotal) {
         const diff = targetTotal - balance.initialCredits;
         balance.currentCredits += diff;
         balance.initialCredits = targetTotal;
       } else if (balance.initialCredits > targetTotal && balance.packageName.includes('Free')) {
-        // Если вдруг было 50 или больше в "Free" режиме, сбрасываем до 30
         balance.initialCredits = targetTotal;
         balance.currentCredits = Math.min(balance.currentCredits, targetTotal);
       }
@@ -267,36 +264,12 @@ export function initializeBalance(packageKey: keyof typeof SUBSCRIPTION_PACKAGES
 }
 
 /**
- * Локальный бонус за завершение onboarding-тура (+5 ед.) с защитой от повторного начисления.
+ * Бонус за onboarding отключен: доступ только из стартовых 10 ед. и платных пакетов.
  */
 export function grantOnboardingBonus(credits = 5): { granted: boolean; currentCredits: number | null } {
-  try {
-    if (typeof window === 'undefined') {
-      return { granted: false, currentCredits: null };
-    }
-
-    if (isOnboardingBonusGranted()) {
-      const existingBalance = getBalance();
-      return { granted: false, currentCredits: existingBalance?.currentCredits ?? null };
-    }
-
-    const balance = getBalance();
-    if (!balance) {
-      return { granted: false, currentCredits: null };
-    }
-
-    balance.currentCredits += credits;
-    balance.initialCredits += credits;
-    localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
-    markOnboardingBonusGranted();
-
-    window.dispatchEvent(new Event('balanceUpdated'));
-
-    return { granted: true, currentCredits: balance.currentCredits };
-  } catch (error) {
-    console.error('❌ [SUBSCRIPTION] Error granting onboarding bonus:', error);
-    return { granted: false, currentCredits: null };
-  }
+  void credits;
+  const existingBalance = getBalance();
+  return { granted: false, currentCredits: existingBalance?.currentCredits ?? null };
 }
 
 /**

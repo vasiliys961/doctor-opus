@@ -22,7 +22,6 @@ import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-cache'
 import { getOnboardingStatus, isOnboardingCompleted, setOnboardingStatus } from '@/lib/onboarding'
-import { grantOnboardingBonus } from '@/lib/subscription-manager'
 
 export default function ImageAnalysisPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -49,7 +48,6 @@ export default function ImageAnalysisPage() {
   const [useLibrary, setUseLibrary] = useState(false)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
-  const [showOnboardingReward, setShowOnboardingReward] = useState(false)
 
   const dataUrlToFile = (dataUrl: string, filename: string) => {
     const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/)
@@ -354,22 +352,12 @@ export default function ImageAnalysisPage() {
     if (getOnboardingStatus() !== 'image_uploaded') return
 
     setOnboardingStatus('completed')
-    const bonus = grantOnboardingBonus(5)
     window.dispatchEvent(new Event('onboardingCompleted'))
-    if (bonus.granted) {
-      setShowOnboardingReward(true)
-      window.setTimeout(() => setShowOnboardingReward(false), 7000)
-    }
   }, [loading, result])
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🔍 Medical Image Analysis</h1>
-      {showOnboardingReward && (
-        <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
-          ✅ Onboarding complete. <strong>+5 credits</strong> added in local mode.
-        </div>
-      )}
       
       <DeviceSync 
         currentImage={imagePreview}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { sql, getDbClient } from '@/lib/database';
+import { BILLING_CONFIG } from '@/lib/config';
 import { checkRateLimit, RATE_LIMIT_BILLING, getRateLimitKey } from '@/lib/rate-limiter';
 
 /**
@@ -165,7 +166,7 @@ export async function POST(request: NextRequest) {
 
       // 2. Проверка достаточности средств
       const newBalance = currentBalance - amount;
-      const SOFT_LIMIT = -5; // Разрешаем небольшой овердрафт
+      const SOFT_LIMIT = BILLING_CONFIG.softLimit;
 
       if (newBalance < SOFT_LIMIT) {
         await client.query('ROLLBACK');

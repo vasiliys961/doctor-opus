@@ -30,11 +30,11 @@ export const BILLING_CONFIG = {
   /** Гостевой пробный баланс (без регистрации) */
   guestTrialBalance: parseFloat(process.env.GUEST_TRIAL_BALANCE || '10'),
   /** Бонус после регистрации */
-  registeredBonus: parseFloat(process.env.REGISTERED_BONUS || '20'),
+  registeredBonus: parseFloat(process.env.REGISTERED_BONUS || '0'),
   /** Базовый баланс нового зарегистрированного пользователя */
-  initialBalance: parseFloat(process.env.INITIAL_BALANCE || '20'),
+  initialBalance: parseFloat(process.env.INITIAL_BALANCE || '10'),
   /** Мягкий лимит (разрешённый овердрафт) */
-  softLimit: parseFloat(process.env.BILLING_SOFT_LIMIT || '-5'),
+  softLimit: parseFloat(process.env.BILLING_SOFT_LIMIT || '0'),
   /** Макс. списание за одну операцию */
   maxSingleDeduction: parseFloat(process.env.MAX_SINGLE_DEDUCTION || '50'),
 };

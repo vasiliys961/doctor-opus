@@ -98,7 +98,7 @@ export default function SubscriptionPage() {
         {showOnboardingBanner && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
             <p className="text-amber-800 text-sm">
-              🎁 Complete a quick demo flow (AI Assistant → Visit Protocol → Image Analysis) and get <strong>+5 credits</strong>.
+              ℹ️ Complete a quick demo flow: AI Assistant → Visit Protocol → Image Analysis.
             </p>
             <Link
               href="/chat"

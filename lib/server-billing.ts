@@ -170,6 +170,7 @@ export async function checkAndDeductGuestBalance(
         allowed: false,
         balanceAfter: currentBalance,
         error: `Your free trial is over. Sign up to get +20 credits and continue. Available: ${currentBalance.toFixed(2)} units, required: ${amount.toFixed(2)} units.`,
+        error: `Free trial limit reached. To continue, activate a subscription or top up your balance. Available: ${currentBalance.toFixed(2)} units, required: ${amount.toFixed(2)} units.`,
       };
     }
 

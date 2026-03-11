@@ -60,7 +60,7 @@ export default function OnboardingTour() {
     completionTour.addStep({
       id: 'completion-step',
       title: 'Onboarding Complete',
-      text: 'Great job! Your first analysis is finished and +5 credits have been added. Open the Physician Guide for a quick workflow overview.',
+      text: 'Great job! Your first analysis is finished. Open the Physician Guide for a quick workflow overview.',
       buttons: [
         {
           text: 'Open Physician Guide',
