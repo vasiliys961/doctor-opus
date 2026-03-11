@@ -35,15 +35,40 @@ jobs:
             docker network inspect doctor-opus-en_default >/dev/null 2>&1 || docker network create doctor-opus-en_default
             docker build -t doctor-opus-app-en .
 
+            echo "=== Ensure dedicated EN database container ==="
+            POSTGRES_USER_VALUE=$(grep -E '^POSTGRES_USER=' /home/doctor-opus-en/.env 2>/dev/null | cut -d= -f2- || true)
+            POSTGRES_PASSWORD_VALUE=$(grep -E '^POSTGRES_PASSWORD=' /home/doctor-opus-en/.env 2>/dev/null | cut -d= -f2- || true)
+            POSTGRES_DATABASE_VALUE=$(grep -E '^POSTGRES_DATABASE=' /home/doctor-opus-en/.env 2>/dev/null | cut -d= -f2- || true)
+
+            POSTGRES_USER_VALUE=${POSTGRES_USER_VALUE:-doctor_opus_en}
+            POSTGRES_PASSWORD_VALUE=${POSTGRES_PASSWORD_VALUE:-doctor_opus_en_pass}
+            POSTGRES_DATABASE_VALUE=${POSTGRES_DATABASE_VALUE:-doctor_opus_en}
+
+            docker volume inspect doctor-opus-postgres-en >/dev/null 2>&1 || docker volume create doctor-opus-postgres-en
+            if ! docker ps -a --format '{{.Names}}' | grep -qx doctor-opus-db-en; then
+              docker run -d \
+                --name doctor-opus-db-en \
+                --restart always \
+                --network doctor-opus-en_default \
+                -v doctor-opus-postgres-en:/var/lib/postgresql/data \
+                -e POSTGRES_USER="$POSTGRES_USER_VALUE" \
+                -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD_VALUE" \
+                -e POSTGRES_DB="$POSTGRES_DATABASE_VALUE" \
+                postgres:15-alpine
+            fi
+            docker start doctor-opus-db-en >/dev/null 2>&1 || true
+
             echo "=== Restart EN container ==="
             docker stop doctor-opus-app-en || true
             docker rm doctor-opus-app-en || true
             docker run -d \
               --name doctor-opus-app-en \
               --restart always \
+              --network doctor-opus-en_default \
               -p 3001:3000 \
               -v /home/doctor-opus-en/uploads:/app/uploads \
               -v /home/doctor-opus-en/exports:/app/exports \
+              -e POSTGRES_URL="postgres://$POSTGRES_USER_VALUE:$POSTGRES_PASSWORD_VALUE@doctor-opus-db-en:5432/$POSTGRES_DATABASE_VALUE" \
               --env-file /home/doctor-opus-en/.env \
               doctor-opus-app-en
 
