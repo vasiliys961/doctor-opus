@@ -97,5 +97,11 @@ export const CHAT_SPECIALISTS: ChatSpecialist[] = [
     label: 'AI in Medicine Consultant',
     icon: '🦾',
     description: 'Expert in AI tool implementation in clinical practice: tool selection and training.'
+  },
+  {
+    id: 'longevai',
+    label: 'Dr. LongevAI',
+    icon: '🧬',
+    description: 'A4M + IHS + 5P medicine: anti-aging, hormone optimization, and longevity biomarkers.'
   }
 ];
