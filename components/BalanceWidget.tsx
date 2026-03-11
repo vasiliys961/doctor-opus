@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { getBalance, getUsagePercentage, isSubscriptionEnabled, upgradeBalanceToRegistered } from '@/lib/subscription-manager'
+import { useState, useEffect, useCallback } from 'react'
+import { getBalance, getUsagePercentage, isSubscriptionEnabled } from '@/lib/subscription-manager'
 import { getUsageBySections } from '@/lib/simple-logger'
 import type { SubscriptionBalance } from '@/lib/subscription-manager'
 import Link from 'next/link'
@@ -14,6 +14,45 @@ export default function BalanceWidget() {
   const [isVisible, setIsVisible] = useState(false)
   const [mounted, setMounted] = useState(false)
 
+  const loadBalance = useCallback(async () => {
+    try {
+      if (session?.user?.email) {
+        const response = await fetch('/api/billing/deduct', { cache: 'no-store' })
+        if (response.ok) {
+          const data = await response.json()
+          if (data?.success) {
+            const currentCredits = Number(data.balance ?? 0)
+            const totalSpent = Number(data.totalSpent ?? 0)
+            const localBalance = getBalance()
+            const initialCredits = Math.max(currentCredits + totalSpent, localBalance?.initialCredits ?? 0, 10)
+
+            setBalance({
+              initialCredits,
+              currentCredits,
+              totalSpent,
+              packageName: localBalance?.packageName || 'Server Balance',
+              packagePriceRub: localBalance?.packagePriceRub || 0,
+              purchaseDate: localBalance?.purchaseDate || new Date().toISOString(),
+              expiryDate: null,
+              isUnlimited: localBalance?.isUnlimited,
+            })
+            setUsagePercent(initialCredits > 0 ? (totalSpent / initialCredits) * 100 : 0)
+            setIsVisible(true)
+            return
+          }
+        }
+      }
+
+      const bal = getBalance()
+      setBalance(bal)
+      setUsagePercent(getUsagePercentage())
+      setIsVisible(true)
+    } catch (error) {
+      console.error('Error loading balance widget:', error)
+      setIsVisible(false)
+    }
+  }, [session?.user?.email])
+
   useEffect(() => {
     setMounted(true)
     // Проверяем, включена ли система
@@ -22,35 +61,20 @@ export default function BalanceWidget() {
       return
     }
 
-    // Если пользователь вошел в систему, проверяем бонус за регистрацию
-    if (session?.user?.email) {
-      upgradeBalanceToRegistered(session.user.email)
+    const handleBalanceUpdated = () => {
+      void loadBalance()
     }
 
-    loadBalance()
-    
-    // Слушаем событие обновления баланса
-    window.addEventListener('balanceUpdated', loadBalance)
-    
-    // Обновлять каждые 10 секунд (на всякий случай)
-    const interval = setInterval(loadBalance, 10000)
+    void loadBalance()
+    window.addEventListener('balanceUpdated', handleBalanceUpdated)
+    const interval = setInterval(() => {
+      void loadBalance()
+    }, 10000)
     return () => {
-      window.removeEventListener('balanceUpdated', loadBalance)
+      window.removeEventListener('balanceUpdated', handleBalanceUpdated)
       clearInterval(interval)
     }
-  }, [session])
-
-  const loadBalance = () => {
-    try {
-      const bal = getBalance()
-      setBalance(bal)
-      setUsagePercent(getUsagePercentage())
-      setIsVisible(true) // Всегда показываем виджет, если система включена
-    } catch (error) {
-      console.error('Error loading balance widget:', error)
-      setIsVisible(false)
-    }
-  }
+  }, [loadBalance])
 
   // Не показываем виджет, пока не примонтирован (предотвращает Hydration Error) или если система отключена
   if (!mounted || !isVisible) {
