@@ -217,7 +217,8 @@ export async function POST(request: NextRequest) {
     }
     const prompt = anonymizeText(formData.get('prompt') as string || 'Analyze the medical image.');
     const clinicalContext = anonymizeText(formData.get('clinicalContext') as string || '');
-    const stage = (formData.get('stage') as string) || 'all';
+    const stage = ((formData.get('stage') as string) || 'all').toLowerCase();
+    const descriptionFromStep1 = anonymizeText(formData.get('description') as string || '');
     const imageType = (formData.get('imageType') as string) || 'universal';
     const customModel = formData.get('model') as string | null;
     const useStreaming = formData.get('useStreaming') === 'true';
@@ -337,7 +338,31 @@ export async function POST(request: NextRequest) {
     // Сравнительный промпт включаем ТОЛЬКО по явному флагу.
     // Множественные кадры/срезы одного исследования не считаем динамикой "было/стало".
     let finalPrompt = prompt;
-    if (isComparative && allImages.length > 1 && !prompt.includes('СРАВНИТЕЛЬНЫЙ')) {
+    if (stage === 'directive') {
+      if (!descriptionFromStep1.trim()) {
+        return NextResponse.json(
+          { success: false, error: 'Step "Clinical directive" requires step 1 description.' },
+          { status: 400 }
+        );
+      }
+
+      finalPrompt = `CLINICAL DIRECTIVE (STEP 2)
+
+Use:
+1) image description from step 1,
+2) patient clinical context,
+3) technical data and attached images.
+
+Important:
+- DO NOT repeat the full visual-description section;
+- provide clinical interpretation, differential diagnosis, and priorities;
+- highlight next clinical steps and key risks.
+
+=== STEP 1 DESCRIPTION ===
+${descriptionFromStep1}`;
+    }
+
+    if (stage !== 'directive' && isComparative && allImages.length > 1 && !prompt.includes('СРАВНИТЕЛЬНЫЙ')) {
       const { getImageComparisonPrompt } = await import('@/lib/prompts');
       finalPrompt = getImageComparisonPrompt(prompt);
     }
