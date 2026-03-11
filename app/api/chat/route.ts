@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
     let files: File[] = [];
     let specialty: string | undefined;
     let systemPrompt: string | undefined;
+    let responseStyle: 'brief' | 'detailed' = 'detailed';
 
     // Проверяем, является ли запрос FormData (с файлами) или JSON
     if (contentType.includes('multipart/form-data')) {
@@ -90,6 +91,7 @@ export async function POST(request: NextRequest) {
       }
       useStreaming = formData.get('useStreaming') === 'true';
       model = formData.get('model') as string | undefined;
+      responseStyle = ((formData.get('responseStyle') as string) === 'brief' ? 'brief' : 'detailed');
       
       // Получаем файлы
       const fileEntries = formData.getAll('files') as File[];
@@ -102,6 +104,7 @@ export async function POST(request: NextRequest) {
       model = body.model;
       specialty = body.specialty;
       systemPrompt = body.systemPrompt;
+      responseStyle = body.responseStyle === 'brief' ? 'brief' : 'detailed';
     }
 
     if (files.length > 0) {
@@ -133,12 +136,12 @@ export async function POST(request: NextRequest) {
     const languageInstruction = buildLanguageInstruction(responseLanguage);
     const isClaudeAssistantModel = selectedModel === MODELS.SONNET || selectedModel === MODELS.OPUS;
     const assistantFormattingInstruction = `
-ФОРМАТ ОТВЕТА:
-- Пиши в чистом Markdown, структурно и читаемо.
-- Если есть табличные данные, оформляй только стандартной Markdown-таблицей с символом | и строкой разделителей |---|.
-- Не используй псевдо-таблицы в одну строку с двойными вертикальными чертами ||.
-- Не помещай таблицы в блоки кода.
-- Перед и после таблицы оставляй пустую строку.
+RESPONSE FORMAT:
+- Use clean Markdown with readable structure.
+- If table data exists, use standard Markdown tables with | and a separator row |---|.
+- Do not use pseudo-tables in one line with double pipes ||.
+- Do not wrap tables into code blocks.
+- Leave a blank line before and after each table.
 `;
     const preparedMessageBase = isClaudeAssistantModel
       ? `${message}\n\n${assistantFormattingInstruction}`
@@ -147,6 +150,9 @@ export async function POST(request: NextRequest) {
     const effectiveSystemPrompt = systemPrompt
       ? `${systemPrompt}\n\n${languageInstruction}`
       : languageInstruction;
+    const styleInstruction = responseStyle === 'brief'
+      ? 'RESPONSE STYLE: Brief. Give only the essentials without long explanations. Prefer 3-6 concise bullet points and a short conclusion.'
+      : 'RESPONSE STYLE: Detailed. Provide a full structured answer with reasoning and practical next steps.';
 
     if (!message && files.length === 0) {
       return NextResponse.json(
@@ -160,6 +166,11 @@ export async function POST(request: NextRequest) {
       role: msg.role === 'user' ? 'user' : 'assistant',
       content: msg.content
     }));
+    const hasDialogueContext = formattedHistory.length > 0;
+    const dialogueInstruction = hasDialogueContext
+      ? 'DIALOGUE MODE: Continue the current conversation. Address new clinician remarks directly and avoid repeating the full structure of the first response unless explicitly requested.'
+      : 'DIALOGUE MODE: Provide a clear initial baseline response for this request.';
+    const finalMessage = `${preparedMessage}\n\n${styleInstruction}\n${dialogueInstruction}`;
 
     // Обработка стриминга с логированием
     const handleStreaming = async (stream: ReadableStream) => {
@@ -211,10 +222,10 @@ export async function POST(request: NextRequest) {
     // Если есть файлы, используем функции с поддержкой файлов
     if (files.length > 0) {
       if (useStreaming) {
-        const stream = await sendTextRequestStreamingWithFiles(preparedMessage, formattedHistory, files, selectedModel, specialty as any);
+        const stream = await sendTextRequestStreamingWithFiles(finalMessage, formattedHistory, files, selectedModel, specialty as any);
         return handleStreaming(stream);
       } else {
-        const result = await sendTextRequestWithFiles(preparedMessage, formattedHistory, files, selectedModel, specialty as any);
+        const result = await sendTextRequestWithFiles(finalMessage, formattedHistory, files, selectedModel, specialty as any);
         const { calculateCost } = await import('@/lib/cost-calculator');
         const costInfo = calculateCost(2000, 1500, selectedModel); // Оценочно для non-streaming
         
@@ -230,7 +241,7 @@ export async function POST(request: NextRequest) {
     // Если запрошен streaming без файлов, возвращаем поток
     if (useStreaming) {
       const stream = await sendTextRequestStreaming(
-        preparedMessage,
+        finalMessage,
         formattedHistory,
         selectedModel,
         specialty as any,
@@ -241,7 +252,7 @@ export async function POST(request: NextRequest) {
 
     // Обычный режим - полный ответ
     console.log('🚀 [CHAT API] Начало запроса к OpenRouter...');
-    const result = await sendTextRequest(preparedMessage, formattedHistory, selectedModel, specialty as any);
+    const result = await sendTextRequest(finalMessage, formattedHistory, selectedModel, specialty as any);
     console.log('✅ [CHAT API] Ответ от OpenRouter получен успешно.');
     
     const { calculateCost } = await import('@/lib/cost-calculator');
