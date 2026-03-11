@@ -91,7 +91,7 @@ export default function SubscriptionPage() {
         {showOnboardingBanner && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
             <p className="text-amber-800 text-sm">
-              🎁 Пройдите быстрый демо-сценарий: ИИ-Ассистент → Протокол приёма → Анализ изображений и получите <strong>+5 единиц</strong>.
+              ℹ️ Быстрый демо-сценарий: ИИ-Ассистент → Протокол приёма → Анализ изображений.
             </p>
             <Link
               href="/chat"

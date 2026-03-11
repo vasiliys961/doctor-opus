@@ -169,7 +169,7 @@ export async function checkAndDeductGuestBalance(
       return {
         allowed: false,
         balanceAfter: currentBalance,
-        error: `Пробный лимит исчерпан. Зарегистрируйтесь, чтобы получить +20 ед. и продолжить. Доступно: ${currentBalance.toFixed(2)} ед., требуется: ${amount.toFixed(2)} ед.`,
+        error: `Пробный лимит исчерпан. Для продолжения оформите подписку или пополните баланс. Доступно: ${currentBalance.toFixed(2)} ед., требуется: ${amount.toFixed(2)} ед.`,
       };
     }
 

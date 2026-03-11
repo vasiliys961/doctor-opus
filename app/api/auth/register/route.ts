@@ -85,17 +85,10 @@ export async function POST(request: NextRequest) {
       RETURNING id
     `;
 
-    // Переносим остаток гостевого trial (до 10 ед.) и добавляем +20 за регистрацию.
-    // Итоговый старт зарегистрированного пользователя: 20..30 ед.
+    // Единый стартовый бонус: фиксированные 10 ед.
+    // Дополнительных бонусов за регистрацию нет.
     const guestKey = getRateLimitKey(request);
-    const { rows: guestRows } = await sql`
-      SELECT balance FROM guest_balances WHERE guest_key = ${guestKey}
-    `;
-    const guestBalanceRaw = guestRows.length > 0
-      ? parseFloat(guestRows[0].balance)
-      : BILLING_CONFIG.guestTrialBalance;
-    const guestCarry = Math.max(0, Math.min(BILLING_CONFIG.guestTrialBalance, guestBalanceRaw));
-    const startingBalance = BILLING_CONFIG.registeredBonus + guestCarry;
+    const startingBalance = BILLING_CONFIG.initialBalance;
 
     // Создаём стартовый баланс зарегистрированного пользователя
     await sql`

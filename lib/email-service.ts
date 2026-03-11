@@ -29,7 +29,7 @@ export async function sendWelcomeEmail(email: string, name: string = 'колле
           
           <div style="background-color: #f0fdfa; border: 1px solid #ccfbf1; padding: 20px; border-radius: 12px; margin: 25px 0;">
             <h3 style="margin-top: 0; color: #0f766e;">🎁 Ваш бонус активирован</h3>
-            <p style="margin-bottom: 0;">За регистрацию на ваш баланс зачислено <strong>дополнительно 20 единиц</strong>. Теперь вам доступно 30 единиц для проведения анализов любой сложности (ЭКГ, МРТ, КТ и др.).</p>
+            <p style="margin-bottom: 0;">Для нового аккаунта доступно <strong>10 стартовых единиц</strong> для первых анализов. Далее вы сможете продолжить работу через подписку или пополнение.</p>
           </div>
 
           <h3 style="color: #0d9488;">Что можно сделать прямо сейчас:</h3>
