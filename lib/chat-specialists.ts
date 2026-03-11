@@ -97,6 +97,12 @@ export const CHAT_SPECIALISTS: ChatSpecialist[] = [
     label: 'ИИ-Ассистент (Медицина)',
     icon: '🦾',
     description: 'Эксперт по внедрению нейросетей в клиническую практику: подбор инструментов и обучение.'
+  },
+  {
+    id: 'longevai',
+    label: 'Dr. LongevAI',
+    icon: '🧬',
+    description: 'A4M + IHS + 5P медицина: anti-aging, гормональная оптимизация, longevity-биомаркеры.'
   }
 ];
 
