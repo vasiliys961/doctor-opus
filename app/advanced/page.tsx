@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -25,7 +24,6 @@ export default function AdvancedAnalysisPage() {
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
-  const [accumulatedDescription, setAccumulatedDescription] = useState('')
   const [showEditor, setShowEditor] = useState(false)
   const [isAnonymous, setIsAnonymous] = useState(false)
 
@@ -45,24 +43,22 @@ export default function AdvancedAnalysisPage() {
     }
   }
 
-  const analyzeAdvanced = async (targetStage: 'description' | 'directive' = 'description') => {
+  const analyzeAdvanced = async () => {
     if (!mainImage) {
       setError('Загрузите основное изображение для анализа')
       return
     }
 
     setLoading(true)
-    if (targetStage === 'description') {
-      setResult('')
-      setAccumulatedDescription('')
-      setCurrentCost(0)
-    }
+    setResult('')
+    setCurrentCost(0)
     setError(null)
 
     try {
-      const prompt = `РАСШИРЕННЫЙ АНАЛИЗ С КОНТЕКСТОМ.
-      Клиническая информация: ${additionalContext}
-      Дополнительных файлов: ${additionalFiles.length}`
+      const prompt = `ВЫПОЛНИ ПОЛНЫЙ АНАЛИЗ И СФОРМИРУЙ КЛИНИЧЕСКУЮ ДИРЕКТИВУ.
+Сначала дай структурированное описание визуальных находок, затем клиническую интерпретацию, дифференциальный ряд, риски и приоритетные следующие шаги.
+Клиническая информация: ${additionalContext}
+Дополнительных файлов: ${additionalFiles.length}`
 
       const modelToUse = mode === 'fast' 
         ? 'google/gemini-3-flash-preview' 
@@ -79,13 +75,10 @@ export default function AdvancedAnalysisPage() {
       formData.append('mode', mode)
       formData.append('model', modelToUse)
       formData.append('imageType', imageType)
-      formData.append('stage', targetStage)
+      formData.append('stage', 'all')
       formData.append('useStreaming', 'true')
       formData.append('isAnonymous', isAnonymous.toString())
-      
-      if (targetStage === 'directive') {
-        formData.append('description', accumulatedDescription)
-      }
+      formData.append('clinicalContext', additionalContext.trim())
 
       const response = await fetch('/api/analyze/image', {
         method: 'POST',
@@ -96,11 +89,7 @@ export default function AdvancedAnalysisPage() {
 
       await handleSSEStream(response, {
         onChunk: (content, accumulatedText) => {
-          if (targetStage === 'description') {
-            setResult(accumulatedText)
-          } else {
-            setResult(accumulatedDescription + "\n\n---\n\n" + accumulatedText)
-          }
+          setResult(accumulatedText)
         },
         onUsage: (usage) => {
           console.log('📊 [ADVANCED STREAMING] Получена точная стоимость:', usage.total_cost)
@@ -114,12 +103,7 @@ export default function AdvancedAnalysisPage() {
           })
         },
         onComplete: (finalText) => {
-          if (targetStage === 'description') {
-            setAccumulatedDescription(finalText)
-            setResult(finalText)
-          } else {
-            setResult(accumulatedDescription + "\n\n---\n\n" + finalText)
-          }
+          setResult(finalText)
           setModelInfo({ model: modelToUse, mode: mode })
         }
       })
@@ -241,21 +225,13 @@ export default function AdvancedAnalysisPage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <button
-            onClick={() => analyzeAdvanced('description')}
+            onClick={analyzeAdvanced}
             disabled={loading || !mainImage}
             className="bg-primary-500 hover:bg-primary-600 text-white font-semibold py-3 px-6 rounded-lg disabled:opacity-50"
           >
-            {loading && accumulatedDescription === '' ? '⌛ Описание...' : '🔍 Шаг 1: Описание'}
-          </button>
-          
-          <button
-            onClick={() => analyzeAdvanced('directive')}
-            disabled={loading || !mainImage || !accumulatedDescription}
-            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg disabled:opacity-50"
-          >
-            {loading && accumulatedDescription !== '' ? '⌛ Заключение...' : '🩺 Шаг 2: Клиническая директива'}
+            {loading ? '⌛ Выполняется полный анализ...' : '🔍 Полный анализ + клиническая директива'}
           </button>
         </div>
       </div>

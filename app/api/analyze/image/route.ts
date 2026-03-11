@@ -217,7 +217,8 @@ export async function POST(request: NextRequest) {
     }
     const prompt = anonymizeText(formData.get('prompt') as string || 'Analyze the medical image.');
     const clinicalContext = anonymizeText(formData.get('clinicalContext') as string || '');
-    const stage = (formData.get('stage') as string) || 'all';
+    const stage = ((formData.get('stage') as string) || 'all').toLowerCase();
+    const descriptionFromStep1 = anonymizeText(formData.get('description') as string || '');
     const imageType = (formData.get('imageType') as string) || 'universal';
     const customModel = formData.get('model') as string | null;
     const useStreaming = formData.get('useStreaming') === 'true';
@@ -337,7 +338,31 @@ export async function POST(request: NextRequest) {
     // Сравнительный промпт включаем ТОЛЬКО по явному флагу.
     // Множественные кадры/срезы одного исследования не считаем динамикой "было/стало".
     let finalPrompt = prompt;
-    if (isComparative && allImages.length > 1 && !prompt.includes('СРАВНИТЕЛЬНЫЙ')) {
+    if (stage === 'directive') {
+      if (!descriptionFromStep1.trim()) {
+        return NextResponse.json(
+          { success: false, error: 'Для шага "Клиническая директива" требуется описание из шага 1.' },
+          { status: 400 }
+        );
+      }
+
+      finalPrompt = `КЛИНИЧЕСКАЯ ДИРЕКТИВА (ШАГ 2)
+
+Используй:
+1) описание изображения из шага 1,
+2) клинический контекст пациента,
+3) технические данные и приложенные изображения.
+
+Важно:
+- НЕ повторяй заново полный блок визуального описания;
+- дай клиническую интерпретацию, дифференциальный ряд и приоритеты;
+- выдели следующие клинические шаги и риски.
+
+=== ОПИСАНИЕ ИЗ ШАГА 1 ===
+${descriptionFromStep1}`;
+    }
+
+    if (stage !== 'directive' && isComparative && allImages.length > 1 && !prompt.includes('СРАВНИТЕЛЬНЫЙ')) {
       const { getImageComparisonPrompt } = await import('@/lib/prompts');
       finalPrompt = getImageComparisonPrompt(prompt);
     }
