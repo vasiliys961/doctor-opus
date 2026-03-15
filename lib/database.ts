@@ -86,12 +86,20 @@ export async function initDatabase() {
         doctor_comment TEXT,
         correct_diagnosis TEXT,
         specialty VARCHAR(100),
-        correctness INTEGER,
+        correctness TEXT,
         consent BOOLEAN DEFAULT FALSE,
         input_case TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+    // Миграция: если колонка correctness имеет тип INTEGER — меняем на TEXT
+    try {
+      await sql`
+        ALTER TABLE analysis_feedback 
+        ALTER COLUMN correctness TYPE TEXT USING correctness::TEXT;
+      `;
+    } catch {}
 
     // Таблица платежей (для будущей интеграции с Робокассой)
     await sql`
@@ -293,7 +301,11 @@ export async function getFineTuningStats() {
       SELECT 
         specialty, 
         COUNT(*) as total_count,
-        SUM(CASE WHEN correctness::text = '1' OR correctness::text = 'true' THEN 1 ELSE 0 END) as ready_count
+        SUM(CASE WHEN 
+          correctness::text = '1' OR 
+          correctness::text = 'true' OR
+          correctness ILIKE '%полностью верно%'
+          THEN 1 ELSE 0 END) as ready_count
       FROM analysis_feedback
       WHERE specialty IS NOT NULL
       GROUP BY specialty;
@@ -510,7 +522,12 @@ export async function getRejectedFeedback(specialty: string, limit = 30) {
       SELECT ai_response, correct_diagnosis, doctor_comment, input_case
       FROM analysis_feedback
       WHERE specialty = ${specialty}
-        AND (correctness = 0 OR correctness::text = 'false')
+        AND (
+          correctness = '0' OR 
+          correctness::text = 'false' OR
+          correctness ILIKE '%ошибка%' OR
+          correctness ILIKE '%частично%'
+        )
         AND ai_response IS NOT NULL
       ORDER BY created_at DESC
       LIMIT ${limit}
