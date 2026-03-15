@@ -109,7 +109,6 @@ ${specialty ? `Специальность: ${specialty}` : ''}
 
     // Используем выбранную модель через OpenRouter
     const payload = {
-      model: MODEL,
       messages: [
         {
           role: 'system' as const,
@@ -121,12 +120,12 @@ ${specialty ? `Специальность: ${specialty}` : ''}
         }
       ],
       max_tokens: MAX_TOKENS,
-      temperature: 0.3, // Низкая температура для более точных и структурированных ответов
-      stream: useStreaming, // Включаем streaming
+      temperature: 0.3,
+      stream: useStreaming,
       stream_options: { include_usage: true }
     };
 
-    const response = await fetch(OPENROUTER_API_URL, {
+    const makeRequest = (model: string) => fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -134,8 +133,10 @@ ${specialty ? `Специальность: ${specialty}` : ''}
         'HTTP-Referer': 'https://doctor-opus.ru',
         'X-Title': 'Doctor Opus'
       },
-      body: JSON.stringify(payload)
-    });
+      body: JSON.stringify({ ...payload, model })
+    })
+
+    let response = await makeRequest(MODEL)
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -147,11 +148,27 @@ ${specialty ? `Специальность: ${specialty}` : ''}
           error: 'Недостаточно средств на OpenRouter. Пополните баланс.'
         }, { status: 402 });
       }
-      
-      return NextResponse.json({
-        success: false,
-        error: `Ошибка API: ${response.status} - ${errorText.substring(0, 200)}`
-      }, { status: response.status });
+
+      // Fallback: GPT недоступен по региону → переключаемся на Sonnet
+      const isGeoError = errorText.includes('unsupported_country_region_territory') ||
+                         errorText.includes('country, region, or territory not supported')
+      if (isGeoError && MODEL === MODELS.GPT_5_2) {
+        console.warn('⚠️ [CLINICAL RECS] GPT недоступен по региону, переключаемся на Sonnet')
+        MODEL = MODELS.SONNET
+        response = await makeRequest(MODEL)
+        if (!response.ok) {
+          const fallbackError = await response.text()
+          return NextResponse.json({
+            success: false,
+            error: `Ошибка API: ${response.status} - ${fallbackError.substring(0, 200)}`
+          }, { status: response.status })
+        }
+      } else {
+        return NextResponse.json({
+          success: false,
+          error: `Ошибка API: ${response.status} - ${errorText.substring(0, 200)}`
+        }, { status: response.status });
+      }
     }
 
     // Если streaming включен, возвращаем SSE поток

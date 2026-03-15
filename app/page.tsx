@@ -121,60 +121,34 @@ export default async function HomePage() {
       <div className="mb-8 sm:mb-12">
         <h2 className="text-xl sm:text-2xl font-bold text-primary-900 mb-4 sm:mb-6">⚡ Быстрые действия</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
-          <Link
-            href="/ecg"
-            className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
-          >
+          <Link href="/ecg" className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
             📈 Анализ ЭКГ
           </Link>
-          <Link
-            href="/image-analysis"
-            className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
-          >
+          <Link href="/image-analysis" className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
             🔍 Анализ снимков
           </Link>
-          <Link
-            href="/patients"
-            className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
-          >
+          <Link href="/patients" className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
             👤 База пациентов
           </Link>
-          <Link
-            href="/chat"
-            className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
-          >
+          <Link href="/chat" className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
             🤖 ИИ-Ассистент
           </Link>
-          <Link
-            href="/protocol"
-            className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
-          >
+          <Link href="/protocol" className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
             📝 Протокол
           </Link>
-          <Link
-            href="/document"
-            className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
-          >
+          <Link href="/document" className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
             📄 Сканирование
           </Link>
-          <Link
-            href="/library"
-            className="bg-white hover:bg-green-50 active:bg-green-100 border-2 border-green-200 hover:border-green-400 text-green-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
-          >
+          <Link href="/library" className="bg-white hover:bg-green-50 active:bg-green-100 border-2 border-green-200 hover:border-green-400 text-green-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
             📚 Библиотека
           </Link>
-          <Link
-            href="/video"
-            className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
-          >
+          <Link href="/video" className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
             🎬 Анализ видео
           </Link>
-          <a
-            href="/calculators"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 border-2 border-indigo-200 hover:border-indigo-400 text-indigo-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
-          >
+          <Link href="/devices" className="bg-white hover:bg-indigo-50 active:bg-indigo-100 border-2 border-indigo-200 hover:border-indigo-400 text-indigo-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
+            🔬 Лаборатория
+          </Link>
+          <a href="/calculators" target="_blank" rel="noopener noreferrer" className="bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 border-2 border-indigo-200 hover:border-indigo-400 text-indigo-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
             🧮 Мед. калькуляторы
           </a>
         </div>
@@ -201,13 +175,37 @@ export default async function HomePage() {
           <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
             <h3 className="font-bold text-base sm:text-lg mb-2">🔬 Лабораторные данные</h3>
             <p className="text-xs sm:text-sm text-gray-600">
-              Сканирование бланков, структурирование анализов, без лишних интерпретаций.
+              Сканирование бланков, PDF-отчёты Холтера/СМАД/спирометрии, структурирование анализов.
             </p>
           </div>
           <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
             <h3 className="font-bold text-base sm:text-lg mb-2">🧬 Генетика & фармакогеномика</h3>
             <p className="text-xs sm:text-sm text-gray-600">
               Разбор VCF/PDF, анализ генетики и экспертный обзор.
+            </p>
+          </div>
+          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-indigo-100">
+            <h3 className="font-bold text-base sm:text-lg mb-2">🧪 Лаборатория (USB)</h3>
+            <p className="text-xs sm:text-sm text-gray-600">
+              ЭКГ, спирометрия, глюкозный профиль CGM, УЗИ/эндоскоп — прямое подключение через USB.
+            </p>
+          </div>
+          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-rose-100">
+            <h3 className="font-bold text-base sm:text-lg mb-2">🩹 Кожа & раны</h3>
+            <p className="text-xs sm:text-sm text-gray-600">
+              Дерматоскопия (ABCDE), анализ ран и раневого процесса, кожные изменения с дифдиагнозом.
+            </p>
+          </div>
+          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
+            <h3 className="font-bold text-base sm:text-lg mb-2">📝 Протокол & документы</h3>
+            <p className="text-xs sm:text-sm text-gray-600">
+              Голосовой протокол осмотра, сканирование и OCR документов, экспорт в Word.
+            </p>
+          </div>
+          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
+            <h3 className="font-bold text-base sm:text-lg mb-2">👤 База пациентов</h3>
+            <p className="text-xs sm:text-sm text-gray-600">
+              Карточки пациентов, история анализов, динамика показателей. Хранится локально в браузере.
             </p>
           </div>
         </div>

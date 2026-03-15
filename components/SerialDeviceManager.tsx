@@ -1,285 +1,748 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { AnalysisMode } from './AnalysisModeSelector'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import AnalysisResult from './AnalysisResult'
 
-interface SerialDeviceManagerProps {
-  onDataCaptured?: (dataUrl: string) => void
+const LEAD_NAMES = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
+const LEAD_COLORS = [
+  '#10b981', '#3b82f6', '#f59e0b', '#ef4444',
+  '#8b5cf6', '#06b6d4', '#f97316', '#84cc16',
+  '#ec4899', '#14b8a6', '#6366f1', '#d97706'
+]
+
+const BAUD_RATES = [9600, 19200, 38400, 57600, 115200]
+
+// Группы отведений по количеству каналов
+const GROUPS_BY_CH: Record<number, { label: string; indices: number[] }[]> = {
+  1:  LEAD_NAMES.map((n, i) => ({ label: n, indices: [i] })),
+  3:  [
+    { label: 'I + II + III',         indices: [0,1,2] },
+    { label: 'aVR + aVL + aVF',      indices: [3,4,5] },
+    { label: 'V1 + V2 + V3',         indices: [6,7,8] },
+    { label: 'V4 + V5 + V6',         indices: [9,10,11] },
+  ],
+  4:  [
+    { label: 'I + II + III + aVR',   indices: [0,1,2,3] },
+    { label: 'aVL + aVF + V1 + V2',  indices: [4,5,6,7] },
+    { label: 'V3 + V4 + V5 + V6',    indices: [8,9,10,11] },
+  ],
+  6:  [
+    { label: 'I II III aVR aVL aVF', indices: [0,1,2,3,4,5] },
+    { label: 'V1 V2 V3 V4 V5 V6',   indices: [6,7,8,9,10,11] },
+  ],
+  12: [{ label: 'Все 12 отведений',  indices: [0,1,2,3,4,5,6,7,8,9,10,11] }],
 }
 
-export default function SerialDeviceManager() {
-  const [port, setPort] = useState<any>(null)
-  const [isConnecting, setIsConnecting] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
-  const [supported, setSupported] = useState(true)
-  const [baudRate, setBaudRate] = useState(115200)
-  const [dataPoints, setDataPoints] = useState<number[]>([])
-  const [analysisResult, setAnalysisResult] = useState('')
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const readerRef = useRef<any>(null)
-  const animationRef = useRef<number>()
+interface LeadData { name: string; points: number[]; capturedAt: Date }
 
-  // Проверка поддержки Web Serial API
+interface DetectResult {
+  baudRate: number
+  channels: number
+  separator: string
+  samplesPerSec: number
+}
+
+// Мини-canvas для отображения одного канала
+function MiniLeadCanvas({ points, color, height = 70 }: { points: number[]; color: string; height?: number }) {
+  const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
-    if (typeof window !== 'undefined' && !('serial' in navigator)) {
-      setSupported(false)
-    }
+    const el = ref.current; if (!el) return
+    const ctx = el.getContext('2d')!
+    ctx.clearRect(0, 0, el.width, el.height)
+    const pts = points.slice(-300); if (pts.length < 2) return
+    const min = Math.min(...pts), max = Math.max(...pts), range = max - min || 1
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5
+    pts.forEach((p, i) => {
+      const x = (i / pts.length) * el.width
+      const y = el.height - ((p - min) / range) * el.height * 0.8 - el.height * 0.1
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    })
+    ctx.stroke()
+  }, [points, color])
+  return <canvas ref={ref} width={400} height={height} className="w-full" />
+}
+
+// ===== ГЛАВНЫЙ КОМПОНЕНТ =====
+export default function SerialDeviceManager() {
+  // Шаги: idle → detecting → recording → captured → analyzing → done
+  type Step = 'idle' | 'detecting' | 'recording' | 'captured' | 'analyzing' | 'done'
+  const [step, setStep] = useState<Step>('idle')
+  const [supported, setSupported] = useState(true)
+
+  // Автодетект
+  const [detectLog, setDetectLog] = useState<string[]>([])
+  const [detected, setDetected] = useState<DetectResult | null>(null)
+
+  // Соединение
+  const [port, setPort] = useState<any>(null)
+  const portRef = useRef<any>(null)
+  const readerRef = useRef<any>(null)
+
+  // Буферы сигнала
+  const liveMultiRef = useRef<number[][]>(Array(12).fill(null).map(() => []))
+  const livePointsRef = useRef<number[]>([])
+  const [liveMulti, setLiveMulti] = useState<number[][]>(Array(12).fill([]))
+  const [livePoints, setLivePoints] = useState<number[]>([])
+
+  // Запись отведений
+  const [savedLeads, setSavedLeads] = useState<(LeadData | null)[]>(Array(12).fill(null))
+  const [currentGroupIdx, setCurrentGroupIdx] = useState(0)
+  const savedLeadsRef = useRef<(LeadData | null)[]>(Array(12).fill(null))
+
+  // Выбор модели анализа
+  type EcgAnalysisPreset = 'fast' | 'best' | 'expert'
+  const [analysisPreset, setAnalysisPreset] = useState<EcgAnalysisPreset>('best')
+  const [analysisModelUsed, setAnalysisModelUsed] = useState('')
+
+  // Результат анализа
+  const [analysisResult, setAnalysisResult] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+
+  // Расширенный режим (для продвинутых)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [manualBaud, setManualBaud] = useState(9600)
+  const [manualChannels, setManualChannels] = useState(1)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !('serial' in navigator)) setSupported(false)
   }, [])
 
-  // Отрисовка графика
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+  const addLog = (msg: string) => setDetectLog(prev => [...prev, msg])
 
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      ctx.beginPath()
-      ctx.strokeStyle = '#10b981' // Emerald-500
-      ctx.lineWidth = 2
-      
-      const step = canvas.width / 100 // Отображаем последние 100 точек
-      const points = dataPoints.slice(-100)
-      
-      points.forEach((point, i) => {
-        // Нормализация значения (предполагаем 0-1024 для примера)
-        const y = canvas.height - (point / 1024) * canvas.height
-        if (i === 0) ctx.moveTo(i * step, y)
-        else ctx.lineTo(i * step, y)
-      })
-      
-      ctx.stroke()
-      
-      // Сетка
-      ctx.strokeStyle = '#e2e8f0'
-      ctx.lineWidth = 0.5
-      for (let i = 0; i < canvas.width; i += 50) {
-        ctx.beginPath()
-        ctx.moveTo(i, 0)
-        ctx.lineTo(i, canvas.height)
-        ctx.stroke()
-      }
-      for (let i = 0; i < canvas.height; i += 50) {
-        ctx.beginPath()
-        ctx.moveTo(0, i)
-        ctx.lineTo(canvas.width, i)
-        ctx.stroke()
-      }
-
-      animationRef.current = requestAnimationFrame(draw)
-    }
-
-    draw()
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current)
-    }
-  }, [dataPoints])
-
-  const connect = async () => {
-    try {
-      setIsConnecting(true)
-      const port = await (navigator as any).serial.requestPort()
-      await port.open({ baudRate })
-      setPort(port)
-      setIsConnected(true)
-      readFromPort(port)
-    } catch (err) {
-      console.error('Ошибка подключения:', err)
-      alert('Не удалось подключиться к устройству. Убедитесь, что оно подключено и вы дали разрешение.')
-    } finally {
-      setIsConnecting(false)
-    }
+  const resetAll = () => {
+    setStep('idle')
+    setDetected(null)
+    setDetectLog([])
+    setSavedLeads(Array(12).fill(null))
+    savedLeadsRef.current = Array(12).fill(null)
+    liveMultiRef.current = Array(12).fill(null).map(() => [])
+    livePointsRef.current = []
+    setLiveMulti(Array(12).fill([]))
+    setLivePoints([])
+    setCurrentGroupIdx(0)
+    setAnalysisResult('')
+    setErrorMsg('')
   }
 
-  const disconnect = async () => {
-    if (readerRef.current) {
-      await readerRef.current.cancel()
-    }
-    if (port) {
-      await port.close()
-    }
+  // Закрыть порт
+  const closePort = async () => {
+    try { if (readerRef.current) await readerRef.current.cancel() } catch {}
+    try { if (portRef.current) await portRef.current.close() } catch {}
+    portRef.current = null
     setPort(null)
-    setIsConnected(false)
   }
 
-  const readFromPort = async (port: any) => {
-    const textDecoder = new TextDecoderStream()
-    const readableStreamClosed = port.readable.pipeTo(textDecoder.writable)
-    const reader = textDecoder.readable.getReader()
-    readerRef.current = reader
+  // Открыть порт с заданным baud rate и читать N секунд
+  const samplePort = (p: any, baud: number, durationMs: number): Promise<string[]> => {
+    return new Promise(async (resolve) => {
+      const lines: string[] = []
+      try {
+        await p.open({ baudRate: baud })
+        const td = new TextDecoderStream()
+        p.readable.pipeTo(td.writable)
+        const reader = td.readable.getReader()
+        const timer = setTimeout(async () => {
+          try { await reader.cancel() } catch {}
+          resolve(lines)
+        }, durationMs)
+        let buf = ''
+        try {
+          while (true) {
+            const { value, done } = await reader.read()
+            if (done) break
+            buf += value
+            const parts = buf.split('\n')
+            buf = parts.pop() || ''
+            lines.push(...parts.filter(l => l.trim()))
+          }
+        } catch {}
+        clearTimeout(timer)
+        resolve(lines)
+      } catch {
+        resolve(lines)
+      } finally {
+        try { await p.close() } catch {}
+      }
+    })
+  }
 
+  // Автодетект протокола
+  const autoDetect = async () => {
+    setStep('detecting')
+    setDetectLog([])
+    setErrorMsg('')
+
+    let p: any
     try {
-      let buffer = ''
+      p = await (navigator as any).serial.requestPort()
+    } catch {
+      setErrorMsg('Устройство не выбрано. Подключите прибор и попробуйте снова.')
+      setStep('idle')
+      return
+    }
+
+    addLog('Устройство выбрано. Определяю настройки...')
+
+    let bestBaud = 9600
+    let bestLines: string[] = []
+
+    for (const baud of BAUD_RATES) {
+      addLog(`Проверяю скорость ${baud} baud...`)
+      const lines = await samplePort(p, baud, 1500)
+      const valid = lines.filter(l => /^[\d,;.\s-]+$/.test(l.trim()) && l.trim().length > 0)
+      addLog(`  → получено ${valid.length} строк с данными`)
+      if (valid.length > bestLines.length) {
+        bestLines = valid
+        bestBaud = baud
+      }
+      if (valid.length > 20) break // Достаточно данных
+    }
+
+    if (bestLines.length < 3) {
+      addLog('⚠️ Не удалось получить данные автоматически.')
+      addLog('Возможно, аппарат использует бинарный протокол.')
+      addLog('Попробуйте ручной режим ниже.')
+      setShowAdvanced(true)
+      setStep('idle')
+      return
+    }
+
+    // Определяем разделитель и количество каналов
+    const sample = bestLines[0].trim()
+    let sep = ','
+    let channels = 1
+
+    if (sample.includes(',')) {
+      sep = ','
+      channels = sample.split(',').filter(s => !isNaN(parseFloat(s))).length
+    } else if (sample.includes(';')) {
+      sep = ';'
+      channels = sample.split(';').filter(s => !isNaN(parseFloat(s))).length
+    } else if (sample.includes('\t')) {
+      sep = '\t'
+      channels = sample.split('\t').filter(s => !isNaN(parseFloat(s))).length
+    } else if (sample.includes(' ') && sample.trim().split(/\s+/).length > 1) {
+      sep = ' '
+      channels = sample.trim().split(/\s+/).filter(s => !isNaN(parseFloat(s))).length
+    }
+
+    // Ограничиваем до поддерживаемых значений
+    const supportedCh = [1, 3, 4, 6, 12]
+    channels = supportedCh.includes(channels) ? channels : supportedCh.reduce((prev, cur) =>
+      Math.abs(cur - channels) < Math.abs(prev - channels) ? cur : prev
+    )
+
+    // Частота дискретизации (строк в секунду)
+    const samplesPerSec = Math.round(bestLines.length / 1.5)
+
+    const result: DetectResult = { baudRate: bestBaud, channels, separator: sep, samplesPerSec }
+    setDetected(result)
+    portRef.current = p
+    setPort(p)
+
+    addLog(`✅ Определено: ${channels} канал(а), скорость ${bestBaud} baud, ~${samplesPerSec} Гц`)
+    addLog('Готово! Нажмите "Начать запись".')
+
+    setStep('recording')
+    startReading(p, bestBaud, sep, channels)
+  }
+
+  // Запуск чтения данных
+  const startReading = async (p: any, baud: number, sep: string, channels: number) => {
+    try {
+      if (p.readable === null) await p.open({ baudRate: baud })
+      const td = new TextDecoderStream()
+      p.readable.pipeTo(td.writable)
+      const reader = td.readable.getReader()
+      readerRef.current = reader
+
+      let buf = ''
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
-        
-        buffer += value
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-        
+        buf += value
+        const lines = buf.split('\n')
+        buf = lines.pop() || ''
         for (const line of lines) {
-          const num = parseFloat(line.trim())
-          if (!isNaN(num)) {
-            setDataPoints(prev => [...prev.slice(-200), num])
-          }
+          const trimmed = line.trim(); if (!trimmed) continue
+          const parts = trimmed.split(sep === ' ' ? /\s+/ : sep).map(s => parseFloat(s)).filter(n => !isNaN(n))
+          if (parts.length === 0) continue
+          parts.forEach((val, i) => {
+            if (i < 12) {
+              liveMultiRef.current[i] = [...(liveMultiRef.current[i] || []).slice(-1000), val]
+            }
+          })
+          livePointsRef.current = [...livePointsRef.current.slice(-1000), parts[0]]
+          setLivePoints([...livePointsRef.current])
+          setLiveMulti(liveMultiRef.current.map(ch => [...ch]))
         }
       }
-    } catch (err) {
-      console.error('Ошибка чтения:', err)
-    } finally {
-      reader.releaseLock()
-    }
+    } catch {}
   }
 
-  const analyzeCapture = async () => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    setIsAnalyzing(true)
+  // Подключение вручную (расширенный режим)
+  const connectManual = async () => {
+    setErrorMsg('')
+    let p: any
     try {
-      const dataUrl = canvas.toDataURL('image/png')
-      const blob = await (await fetch(dataUrl)).blob()
-      
-      const formData = new FormData()
-      formData.append('file', blob, 'ecg_live_capture.png')
-      formData.append('prompt', 'Проанализируйте этот фрагмент ЭКГ, полученный с прибора в реальном времени. Опишите ритм, наличие артефактов и любые отклонения.')
-      formData.append('mode', 'optimized')
-      formData.append('imageType', 'ecg')
+      p = await (navigator as any).serial.requestPort()
+      portRef.current = p
+      setPort(p)
+    } catch {
+      setErrorMsg('Устройство не выбрано.')
+      return
+    }
+    const result: DetectResult = { baudRate: manualBaud, channels: manualChannels, separator: ',', samplesPerSec: 0 }
+    setDetected(result)
+    setStep('recording')
+    startReading(p, manualBaud, ',', manualChannels)
+  }
 
-      const response = await fetch('/api/analyze/image', {
-        method: 'POST',
-        body: formData
+  // Сохранить текущую группу отведений
+  const saveGroup = useCallback(() => {
+    if (!detected) return
+    const groups = GROUPS_BY_CH[detected.channels] || GROUPS_BY_CH[1]
+    const group = groups[currentGroupIdx]
+    if (!group) return
+
+    const hasData = group.indices.some(i => (liveMultiRef.current[i]?.length ?? 0) >= 10)
+    if (!hasData && livePointsRef.current.length < 10) {
+      setErrorMsg('Нет данных. Убедитесь что прибор передаёт сигнал.')
+      return
+    }
+
+    const newLeads = [...savedLeadsRef.current]
+    group.indices.forEach((leadIdx, chIdx) => {
+      const pts = liveMultiRef.current[leadIdx]?.length >= 10
+        ? [...liveMultiRef.current[leadIdx]]
+        : [...livePointsRef.current]
+      newLeads[leadIdx] = { name: LEAD_NAMES[leadIdx], points: pts, capturedAt: new Date() }
+    })
+    savedLeadsRef.current = newLeads
+    setSavedLeads([...newLeads])
+
+    // Сброс буферов
+    liveMultiRef.current = Array(12).fill(null).map(() => [])
+    livePointsRef.current = []
+    setLivePoints([])
+    setLiveMulti(Array(12).fill([]))
+
+    const groups2 = GROUPS_BY_CH[detected.channels] || GROUPS_BY_CH[1]
+    if (currentGroupIdx < groups2.length - 1) {
+      setCurrentGroupIdx(prev => prev + 1)
+    } else {
+      // Все группы записаны
+      setStep('captured')
+      closePort()
+    }
+  }, [detected, currentGroupIdx])
+
+  // Проверяем сохранены ли все нужные отведения
+  const savedCount = savedLeads.filter(Boolean).length
+  const allGroupsDone = detected
+    ? (() => {
+        const groups = GROUPS_BY_CH[detected.channels] || GROUPS_BY_CH[1]
+        return groups.every(g => g.indices.every(i => savedLeads[i]))
+      })()
+    : false
+
+  // Собрать финальный PNG и отправить на анализ
+  const buildAndAnalyze = async () => {
+    const leads = savedLeadsRef.current.filter(Boolean) as LeadData[]
+    if (leads.length === 0) { setErrorMsg('Нет записанных отведений.'); return }
+
+    setStep('analyzing')
+    setErrorMsg('')
+
+    try {
+      const COLS = Math.min(leads.length, 3)
+      const ROWS = Math.ceil(leads.length / COLS)
+      const LW = 560, LH = 110, PAD = 30, LABEL_H = 20
+
+      const canvas = document.createElement('canvas')
+      canvas.width = COLS * LW + PAD * 2
+      canvas.height = ROWS * (LH + LABEL_H) + PAD * 2 + 50
+      const ctx = canvas.getContext('2d')!
+
+      // Фон
+      ctx.fillStyle = '#fffdf7'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      // Заголовок
+      ctx.fillStyle = '#1e293b'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center'
+      ctx.fillText('ЭКГ — прямая запись с прибора', canvas.width / 2, 28)
+      ctx.fillStyle = '#64748b'; ctx.font = '12px Arial'
+      ctx.fillText(`${leads.length} отведений · ${new Date().toLocaleString('ru-RU')}${detected ? ` · ${detected.baudRate} baud` : ''}`, canvas.width / 2, 46)
+
+      leads.forEach((lead, idx) => {
+        const col = idx % COLS, row = Math.floor(idx / COLS)
+        const ox = PAD + col * LW, oy = PAD + 50 + row * (LH + LABEL_H)
+        const leadIdx = LEAD_NAMES.indexOf(lead.name)
+        const color = LEAD_COLORS[leadIdx] || '#10b981'
+
+        // Метка
+        ctx.fillStyle = color; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'left'
+        ctx.fillText(lead.name, ox + 5, oy + 14)
+
+        // Рамка
+        ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1
+        ctx.strokeRect(ox, oy + LABEL_H, LW, LH)
+
+        // Миллиметровая сетка (светло-жёлтая)
+        ctx.strokeStyle = '#fef9c3'; ctx.lineWidth = 0.4
+        for (let x = ox; x < ox + LW; x += 20) { ctx.beginPath(); ctx.moveTo(x, oy + LABEL_H); ctx.lineTo(x, oy + LABEL_H + LH); ctx.stroke() }
+        for (let y = oy + LABEL_H; y < oy + LABEL_H + LH; y += 20) { ctx.beginPath(); ctx.moveTo(ox, y); ctx.lineTo(ox + LW, y); ctx.stroke() }
+
+        // Изолиния
+        const midY = oy + LABEL_H + LH / 2
+        ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 0.5
+        ctx.beginPath(); ctx.moveTo(ox, midY); ctx.lineTo(ox + LW, midY); ctx.stroke()
+
+        // Сигнал
+        const pts = lead.points.slice(-400); if (pts.length < 2) return
+        const min = Math.min(...pts), max = Math.max(...pts), range = max - min || 1
+        ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5
+        pts.forEach((p, i) => {
+          const x = ox + (i / pts.length) * LW
+          const y = oy + LABEL_H + LH - ((p - min) / range) * LH * 0.8 - LH * 0.1
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+        })
+        ctx.stroke()
       })
-      
-      const data = await response.json()
-      if (data.success) {
-        setAnalysisResult(data.result)
-      } else {
-        alert('Ошибка анализа: ' + data.error)
+
+      const blob = await (await fetch(canvas.toDataURL('image/png'))).blob()
+
+      // Выбираем модели по пресету
+      const presetConfig = {
+        fast:   { mode: 'fast',      model: 'google/gemini-3-flash-preview',    extractor: 'google/gemini-3-flash-preview' },
+        best:   { mode: 'optimized', model: 'openai/gpt-5.4',                   extractor: 'google/gemini-3-pro-preview' },
+        expert: { mode: 'validated', model: 'anthropic/claude-opus-4.6',         extractor: 'google/gemini-3-pro-preview' },
       }
-    } catch (err) {
-      console.error('Ошибка:', err)
-      alert('Произошла ошибка при отправке данных на анализ.')
-    } finally {
-      setIsAnalyzing(false)
+      const cfg = presetConfig[analysisPreset]
+      setAnalysisModelUsed(cfg.model)
+
+      const formData = new FormData()
+      formData.append('file', blob, 'ecg_direct.png')
+      formData.append('imageType', 'ecg')
+      formData.append('mode', cfg.mode)
+      formData.append('model', cfg.model)
+      formData.append('prompt',
+        `Это ЭКГ, записанная напрямую с медицинского прибора через USB. ` +
+        `Отведения: ${leads.map(l => l.name).join(', ')}. ` +
+        `Проанализируйте ритм, ЧСС, электрическую ось, наличие блокад, ишемии, гипертрофий, аритмий. Дайте клиническое заключение.`
+      )
+
+      const resp = await fetch('/api/analyze/image', { method: 'POST', body: formData })
+      const data = await resp.json()
+      if (data.success) { setAnalysisResult(data.result); setStep('done') }
+      else { setErrorMsg('Ошибка анализа: ' + data.error); setStep('captured') }
+    } catch (e: any) {
+      setErrorMsg('Ошибка: ' + e.message)
+      setStep('captured')
     }
   }
 
-  if (!supported) {
-    return (
-      <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-xl text-center">
-        <h3 className="text-lg font-bold text-yellow-800 mb-2">Web Serial API не поддерживается</h3>
-        <p className="text-yellow-700">
-          Ваш браузер не поддерживает прямое подключение USB-устройств. 
-          Пожалуйста, используйте <strong>Google Chrome</strong> или <strong>Microsoft Edge</strong> на ПК или Mac.
-        </p>
-      </div>
-    )
-  }
+  // ===================== UI =====================
+
+  if (!supported) return (
+    <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-xl text-center">
+      <h3 className="text-lg font-bold text-yellow-800 mb-2">Нужен другой браузер</h3>
+      <p className="text-yellow-700">Используйте <strong>Google Chrome</strong> или <strong>Microsoft Edge</strong> на ПК/Mac.</p>
+    </div>
+  )
+
+  const groups = detected ? (GROUPS_BY_CH[detected.channels] || GROUPS_BY_CH[1]) : []
+  const currentGroup = groups[currentGroupIdx]
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">🔌 Подключение оборудования</h2>
-            <p className="text-sm text-gray-500">Прямое считывание данных с ЭКГ, датчиков и анализаторов через USB</p>
+    <div className="space-y-4 max-w-4xl mx-auto">
+
+      {/* ШАГ 0: ГЛАВНЫЙ ЭКРАН */}
+      {step === 'idle' && (
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+          <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 p-8 text-white text-center">
+            <div className="text-6xl mb-4">🫀</div>
+            <h2 className="text-3xl font-black mb-2">Анализ ЭКГ с прибора</h2>
+            <p className="text-indigo-200 text-lg">Подключите ЭКГ-аппарат по USB и получите заключение ИИ</p>
           </div>
-          <div className="flex items-center gap-3">
-            {!isConnected ? (
-              <>
-                <select 
-                  value={baudRate} 
-                  onChange={(e) => setBaudRate(parseInt(e.target.value))}
-                  className="px-3 py-2 border rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-indigo-500 outline-none"
-                >
-                  <option value={9600}>9600 baud</option>
-                  <option value={19200}>19200 baud</option>
-                  <option value={38400}>38400 baud</option>
-                  <option value={57600}>57600 baud</option>
-                  <option value={115200}>115200 baud</option>
-                </select>
-                <button
-                  onClick={connect}
-                  disabled={isConnecting}
-                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition-all shadow-md disabled:opacity-50"
-                >
-                  {isConnecting ? '⏳ Подключение...' : '🔗 Подключить прибор'}
-                </button>
-              </>
-            ) : (
+
+          <div className="p-8">
+            {/* Инструкция */}
+            <div className="grid grid-cols-3 gap-4 mb-8">
+              {[
+                { step: '1', icon: '🔌', text: 'Подключите прибор к USB' },
+                { step: '2', icon: '🤖', text: 'Нажмите кнопку — система сама настроится' },
+                { step: '3', icon: '📋', text: 'Получите заключение ИИ' },
+              ].map(s => (
+                <div key={s.step} className="text-center p-4 bg-indigo-50 rounded-xl">
+                  <div className="text-3xl mb-2">{s.icon}</div>
+                  <div className="text-xs font-bold text-indigo-400 uppercase mb-1">Шаг {s.step}</div>
+                  <div className="text-sm text-gray-700 font-medium">{s.text}</div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={autoDetect}
+              className="w-full py-5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xl font-black rounded-2xl transition-all shadow-xl hover:shadow-2xl"
+            >
+              🔗 Подключить прибор и начать
+            </button>
+
+            {errorMsg && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{errorMsg}</div>
+            )}
+
+            {/* Расширенный режим */}
+            <div className="mt-6">
               <button
-                onClick={disconnect}
-                className="px-6 py-2 bg-red-100 text-red-600 hover:bg-red-200 rounded-lg font-bold transition-all border border-red-200"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="text-sm text-gray-400 hover:text-gray-600 flex items-center gap-1 mx-auto"
               >
-                🔴 Отключить
+                ⚙️ {showAdvanced ? 'Скрыть' : 'Ручные настройки (для специалистов)'}
               </button>
-            )}
+              {showAdvanced && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
+                  <div className="flex gap-3 flex-wrap">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 block mb-1">Скорость (baud)</label>
+                      <select value={manualBaud} onChange={e => setManualBaud(+e.target.value)}
+                        className="px-3 py-2 border rounded-lg text-sm bg-white outline-none">
+                        {BAUD_RATES.map(b => <option key={b} value={b}>{b}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 block mb-1">Каналов</label>
+                      <select value={manualChannels} onChange={e => setManualChannels(+e.target.value)}
+                        className="px-3 py-2 border rounded-lg text-sm bg-white outline-none">
+                        {[1,3,4,6,12].map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex items-end">
+                      <button onClick={connectManual}
+                        className="px-5 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded-lg font-bold text-sm transition-all">
+                        Подключить вручную
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400">Данные должны передаваться числами, разделёнными запятой.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-
-        <div className="relative bg-gray-900 rounded-xl overflow-hidden border-4 border-gray-800 shadow-inner aspect-[21/9]">
-          {!isConnected && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 bg-gray-900/80 z-10">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-4 opacity-20">
-                <path d="M12 2v20M2 12h20"/>
-              </svg>
-              <p>Ожидание подключения устройства...</p>
-            </div>
-          )}
-          <canvas 
-            ref={canvasRef} 
-            width={1200} 
-            height={400} 
-            className="w-full h-full"
-          />
-          {isConnected && (
-            <div className="absolute top-4 right-4 flex items-center gap-2 bg-green-500/20 backdrop-blur-md px-3 py-1 rounded-full border border-green-500/50">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              <span className="text-xs font-bold text-green-400 uppercase tracking-wider">LIVE</span>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-6 flex justify-between items-center p-4 bg-indigo-50 rounded-xl border border-indigo-100">
-          <div className="text-sm text-indigo-900">
-            <strong>Подсказка:</strong> Прибор должен передавать данные в текстовом формате (числа, разделенные новой строкой).
-          </div>
-          <button
-            onClick={analyzeCapture}
-            disabled={!isConnected || isAnalyzing}
-            className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition-all shadow-lg disabled:opacity-50 flex items-center gap-2"
-          >
-            {isAnalyzing ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Обработка...
-              </>
-            ) : (
-              <>
-                🧠 Проанализировать текущий фрагмент
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {analysisResult && (
-        <AnalysisResult 
-          result={analysisResult} 
-          model="google/gemini-3-flash-preview" 
-          mode="optimized" 
-          images={canvasRef.current ? [canvasRef.current.toDataURL('image/png')] : []}
-        />
       )}
+
+      {/* ШАГ 1: АВТОДЕТЕКТ */}
+      {step === 'detecting' && (
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 text-center">
+          <div className="text-5xl mb-4 animate-pulse">🔍</div>
+          <h3 className="text-xl font-bold text-gray-800 mb-4">Определяю настройки прибора...</h3>
+          <div className="text-left bg-gray-900 rounded-xl p-4 font-mono text-sm space-y-1 max-h-48 overflow-y-auto">
+            {detectLog.map((log, i) => (
+              <div key={i} className={log.startsWith('✅') ? 'text-green-400' : log.startsWith('⚠️') ? 'text-yellow-400' : 'text-gray-300'}>
+                {log}
+              </div>
+            ))}
+            {detectLog.length === 0 && <div className="text-gray-500">Инициализация...</div>}
+          </div>
+        </div>
+      )}
+
+      {/* ШАГ 2: ЗАПИСЬ */}
+      {step === 'recording' && detected && (
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+          {/* Статус */}
+          <div className="bg-green-600 px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="w-3 h-3 bg-white rounded-full animate-pulse" />
+              <span className="text-white font-bold">LIVE · {detected.channels} канал(а) · {detected.baudRate} baud</span>
+            </div>
+            <button onClick={resetAll} className="text-green-200 hover:text-white text-sm">✕ Отмена</button>
+          </div>
+
+          <div className="p-6 space-y-4">
+            {/* Прогресс по группам */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {groups.map((g, idx) => {
+                const done = g.indices.every(i => savedLeads[i])
+                const active = idx === currentGroupIdx
+                return (
+                  <div key={idx} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                    done ? 'bg-green-100 text-green-700 border border-green-300' :
+                    active ? 'bg-indigo-600 text-white shadow-md' :
+                    'bg-gray-100 text-gray-400 border border-gray-200'
+                  }`}>
+                    {done ? '✓ ' : active ? '● ' : ''}{g.label}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Живой монитор */}
+            <div className="bg-gray-900 rounded-xl overflow-hidden border-2 border-gray-800">
+              {detected.channels === 1 ? (
+                <div className="p-1">
+                  <div className="px-2 pt-1 text-xs font-bold" style={{ color: currentGroup ? LEAD_COLORS[currentGroup.indices[0]] : '#10b981' }}>
+                    {currentGroup?.label || 'Сигнал'}
+                  </div>
+                  <MiniLeadCanvas points={livePoints} color={currentGroup ? LEAD_COLORS[currentGroup.indices[0]] : '#10b981'} height={120} />
+                </div>
+              ) : (
+                <div className={`grid gap-1 p-2`} style={{ gridTemplateColumns: `repeat(${Math.min(detected.channels, 6)}, 1fr)` }}>
+                  {(currentGroup?.indices || []).map((leadIdx, chIdx) => (
+                    <div key={leadIdx}>
+                      <div className="text-xs font-bold px-1" style={{ color: LEAD_COLORS[leadIdx] }}>{LEAD_NAMES[leadIdx]}</div>
+                      <MiniLeadCanvas points={liveMulti[leadIdx] || []} color={LEAD_COLORS[leadIdx]} height={80} />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="px-3 py-1 text-xs text-gray-500 border-t border-gray-800">
+                Точек получено: {livePoints.length}
+              </div>
+            </div>
+
+            {/* Большая кнопка сохранения */}
+            <button
+              onClick={saveGroup}
+              disabled={livePoints.length < 10}
+              className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-lg font-black rounded-xl transition-all shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {detected.channels >= 12
+                ? '💾 Записать все 12 отведений'
+                : `💾 Сохранить: ${currentGroup?.label} (${currentGroupIdx + 1} из ${groups.length})`
+              }
+            </button>
+
+            {/* Мини-превью сохранённых */}
+            {savedCount > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {savedLeads.map((lead, i) => lead ? (
+                  <span key={i} className="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-300">
+                    ✓ {lead.name}
+                  </span>
+                ) : null)}
+              </div>
+            )}
+
+            {errorMsg && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{errorMsg}</div>}
+          </div>
+        </div>
+      )}
+
+      {/* ШАГ 3: ВСЁ ЗАПИСАНО */}
+      {(step === 'captured' || (step === 'recording' && allGroupsDone)) && (
+        <div className="bg-white rounded-2xl shadow-lg border border-green-200 overflow-hidden">
+          <div className="bg-green-50 border-b border-green-100 px-6 py-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-green-800">✅ Запись завершена</h3>
+              <p className="text-sm text-green-600">Записано {savedCount} отведений: {savedLeads.filter(Boolean).map(l => l!.name).join(', ')}</p>
+            </div>
+            <button onClick={resetAll} className="text-sm text-gray-400 hover:text-gray-600">Начать заново</button>
+          </div>
+          <div className="p-6 space-y-4">
+
+            {/* Выбор модели */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Выберите режим анализа:</p>
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  {
+                    id: 'fast',
+                    icon: '⚡',
+                    label: 'Быстрый',
+                    desc: 'Gemini Flash',
+                    sub: 'Скрининг, быстрый ответ',
+                    color: 'yellow',
+                  },
+                  {
+                    id: 'best',
+                    icon: '⭐',
+                    label: 'Лучший',
+                    desc: 'Gemini Pro → GPT-5.4',
+                    sub: 'Рекомендуется для ЭКГ',
+                    color: 'indigo',
+                  },
+                  {
+                    id: 'expert',
+                    icon: '🧠',
+                    label: 'Экспертный',
+                    desc: 'Gemini Pro → Opus 4.6',
+                    sub: 'Сложные и критические случаи',
+                    color: 'purple',
+                  },
+                ] as { id: EcgAnalysisPreset; icon: string; label: string; desc: string; sub: string; color: string }[]).map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setAnalysisPreset(opt.id)}
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                      analysisPreset === opt.id
+                        ? opt.color === 'indigo' ? 'border-indigo-500 bg-indigo-50'
+                          : opt.color === 'purple' ? 'border-purple-500 bg-purple-50'
+                          : 'border-yellow-500 bg-yellow-50'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">{opt.icon}</div>
+                    <div className={`font-bold text-sm ${
+                      analysisPreset === opt.id
+                        ? opt.color === 'indigo' ? 'text-indigo-700'
+                          : opt.color === 'purple' ? 'text-purple-700'
+                          : 'text-yellow-700'
+                        : 'text-gray-700'
+                    }`}>{opt.label}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{opt.desc}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">{opt.sub}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={buildAndAnalyze}
+              className="w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white text-xl font-black rounded-2xl transition-all shadow-xl"
+            >
+              🧠 Получить заключение ИИ
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ШАГ 4: АНАЛИЗ */}
+      {step === 'analyzing' && (
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-12 text-center">
+          <div className="text-5xl mb-4">🧠</div>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">Анализирую ЭКГ...</h3>
+          <p className="text-gray-500">
+            {analysisPreset === 'fast'   && 'Gemini Flash обрабатывает и формирует заключение'}
+            {analysisPreset === 'best'   && 'Gemini Pro извлекает данные → GPT-5.4 формирует заключение'}
+            {analysisPreset === 'expert' && 'Gemini Pro извлекает данные → Claude Opus формирует заключение'}
+          </p>
+          <div className="mt-6 flex justify-center">
+            <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+          </div>
+        </div>
+      )}
+
+      {/* РЕЗУЛЬТАТ */}
+      {step === 'done' && analysisResult && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-bold text-gray-800">📋 Заключение ИИ</h3>
+            <button onClick={resetAll} className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-sm font-bold transition-all">
+              🔄 Новая запись
+            </button>
+          </div>
+          <AnalysisResult
+            result={analysisResult}
+            model={analysisModelUsed || 'openai/gpt-5.4'}
+            mode={analysisPreset === 'fast' ? 'fast' : analysisPreset === 'expert' ? 'validated' : 'optimized'}
+            images={[]}
+          />
+        </div>
+      )}
+
     </div>
   )
 }
-
-
-
-

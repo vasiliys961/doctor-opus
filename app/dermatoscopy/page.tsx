@@ -12,7 +12,43 @@ import FeedbackForm from '@/components/FeedbackForm'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 
+type StudyType = 'dermatoscopy' | 'wound' | 'skin'
+
+const STUDY_TYPES: { id: StudyType; icon: string; label: string; prompt: string; placeholder: string; tipFast: string; tipOpt: string; tipVal: string }[] = [
+  {
+    id: 'dermatoscopy',
+    icon: '🔬',
+    label: 'Дерматоскопия',
+    prompt: 'Проанализируйте дерматоскопическое изображение. Опишите структуру, цвета, границы, признаки меланомы по ABCDE критериям.',
+    placeholder: 'Пример: Пациент 45 лет, образование на спине, заметил рост и изменение цвета в последние 3 месяца.',
+    tipFast: 'двухэтапный скрининг — структурированное описание структуры и цвета, затем оценка риска.',
+    tipOpt: 'рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и качества для дерматоскопии.',
+    tipVal: 'самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для атипичных и сложных образований.',
+  },
+  {
+    id: 'wound',
+    icon: '🩹',
+    label: 'Анализ раны',
+    prompt: 'Проанализируйте фотографию раны. Оцените: стадию раневого процесса, наличие некроза, грануляций, эпителизации, признаки инфекции (гиперемия, отёк, гнойное отделяемое), характер краёв раны. Дайте рекомендации по дальнейшему ведению.',
+    placeholder: 'Пример: Пациент 60 лет, рана после операции на животе, 5-е сутки, появилось покраснение краёв и серозное отделяемое.',
+    tipFast: 'быстрая оценка раневого процесса — стадия, признаки инфекции, общие рекомендации.',
+    tipOpt: 'рекомендуемый режим — детальная оценка раны, рекомендации по перевязкам и терапии.',
+    tipVal: 'экспертный анализ — для сложных ран, пролежней, диабетической стопы, предоперационной оценки.',
+  },
+  {
+    id: 'skin',
+    icon: '🌡️',
+    label: 'Кожные изменения',
+    prompt: 'Проанализируйте фотографию кожи. Опишите морфологические элементы (пятна, папулы, везикулы, пустулы, бляшки), их распределение, цвет, границы. Предложите дифференциальный диагноз и рекомендации.',
+    placeholder: 'Пример: Пациент 30 лет, высыпания на туловище 2 недели, зуд умеренный, температура не повышалась.',
+    tipFast: 'быстрый скрининг — описание элементов, дифдиагноз, нужна ли консультация дерматолога.',
+    tipOpt: 'рекомендуемый режим — полное описание морфологии, дифдиагноз с вероятностями, план обследования.',
+    tipVal: 'экспертный анализ — для атипичных высыпаний, редких дерматозов, подозрения на системные заболевания.',
+  },
+]
+
 export default function DermatoscopyPage() {
+  const [studyType, setStudyType] = useState<StudyType>('dermatoscopy')
   const [file, setFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [result, setResult] = useState<string>('')
@@ -26,6 +62,14 @@ export default function DermatoscopyPage() {
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
+
+  const current = STUDY_TYPES.find(s => s.id === studyType)!
+
+  const switchType = (type: StudyType) => {
+    setStudyType(type)
+    setResult('')
+    setError(null)
+  }
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -42,10 +86,10 @@ export default function DermatoscopyPage() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('prompt', 'Проанализируйте дерматоскопическое изображение. Опишите структуру, цвета, границы, признаки меланомы по ABCDE критериям.')
+      formData.append('prompt', current.prompt)
       formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
-      formData.append('imageType', 'dermatoscopy') // Указываем тип изображения
+      formData.append('imageType', studyType)
       formData.append('useStreaming', useStream.toString())
       formData.append('isAnonymous', isAnonymous.toString())
       formData.append('isTwoStage', 'true')
@@ -94,7 +138,7 @@ export default function DermatoscopyPage() {
             setModelInfo({ model: usedModel, mode: analysisMode })
             
             logUsage({
-              section: 'dermatoscopy',
+              section: studyType,
               model: usedModel,
               inputTokens: usage.prompt_tokens,
               outputTokens: usage.completion_tokens,
@@ -128,7 +172,7 @@ export default function DermatoscopyPage() {
           setModelInfo({ model: modelUsed, mode: analysisMode });
 
           logUsage({
-            section: 'dermatoscopy',
+            section: studyType,
             model: modelUsed,
             inputTokens: inputTokens,
             outputTokens: outputTokens,
@@ -158,24 +202,42 @@ export default function DermatoscopyPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 Анализ дерматоскопии</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-4">{current.icon} {current.label}</h1>
+
+      {/* Переключатель типа исследования */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {STUDY_TYPES.map(s => (
+          <button
+            key={s.id}
+            onClick={() => switchType(s.id)}
+            disabled={loading}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-all ${
+              studyType === s.id
+                ? 'bg-primary-600 text-white border-primary-600 shadow'
+                : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400 hover:text-primary-700'
+            }`}
+          >
+            {s.icon} {s.label}
+          </button>
+        ))}
+      </div>
       
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг (сначала структурированное описание структуры и цвета образования, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и качества для дерматоскопии.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев.",
+          fast: current.tipFast,
+          optimized: current.tipOpt,
+          validated: current.tipVal,
           extra: [
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества для дерматоскопии.",
-            "📸 Вы можете загрузить снимки дерматоскопии, сделать фото или использовать ссылку.",
-            "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
+            `⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества.`,
+            "📸 Загрузите снимок, сделайте фото или используйте ссылку.",
+            "🔄 Streaming‑режим позволяет видеть ход рассуждений модели в реальном времени.",
             "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
           ]
         }}
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Загрузите дерматоскопическое изображение</h2>
+        <h2 className="text-xl font-semibold mb-4">Загрузите изображение</h2>
         <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} />
       </div>
 
@@ -208,7 +270,7 @@ export default function DermatoscopyPage() {
               <textarea
                 value={clinicalContext}
                 onChange={(e) => setClinicalContext(e.target.value)}
-                placeholder="Пример: Пациент 45 лет, образование на спине, заметил рост и изменение цвета в последние 3 месяца. Зуд отсутствует."
+                placeholder={current.placeholder}
                 className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm mb-4 ${
                   /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
                   ? 'border-red-500 bg-red-50' 
@@ -304,7 +366,7 @@ export default function DermatoscopyPage() {
         loading={loading} 
         mode={modelInfo.mode || mode} 
         model={modelInfo.model}
-        imageType="dermatoscopy" 
+        imageType={studyType}
         cost={currentCost} 
         isAnonymous={isAnonymous}
         images={imagePreview ? [imagePreview] : []}
@@ -312,7 +374,7 @@ export default function DermatoscopyPage() {
 
       {result && !loading && (
         <FeedbackForm 
-          analysisType="DERMATOSCOPY" 
+          analysisType={studyType.toUpperCase() as any}
           analysisResult={result} 
           inputCase={clinicalContext}
         />
