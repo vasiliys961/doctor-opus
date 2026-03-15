@@ -121,6 +121,19 @@ export async function initDatabase() {
       );
     `;
 
+    // Таблица предложений по улучшению промптов (на основе rejected кейсов)
+    await sql`
+      CREATE TABLE IF NOT EXISTS prompt_suggestions (
+        id SERIAL PRIMARY KEY,
+        specialty VARCHAR(100),
+        pattern_found TEXT,
+        suggested_change TEXT,
+        based_on_cases INTEGER DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     // Гостевые пробные балансы (без регистрации)
     await sql`
       CREATE TABLE IF NOT EXISTS guest_balances (
@@ -435,5 +448,76 @@ export async function deleteUserAccount(email: string) {
   } catch (error) {
     safeError('❌ [DATABASE] Ошибка при удалении аккаунта:', error);
     return { success: false, error };
+  }
+}
+
+/**
+ * Получить все предложения по улучшению промптов
+ */
+export async function getPromptSuggestions(status?: string) {
+  try {
+    const { rows } = status
+      ? await sql`SELECT * FROM prompt_suggestions WHERE status = ${status} ORDER BY created_at DESC`
+      : await sql`SELECT * FROM prompt_suggestions ORDER BY created_at DESC`;
+    return { success: true, suggestions: rows };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка получения предложений:', error);
+    return { success: false, suggestions: [] };
+  }
+}
+
+/**
+ * Сохранить предложение по улучшению промпта
+ */
+export async function savePromptSuggestion(data: {
+  specialty: string;
+  pattern_found: string;
+  suggested_change: string;
+  based_on_cases: number;
+}) {
+  try {
+    const { rows } = await sql`
+      INSERT INTO prompt_suggestions (specialty, pattern_found, suggested_change, based_on_cases)
+      VALUES (${data.specialty}, ${data.pattern_found}, ${data.suggested_change}, ${data.based_on_cases})
+      RETURNING id
+    `;
+    return { success: true, id: rows[0]?.id };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка сохранения предложения:', error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Обновить статус предложения (pending -> approved / rejected)
+ */
+export async function updateSuggestionStatus(id: number, status: 'approved' | 'rejected') {
+  try {
+    await sql`UPDATE prompt_suggestions SET status = ${status} WHERE id = ${id}`;
+    return { success: true };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка обновления статуса:', error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Получить rejected кейсы по специальности для анализа паттернов
+ */
+export async function getRejectedFeedback(specialty: string, limit = 30) {
+  try {
+    const { rows } = await sql`
+      SELECT ai_response, correct_diagnosis, doctor_comment, input_case
+      FROM analysis_feedback
+      WHERE specialty = ${specialty}
+        AND (correctness = 0 OR correctness::text = 'false')
+        AND ai_response IS NOT NULL
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+    `;
+    return { success: true, cases: rows };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка получения rejected кейсов:', error);
+    return { success: false, cases: [] };
   }
 }

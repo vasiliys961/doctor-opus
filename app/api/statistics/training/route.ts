@@ -20,7 +20,7 @@ export async function GET() {
       totalReady,
       totalCount,
       bySpecialty: stats,
-      threshold: 100 // Порог для начала обучения
+      threshold: 100
     });
   } catch (error: any) {
     console.error('Error fetching training stats:', error);

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { getUsageBySections, getCurrentMonthName, clearCurrentMonthStats } from '@/lib/simple-logger'
-import { signOut } from 'next-auth/react'
+import { signOut, useSession } from 'next-auth/react'
+import Link from 'next/link'
 
 // Цены моделей (для расчета условных единиц за 1M токенов)
 const MODEL_PRICING = {
@@ -35,13 +36,19 @@ interface SectionStats {
 }
 
 export default function StatisticsPage() {
+  const { data: session } = useSession()
+  const isAdmin = (session?.user as any)?.isAdmin
+
   const [stats, setStats] = useState<ModelStats[]>([])
   const [totalCost, setTotalCost] = useState(0)
   const [loading, setLoading] = useState(true)
   const [sectionStats, setSectionStats] = useState<Record<string, SectionStats>>({})
   const [monthTotalCost, setMonthTotalCost] = useState(0)
   const [monthTotalCalls, setMonthTotalCalls] = useState(0)
-  const [trainingStats, setTrainingStats] = useState<{ totalReady: number, totalCount: number, threshold: number } | null>(null)
+  const [trainingStats, setTrainingStats] = useState<{ totalReady: number, totalCount: number, threshold: number, bySpecialty?: any[] } | null>(null)
+  const [analyzingSpecialty, setAnalyzingSpecialty] = useState<string | null>(null)
+  const [analyzeNotice, setAnalyzeNotice] = useState('')
+  const [analyzeError, setAnalyzeError] = useState('')
 
   useEffect(() => {
     loadStatistics()
@@ -58,6 +65,29 @@ export default function StatisticsPage() {
       }
     } catch (error) {
       console.error('Error loading training stats:', error)
+    }
+  }
+
+  const analyzeRejected = async (specialty: string) => {
+    setAnalyzingSpecialty(specialty)
+    setAnalyzeNotice('')
+    setAnalyzeError('')
+    try {
+      const res = await fetch('/api/admin/prompt-suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'analyze', specialty }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAnalyzeNotice(`✅ Анализ по "${specialty}" готов. Посмотреть результат →`)
+      } else {
+        setAnalyzeError(data.error || 'Ошибка анализа')
+      }
+    } catch {
+      setAnalyzeError('Ошибка запроса')
+    } finally {
+      setAnalyzingSpecialty(null)
     }
   }
 
@@ -285,8 +315,62 @@ export default function StatisticsPage() {
               style={{ width: `${Math.min(100, (trainingStats.totalReady / trainingStats.threshold) * 100)}%` }}
             ></div>
           </div>
-          
-          <p className="text-sm text-gray-500 italic">
+
+          {/* Баннер если есть rejected кейсы — только для admin */}
+          {isAdmin && trainingStats.totalCount > 0 && (
+            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">
+                    ⚠️ Накоплено {trainingStats.totalCount} кейсов с обратной связью врачей
+                  </p>
+                  <p className="text-xs text-amber-600 mt-1">
+                    Запустите анализ паттернов ошибок по специальности — Claude найдёт что именно AI делает неправильно и предложит улучшение промпта
+                  </p>
+                </div>
+                <Link
+                  href="/admin/prompt-suggestions"
+                  className="shrink-0 px-3 py-1.5 bg-amber-600 text-white text-xs rounded-lg hover:bg-amber-700 transition"
+                >
+                  Смотреть все →
+                </Link>
+              </div>
+
+              {/* Кнопки быстрого анализа по специальностям */}
+              {trainingStats.bySpecialty && trainingStats.bySpecialty.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {trainingStats.bySpecialty
+                    .filter((s: any) => parseInt(s.total_count) > 0)
+                    .map((s: any) => (
+                      <button
+                        key={s.specialty}
+                        onClick={() => analyzeRejected(s.specialty)}
+                        disabled={analyzingSpecialty === s.specialty}
+                        className="px-3 py-1 bg-white border border-amber-300 text-amber-700 text-xs rounded-lg hover:bg-amber-50 disabled:opacity-50 transition"
+                      >
+                        {analyzingSpecialty === s.specialty
+                          ? '⏳ Анализ...'
+                          : `Анализ: ${s.specialty} (${s.total_count})`}
+                      </button>
+                    ))}
+                </div>
+              )}
+
+              {analyzeNotice && (
+                <div className="mt-3 flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700">
+                  <span>{analyzeNotice}</span>
+                  <Link href="/admin/prompt-suggestions" className="underline font-medium">
+                    Открыть →
+                  </Link>
+                </div>
+              )}
+              {analyzeError && (
+                <p className="mt-2 text-xs text-red-600">{analyzeError}</p>
+              )}
+            </div>
+          )}
+
+          <p className="text-sm text-gray-500 italic mt-4">
             * Учитываются только отзывы с исправленным диагнозом и согласием на использование. 
             Минимальный порог для эффективного Fine-tuning — {trainingStats.threshold} кейсов.
           </p>
