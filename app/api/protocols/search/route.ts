@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { formatCostLog } from '@/lib/cost-calculator';
 import { MODELS } from '@/lib/openrouter';
+import { isGeoRestrictionStatus, isOpenAIGeoRestrictionError } from '@/lib/geo-restriction';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -150,10 +151,13 @@ ${specialty ? `Специальность: ${specialty}` : ''}
       }
 
       // Fallback: GPT недоступен по региону → переключаемся на Sonnet
-      const isGeoError = errorText.includes('unsupported_country_region_territory') ||
-                         errorText.includes('country, region, or territory not supported')
-      if (isGeoError && MODEL === MODELS.GPT_5_2) {
-        console.warn('⚠️ [CLINICAL RECS] GPT недоступен по региону, переключаемся на Sonnet')
+      const shouldFallbackToSonnet =
+        MODEL === MODELS.GPT_5_2 &&
+        isGeoRestrictionStatus(response.status) &&
+        isOpenAIGeoRestrictionError(errorText);
+
+      if (shouldFallbackToSonnet) {
+        console.warn(`⚠️ [CLINICAL RECS] GPT fallback: status=${response.status}, switching to Sonnet`);
         MODEL = MODELS.SONNET
         response = await makeRequest(MODEL)
         if (!response.ok) {
