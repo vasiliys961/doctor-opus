@@ -1,37 +1,12 @@
 import Link from 'next/link'
 import SpendingSummary from '@/components/SpendingSummary'
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
-import { unstable_noStore as noStore } from 'next/cache'
-
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+import HomeAuthBadge from '@/components/HomeAuthBadge'
 
 export default async function HomePage() {
-  noStore()
-  let session = null
-  try {
-    session = await getServerSession(authOptions)
-  } catch (_e) {
-    // Без NEXTAUTH_SECRET или при ошибке auth — показываем главную без сессии
-  }
-
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-7xl">
       <div className="flex justify-end mb-4">
-        {!session ? (
-          <Link
-            href="/auth/signin"
-            className="bg-white border border-teal-600 text-teal-600 hover:bg-teal-50 px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-2"
-          >
-            🔑 Войти / Регистрация
-          </Link>
-        ) : (
-          <div className="flex items-center gap-3 bg-teal-50 px-4 py-2 rounded-xl border border-teal-100">
-            <span className="text-xs text-teal-700">Вы вошли как: <strong>{session.user?.email}</strong></span>
-            <Link href="/chat" className="text-xs bg-teal-600 text-white px-2 py-1 rounded-md font-bold">В чат</Link>
-          </div>
-        )}
+        <HomeAuthBadge />
       </div>
 
       <a

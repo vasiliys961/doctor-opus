@@ -9,6 +9,28 @@ export interface StreamingHandler {
   onComplete?: (finalText: string) => void
 }
 
+const STREAMING_DEBUG_ENABLED =
+  process.env.NODE_ENV !== 'production' ||
+  process.env.NEXT_PUBLIC_STREAMING_DEBUG === '1'
+
+const debugLog = (...args: unknown[]) => {
+  if (STREAMING_DEBUG_ENABLED) {
+    console.log(...args)
+  }
+}
+
+const debugWarn = (...args: unknown[]) => {
+  if (STREAMING_DEBUG_ENABLED) {
+    console.warn(...args)
+  }
+}
+
+const debugTrace = (...args: unknown[]) => {
+  if (STREAMING_DEBUG_ENABLED) {
+    console.debug(...args)
+  }
+}
+
 /**
  * Обработка SSE потока от API
  */
@@ -16,9 +38,9 @@ export async function handleSSEStream(
   response: Response,
   handler: StreamingHandler
 ): Promise<string> {
-  console.log('🚀 [STREAMING UTILS] Начало обработки SSE потока')
-  console.log('📊 [STREAMING UTILS] Response status:', response.status)
-  console.log('📊 [STREAMING UTILS] Response headers:', Object.fromEntries(response.headers.entries()))
+  debugLog('🚀 [STREAMING UTILS] Начало обработки SSE потока')
+  debugLog('📊 [STREAMING UTILS] Response status:', response.status)
+  debugLog('📊 [STREAMING UTILS] Response headers:', Object.fromEntries(response.headers.entries()))
   
   const reader = response.body?.getReader()
   const decoder = new TextDecoder()
@@ -34,16 +56,16 @@ export async function handleSSEStream(
   let firstChunkReceived = false
 
   try {
-    console.log('📡 [STREAMING UTILS] Начинаем чтение потока...')
+    debugLog('📡 [STREAMING UTILS] Начинаем чтение потока...')
     
     while (true) {
       const { done, value } = await reader.read()
       
       if (done) {
-        console.log('📡 [STREAMING UTILS] Поток завершён, всего чанков:', chunkCount)
+        debugLog('📡 [STREAMING UTILS] Поток завершён, всего чанков:', chunkCount)
         // Обрабатываем оставшийся буфер
         if (buffer.trim()) {
-          console.log('📡 [STREAMING UTILS] Обрабатываем оставшийся буфер:', buffer.substring(0, 200))
+          debugLog('📡 [STREAMING UTILS] Обрабатываем оставшийся буфер:', buffer.substring(0, 200))
           accumulatedText = processBuffer(buffer, handler, accumulatedText)
           buffer = ''
         }
@@ -54,7 +76,7 @@ export async function handleSSEStream(
       const chunk = decoder.decode(value, { stream: true })
       
       if (!firstChunkReceived) {
-        console.log('📡 [STREAMING UTILS] Первый чанк получен:', chunk.substring(0, 500))
+        debugLog('📡 [STREAMING UTILS] Первый чанк получен:', chunk.substring(0, 500))
         firstChunkReceived = true
       }
       
@@ -65,15 +87,15 @@ export async function handleSSEStream(
       buffer = lines.pop() || '' // Последняя строка может быть неполной
 
       for (const line of lines) {
-        console.log('📡 [STREAMING UTILS] Обработка строки:', line.substring(0, 50))
+        debugLog('📡 [STREAMING UTILS] Обработка строки:', line.substring(0, 50))
         const result = processSSELine(line, handler, accumulatedText)
         if (result.content) {
           accumulatedText += result.content
-          console.log('📡 [STREAMING UTILS] Получен контент:', result.content.length, 'символов, всего:', accumulatedText.length)
+          debugLog('📡 [STREAMING UTILS] Получен контент:', result.content.length, 'символов, всего:', accumulatedText.length)
           handler.onChunk(result.content, accumulatedText)
         }
         if (result.done) {
-          console.log('📡 [STREAMING UTILS] Получен сигнал [DONE]')
+          debugLog('📡 [STREAMING UTILS] Получен сигнал [DONE]')
           if (handler.onComplete) {
             handler.onComplete(accumulatedText)
           }
@@ -82,7 +104,7 @@ export async function handleSSEStream(
       }
     }
 
-    console.log('✅ [STREAMING UTILS] Итого получено:', accumulatedText.length, 'символов, чанков:', chunkCount)
+    debugLog('✅ [STREAMING UTILS] Итого получено:', accumulatedText.length, 'символов, чанков:', chunkCount)
     
     if (handler.onComplete) {
       handler.onComplete(accumulatedText)
@@ -102,7 +124,7 @@ export async function handleSSEStream(
     throw error
   } finally {
     reader.releaseLock()
-    console.log('🔒 [STREAMING UTILS] Reader освобождён')
+    debugLog('🔒 [STREAMING UTILS] Reader освобождён')
   }
 }
 
@@ -122,7 +144,7 @@ function processSSELine(
   if (line.startsWith('data: ')) {
     const data = line.slice(6).trim()
     if (data === '[DONE]') {
-      console.log('📡 [STREAMING UTILS] Получен сигнал [DONE]')
+      debugLog('📡 [STREAMING UTILS] Получен сигнал [DONE]')
       return { content: '', done: true }
     }
 
@@ -135,7 +157,7 @@ function processSSELine(
         // Мы вызываем onUsage только если есть total_cost или это одиночный запрос (не последовательный)
         // Чтобы не сбивать счетчик промежуточными данными
         if (json.usage.total_cost !== undefined || json.usage.total_tokens !== undefined) {
-          console.log('📊 [STREAMING UTILS] Получена статистика использования:', json.usage)
+          debugLog('📊 [STREAMING UTILS] Получена статистика использования:', json.usage)
           handler.onUsage({
             total_cost: json.usage.total_cost || 0,
             prompt_tokens: json.usage.prompt_tokens || 0,
@@ -162,7 +184,7 @@ function processSSELine(
     } catch (e) {
       // Если это не JSON, возможно это просто текст
       if (data && data.length > 0 && !data.includes('[DONE]')) {
-        console.warn('⚠️ [STREAMING UTILS] Ошибка парсинга JSON:', e, 'data:', data.substring(0, 100))
+        debugWarn('⚠️ [STREAMING UTILS] Ошибка парсинга JSON:', e, 'data:', data.substring(0, 100))
         // Пробуем добавить как текст напрямую
         return { content: data, done: false }
       }
@@ -170,7 +192,7 @@ function processSSELine(
     }
   } else if (line.trim() && !line.startsWith(':')) {
     // Если строка не начинается с "data: ", пробуем распарсить как JSON напрямую
-    console.log('📡 [STREAMING UTILS] Строка без префикса data::', line.substring(0, 200))
+    debugLog('📡 [STREAMING UTILS] Строка без префикса data::', line.substring(0, 200))
     try {
       const json = JSON.parse(line.trim())
       if (json.choices && json.choices[0]) {
@@ -181,13 +203,13 @@ function processSSELine(
           content = json.choices[0].message.content
         }
         if (content) {
-          console.log('📡 [STREAMING UTILS] Извлечён контент из строки без префикса:', content.length, 'символов')
+          debugLog('📡 [STREAMING UTILS] Извлечён контент из строки без префикса:', content.length, 'символов')
         }
         return { content, done: false }
       }
     } catch (e) {
       // Игнорируем ошибки парсинга
-      console.debug('📡 [STREAMING UTILS] Не удалось распарсить строку:', line.substring(0, 100), 'ошибка:', e)
+      debugTrace('📡 [STREAMING UTILS] Не удалось распарсить строку:', line.substring(0, 100), 'ошибка:', e)
     }
   }
 
