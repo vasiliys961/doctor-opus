@@ -7,6 +7,30 @@ import type { SubscriptionBalance } from '@/lib/subscription-manager'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 
+// Модульный кэш: один запрос к /api/billing/deduct на весь таб, TTL 30 сек
+let _balanceCache: { data: unknown; ts: number } | null = null
+const BALANCE_CACHE_TTL = 30_000
+
+async function fetchBalanceWithCache(): Promise<Response> {
+  const now = Date.now()
+  if (_balanceCache && now - _balanceCache.ts < BALANCE_CACHE_TTL) {
+    return new Response(JSON.stringify(_balanceCache.data), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  const response = await fetch('/api/billing/deduct', { cache: 'no-store' })
+  if (response.ok) {
+    const data = await response.json()
+    _balanceCache = { data, ts: now }
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  return response
+}
+
 export default function BalanceWidget() {
   const { data: session } = useSession()
   const [balance, setBalance] = useState<SubscriptionBalance | null>(null)
@@ -17,7 +41,7 @@ export default function BalanceWidget() {
   const loadBalance = useCallback(async () => {
     try {
       if (session?.user?.email) {
-        const response = await fetch('/api/billing/deduct', { cache: 'no-store' })
+        const response = await fetchBalanceWithCache()
         if (response.ok) {
           const data = await response.json()
           if (data?.success) {
@@ -62,6 +86,7 @@ export default function BalanceWidget() {
     }
 
     const handleBalanceUpdated = () => {
+      _balanceCache = null // сбрасываем кэш при реальном изменении баланса
       void loadBalance()
     }
 

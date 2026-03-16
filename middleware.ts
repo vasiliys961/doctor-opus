@@ -18,7 +18,7 @@ import { getToken } from 'next-auth/jwt';
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  // Статика Next.js — не трогаем (избегаем 404 на layout.css, main-app.js и т.д.)
+  // Статика Next.js — не трогаем
   if (path.startsWith('/_next/') || path.startsWith('/favicon')) {
     return NextResponse.next();
   }
@@ -35,85 +35,63 @@ export async function middleware(request: NextRequest) {
     '/pricing',
     '/docs',
   ];
-  
+
   // Публичные API (без токена)
   const publicApiPaths = [
     '/api/auth',              // NextAuth (login, session, providers) + /api/auth/register
     '/api/payment/payanyway', // Webhook для платежей PayAnyWay (Moneta.ru)
   ];
-  
-  // Проверка публичных путей
-  const isPublicPath = publicPaths.some(p => 
+
+  const isPublicPath = publicPaths.some(p =>
     path === p || path.startsWith(p + '/')
   );
-  
-  const isPublicApi = publicApiPaths.some(p => 
+
+  const isPublicApi = publicApiPaths.some(p =>
     path.startsWith(p)
   );
-  
-  // Разрешаем публичные маршруты
+
   if (isPublicPath || isPublicApi) {
     return NextResponse.next();
   }
-  
-  // ===== ЗАЩИТА API ENDPOINTS =====
-  if (path.startsWith('/api/')) {
-    try {
-      const token = await getToken({
-        req: request,
-        secret: process.env.NEXTAUTH_SECRET,
-      });
-      
-      if (!token) {
-        // Логирование попытки неавторизованного доступа
-        const ip = request.headers.get('x-forwarded-for') || 
-                   request.ip || 
-                   'unknown';
-        
-        console.warn(
-          `⚠️ Unauthorized API access attempt:\n` +
-          `   Path: ${path}\n` +
-          `   IP: ${ip}\n` +
-          `   Time: ${new Date().toISOString()}`
-        );
-        
-        return NextResponse.json(
-          { 
-            error: 'Authentication required',
-            message: 'Please log in to access this resource',
-            code: 'UNAUTHORIZED',
-          },
-          { status: 401 }
-        );
-      }
-      
-      // Токен валиден - продолжаем
-      return NextResponse.next();
-      
-    } catch (error) {
-      console.error('❌ Middleware auth error:', error);
-      return NextResponse.json(
-        { error: 'Authentication error' },
-        { status: 500 }
-      );
-    }
-  }
-  
-  // ===== ЗАЩИТА СТРАНИЦ (dashboard, analysis и т.д.) =====
-  if (!isPublicPath) {
-    const token = await getToken({
+
+  // Один вызов getToken на весь middleware — используется для API и страниц
+  let token: Awaited<ReturnType<typeof getToken>> = null;
+  try {
+    token = await getToken({
       req: request,
       secret: process.env.NEXTAUTH_SECRET,
     });
-    
-    if (!token) {
-      // Редирект на страницу входа с сохранением целевого URL
-      const loginUrl = new URL('/auth/signin', request.url);
-      loginUrl.searchParams.set('callbackUrl', path);
-      return NextResponse.redirect(loginUrl);
+  } catch (error) {
+    if (path.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Authentication error' }, { status: 500 });
     }
+    const loginUrl = new URL('/auth/signin', request.url);
+    loginUrl.searchParams.set('callbackUrl', path);
+    return NextResponse.redirect(loginUrl);
   }
-  
+
+  // ===== ЗАЩИТА API ENDPOINTS =====
+  if (path.startsWith('/api/')) {
+    if (!token) {
+      return NextResponse.json(
+        {
+          error: 'Authentication required',
+          message: 'Please log in to access this resource',
+          code: 'UNAUTHORIZED',
+        },
+        { status: 401 }
+      );
+    }
+    return NextResponse.next();
+  }
+
+  // ===== ЗАЩИТА СТРАНИЦ =====
+  if (!token) {
+    const loginUrl = new URL('/auth/signin', request.url);
+    loginUrl.searchParams.set('callbackUrl', path);
+    return NextResponse.redirect(loginUrl);
+  }
+
   return NextResponse.next();
 }
 
