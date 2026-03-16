@@ -214,10 +214,14 @@ export default function ChatPage() {
     let accumulatedText = lastAssistantMessage.content;
 
     try {
-      // ВАЖНО: отправляем на сервер ключ модели (sonnet/gpt52/opus/gemini),
-      // а не строковый id провайдера. Сервер сам выберет актуальный id (например Sonnet 4.6),
-      // иначе при обновлении MODELS.SONNET клиент может незаметно попасть в fallback (Opus).
+      // ВАЖНО: отправляем на сервер ключ модели (sonnet/gpt52/opus/gemini).
+      // displayModelName используется только для UI — чтобы не показывать 'gpt52' пользователю.
       const modelName = model
+      const displayModelName = model === 'gpt52' ? 'openai/gpt-5.4'
+        : model === 'sonnet' ? 'anthropic/claude-sonnet-4.6'
+        : model === 'opus' ? 'anthropic/claude-opus-4.6'
+        : model === 'gemini' ? 'google/gemini-3-flash-preview'
+        : model
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -541,7 +545,7 @@ export default function ChatPage() {
                           newMessages[assistantMessageIndex] = {
                             ...newMessages[assistantMessageIndex],
                             cost: json.usage.total_cost,
-                            model: json.model || modelName
+                            model: json.model || displayModelName
                           }
                         }
                         return newMessages
@@ -549,15 +553,7 @@ export default function ChatPage() {
                       
                       logUsage({
                         section: 'chat',
-                        model: json.model || modelName,
-                        inputTokens: json.usage.prompt_tokens,
-                        outputTokens: json.usage.completion_tokens,
-                        specialty: specialty // Передаем специальность
-                      })
-                      continue; // Переходим к следующей строке, контента здесь нет
-                    }
-
-                    const content = json.choices?.[0]?.delta?.content || ''
+                        model: json.model || displayModelName,
                     if (content) {
                       accumulatedText += content
                       
@@ -699,7 +695,7 @@ export default function ChatPage() {
                           newMessages[assistantMessageIndex] = {
                             ...newMessages[assistantMessageIndex],
                             cost: json.usage.total_cost,
-                            model: json.model || modelName
+                            model: json.model || displayModelName
                           }
                         }
                         return newMessages
@@ -707,7 +703,7 @@ export default function ChatPage() {
                       
                       logUsage({
                         section: 'chat',
-                        model: json.model || modelName,
+                        model: json.model || displayModelName,
                         inputTokens: json.usage.prompt_tokens,
                         outputTokens: json.usage.completion_tokens,
                         specialty: specialty // Передаем специальность
