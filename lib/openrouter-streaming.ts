@@ -1102,6 +1102,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
   if (!response.ok) {
     const errorText = await response.text();
     const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(model, response.status, errorText);
+    console.warn(`[GEO-DEBUG] stream model=${model} status=${response.status} shouldFallback=${shouldFallback} err=${errorText.substring(0, 300)}`);
     if (shouldFallback) {
       modelUsed = fallbackModel!;
       response = await runRequest(modelUsed);
