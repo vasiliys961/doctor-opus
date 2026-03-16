@@ -550,10 +550,18 @@ export default function ChatPage() {
                         }
                         return newMessages
                       })
-                      
+
                       logUsage({
                         section: 'chat',
                         model: json.model || displayModelName,
+                        inputTokens: json.usage.prompt_tokens,
+                        outputTokens: json.usage.completion_tokens,
+                        specialty: specialty
+                      })
+                      continue
+                    }
+
+                    const content = json.choices?.[0]?.delta?.content || ''
                     if (content) {
                       accumulatedText += content
                       
