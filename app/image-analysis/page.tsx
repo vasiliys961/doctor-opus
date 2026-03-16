@@ -231,8 +231,9 @@ export default function ImageAnalysisPage() {
           // Определяем модель для отображения в UI
           let modelUsed = ''
           if (analysisMode === 'fast') modelUsed = 'google/gemini-3-flash-preview'
-          else if (analysisMode === 'optimized') modelUsed = 'anthropic/claude-sonnet-4.6'
-          else modelUsed = 'anthropic/claude-opus-4.6'
+          else if (analysisMode === 'optimized') {
+            modelUsed = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4'
+          } else modelUsed = 'anthropic/claude-opus-4.6'
           
           await handleSSEStream(response, {
             onChunk: (content, accumulatedText) => {
@@ -245,7 +246,13 @@ export default function ImageAnalysisPage() {
               
               flushSync(() => {
                 setCurrentCost(usage.total_cost)
-                const modelUsed = usage.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6')
+                const modelUsed = usage.model || (
+                  analysisMode === 'fast'
+                    ? 'google/gemini-3-flash-preview'
+                    : analysisMode === 'optimized'
+                      ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4')
+                      : 'anthropic/claude-opus-4.6'
+                )
                 
                 setModelInfo({ model: modelUsed, mode: analysisMode })
                 setLastAnalysisData({ model: modelUsed, mode: analysisMode })

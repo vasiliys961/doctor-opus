@@ -1,8 +1,3 @@
-const OPENAI_GEO_ERROR_PATTERNS = [
-  'unsupported_country_region_territory',
-  'country, region, or territory not supported',
-];
-
 const ANTHROPIC_GEO_ERROR_PATTERNS = [
   'access to anthropic models is not allowed',
   'unsupported countries',
@@ -14,7 +9,9 @@ function normalizeErrorText(errorText: string): string {
 }
 
 export function isGeoRestrictionStatus(status: number): boolean {
-  return status === 403 || status === 451;
+  // OpenRouter может возвращать geo-ошибку как 400 (provider wrapped error),
+  // поэтому учитываем и его, но только вместе со строгими geo-сигнатурами.
+  return status === 400 || status === 403 || status === 451;
 }
 
 export function isAnthropicModel(model: string): boolean {
@@ -23,8 +20,11 @@ export function isAnthropicModel(model: string): boolean {
 }
 
 export function isOpenAIGeoRestrictionError(errorText: string): boolean {
-  const normalized = normalizeErrorText(errorText);
-  return OPENAI_GEO_ERROR_PATTERNS.some(pattern => normalized.includes(pattern));
+  const normalized = String(errorText || '').toLowerCase();
+  return (
+    normalized.includes('unsupported_country_region_territory') ||
+    normalized.includes('country, region, or territory not supported')
+  );
 }
 
 export function isAnthropicGeoRestrictionError(errorText: string): boolean {
@@ -33,12 +33,14 @@ export function isAnthropicGeoRestrictionError(errorText: string): boolean {
 }
 
 export function shouldUseStage2GeoFallback(primaryModel: string, status: number, errorText: string): boolean {
-  if (!isGeoRestrictionStatus(status)) {
-    return false;
+  if (isAnthropicModel(primaryModel)) {
+    // Anthropic geo-блок в OpenRouter может приходить не только как 403/451,
+    // поэтому опираемся на строгие сигнатуры ошибки.
+    return isAnthropicGeoRestrictionError(errorText);
   }
 
-  if (isAnthropicModel(primaryModel)) {
-    return isAnthropicGeoRestrictionError(errorText);
+  if (!isGeoRestrictionStatus(status)) {
+    return false;
   }
 
   return isOpenAIGeoRestrictionError(errorText);
