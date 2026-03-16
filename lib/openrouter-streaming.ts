@@ -5,6 +5,7 @@
 
 import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
 import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
+import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -32,20 +33,6 @@ function isNetworkStage2Error(error: any): boolean {
   );
 }
 
-function isAnthropicModel(model: string): boolean {
-  const normalized = String(model || '').toLowerCase();
-  return normalized.startsWith('anthropic/') || normalized.includes('claude');
-}
-
-function isAnthropicGeoRestrictionError(errorText: string): boolean {
-  const normalized = String(errorText || '').toLowerCase();
-  return (
-    normalized.includes('access to anthropic models is not allowed') ||
-    normalized.includes('unsupported countries') ||
-    normalized.includes('unsupported countries, regions, or territories')
-  );
-}
-
 function getStage2FallbackModel(primaryModel: string): string | null {
   if (isAnthropicModel(primaryModel)) {
     return MODELS.GPT_5_2;
@@ -56,29 +43,11 @@ function getStage2FallbackModel(primaryModel: string): string | null {
   return null;
 }
 
-function isOpenAIGeoRestrictionError(errorText: string): boolean {
-  const normalized = String(errorText || '').toLowerCase();
-  return (
-    normalized.includes('unsupported_country_region_territory') ||
-    normalized.includes('country, region, or territory not supported')
-  );
-}
-
 function getChatFallbackModel(primaryModel: string): string | null {
   if (primaryModel === MODELS.GPT_5_2) {
     return MODELS.SONNET;
   }
   return null;
-}
-
-function shouldUseStage2GeoFallback(primaryModel: string, errorText: string): boolean {
-  if (isAnthropicModel(primaryModel)) {
-    return isAnthropicGeoRestrictionError(errorText);
-  }
-  if (primaryModel === MODELS.GPT_5_2) {
-    return isOpenAIGeoRestrictionError(errorText);
-  }
-  return false;
 }
 
 /**
@@ -554,7 +523,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
 
       if (!response.ok) {
         const errorText = await response.text();
-        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, errorText);
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, response.status, errorText);
         if (shouldFallback) {
           const switchMsg = `\n\n> Primary model is temporarily unavailable in the current provider region. Switching to ${fallbackModel} fallback...\n\n`;
           await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
@@ -795,7 +764,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
       // Heartbeat остановится в finally
       if (!response.ok) {
         const errorText = await response.text();
-        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, errorText);
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, response.status, errorText);
         if (shouldFallback) {
           const switchMsg = `\n\n> Primary model is temporarily unavailable in the current provider region. Switching to ${fallbackModel} fallback...\n\n`;
           await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
@@ -1019,7 +988,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
 
       if (!response.ok) {
         const errorText = await response.text();
-        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, errorText);
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, response.status, errorText);
         if (shouldFallback) {
           const switchMsg = `\n\n> Primary model is temporarily unavailable in the current provider region. Switching to ${fallbackModel} fallback...\n\n`;
           await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
@@ -1132,7 +1101,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
   let response = await runRequest(model);
   if (!response.ok) {
     const errorText = await response.text();
-    const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(model, errorText);
+    const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(model, response.status, errorText);
     if (shouldFallback) {
       modelUsed = fallbackModel!;
       response = await runRequest(modelUsed);
@@ -1284,7 +1253,7 @@ export async function sendTextRequestStreaming(
       if (!response.ok) {
         const errorText = await response.text();
         const fallbackModel = getChatFallbackModel(modelUsed);
-        const shouldFallback = !!fallbackModel && isOpenAIGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
         if (shouldFallback) {
           console.warn(`⚠️ [TEXT STREAM FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
           modelUsed = fallbackModel!;

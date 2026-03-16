@@ -6,6 +6,7 @@
 import { MODELS } from './openrouter';
 import { calculateCost, formatCostLog } from './cost-calculator';
 import { Specialty, TITAN_CONTEXTS, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
+import { isGeoRestrictionStatus, isOpenAIGeoRestrictionError } from './geo-restriction';
 import mammoth from 'mammoth';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -52,14 +53,6 @@ const MAX_PDF_SIZE_BYTES = 20 * 1024 * 1024;
  */
 function modelSupportsPDFNatively(model: string): boolean {
   return model.includes('gemini');
-}
-
-function isOpenAIGeoRestrictionError(errorText: string): boolean {
-  const normalized = String(errorText || '').toLowerCase();
-  return (
-    normalized.includes('unsupported_country_region_territory') ||
-    normalized.includes('country, region, or territory not supported')
-  );
 }
 
 function getChatFallbackModel(primaryModel: string): string | null {
@@ -342,7 +335,7 @@ export async function sendTextRequestWithFiles(
     if (!response.ok) {
       const errorText = await response.text();
       const fallbackModel = getChatFallbackModel(modelUsed);
-      const shouldFallback = !!fallbackModel && isOpenAIGeoRestrictionError(errorText);
+      const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
       if (shouldFallback) {
         console.warn(`⚠️ [FILES FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
         modelUsed = fallbackModel!;
@@ -484,7 +477,7 @@ export async function sendTextRequestStreamingWithFiles(
       if (!response.ok) {
         const errorText = await response.text();
         const fallbackModel = getChatFallbackModel(modelUsed);
-        const shouldFallback = !!fallbackModel && isOpenAIGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
         if (shouldFallback) {
           console.warn(`⚠️ [FILES STREAM FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
           modelUsed = fallbackModel!;
