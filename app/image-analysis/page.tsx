@@ -23,6 +23,7 @@ import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-c
 import { getOnboardingStatus, isOnboardingCompleted, setOnboardingStatus } from '@/lib/onboarding'
 
 export default function ImageAnalysisPage() {
+  const OPTIMIZED_MODEL_STORAGE_KEY = 'image-analysis.optimized-model'
   const [file, setFile] = useState<File | null>(null)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [validation, setValidation] = useState<ImageValidationResult | null>(null)
@@ -47,6 +48,25 @@ export default function ImageAnalysisPage() {
   const [useLibrary, setUseLibrary] = useState(false)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
+
+  useEffect(() => {
+    try {
+      const savedModel = localStorage.getItem(OPTIMIZED_MODEL_STORAGE_KEY)
+      if (savedModel === 'sonnet' || savedModel === 'gpt52') {
+        setOptimizedModel(savedModel)
+      }
+    } catch {
+      // Игнорируем ошибки доступа к localStorage (private mode / restrictive settings)
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(OPTIMIZED_MODEL_STORAGE_KEY, optimizedModel)
+    } catch {
+      // Игнорируем ошибки доступа к localStorage
+    }
+  }, [optimizedModel])
 
   const dataUrlToFile = (dataUrl: string, filename: string) => {
     const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/)
