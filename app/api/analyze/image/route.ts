@@ -332,7 +332,31 @@ export async function POST(request: NextRequest) {
     }
 
     const finalClinicalContext = [clinicalContext, dicomContext].filter(Boolean).join('\n\n');
-    let modelToUse = customModel || (mode === 'fast' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
+    const normalizedCustomModel = (() => {
+      if (!customModel) return null;
+      if (customModel === 'gpt52' || customModel === MODELS.GPT_5_2) return MODELS.GPT_5_2;
+      if (customModel === 'sonnet' || customModel === MODELS.SONNET) return MODELS.SONNET;
+      if (customModel === 'opus' || customModel === MODELS.OPUS) return MODELS.OPUS;
+      if (customModel === 'gemini' || customModel === MODELS.GEMINI_3_FLASH) return MODELS.GEMINI_3_FLASH;
+      return customModel;
+    })();
+    const defaultModelByMode =
+      mode === 'fast'
+        ? MODELS.GEMINI_3_FLASH
+        : mode === 'validated'
+          ? MODELS.OPUS
+          : MODELS.GPT_5_2; // optimized по умолчанию всегда GPT-5.4
+    let modelToUse = normalizedCustomModel || defaultModelByMode;
+    const allowedModels = new Set([
+      MODELS.GEMINI_3_FLASH,
+      MODELS.GPT_5_2,
+      MODELS.SONNET,
+      MODELS.OPUS,
+    ]);
+    if (!allowedModels.has(modelToUse)) {
+      modelToUse = defaultModelByMode;
+    }
+    console.log(`[MODEL-SELECT] mode=${mode} custom=${customModel || 'none'} resolved=${modelToUse}`);
     const displayedCost = billingContext?.estimatedCost ?? getAnalysisCost(mode, allImages.length);
 
     // Сравнительный промпт включаем ТОЛЬКО по явному флагу.
