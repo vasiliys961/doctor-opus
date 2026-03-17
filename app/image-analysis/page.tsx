@@ -35,7 +35,19 @@ export default function ImageAnalysisPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<AnalysisMode>('optimized')
-  const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>('sonnet')
+  const [optimizedModel, setOptimizedModel] = useState<OptimizedModel>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedModel = localStorage.getItem(OPTIMIZED_MODEL_STORAGE_KEY)
+        if (savedModel === 'sonnet' || savedModel === 'gpt52') {
+          return savedModel
+        }
+      } catch {
+        // Игнорируем ошибки доступа к localStorage
+      }
+    }
+    return 'gpt52'
+  })
   const [imageType, setImageType] = useState<ImageModality>('universal')
   const [clinicalContext, setClinicalContext] = useState('')
   const [labsContext, setLabsContext] = useState('')
@@ -48,17 +60,6 @@ export default function ImageAnalysisPage() {
   const [useLibrary, setUseLibrary] = useState(false)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
-
-  useEffect(() => {
-    try {
-      const savedModel = localStorage.getItem(OPTIMIZED_MODEL_STORAGE_KEY)
-      if (savedModel === 'sonnet' || savedModel === 'gpt52') {
-        setOptimizedModel(savedModel)
-      }
-    } catch {
-      // Игнорируем ошибки доступа к localStorage (private mode / restrictive settings)
-    }
-  }, [])
 
   useEffect(() => {
     try {
