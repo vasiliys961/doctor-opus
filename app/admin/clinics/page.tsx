@@ -196,6 +196,7 @@ export default function AdminClinicsPage() {
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Баланс</th>
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Потрачено</th>
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Статус</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Действия</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -211,6 +212,14 @@ export default function AdminClinicsPage() {
                         <span className={`px-2 py-1 rounded-full font-bold uppercase ${clinic.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
                           {clinic.status}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <Link
+                          href={`/admin/clinics/${clinic.id}/members`}
+                          className="inline-flex items-center px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold"
+                        >
+                          Участники
+                        </Link>
                       </td>
                     </tr>
                   ))}
