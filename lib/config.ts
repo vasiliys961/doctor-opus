@@ -39,6 +39,16 @@ export const BILLING_CONFIG = {
   maxSingleDeduction: parseFloat(process.env.MAX_SINGLE_DEDUCTION || '50'),
 };
 
+// ==================== КЛИНИКИ (B2B) ====================
+export const CLINIC_CONFIG = {
+  /**
+   * Включение B2B-контура клиник.
+   * 0 (по умолчанию) — выключено, текущий personal-биллинг работает без изменений.
+   * 1 — включено, доступны разделы/API клиник.
+   */
+  enabled: process.env.CLINIC_BILLING_ENABLED === '1',
+};
+
 // ==================== API / АНАЛИЗ ====================
 export const API_CONFIG = {
   /** Макс. размер загружаемого файла (байты) */

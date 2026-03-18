@@ -142,12 +142,69 @@ export async function POST(request: NextRequest) {
     } catch (e: any) { safeLog('ℹ️ created_at:', e.message); }
     
     await sql`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`;
+
+    // ===== B2B: Clinics scaffold (без включения списаний) =====
+    safeLog('📊 [MIGRATION] Creating clinics tables...');
+    await sql`
+      CREATE TABLE IF NOT EXISTS clinics (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        inn VARCHAR(32),
+        contact_email VARCHAR(255),
+        owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        status VARCHAR(32) DEFAULT 'active',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS clinic_members (
+        id SERIAL PRIMARY KEY,
+        clinic_id INTEGER NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role VARCHAR(32) NOT NULL DEFAULT 'doctor',
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (clinic_id, user_id)
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS clinic_wallets (
+        id SERIAL PRIMARY KEY,
+        clinic_id INTEGER NOT NULL UNIQUE REFERENCES clinics(id) ON DELETE CASCADE,
+        balance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        total_spent DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS clinic_transactions (
+        id SERIAL PRIMARY KEY,
+        clinic_id INTEGER NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+        actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        operation TEXT NOT NULL,
+        section VARCHAR(100),
+        model VARCHAR(255),
+        metadata JSONB,
+        balance_after DECIMAL(10,2),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_clinic_members_clinic ON clinic_members(clinic_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_clinic_members_user ON clinic_members(user_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_clinic_tx_clinic_date ON clinic_transactions(clinic_id, created_at DESC)`;
     
     // Проверка
     const tables = await sql`
       SELECT tablename FROM pg_tables 
       WHERE schemaname = 'public' 
-      AND tablename IN ('user_balances', 'guest_balances', 'credit_transactions', 'users', 'payments', 'consents')
+      AND tablename IN (
+        'user_balances', 'guest_balances', 'credit_transactions', 'users', 'payments', 'consents',
+        'clinics', 'clinic_members', 'clinic_wallets', 'clinic_transactions'
+      )
       ORDER BY tablename
     `;
     
@@ -212,11 +269,23 @@ export async function GET(request: NextRequest) {
     const tables = await sql`
       SELECT tablename FROM pg_tables 
       WHERE schemaname = 'public' 
-      AND tablename IN ('user_balances', 'guest_balances', 'credit_transactions', 'users', 'payments', 'consents')
+      AND tablename IN (
+        'user_balances', 'guest_balances', 'credit_transactions', 'users', 'payments', 'consents',
+        'clinics', 'clinic_members', 'clinic_wallets', 'clinic_transactions'
+      )
     `;
     
     const existingTables = tables.rows.map(t => t.tablename);
-    const requiredTables = ['user_balances', 'guest_balances', 'credit_transactions', 'users'];
+    const requiredTables = [
+      'user_balances',
+      'guest_balances',
+      'credit_transactions',
+      'users',
+      'clinics',
+      'clinic_members',
+      'clinic_wallets',
+      'clinic_transactions',
+    ];
     const missingTables = requiredTables.filter(t => !existingTables.includes(t));
     
     const stats: Record<string, number> = {};

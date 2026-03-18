@@ -179,6 +179,17 @@ export default function Navigation() {
           {isAdmin && (
             <div className="mt-4 pt-4 border-t border-primary-700">
               <Link
+                href="/admin/clinics"
+                onClick={closeMenu}
+                className={`block w-full text-left py-2.5 px-4 rounded-lg transition-all touch-manipulation text-sm mb-2 ${
+                  pathname === '/admin/clinics'
+                    ? 'bg-indigo-600 text-white font-bold shadow-md ring-2 ring-indigo-300'
+                    : 'bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 border border-indigo-500/30'
+                }`}
+              >
+                🏥 Админ-панель (Клиники)
+              </Link>
+              <Link
                 href="/admin/payments"
                 onClick={closeMenu}
                 className={`block w-full text-left py-2.5 px-4 rounded-lg transition-all touch-manipulation text-sm ${
