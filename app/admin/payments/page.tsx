@@ -25,6 +25,9 @@ interface PaymentsSummary {
   anonymousSpenders: number
   anonymousSpentUnits: number | string
   totalPaymentsAllTime: number
+  exhaustedUsers: number
+  lowBalanceUsers: number
+  nearLimitUsers: number
 }
 
 interface PaidUser {
@@ -196,7 +199,7 @@ export default function AdminPaymentsPage() {
         )}
 
         {summary && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
             <div className="bg-white border rounded-xl p-4">
               <p className="text-xs uppercase tracking-wider text-slate-400">Зарегистрированы</p>
               <p className="text-2xl font-bold text-slate-900 mt-1">{summary.totalUsers}</p>
@@ -224,6 +227,18 @@ export default function AdminPaymentsPage() {
             <div className="bg-white border rounded-xl p-4">
               <p className="text-xs uppercase tracking-wider text-slate-400">Платежей в БД (всего)</p>
               <p className="text-2xl font-bold text-slate-900 mt-1">{summary.totalPaymentsAllTime}</p>
+            </div>
+            <div className="bg-white border rounded-xl p-4">
+              <p className="text-xs uppercase tracking-wider text-slate-400">Баланс ≤ 0 ед.</p>
+              <p className="text-2xl font-bold text-red-700 mt-1">{summary.exhaustedUsers}</p>
+            </div>
+            <div className="bg-white border rounded-xl p-4">
+              <p className="text-xs uppercase tracking-wider text-slate-400">Баланс 0..2 ед.</p>
+              <p className="text-2xl font-bold text-orange-700 mt-1">{summary.lowBalanceUsers}</p>
+            </div>
+            <div className="bg-white border rounded-xl p-4">
+              <p className="text-xs uppercase tracking-wider text-slate-400">Баланс 2..5 ед.</p>
+              <p className="text-2xl font-bold text-amber-700 mt-1">{summary.nearLimitUsers}</p>
             </div>
             <div className="bg-white border rounded-xl p-4">
               <p className="text-xs uppercase tracking-wider text-slate-400">Конверсия в оплату</p>

@@ -155,7 +155,8 @@ export default function BalanceWidget() {
     )
   }
 
-  const isLowBalance = balance.currentCredits < (balance.initialCredits * 0.2)
+  const isLowBalance = balance.currentCredits < Math.max(balance.initialCredits * 0.2, 3)
+  const isVeryLowBalance = balance.currentCredits > 0 && balance.currentCredits <= 3
   const isCriticalBalance = balance.currentCredits <= 0
   const isNegative = balance.currentCredits < 0
   
@@ -192,6 +193,11 @@ export default function BalanceWidget() {
               ⚠️ ПОПОЛНИТЬ
             </span>
           )}
+          {isVeryLowBalance && (
+            <span className="bg-white text-orange-600 text-[10px] px-2 py-1 rounded-full font-bold shadow-sm">
+              ⏳ МЕНЕЕ 3 ЕД.
+            </span>
+          )}
         </div>
 
         {/* Прогресс-бар */}
@@ -210,7 +216,7 @@ export default function BalanceWidget() {
         {(isLowBalance || isNegative) && (
           <div className="mt-3 pt-2 border-t border-white/20">
             <p className="text-[10px] text-center font-bold uppercase tracking-widest animate-bounce">
-              Активировать пакет →
+              {isCriticalBalance ? 'Лимит исчерпан — пополнить пакет →' : 'Низкий баланс — пополнить пакет →'}
             </p>
           </div>
         )}

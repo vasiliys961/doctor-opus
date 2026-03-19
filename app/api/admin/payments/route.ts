@@ -184,6 +184,13 @@ export async function GET(request: NextRequest) {
     const totalPaymentsAllTimeResult = await sql`
       SELECT COUNT(*)::int AS total_payments_all_time FROM payments
     `;
+    const balanceBucketsResult = await sql`
+      SELECT
+        COUNT(*) FILTER (WHERE balance <= 0)::int AS exhausted_users,
+        COUNT(*) FILTER (WHERE balance > 0 AND balance <= 2)::int AS low_balance_users,
+        COUNT(*) FILTER (WHERE balance > 2 AND balance <= 5)::int AS near_limit_users
+      FROM user_balances
+    `;
 
     const totalUsers = usersCountResult.rows[0]?.total_users ?? 0;
     const paidUsers = paidUsersCountResult.rows[0]?.paid_users ?? 0;
@@ -191,6 +198,9 @@ export async function GET(request: NextRequest) {
     const anonymousSpenders = anonymousSpentResult.rows[0]?.anonymous_spenders ?? 0;
     const anonymousSpentUnits = anonymousSpentResult.rows[0]?.anonymous_spent_units ?? 0;
     const totalPaymentsAllTime = totalPaymentsAllTimeResult.rows[0]?.total_payments_all_time ?? 0;
+    const exhaustedUsers = balanceBucketsResult.rows[0]?.exhausted_users ?? 0;
+    const lowBalanceUsers = balanceBucketsResult.rows[0]?.low_balance_users ?? 0;
+    const nearLimitUsers = balanceBucketsResult.rows[0]?.near_limit_users ?? 0;
 
     return NextResponse.json({
       success: true,
@@ -205,6 +215,9 @@ export async function GET(request: NextRequest) {
         anonymousSpenders,
         anonymousSpentUnits,
         totalPaymentsAllTime,
+        exhaustedUsers,
+        lowBalanceUsers,
+        nearLimitUsers,
       },
       paidUsersList: paidUsersResult.rows,
     });

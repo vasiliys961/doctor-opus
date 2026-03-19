@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { sql, getDbClient } from '@/lib/database';
 import { BILLING_CONFIG } from '@/lib/config';
+import { formatInsufficientCreditsMessage } from '@/lib/billing-messages';
 import { checkRateLimit, RATE_LIMIT_BILLING, getRateLimitKey } from '@/lib/rate-limiter';
 
 /**
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
     const { amount, operation, metadata = {} } = body;
 
     // Валидация входных данных
-    const MAX_SINGLE_DEDUCTION = 50; // Макс. списание за одну операцию (единицы)
+    const MAX_SINGLE_DEDUCTION = BILLING_CONFIG.maxSingleDeduction;
     
     if (typeof amount !== 'number' || amount <= 0) {
       return NextResponse.json(
@@ -174,7 +175,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error: 'Insufficient credits',
-            message: `Insufficient balance. Available: ${currentBalance.toFixed(2)}, Required: ${amount.toFixed(2)}`,
+            message: formatInsufficientCreditsMessage({
+              available: currentBalance,
+              required: amount,
+            }),
             balance: currentBalance,
             required: amount,
           },

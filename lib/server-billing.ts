@@ -11,6 +11,7 @@
 
 import { getDbClient } from '@/lib/database';
 import { BILLING_CONFIG } from '@/lib/config';
+import { formatInsufficientCreditsMessage } from '@/lib/billing-messages';
 
 /**
  * VIP-пользователи — из env (через запятую)
@@ -82,7 +83,10 @@ export async function checkAndDeductBalance(
       return {
         allowed: false,
         balanceAfter: currentBalance,
-        error: `Недостаточно средств. Доступно: ${currentBalance.toFixed(2)} ед., требуется: ${amount.toFixed(2)} ед. Оформите подписку для продолжения.`,
+        error: formatInsufficientCreditsMessage({
+          available: currentBalance,
+          required: amount,
+        }),
       };
     }
 
@@ -169,7 +173,11 @@ export async function checkAndDeductGuestBalance(
       return {
         allowed: false,
         balanceAfter: currentBalance,
-        error: `Пробный лимит исчерпан. Для продолжения оформите подписку или пополните баланс. Доступно: ${currentBalance.toFixed(2)} ед., требуется: ${amount.toFixed(2)} ед.`,
+        error: formatInsufficientCreditsMessage({
+          available: currentBalance,
+          required: amount,
+          guest: true,
+        }),
       };
     }
 
