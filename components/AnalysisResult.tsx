@@ -478,16 +478,11 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
 
 
   const [speaking, setSpeaking] = useState(false)
-  const [audioElement] = useState(() => typeof window !== 'undefined' ? new Audio() : null)
 
-  const handleSpeak = async () => {
-    if (typeof window === 'undefined') return
-    
+  const handleSpeak = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
     if (speaking) {
-      if (audioElement) {
-        audioElement.pause()
-        audioElement.currentTime = 0
-      }
+      window.speechSynthesis.cancel()
       setSpeaking(false)
       return
     }
@@ -525,33 +520,13 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       .trim()
       .substring(0, 1500)
 
+    const utterance = new SpeechSynthesisUtterance(clean)
+    utterance.lang = 'ru-RU'
+    utterance.rate = 0.9
+    utterance.onend = () => setSpeaking(false)
+    utterance.onerror = () => setSpeaking(false)
+    window.speechSynthesis.speak(utterance)
     setSpeaking(true)
-    try {
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: clean })
-      })
-      if (!response.ok) {
-        console.error('[TTS] Error:', response.status)
-        setSpeaking(false)
-        return
-      }
-      const blob = await response.blob()
-      if (audioElement) {
-        const url = URL.createObjectURL(blob)
-        audioElement.src = url
-        audioElement.onended = () => setSpeaking(false)
-        audioElement.onerror = () => setSpeaking(false)
-        audioElement.play().catch(e => {
-          console.error('[TTS] Play error:', e)
-          setSpeaking(false)
-        })
-      }
-    } catch (error) {
-      console.error('[TTS] Fetch error:', error)
-      setSpeaking(false)
-    }
   }
 
   const handleShare = async () => {
