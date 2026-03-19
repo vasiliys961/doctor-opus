@@ -477,6 +477,58 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   }
 
 
+  const [speaking, setSpeaking] = useState(false)
+
+  const handleSpeak = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    if (speaking) {
+      window.speechSynthesis.cancel()
+      setSpeaking(false)
+      return
+    }
+
+    const lines = result.split('\n')
+    let conclusionLines: string[] = []
+    let inConclusion = false
+    for (const line of lines) {
+      const lower = line.toLowerCase()
+      if (!inConclusion && (
+        lower.includes('заключени') ||
+        lower.includes('вывод') ||
+        lower.includes('итог') ||
+        lower.includes('резюме')
+      ) && line.match(/^#{1,4}\s/)) {
+        inConclusion = true
+        continue
+      }
+      if (inConclusion && line.match(/^#{1,4}\s/) && !lower.includes('заключени')) break
+      if (inConclusion) conclusionLines.push(line)
+    }
+
+    const textToSpeak = conclusionLines.length > 0
+      ? conclusionLines.join('\n')
+      : result.slice(-500)
+
+    const clean = textToSpeak
+      .replace(/#{1,4}\s+/g, '')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/^[-*+]\s+/gm, '')
+      .replace(/^\d+\.\s+/gm, '')
+      .trim()
+      .substring(0, 1500)
+
+    const utterance = new SpeechSynthesisUtterance(clean)
+    utterance.lang = 'ru-RU'
+    utterance.rate = 0.9
+    utterance.onend = () => setSpeaking(false)
+    utterance.onerror = () => setSpeaking(false)
+    window.speechSynthesis.speak(utterance)
+    setSpeaking(true)
+  }
+
   const handleShare = async () => {
     try {
       // Проверяем поддержку Web Share API
@@ -672,6 +724,17 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors text-sm"
           >
             {copied ? '✓ Скопировано' : '📋 Копировать'}
+          </button>
+          <button
+            onClick={handleSpeak}
+            className={`px-4 py-2 rounded-lg transition-colors text-sm ${
+              speaking
+                ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+            }`}
+            title="Озвучить заключение"
+          >
+            {speaking ? '⏹ Стоп' : '🔊 Озвучить'}
           </button>
           {!loading && result && imageType === 'ecg' && (
             <button
