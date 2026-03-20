@@ -7,22 +7,37 @@ import Link from 'next/link'
 import { isOnboardingCompleted } from '@/lib/onboarding'
 
 export default function SubscriptionPage() {
-  const [selectedPackage, setSelectedPackage] = useState<keyof typeof SUBSCRIPTION_PACKAGES | null>(null)
   const [currentBalance, setCurrentBalance] = useState<SubscriptionBalance | null>(null)
   const [mounted, setMounted] = useState(false)
   const [isOnboardingDone, setIsOnboardingDone] = useState(false)
+
+  // Состояние оплаты per-package
+  const [payingPackage, setPayingPackage] = useState<string | null>(null)
+  const [payError, setPayError] = useState<string | null>(null)
+
+  // Проверка зачисления
   const [checkingPayment, setCheckingPayment] = useState(false)
   const [paymentCheckMessage, setPaymentCheckMessage] = useState<string | null>(null)
   const [paymentCheckStatus, setPaymentCheckStatus] = useState<'success' | 'pending' | 'error' | null>(null)
 
   useEffect(() => {
-    const refreshOnboardingStatus = () => {
-      setIsOnboardingDone(isOnboardingCompleted())
-    }
+    const refreshOnboardingStatus = () => setIsOnboardingDone(isOnboardingCompleted())
 
     setMounted(true)
     setCurrentBalance(getBalance())
     refreshOnboardingStatus()
+
+    // Показываем сообщение об успешной/неуспешной оплате из URL
+    const params = new URLSearchParams(window.location.search)
+    const status = params.get('status')
+    if (status === 'success') {
+      setPaymentCheckStatus('success')
+      setPaymentCheckMessage('Оплата прошла успешно! Баланс обновится автоматически в течение нескольких секунд.')
+      handleCheckPayment()
+    } else if (status === 'fail') {
+      setPaymentCheckStatus('error')
+      setPaymentCheckMessage('Оплата не прошла или была отменена. Попробуйте ещё раз.')
+    }
 
     window.addEventListener('onboardingCompleted', refreshOnboardingStatus)
     window.addEventListener('focus', refreshOnboardingStatus)
@@ -33,7 +48,38 @@ export default function SubscriptionPage() {
       window.removeEventListener('focus', refreshOnboardingStatus)
       document.removeEventListener('visibilitychange', refreshOnboardingStatus)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /** Создаёт инвойс через API и редиректит на PayAnyWay */
+  const handleBuyPackage = async (packageId: string) => {
+    setPayingPackage(packageId)
+    setPayError(null)
+    try {
+      const res = await fetch('/api/payment/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageId }),
+      })
+      const data = await res.json()
+
+      if (!res.ok || !data?.success || !data?.paymentUrl) {
+        if (res.status === 401) {
+          setPayError('Для оплаты необходимо войти в аккаунт.')
+        } else {
+          setPayError(data?.error || 'Не удалось создать платёж. Попробуйте ещё раз.')
+        }
+        return
+      }
+
+      // Редирект на страницу оплаты PayAnyWay
+      window.location.href = data.paymentUrl
+    } catch {
+      setPayError('Ошибка соединения. Проверьте интернет и попробуйте снова.')
+    } finally {
+      setPayingPackage(null)
+    }
+  }
 
   const handleCheckPayment = async () => {
     setCheckingPayment(true)
@@ -70,13 +116,13 @@ export default function SubscriptionPage() {
 
       if (balanceIncreased) {
         setPaymentCheckStatus('success')
-        setPaymentCheckMessage(`Оплата найдена: баланс обновлён до ${serverBalance.toFixed(2)} ед.`)
+        setPaymentCheckMessage(`Оплата найдена — баланс обновлён до ${serverBalance.toFixed(2)} ед.`)
       } else if (data.hasPendingPayments) {
         setPaymentCheckStatus('pending')
-        setPaymentCheckMessage('Оплата ещё в обработке. Попробуйте проверить снова через 1-2 минуты.')
+        setPaymentCheckMessage('Оплата ещё в обработке. Попробуйте проверить снова через 1–2 минуты.')
       } else {
         setPaymentCheckStatus('pending')
-        setPaymentCheckMessage('Зачисление пока не найдено. Если в PayAnyWay статус "уведомление не отправлено", повторите отправку уведомления в кабинете.')
+        setPaymentCheckMessage('Зачисление пока не найдено. Если в PayAnyWay статус «уведомление не отправлено» — обратитесь в поддержку.')
       }
     } catch {
       setPaymentCheckStatus('error')
@@ -86,7 +132,6 @@ export default function SubscriptionPage() {
     }
   }
 
-  // Если система отключена
   if (mounted && !isSubscriptionEnabled()) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
@@ -99,7 +144,6 @@ export default function SubscriptionPage() {
     )
   }
 
-  // Пока компонент не примонтирован, показываем скелет страницы без баланса
   const balanceContent = (mounted && currentBalance) ? (
     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
       <p className="text-blue-800">
@@ -107,8 +151,8 @@ export default function SubscriptionPage() {
       </p>
     </div>
   ) : mounted ? null : (
-    <div className="bg-gray-100 animate-pulse border border-gray-200 rounded-lg p-4 mb-8 h-14"></div>
-  );
+    <div className="bg-gray-100 animate-pulse border border-gray-200 rounded-lg p-4 mb-8 h-14" />
+  )
 
   const showOnboardingBanner = mounted && !isOnboardingDone
 
@@ -119,8 +163,10 @@ export default function SubscriptionPage() {
           💎 Пакеты единиц
         </h1>
         <p className="text-gray-600 mb-4">
-          Единицы используются для оплаты анализов и консультаций. 
-          <Link href="/clinic/dashboard" className="ml-2 text-indigo-600 font-bold hover:underline">🏢 Панель для клиник →</Link>
+          Единицы используются для оплаты анализов и консультаций.{' '}
+          <Link href="/clinic/dashboard" className="ml-2 text-indigo-600 font-bold hover:underline">
+            🏢 Панель для клиник →
+          </Link>
         </p>
 
         {/* БЕТА-БАННЕР */}
@@ -130,11 +176,12 @@ export default function SubscriptionPage() {
             <div className="flex-1">
               <h3 className="text-xl font-bold text-amber-900 mb-2">Открытое бета-тестирование до 31 мая 2026</h3>
               <p className="text-amber-800 mb-3">
-                Сейчас действуют специальные цены от <strong>1.99 ₽/ед.</strong> 
+                Сейчас действуют специальные цены от <strong>1.99 ₽/ед.</strong>{' '}
                 После окончания бета-периода базовая цена составит <strong>3 ₽/ед.</strong> Скидки за объём сохранятся.
               </p>
               <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
-                💎 Все, кто зарегистрировался до 31 мая, смогут купить ещё <strong>до 2 пакетов по текущим ценам</strong> в течение 3 месяцев после изменения тарифов.
+                💎 Все, кто зарегистрировался до 31 мая, смогут купить ещё{' '}
+                <strong>до 2 пакетов по текущим ценам</strong> в течение 3 месяцев после изменения тарифов.
               </p>
             </div>
           </div>
@@ -164,73 +211,42 @@ export default function SubscriptionPage() {
           </p>
         </div>
 
-        {/* КНОПКА ПЕРЕХОДА К ОПЛАТЕ */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 mb-10 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-gray-800 mb-1">💳 Готовы пополнить баланс?</h2>
-            <p className="text-sm text-gray-500">
-              Безопасная оплата картой. Введите ваш email из Doctor Opus — единицы зачислятся автоматически.
-            </p>
+        {/* Ошибка оплаты */}
+        {payError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-red-700 text-sm">
+            ⚠️ {payError}
           </div>
-          <a
-            href="https://self.payanyway.ru/17715342661162"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 bg-gradient-to-r from-teal-500 to-emerald-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-teal-600 hover:to-emerald-700 transition shadow-lg text-center"
-          >
-            Перейти к оплате →
-          </a>
-        </div>
+        )}
 
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-5 mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-bold text-gray-800">Проверка зачисления</h3>
-              <p className="text-sm text-gray-600">
-                Если после оплаты в PayAnyWay баланс не обновился автоматически, нажмите кнопку ниже.
-              </p>
-            </div>
-            <button
-              onClick={handleCheckPayment}
-              disabled={checkingPayment}
-              className="shrink-0 px-5 py-2.5 rounded-lg font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 transition"
-            >
-              {checkingPayment ? 'Проверяем...' : 'Проверить оплату'}
-            </button>
+        {/* Статус оплаты / зачисления */}
+        {paymentCheckMessage && (
+          <div className={`rounded-lg px-4 py-3 mb-6 text-sm border ${
+            paymentCheckStatus === 'success'
+              ? 'bg-green-50 text-green-800 border-green-200'
+              : paymentCheckStatus === 'error'
+              ? 'bg-red-50 text-red-700 border-red-200'
+              : 'bg-amber-50 text-amber-800 border-amber-200'
+          }`}>
+            {paymentCheckMessage}
           </div>
-
-          {paymentCheckMessage && (
-            <div
-              className={`mt-3 rounded-lg px-3 py-2 text-sm ${
-                paymentCheckStatus === 'success'
-                  ? 'bg-green-50 text-green-800 border border-green-200'
-                  : paymentCheckStatus === 'error'
-                  ? 'bg-red-50 text-red-700 border border-red-200'
-                  : 'bg-amber-50 text-amber-800 border border-amber-200'
-              }`}
-            >
-              {paymentCheckMessage}
-            </div>
-          )}
-        </div>
+        )}
 
         {/* ИНДИВИДУАЛЬНЫЕ ПАКЕТЫ */}
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Для индивидуальных врачей</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto mb-12">
           {Object.entries(SUBSCRIPTION_PACKAGES)
-            .filter(([_, pkg]) => pkg.category === 'individual')
+            .filter(([, pkg]) => pkg.category === 'individual')
             .map(([key, pkg]) => {
               const pricePerCredit = (pkg.priceRub / pkg.credits).toFixed(2)
-              const isSelected = selectedPackage === key
               const isRecommended = pkg.recommended
+              const isLoading = payingPackage === key
 
               return (
                 <div
                   key={key}
-                  onClick={() => setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)}
-                  className={`relative bg-white rounded-xl shadow-lg p-6 cursor-pointer transition-all hover:shadow-2xl hover:-translate-y-2 ${
-                    isSelected ? 'ring-4 ring-teal-500' : ''
-                  } ${isRecommended ? 'ring-4 ring-yellow-400 scale-105' : ''}`}
+                  className={`relative bg-white rounded-xl shadow-lg p-6 flex flex-col transition-all hover:shadow-2xl hover:-translate-y-1 ${
+                    isRecommended ? 'ring-4 ring-yellow-400 scale-105' : ''
+                  }`}
                 >
                   {isRecommended && (
                     <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
@@ -239,16 +255,12 @@ export default function SubscriptionPage() {
                       </span>
                     </div>
                   )}
-                  
-                  <div className="text-center">
-                    <h3 className="text-xl font-bold text-gray-800 mb-3">
-                      {pkg.name}
-                    </h3>
-                    
+
+                  <div className="text-center flex-1">
+                    <h3 className="text-xl font-bold text-gray-800 mb-3">{pkg.name}</h3>
+
                     <div className="mb-4">
-                      <p className="text-4xl font-bold text-teal-600 mb-1">
-                        {pkg.credits}
-                      </p>
+                      <p className="text-4xl font-bold text-teal-600 mb-1">{pkg.credits}</p>
                       <p className="text-xs text-gray-600">единиц</p>
                     </div>
 
@@ -257,22 +269,40 @@ export default function SubscriptionPage() {
                         {pkg.priceRub.toLocaleString('ru-RU')} ₽
                       </p>
                       <p className={`text-sm font-bold ${isRecommended ? 'text-green-600' : 'text-gray-500'}`}>
-                        {pricePerCredit} ₽/ед.
-                        {isRecommended && ' ✨'}
+                        {pricePerCredit} ₽/ед.{isRecommended && ' ✨'}
                       </p>
                     </div>
 
-                    <p className="text-xs text-gray-600 mb-4 min-h-[40px]">
-                      {pkg.description}
-                    </p>
+                    <p className="text-xs text-gray-600 mb-4 min-h-[40px]">{pkg.description}</p>
 
                     {isRecommended && (
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-800 mb-3">
-                        <strong>Лучшее соотношение!</strong><br/>
-                        Цена ниже 2 ₽/ед.
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-800 mb-4">
+                        <strong>Лучшее соотношение!</strong><br />Цена ниже 2 ₽/ед.
                       </div>
                     )}
                   </div>
+
+                  <button
+                    onClick={() => handleBuyPackage(key)}
+                    disabled={isLoading || payingPackage !== null}
+                    className={`w-full mt-2 py-3 rounded-xl font-bold text-sm transition-all ${
+                      isRecommended
+                        ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-white hover:from-yellow-500 hover:to-amber-600 shadow-md'
+                        : 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white hover:from-teal-600 hover:to-emerald-700'
+                    } disabled:opacity-60 disabled:cursor-not-allowed`}
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                        </svg>
+                        Переход к оплате…
+                      </span>
+                    ) : (
+                      `Оплатить ${pkg.priceRub.toLocaleString('ru-RU')} ₽`
+                    )}
+                  </button>
                 </div>
               )
             })}
@@ -282,30 +312,25 @@ export default function SubscriptionPage() {
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Для клиник и медицинских центров</h2>
           <p className="text-sm text-gray-600 mb-6">
-            Командные пакеты включают: общий пул единиц для нескольких врачей, статистику использования по специалистам, 
+            Командные пакеты включают: общий пул единиц для нескольких врачей, статистику использования по специалистам,
             приоритетную техподдержку, возможность выставления счёта для юрлица.
           </p>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {Object.entries(SUBSCRIPTION_PACKAGES)
-              .filter(([_, pkg]) => pkg.category === 'team')
+              .filter(([, pkg]) => pkg.category === 'team')
               .map(([key, pkg]) => {
                 const pricePerCredit = (pkg.priceRub / pkg.credits).toFixed(2)
-                const isSelected = selectedPackage === key
+                const isLoading = payingPackage === key
 
                 return (
                   <div
                     key={key}
-                  onClick={() => setSelectedPackage(key as keyof typeof SUBSCRIPTION_PACKAGES)}
-                    className={`relative bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border-2 border-indigo-200 p-6 cursor-pointer transition-all hover:shadow-xl hover:-translate-y-1 ${
-                      isSelected ? 'ring-4 ring-teal-500' : ''
-                  }`}
+                    className="relative bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border-2 border-indigo-200 p-6 flex flex-col transition-all hover:shadow-xl hover:-translate-y-1"
                   >
-                    <div className="text-center">
-                      <h3 className="text-xl font-bold text-indigo-900 mb-3">
-                        {pkg.name}
-                      </h3>
-                      
+                    <div className="text-center flex-1">
+                      <h3 className="text-xl font-bold text-indigo-900 mb-3">{pkg.name}</h3>
+
                       <div className="mb-4">
                         <p className="text-4xl font-bold text-indigo-600 mb-1">
                           {pkg.credits.toLocaleString('ru-RU')}
@@ -317,32 +342,63 @@ export default function SubscriptionPage() {
                         <p className="text-3xl font-bold text-indigo-900 mb-1">
                           {pkg.priceRub.toLocaleString('ru-RU')} ₽
                         </p>
-                        <p className="text-sm text-indigo-600">
-                          {pricePerCredit} ₽/ед.
-                        </p>
+                        <p className="text-sm text-indigo-600">{pricePerCredit} ₽/ед.</p>
                       </div>
 
-                      <p className="text-xs text-indigo-700 min-h-[40px]">
-                        {pkg.description}
-                      </p>
+                      <p className="text-xs text-indigo-700 min-h-[40px]">{pkg.description}</p>
                     </div>
+
+                    <button
+                      onClick={() => handleBuyPackage(key)}
+                      disabled={isLoading || payingPackage !== null}
+                      className="w-full mt-4 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:from-indigo-600 hover:to-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                    >
+                      {isLoading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                          Переход к оплате…
+                        </span>
+                      ) : (
+                        `Оплатить ${pkg.priceRub.toLocaleString('ru-RU')} ₽`
+                      )}
+                    </button>
                   </div>
                 )
               })}
           </div>
         </div>
 
+        {/* ПРОВЕРКА ЗАЧИСЛЕНИЯ */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-5 mb-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">Проверка зачисления</h3>
+              <p className="text-sm text-gray-600">
+                Если после оплаты баланс не обновился автоматически — нажмите кнопку ниже.
+              </p>
+            </div>
+            <button
+              onClick={handleCheckPayment}
+              disabled={checkingPayment}
+              className="shrink-0 px-5 py-2.5 rounded-lg font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 transition"
+            >
+              {checkingPayment ? 'Проверяем…' : 'Проверить оплату'}
+            </button>
+          </div>
+        </div>
 
+        {/* СТОИМОСТЬ ОПЕРАЦИЙ */}
         <div className="mt-8 bg-white rounded-xl shadow-lg p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-gray-800">
-              📊 Примерная стоимость операций
-            </h2>
-            <button 
+            <h2 className="text-2xl font-bold text-gray-800">📊 Примерная стоимость операций</h2>
+            <button
               onClick={() => {
                 if (confirm('Сбросить текущий баланс и кэш для тестирования?')) {
-                  localStorage.clear();
-                  window.location.reload();
+                  localStorage.clear()
+                  window.location.reload()
                 }
               }}
               className="text-[10px] text-gray-400 hover:text-red-500 transition-colors uppercase tracking-widest font-bold"
@@ -353,26 +409,26 @@ export default function SubscriptionPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
             <div className="border border-gray-200 rounded-lg p-4">
               <p className="font-semibold text-gray-800 mb-1">⚡ Быстрый анализ (Gemini)</p>
-              <p className="text-teal-600 font-bold">~0.5 - 1.5 ед.</p>
-              <p className="text-[10px] text-gray-500">≈ 1-3 руб. (по бета-цене 2₽/ед.)</p>
+              <p className="text-teal-600 font-bold">~0.5 – 1.5 ед.</p>
+              <p className="text-[10px] text-gray-500">≈ 1–3 руб. (по бета-цене 2₽/ед.)</p>
             </div>
             <div className="border border-gray-200 rounded-lg p-4">
               <p className="font-semibold text-gray-800 mb-1">⭐ Оптимизированный (Sonnet 4.6)</p>
-              <p className="text-teal-600 font-bold">~5 - 12 ед.</p>
-              <p className="text-[10px] text-gray-500">≈ 10-24 руб. (по бета-цене 2₽/ед.)</p>
+              <p className="text-teal-600 font-bold">~5 – 12 ед.</p>
+              <p className="text-[10px] text-gray-500">≈ 10–24 руб. (по бета-цене 2₽/ед.)</p>
             </div>
             <div className="border border-gray-200 rounded-lg p-4">
               <p className="font-semibold text-gray-800 mb-1">🧠 Экспертный (Opus 4.6)</p>
-              <p className="text-teal-600 font-bold">~10 - 20 ед.</p>
-              <p className="text-[10px] text-gray-500">≈ 20-40 руб. (по бета-цене 2₽/ед.)</p>
+              <p className="text-teal-600 font-bold">~10 – 20 ед.</p>
+              <p className="text-[10px] text-gray-500">≈ 20–40 руб. (по бета-цене 2₽/ед.)</p>
             </div>
           </div>
           <p className="text-xs text-gray-500 mt-4">
-            * Диапазоны ориентировочные. Для повышения точности в сложных клинических случаях (низкое качество изображения, неоднозначные находки, high-risk модальности) система может автоматически подключать Gemini 3.1 Pro, что увеличивает стоимость анализа. После 31.05.2026 базовая цена составит 3 ₽/ед.
+            * Диапазоны ориентировочные. Для повышения точности в сложных клинических случаях система может автоматически
+            подключать более мощные модели, что увеличивает стоимость анализа. После 31.05.2026 базовая цена составит 3 ₽/ед.
           </p>
         </div>
       </div>
     </div>
   )
 }
-

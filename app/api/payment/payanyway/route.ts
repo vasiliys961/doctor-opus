@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
-import { getDbClient, initDatabase } from '@/lib/database';
+import { getDbClient, initDatabase, confirmPayment } from '@/lib/database';
 import { safeLog, safeError, safeWarn } from '@/lib/logger';
 import { SUBSCRIPTION_PACKAGES } from '@/lib/subscription-manager';
 
@@ -289,7 +289,10 @@ function buildStorefrontTransactionId(
   payload: StorefrontPayload,
   raw: Record<string, string>
 ): string {
+  // Приоритет: уникальный ID от PayAnyWay (проверяем все возможные названия поля)
   const explicitId =
+    raw.MNT_OPERATION_ID ||
+    raw.MNT_TRANSACTION_ID ||
     raw.transactionId ||
     raw.operationId ||
     raw.orderId ||
@@ -302,11 +305,12 @@ function buildStorefrontTransactionId(
     return `storefront:${sanitizeReceiptValue(explicitId)}`;
   }
 
-  // Для ретраев одного и того же callback получаем одинаковый ID и не начисляем дубли.
-  const canonical = Object.keys(raw)
-    .sort()
-    .map((k) => `${k}=${raw[k]}`)
-    .join('&');
+  // PayAnyWay storefront не передаёт уникальный ID операции.
+  // Используем 2-часовое окно: ретраи одного callback дедуплицируются,
+  // но отдельные платежи в разные часы получают разные ID и зачисляются.
+  const twoHourWindow = Math.floor(Date.now() / (2 * 3600 * 1000));
+  const price = payload.productPriceWithDiscount || payload.productPrice || '';
+  const canonical = `${payload.customerEmail}:${price}:${twoHourWindow}`;
   const hash = crypto.createHash('sha256').update(canonical).digest('hex').slice(0, 20);
   return `storefront:${payload.customerEmail}:${hash}`;
 }
@@ -589,34 +593,64 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
 
     await initDatabase();
 
-    const result = await applyCompletedPayment({
-      email,
-      amount,
-      units: pkg.units,
-      packageId: pkg.packageId,
-      transactionId: operationId,
-      operationLabel: 'Пополнение (PayAnyWay)',
-      metadata: { operationId, packageId: pkg.packageId, source: 'payanyway_assistant' },
-    });
+    // Определяем flow:
+    // - Invoice API flow: txId — числовой ID из нашей БД (создан через /api/payment/create)
+    //   → обновляем существующую pending-запись через confirmPayment
+    // - Прочие случаи (прямая ссылка, ручная отправка)
+    //   → вставляем новую запись через applyCompletedPayment
+    const dbPaymentId = /^\d+$/.test(txId) ? parseInt(txId, 10) : null;
 
-    if (!result.success) {
-      const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
-      return new Response(xml, {
-        status: 200,
-        headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
+    let credited = false;
+    let alreadyDone = false;
+
+    if (dbPaymentId) {
+      // Invoice API: обновляем запись payments(id=dbPaymentId) до completed
+      const confirmResult = await confirmPayment(dbPaymentId, operationId);
+      if (!confirmResult.success) {
+        // Возможно запись уже completed или не найдена — пробуем через applyCompletedPayment
+        safeWarn(`⚠️ [PAYANYWAY] confirmPayment(${dbPaymentId}) не удался, fallback applyCompletedPayment`);
+        const fallback = await applyCompletedPayment({
+          email,
+          amount,
+          units: pkg.units,
+          packageId: pkg.packageId,
+          transactionId: operationId,
+          operationLabel: 'Пополнение (PayAnyWay)',
+          metadata: { operationId, dbPaymentId, source: 'payanyway_assistant_fallback' },
+        });
+        if (!fallback.success) {
+          const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
+          return new Response(xml, { status: 200, headers: { 'Content-Type': 'application/xml; charset=UTF-8' } });
+        }
+        alreadyDone = fallback.alreadyProcessed ?? false;
+        credited = !alreadyDone;
+      } else {
+        credited = true;
+      }
+    } else {
+      // Прямая/ручная оплата без Invoice API
+      const result = await applyCompletedPayment({
+        email,
+        amount,
+        units: pkg.units,
+        packageId: pkg.packageId,
+        transactionId: operationId,
+        operationLabel: 'Пополнение (PayAnyWay)',
+        metadata: { operationId, source: 'payanyway_assistant' },
       });
+      if (!result.success) {
+        const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
+        return new Response(xml, { status: 200, headers: { 'Content-Type': 'application/xml; charset=UTF-8' } });
+      }
+      alreadyDone = result.alreadyProcessed ?? false;
+      credited = !alreadyDone;
     }
 
-    if (result.alreadyProcessed) {
+    if (alreadyDone) {
       safeLog(`ℹ️ [PAYANYWAY] Операция ${operationId} уже обработана`);
-      const xml = buildPayUrlXml(txId, '200', receiptContext, pkg);
-      return new Response(xml, {
-        status: 200,
-        headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
-      });
+    } else if (credited) {
+      safeLog(`💰 [PAYANYWAY] Баланс ${email} пополнен на ${pkg.units} ед.`);
     }
-
-    safeLog(`💰 [PAYANYWAY] Баланс ${email} пополнен на ${pkg.units} ед. (платёж #${result.paymentId})`);
 
     const xml = buildPayUrlXml(txId, '200', receiptContext, pkg);
     return new Response(xml, {
