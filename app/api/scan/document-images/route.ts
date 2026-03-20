@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateCost } from '@/lib/cost-calculator';
 import { anonymizeImageBuffer } from "@/lib/server-image-processing";
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -11,12 +15,21 @@ const DOCUMENT_SCAN_MODELS = [
   'meta-llama/llama-3.2-90b-vision-instruct', // Llama 3.2 90B — резерв для документов
 ];
 
+function estimateDocumentImagesCost(imagesCount: number): number {
+  const estimated = 1.0 + imagesCount * 1.1;
+  return Number(Math.min(12, Math.max(1.2, estimated)).toFixed(2));
+}
+
 /**
  * API endpoint для сканирования документов из массива изображений (PDF страницы)
  * Принимает изображения в base64 и сканирует их через Vision API
  */
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
+
     const body = await request.json();
     const { images, prompt, isAnonymous } = body;
 
@@ -24,6 +37,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'No images provided' },
         { status: 400 }
+      );
+    }
+
+    const estimatedCost = estimateDocumentImagesCost(images.length);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Document scan (images)', {
+          imagesCount: images.length,
+          source: 'scan_document_images',
+        })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: document scan (images)', {
+          imagesCount: images.length,
+          source: 'scan_document_images',
+        });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Недостаточно единиц для сканирования документа' },
+        { status: 402 }
       );
     }
 

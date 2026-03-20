@@ -2,27 +2,44 @@ import { NextResponse } from 'next/server';
 import { MODELS } from '@/lib/openrouter';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const LABS_ANALYSIS_COST = 1.5;
 
 export async function POST(req: Request) {
   try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
     const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
-        { status: 401 }
-      );
-    }
-    */
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail
+      ? null
+      : (req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'guest:labs');
 
     const formData = await req.formData();
     const file = formData.get('file') as File;
     
     if (!file) {
       return NextResponse.json({ error: 'Файл не предоставлен' }, { status: 400 });
+    }
+
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, LABS_ANALYSIS_COST, 'Legacy labs analysis', {
+          source: 'analyze_labs_legacy',
+          fileName: file.name,
+          fileType: file.type || 'unknown',
+          fileSize: file.size,
+        })
+      : await checkAndDeductGuestBalance(guestKey, LABS_ANALYSIS_COST, 'Guest trial: legacy labs analysis', {
+          source: 'analyze_labs_legacy',
+          fileName: file.name,
+          fileType: file.type || 'unknown',
+          fileSize: file.size,
+        });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Недостаточно единиц для анализа лабораторных данных' },
+        { status: 402 }
+      );
     }
 
     const bytes = await file.arrayBuffer();

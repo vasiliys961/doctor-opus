@@ -3,6 +3,16 @@ import { sendTextRequest, MODELS } from '@/lib/openrouter';
 import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
 import { formatCostLog } from '@/lib/cost-calculator';
 import { anonymizeText } from '@/lib/anonymization';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
+
+function estimateProtocolCost(rawTextLength: number, strictTemplateMode: boolean): number {
+  const base = strictTemplateMode ? 3.2 : 2.4;
+  const sizeFactor = Math.min(2.5, rawTextLength / 4000);
+  return Number(Math.min(10, Math.max(1.5, base + sizeFactor)).toFixed(2));
+}
 
 function buildProtocolCorrectionPrompt(params: {
   rawText: string;
@@ -92,6 +102,10 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
+
     const body = await request.json();
     const { 
       rawText: rawIncomingText, 
@@ -113,6 +127,29 @@ export async function POST(request: NextRequest) {
     }
     if (!safeTemplate) {
       return NextResponse.json({ success: false, error: 'Шаблон не предоставлен' }, { status: 400 });
+    }
+
+    const estimatedCost = estimateProtocolCost(rawText.length, isStrictTemplateMode);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Protocol generation', {
+          templateId: templateId || null,
+          model,
+          useStreaming,
+          strictTemplateMode: isStrictTemplateMode,
+          source: 'protocol_generation',
+        })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: protocol generation', {
+          templateId: templateId || null,
+          model,
+          useStreaming,
+          strictTemplateMode: isStrictTemplateMode,
+          source: 'protocol_generation',
+        });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Недостаточно единиц для генерации протокола' },
+        { status: 402 }
+      );
     }
 
     // Добавляем специфическую инструкцию специалиста в промпт

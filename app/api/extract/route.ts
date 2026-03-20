@@ -7,8 +7,23 @@ import * as XLSX from 'xlsx';
 import AdmZip from 'adm-zip';
 import { normalizeMarkdown } from '@/lib/markdown-utils';
 import { anonymizeText } from '@/lib/anonymization';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 
 const gunzipAsync = promisify(gunzip);
+
+function estimateExtractCost(fileType: string, fileSizeBytes: number): number {
+  const typeBase =
+    fileType === 'zip' ? 3.2 :
+    (fileType === 'xlsx' || fileType === 'xls') ? 2.2 :
+    (fileType === 'jpg' || fileType === 'jpeg' || fileType === 'png') ? 2.0 :
+    1.4;
+  const sizeMb = fileSizeBytes / (1024 * 1024);
+  const estimated = typeBase + Math.min(2.8, sizeMb * 0.3);
+  return Number(Math.min(11, Math.max(1.2, estimated)).toFixed(2));
+}
 
 /**
  * API endpoint для извлечения информации из различных форматов файлов
@@ -17,6 +32,10 @@ const gunzipAsync = promisify(gunzip);
  */
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = anonymizeText(formData.get('prompt') as string || 'Извлеки всю информацию из файла. Структурируй данные.');
@@ -69,6 +88,36 @@ export async function POST(request: NextRequest) {
         error: 'PDF файлы обрабатываются через /api/scan/document endpoint',
         suggestion: 'Используйте /api/scan/document для PDF файлов',
       }, { status: 400 });
+    }
+
+    const supportedForExtraction = ['csv', 'txt', 'vcf', 'json', 'vcf.gz', 'xlsx', 'xls', 'zip', 'jpg', 'jpeg', 'png'];
+    if (!supportedForExtraction.includes(fileType) && !file.name.toLowerCase().endsWith('.zip')) {
+      return NextResponse.json({
+        success: false,
+        error: `Неподдерживаемый формат файла: ${fileType}`,
+        supportedFormats: ['pdf', 'csv', 'vcf', 'vcf.gz', 'txt', 'jpg', 'jpeg', 'png', 'json', 'xlsx', 'xls', 'zip'],
+      }, { status: 400 });
+    }
+
+    const estimatedCost = estimateExtractCost(fileType, file.size);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'File extraction', {
+          fileName: file.name,
+          fileType,
+          fileSize: file.size,
+          source: 'extract_file',
+        })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: file extraction', {
+          fileName: file.name,
+          fileType,
+          fileSize: file.size,
+          source: 'extract_file',
+        });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Недостаточно единиц для извлечения данных' },
+        { status: 402 }
+      );
     }
 
     // Для текстовых файлов (CSV, TXT, VCF) - читаем как текст
@@ -326,7 +375,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Неподдерживаемый формат
+    // Неподдерживаемый формат (дополнительная защита, сюда доходить не должны)
     return NextResponse.json({
       success: false,
       error: `Неподдерживаемый формат файла: ${fileType}`,

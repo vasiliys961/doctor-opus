@@ -2,8 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { formatCostLog } from '@/lib/cost-calculator';
 import { MODELS } from '@/lib/openrouter';
 import { isGeoRestrictionStatus, isOpenAIGeoRestrictionError } from '@/lib/geo-restriction';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+function estimateProtocolsSearchCost(queryLength: number, modelMode: string): number {
+  const modelBase = modelMode === 'detailed' ? 3.8 : modelMode === 'online' ? 2.8 : 2.1;
+  const sizeFactor = Math.min(1.8, queryLength / 2000);
+  return Number(Math.min(9, Math.max(1.2, modelBase + sizeFactor)).toFixed(2));
+}
 
 /**
  * API endpoint для поиска актуальных клинических рекомендаций
@@ -12,6 +22,10 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
  */
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
+
     const body = await request.json();
     const { query, specialty = '', useStreaming = true, modelMode = 'standard' } = body;
 
@@ -19,6 +33,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Запрос не может быть пустым' },
         { status: 400 }
+      );
+    }
+
+    const estimatedCost = estimateProtocolsSearchCost(query.trim().length, modelMode);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Clinical recommendations search', {
+          modelMode,
+          specialty: specialty || null,
+          useStreaming,
+          source: 'protocols_search',
+        })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: clinical recommendations search', {
+          modelMode,
+          specialty: specialty || null,
+          useStreaming,
+          source: 'protocols_search',
+        });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Недостаточно единиц для поиска рекомендаций' },
+        { status: 402 }
       );
     }
 
