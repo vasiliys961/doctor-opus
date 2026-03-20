@@ -29,6 +29,7 @@ const MNT_SECRET = process.env.PAYANYWAY_SECRET || '';
 const PAYANYWAY_AGENT_TYPE = process.env.PAYANYWAY_AGENT_TYPE || 'commission';
 const PAYANYWAY_SUPPLIER_NAME = process.env.PAYANYWAY_SUPPLIER_NAME || '';
 const PAYANYWAY_SUPPLIER_INN = process.env.PAYANYWAY_SUPPLIER_INN || '';
+const PAYANYWAY_SELLER_ACCOUNT = process.env.PAYANYWAY_SELLER_ACCOUNT || '';
 const PAYANYWAY_STOREFRONT_TOKEN = process.env.PAYANYWAY_STOREFRONT_TOKEN || '';
 const PAYANYWAY_SUPPLIER_PHONES = (process.env.PAYANYWAY_SUPPLIER_PHONES || '')
   .split(',')
@@ -207,22 +208,25 @@ function isStorefrontAuthorized(data: Record<string, string>): boolean {
 function buildInventoryItem(itemName: string, itemPrice: string) {
   const name = sanitizeReceiptValue(itemName);
   const item: Record<string, any> = {
+    // Совместимость с требованиями номенклатуры PayAnyWay/BPA.
+    productName: name,
+    productPrice: Number(itemPrice),
+    productQuantity: 1,
+    productVatCode: 1105, // НДС не облагается
+    pm: 'full_payment',
+    po: 'service',
+
+    // Legacy-поля для обратной совместимости MONETA.Assistant.
     name,
     price: itemPrice,
     quantity: '1',
-    vatTag: '1105',       // без НДС (самозанятые)
-    pm: 'full_payment',   // полный расчёт
-    po: 'service',        // услуга
-    agent_info: { type: PAYANYWAY_AGENT_TYPE },
+    vatTag: '1105',
   };
 
-  if (PAYANYWAY_SUPPLIER_NAME && PAYANYWAY_SUPPLIER_INN) {
-    item.supplier_info = {
-      phones: PAYANYWAY_SUPPLIER_PHONES,
-      name: sanitizeReceiptValue(PAYANYWAY_SUPPLIER_NAME),
-      inn: sanitizeInn(PAYANYWAY_SUPPLIER_INN),
-    };
-  }
+  if (PAYANYWAY_SELLER_ACCOUNT) item.sellerAccount = PAYANYWAY_SELLER_ACCOUNT;
+  if (PAYANYWAY_SUPPLIER_INN) item.sellerInn = sanitizeInn(PAYANYWAY_SUPPLIER_INN);
+  if (PAYANYWAY_SUPPLIER_NAME) item.sellerName = sanitizeReceiptValue(PAYANYWAY_SUPPLIER_NAME);
+  if (PAYANYWAY_SUPPLIER_PHONES.length > 0) item.sellerPhone = sanitizePhone(PAYANYWAY_SUPPLIER_PHONES[0]);
 
   return item;
 }
@@ -230,6 +234,7 @@ function buildInventoryItem(itemName: string, itemPrice: string) {
 function buildMntAttributesXml(inventoryJson: string, context: ReceiptContext): string {
   const attributes: Array<{ key: string; value: string }> = [
     { key: 'INVENTORY', value: inventoryJson },
+    { key: 'inventory', value: inventoryJson }, // совместимость: некоторые витрины ожидают lowercase
     { key: 'CUSTOMER', value: sanitizeReceiptValue(context.customerEmail) },
   ];
 
@@ -508,17 +513,21 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
       return handleStorefrontCallback(storefrontPayload, data);
     }
 
-    // Базовая защита: проверяем MNT_ID
-    if (data.MNT_ID !== MNT_ID) {
-      safeWarn(`⚠️ [PAYANYWAY] Неверный MNT_ID: ${data.MNT_ID}`);
-      return new Response('FAIL', { status: 200 });
-    }
-
     const txId = data.MNT_TRANSACTION_ID || '';
     const amount = parseFloat(data.MNT_AMOUNT || '0');
     const email = (data.MNT_SUBSCRIBER_ID || '').toLowerCase().trim();
     const receiptContext = extractReceiptContext(data, email);
     const pkg = findPackageByAmount(amount);
+
+    // Базовая защита: проверяем MNT_ID (отвечаем XML, чтобы не ломать протокол callback)
+    if (data.MNT_ID !== MNT_ID) {
+      safeWarn(`⚠️ [PAYANYWAY] Неверный MNT_ID: ${data.MNT_ID}`);
+      const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
+      return new Response(xml, {
+        status: 200,
+        headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
+      });
+    }
 
     // Check URL: по спецификации определяется MNT_COMMAND=CHECK
     // (добавлен fallback по отсутствию MNT_OPERATION_ID для совместимости)
@@ -527,7 +536,13 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
     // Проверяем подпись с учетом типа запроса (Check/Pay)
     if (!validateSignatureRaw(raw, isCheck)) {
       safeError('❌ [PAYANYWAY] Неверная подпись!');
-      return new Response('FAIL', { status: 200 });
+      const xml = isCheck
+        ? buildCheckUrlXml(txId, amount || 0, receiptContext, pkg)
+        : buildPayUrlXml(txId, '500', receiptContext, pkg);
+      return new Response(xml, {
+        status: 200,
+        headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
+      });
     }
 
     if (isCheck) {
