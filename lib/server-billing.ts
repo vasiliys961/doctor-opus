@@ -13,6 +13,10 @@ import { getDbClient } from '@/lib/database';
 import { BILLING_CONFIG } from '@/lib/config';
 import { formatInsufficientCreditsMessage } from '@/lib/billing-messages';
 
+function isFailOpenEnabled(): boolean {
+  return process.env.BILLING_FAIL_OPEN === 'true';
+}
+
 /**
  * VIP-пользователи — из env (через запятую)
  */
@@ -108,8 +112,11 @@ export async function checkAndDeductBalance(
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     console.error('❌ [SERVER-BILLING] Error:', error);
-    // При ошибке биллинга — пропускаем (не блокируем врача)
-    return { allowed: true };
+    if (isFailOpenEnabled()) {
+      // Режим совместимости: разрешаем операцию даже при сбое биллинга.
+      return { allowed: true };
+    }
+    return { allowed: false, error: 'Сервис биллинга временно недоступен. Попробуйте снова позже.' };
   } finally {
     client.release();
   }
@@ -201,7 +208,10 @@ export async function checkAndDeductGuestBalance(
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     console.error('❌ [SERVER-BILLING] Guest adjustment error:', error);
-    return { allowed: true };
+    if (isFailOpenEnabled()) {
+      return { allowed: true };
+    }
+    return { allowed: false, error: 'Сервис биллинга временно недоступен. Попробуйте снова позже.' };
   } finally {
     client.release();
   }

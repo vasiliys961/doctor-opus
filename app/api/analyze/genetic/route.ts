@@ -7,6 +7,8 @@ import fs from 'fs/promises';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
+import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const gunzipAsync = promisify(gunzip);
@@ -14,6 +16,14 @@ const gunzipAsync = promisify(gunzip);
 // Примерные стоимости моделей в единицах за 1000 токенов
 const PRICE_UNITS_PER_1K_TOKENS_SONNET = 2.0;
 const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4;
+const MIN_GENETIC_EXTRACTION_COST = 1.5;
+const MAX_GENETIC_EXTRACTION_COST = 12;
+
+function estimateGeneticExtractionCost(fileSizeBytes: number): number {
+  const sizeMb = fileSizeBytes / (1024 * 1024);
+  const estimated = 1.5 + sizeMb * 0.35;
+  return Number(Math.min(MAX_GENETIC_EXTRACTION_COST, Math.max(MIN_GENETIC_EXTRACTION_COST, estimated)).toFixed(2));
+}
 
 /**
  * ЭТАП 1. API endpoint для ГЕНЕТИЧЕСКОГО АНАЛИЗА
@@ -22,16 +32,9 @@ const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4;
  */
 export async function POST(request: NextRequest) {
   try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
     const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
-        { status: 401 }
-      );
-    }
-    */
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
 
     console.log('🧬 [GENETIC] Этап 1: начало обработки запроса (только извлечение)...');
 
@@ -44,6 +47,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Файл не предоставлен' },
         { status: 400 }
+      );
+    }
+
+    const estimatedCost = estimateGeneticExtractionCost(file.size);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Genetic extraction', {
+          fileName: file.name,
+          fileType: file.type || 'unknown',
+          fileSize: file.size,
+          source: 'genetic_extract_file',
+        })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: genetic extraction', {
+          fileName: file.name,
+          fileType: file.type || 'unknown',
+          fileSize: file.size,
+          source: 'genetic_extract_file',
+        });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Недостаточно единиц для генетического извлечения' },
+        { status: 402 }
       );
     }
 

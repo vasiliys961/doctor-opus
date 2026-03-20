@@ -2,25 +2,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
+import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4;
+const MIN_EXTRACT_IMAGES_COST = 1.5;
+const MAX_EXTRACT_IMAGES_COST = 15;
+
+function estimateExtractImagesCost(imagesCount: number): number {
+  const estimated = 1.0 + imagesCount * 1.25;
+  return Number(Math.min(MAX_EXTRACT_IMAGES_COST, Math.max(MIN_EXTRACT_IMAGES_COST, estimated)).toFixed(2));
+}
 
 /**
  * API endpoint для извлечения генетических данных из изображений (конвертированных на клиенте)
  */
 export async function POST(request: NextRequest) {
   try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
     const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Необходима авторизация' },
-        { status: 401 }
-      );
-    }
-    */
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
 
     console.log('🧬 [GENETIC IMAGES] Начало обработки изображений...');
 
@@ -31,6 +33,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Изображения не предоставлены' },
         { status: 400 }
+      );
+    }
+
+    const estimatedCost = estimateExtractImagesCost(images.length);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Genetic extraction (images)', {
+          fileName: fileName || null,
+          imagesCount: images.length,
+          source: 'genetic_extract_images',
+        })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: genetic extraction (images)', {
+          fileName: fileName || null,
+          imagesCount: images.length,
+          source: 'genetic_extract_images',
+        });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Недостаточно единиц для генетического извлечения' },
+        { status: 402 }
       );
     }
 
