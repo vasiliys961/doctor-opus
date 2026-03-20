@@ -11,6 +11,9 @@ export default function SubscriptionPage() {
   const [currentBalance, setCurrentBalance] = useState<SubscriptionBalance | null>(null)
   const [mounted, setMounted] = useState(false)
   const [isOnboardingDone, setIsOnboardingDone] = useState(false)
+  const [checkingPayment, setCheckingPayment] = useState(false)
+  const [paymentCheckMessage, setPaymentCheckMessage] = useState<string | null>(null)
+  const [paymentCheckStatus, setPaymentCheckStatus] = useState<'success' | 'pending' | 'error' | null>(null)
 
   useEffect(() => {
     const refreshOnboardingStatus = () => {
@@ -31,6 +34,57 @@ export default function SubscriptionPage() {
       document.removeEventListener('visibilitychange', refreshOnboardingStatus)
     }
   }, [])
+
+  const handleCheckPayment = async () => {
+    setCheckingPayment(true)
+    setPaymentCheckMessage(null)
+    setPaymentCheckStatus(null)
+    try {
+      const response = await fetch('/api/payment/status', { cache: 'no-store' })
+      const data = await response.json()
+      if (!response.ok || !data?.success) {
+        setPaymentCheckStatus('error')
+        setPaymentCheckMessage(data?.error || 'Не удалось проверить статус оплаты. Попробуйте позже.')
+        return
+      }
+
+      const serverBalance = Number(data.balance ?? 0)
+      const serverTotalSpent = Number(data.totalSpent ?? 0)
+      const prevBalance = currentBalance?.currentCredits ?? 0
+      const balanceIncreased = serverBalance > prevBalance
+
+      setCurrentBalance((prev) => {
+        const initialCredits = Math.max(serverBalance + serverTotalSpent, prev?.initialCredits ?? 0, 10)
+        return {
+          initialCredits,
+          currentCredits: serverBalance,
+          totalSpent: serverTotalSpent,
+          packageName: prev?.packageName || 'Баланс аккаунта',
+          packagePriceRub: prev?.packagePriceRub || 0,
+          purchaseDate: prev?.purchaseDate || new Date().toISOString(),
+          expiryDate: null,
+          isUnlimited: prev?.isUnlimited,
+        }
+      })
+      window.dispatchEvent(new Event('balanceUpdated'))
+
+      if (balanceIncreased) {
+        setPaymentCheckStatus('success')
+        setPaymentCheckMessage(`Оплата найдена: баланс обновлён до ${serverBalance.toFixed(2)} ед.`)
+      } else if (data.hasPendingPayments) {
+        setPaymentCheckStatus('pending')
+        setPaymentCheckMessage('Оплата ещё в обработке. Попробуйте проверить снова через 1-2 минуты.')
+      } else {
+        setPaymentCheckStatus('pending')
+        setPaymentCheckMessage('Зачисление пока не найдено. Если в PayAnyWay статус "уведомление не отправлено", повторите отправку уведомления в кабинете.')
+      }
+    } catch {
+      setPaymentCheckStatus('error')
+      setPaymentCheckMessage('Ошибка проверки оплаты. Попробуйте позже.')
+    } finally {
+      setCheckingPayment(false)
+    }
+  }
 
   // Если система отключена
   if (mounted && !isSubscriptionEnabled()) {
@@ -126,6 +180,38 @@ export default function SubscriptionPage() {
           >
             Перейти к оплате →
           </a>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-5 mb-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">Проверка зачисления</h3>
+              <p className="text-sm text-gray-600">
+                Если после оплаты в PayAnyWay баланс не обновился автоматически, нажмите кнопку ниже.
+              </p>
+            </div>
+            <button
+              onClick={handleCheckPayment}
+              disabled={checkingPayment}
+              className="shrink-0 px-5 py-2.5 rounded-lg font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 transition"
+            >
+              {checkingPayment ? 'Проверяем...' : 'Проверить оплату'}
+            </button>
+          </div>
+
+          {paymentCheckMessage && (
+            <div
+              className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+                paymentCheckStatus === 'success'
+                  ? 'bg-green-50 text-green-800 border border-green-200'
+                  : paymentCheckStatus === 'error'
+                  ? 'bg-red-50 text-red-700 border border-red-200'
+                  : 'bg-amber-50 text-amber-800 border border-amber-200'
+              }`}
+            >
+              {paymentCheckMessage}
+            </div>
+          )}
         </div>
 
         {/* ИНДИВИДУАЛЬНЫЕ ПАКЕТЫ */}
