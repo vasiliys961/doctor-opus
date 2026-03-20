@@ -6,12 +6,33 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText, anonymizeObject } from '@/lib/anonymization';
 import { checkRateLimit, RATE_LIMIT_CHAT, getRateLimitKey } from '@/lib/rate-limiter';
+import { checkAndDeductBalance } from '@/lib/server-billing';
 
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 const MAX_CHAT_FILES_PER_REQUEST = 4;
 const MAX_CHAT_TOTAL_BYTES_PER_REQUEST = 16 * 1024 * 1024;
+const MIN_CHAT_COST = 0.7;
+const MAX_CHAT_COST = 6;
+
+function estimateChatCost(params: {
+  selectedModel: string;
+  messageLength: number;
+  historyLength: number;
+  filesCount: number;
+  totalFileBytes: number;
+}): number {
+  const modelBase =
+    params.selectedModel === MODELS.OPUS ? 2.2 :
+    params.selectedModel === MODELS.SONNET ? 1.3 :
+    params.selectedModel === MODELS.GPT_5_2 ? 1.4 : 0.9;
+  const textFactor = Math.min(1.4, params.messageLength / 3000);
+  const historyFactor = Math.min(1.8, params.historyLength * 0.12);
+  const filesFactor = params.filesCount > 0 ? (0.6 + Math.min(1.5, params.totalFileBytes / (8 * 1024 * 1024))) : 0;
+  const estimated = modelBase + textFactor + historyFactor + filesFactor;
+  return Number(Math.min(MAX_CHAT_COST, Math.max(MIN_CHAT_COST, estimated)).toFixed(2));
+}
 
 /**
  * На некоторых Node runtime глобальный File отсутствует, из-за чего
@@ -132,6 +153,34 @@ export async function POST(request: NextRequest) {
         : (model && (model === 'gemini' || model.includes('gemini')))
           ? MODELS.GEMINI_3_FLASH
           : MODELS.OPUS;
+
+    const totalFileBytes = files.reduce((sum, file) => sum + file.size, 0);
+    const estimatedCost = estimateChatCost({
+      selectedModel,
+      messageLength: message.length,
+      historyLength: history.length,
+      filesCount: files.length,
+      totalFileBytes,
+    });
+    const billing = await checkAndDeductBalance(
+      session.user.email,
+      estimatedCost,
+      'AI Assistant chat',
+      {
+        model: selectedModel,
+        historyLength: history.length,
+        filesCount: files.length,
+        totalFileBytes,
+        useStreaming,
+        specialty: specialty || null,
+      }
+    );
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Недостаточно единиц для запроса в чат' },
+        { status: 402 }
+      );
+    }
 
     const isClaudeAssistantModel = selectedModel === MODELS.SONNET || selectedModel === MODELS.OPUS;
     const assistantFormattingInstruction = `
