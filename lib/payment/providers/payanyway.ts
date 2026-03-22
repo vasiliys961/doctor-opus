@@ -34,10 +34,11 @@ export class PayanywayProvider implements PaymentProvider {
   }): Promise<string> {
     const { amount, orderId, description, email } = options;
     const amountStr = amount.toFixed(2);
+    const subscriberId = (email || '').trim();
 
     const signature = crypto
       .createHash('md5')
-      .update(`${this.mntId}${orderId}${amountStr}RUB${this.testMode}${this.secret}`)
+      .update(`${this.mntId}${orderId}${amountStr}RUB${subscriberId}${this.testMode}${this.secret}`)
       .digest('hex');
 
     const params = new URLSearchParams({
@@ -52,7 +53,7 @@ export class PayanywayProvider implements PaymentProvider {
       MNT_FAIL_URL: `${process.env.NEXTAUTH_URL || 'https://doctor-opus.ru'}/subscription?status=fail`,
     });
 
-    if (email) params.append('MNT_SUBSCRIBER_ID', email);
+    if (subscriberId) params.append('MNT_SUBSCRIBER_ID', subscriberId);
 
     return `${this.baseUrl}?${params.toString()}`;
   }
