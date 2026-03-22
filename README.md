@@ -148,6 +148,7 @@ curl -I https://doctor-opus.ru
 - В `docker-compose.yml` переменные без значений будут пустыми, если не задать их в `.env`.
 - Для SMTP Timeweb заполните `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
 - Для платежей (PayAnyWay) заполните `PAYMENT_PROVIDER=payanyway`, `PAYANYWAY_MNT_ID`, `PAYANYWAY_SECRET`, `PAYANYWAY_TEST_MODE`.
+- Storefront-callback включайте только при необходимости: `PAYANYWAY_STOREFRONT_ENABLED=true` и обязательно задайте `PAYANYWAY_STOREFRONT_TOKEN`.
 
 ---
 

@@ -395,6 +395,24 @@ export async function createPayment(data: {
   package_id: string;
 }) {
   try {
+    // Если пользователь нажал "Оплатить" несколько раз подряд, переиспользуем свежий pending-инвойс.
+    const recentPending = await sql`
+      SELECT id
+      FROM payments
+      WHERE email = ${data.email}
+        AND amount = ${data.amount}
+        AND units = ${data.units}
+        AND package_id = ${data.package_id}
+        AND status = 'pending'
+        AND transaction_id IS NULL
+        AND created_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    if (recentPending.rows.length > 0) {
+      return { success: true, paymentId: recentPending.rows[0].id, reused: true };
+    }
+
     const result = await sql`
       INSERT INTO payments (email, amount, units, package_id, status)
       VALUES (${data.email}, ${data.amount}, ${data.units}, ${data.package_id}, 'pending')

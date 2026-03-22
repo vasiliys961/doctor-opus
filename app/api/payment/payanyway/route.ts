@@ -26,6 +26,9 @@ import { SUBSCRIPTION_PACKAGES } from '@/lib/subscription-manager';
 
 const MNT_ID = process.env.PAYANYWAY_MNT_ID || '';
 const MNT_SECRET = process.env.PAYANYWAY_SECRET || '';
+const PAYANYWAY_STOREFRONT_ENABLED = ['1', 'true', 'yes', 'on'].includes(
+  (process.env.PAYANYWAY_STOREFRONT_ENABLED || '').toLowerCase()
+);
 const PAYANYWAY_AGENT_TYPE = process.env.PAYANYWAY_AGENT_TYPE || 'commission';
 const PAYANYWAY_SUPPLIER_NAME = process.env.PAYANYWAY_SUPPLIER_NAME || '';
 const PAYANYWAY_SUPPLIER_INN = process.env.PAYANYWAY_SUPPLIER_INN || '';
@@ -198,8 +201,13 @@ function secureEquals(a: string, b: string): boolean {
 }
 
 function isStorefrontAuthorized(data: Record<string, string>): boolean {
-  // Опциональный секрет для витринного callback. Если не задан — режим совместимости.
-  if (!PAYANYWAY_STOREFRONT_TOKEN) return true;
+  // Без явного включения storefront-flow мы не принимаем callback этого типа.
+  if (!PAYANYWAY_STOREFRONT_ENABLED) return false;
+  // В production storefront-callback без токена недопустим — иначе возможны ложные зачисления.
+  if (!PAYANYWAY_STOREFRONT_TOKEN) {
+    safeWarn('⚠️ [PAYANYWAY STOREFRONT] CALLBACK отклонён: PAYANYWAY_STOREFRONT_TOKEN не задан');
+    return false;
+  }
   const token = (data.token || data.secret || data.sig || '').trim();
   if (!token) return false;
   return secureEquals(token, PAYANYWAY_STOREFRONT_TOKEN);
@@ -512,9 +520,11 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
     safeLog(`💳 [PAYANYWAY] Decoded данные: ${JSON.stringify(decoded)}`);
 
     const data = decoded;
-    const storefrontPayload = extractStorefrontPayload(data);
+    const storefrontPayload = PAYANYWAY_STOREFRONT_ENABLED
+      ? extractStorefrontPayload(data)
+      : null;
     if (storefrontPayload) {
-      return handleStorefrontCallback(storefrontPayload, data);
+      return handleStorefrontCallback(storefrontPayload, raw);
     }
 
     const txId = data.MNT_TRANSACTION_ID || '';
@@ -607,25 +617,14 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
       // Invoice API: обновляем запись payments(id=dbPaymentId) до completed
       const confirmResult = await confirmPayment(dbPaymentId, operationId);
       if (!confirmResult.success) {
-        // Возможно запись уже completed или не найдена — пробуем через applyCompletedPayment
-        safeWarn(`⚠️ [PAYANYWAY] confirmPayment(${dbPaymentId}) не удался, fallback applyCompletedPayment`);
-        const fallback = await applyCompletedPayment({
-          email,
-          amount,
-          units: pkg.units,
-          packageId: pkg.packageId,
-          transactionId: operationId,
-          operationLabel: 'Пополнение (PayAnyWay)',
-          metadata: { operationId, dbPaymentId, source: 'payanyway_assistant_fallback' },
-        });
-        if (!fallback.success) {
-          const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
-          return new Response(xml, { status: 200, headers: { 'Content-Type': 'application/xml; charset=UTF-8' } });
-        }
-        alreadyDone = fallback.alreadyProcessed ?? false;
-        credited = !alreadyDone;
+        // Для invoice-flow безуспешное подтверждение не должно приводить к "новому" автозачислению.
+        // Это защищает от расхождений "зачислено в Opus, но нет валидной связки с исходным инвойсом".
+        safeError(`❌ [PAYANYWAY] confirmPayment(${dbPaymentId}) не удался; автозачисление запрещено`);
+        const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
+        return new Response(xml, { status: 200, headers: { 'Content-Type': 'application/xml; charset=UTF-8' } });
       } else {
-        credited = true;
+        alreadyDone = confirmResult.alreadyProcessed ?? false;
+        credited = !alreadyDone;
       }
     } else {
       // Прямая/ручная оплата без Invoice API
