@@ -40,6 +40,7 @@ export async function middleware(request: NextRequest) {
   const publicApiPaths = [
     '/api/auth',              // NextAuth (login, session, providers) + /api/auth/register
     '/api/payment/payanyway', // Webhook для платежей PayAnyWay (Moneta.ru)
+    '/api/payment/reconcile', // Фоновая автосверка pending-платежей (защищена отдельным secret)
   ];
 
   const isPublicPath = publicPaths.some(p =>
