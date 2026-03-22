@@ -35,6 +35,10 @@ export class PayanywayProvider implements PaymentProvider {
     const { amount, orderId, description, email } = options;
     const amountStr = amount.toFixed(2);
     const subscriberId = (email || '').trim();
+    const baseAppUrl = process.env.NEXTAUTH_URL || 'https://doctor-opus.ru';
+    const resultUrl = `${baseAppUrl}/api/payment/payanyway`;
+    const successUrl = `${baseAppUrl}/subscription?status=success`;
+    const failUrl = `${baseAppUrl}/subscription?status=fail`;
 
     const signature = crypto
       .createHash('md5')
@@ -49,8 +53,10 @@ export class PayanywayProvider implements PaymentProvider {
       MNT_DESCRIPTION: description,
       MNT_TEST_MODE: this.testMode,
       MNT_SIGNATURE: signature,
-      MNT_SUCCESS_URL: `${process.env.NEXTAUTH_URL || 'https://doctor-opus.ru'}/subscription?status=success`,
-      MNT_FAIL_URL: `${process.env.NEXTAUTH_URL || 'https://doctor-opus.ru'}/subscription?status=fail`,
+      // Явно прокидываем callback URL в каждый инвойс, чтобы уведомления не зависели только от настроек кабинета.
+      MNT_RESULT_URL: resultUrl,
+      MNT_SUCCESS_URL: successUrl,
+      MNT_FAIL_URL: failUrl,
     });
 
     if (subscriberId) params.append('MNT_SUBSCRIBER_ID', subscriberId);
