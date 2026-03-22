@@ -54,6 +54,8 @@ export default function AdminPaymentsPage() {
   const [notice, setNotice] = useState('')
   const [refunding, setRefunding] = useState<number | null>(null)
   const [period, setPeriod] = useState<'all' | 'today' | '7d' | '30d'>('all')
+  const [showOpsReminder, setShowOpsReminder] = useState(false)
+  const [copiedCommand, setCopiedCommand] = useState<string | null>(null)
 
   const isAdmin = (session?.user as any)?.isAdmin
 
@@ -130,6 +132,22 @@ export default function AdminPaymentsPage() {
   const formatDate = (d: string) => new Date(d).toLocaleString('ru-RU', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
   })
+
+  const reminderCommands = {
+    reconcile: 'SECRET="$(cat /root/.payment_reconcile_secret)"; curl -fsS "https://doctor-opus.ru/api/payment/reconcile?secret=${SECRET}&limit=200"',
+    cron: 'crontab -l | grep doctor-opus-payment',
+    logs: 'tail -n 100 /var/log/doctor-opus-payment-reconcile.log',
+  }
+
+  const copyCommand = async (key: string, command: string) => {
+    try {
+      await navigator.clipboard.writeText(command)
+      setCopiedCommand(key)
+      setTimeout(() => setCopiedCommand((prev) => (prev === key ? null : prev)), 1500)
+    } catch {
+      setError('Не удалось скопировать команду. Скопируйте вручную из блока ниже.')
+    }
+  }
 
   const statusBadge = (status: string) => {
     const styles: Record<string, string> = {
@@ -254,6 +272,66 @@ export default function AdminPaymentsPage() {
             <strong>Источник данных админки:</strong> {dbInfo.source} → <code>{dbInfo.host}/{dbInfo.database}</code>
           </div>
         )}
+
+        <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-sm text-sky-900">
+              <strong>Напоминалка по платежам:</strong> если оплата прошла в PayAnyWay, но в Opus не отразилась сразу — используйте автосверку.
+            </p>
+            <button
+              onClick={() => setShowOpsReminder(prev => !prev)}
+              className="px-3 py-1.5 bg-white border border-sky-200 text-sky-700 rounded-lg text-xs font-bold hover:bg-sky-100 transition"
+            >
+              {showOpsReminder ? 'Скрыть шаги' : 'Показать шаги'}
+            </button>
+          </div>
+          {showOpsReminder && (
+            <div className="mt-4 text-xs text-sky-900 space-y-3">
+              <p>
+                1) Проверить, что reconcile доступен:
+                <br />
+                <button
+                  onClick={() => void copyCommand('reconcile', reminderCommands.reconcile)}
+                  className="mb-1 px-2 py-1 bg-white border border-sky-200 text-sky-700 rounded text-[11px] font-bold hover:bg-sky-100 transition"
+                >
+                  {copiedCommand === 'reconcile' ? 'Скопировано' : 'Скопировать команду'}
+                </button>
+                <br />
+                <code className="bg-white border border-sky-200 rounded px-2 py-1 inline-block mt-1">
+                  {reminderCommands.reconcile}
+                </code>
+              </p>
+              <p>
+                2) Проверить фоновые задачи:
+                <br />
+                <button
+                  onClick={() => void copyCommand('cron', reminderCommands.cron)}
+                  className="mb-1 px-2 py-1 bg-white border border-sky-200 text-sky-700 rounded text-[11px] font-bold hover:bg-sky-100 transition"
+                >
+                  {copiedCommand === 'cron' ? 'Скопировано' : 'Скопировать команду'}
+                </button>
+                <br />
+                <code className="bg-white border border-sky-200 rounded px-2 py-1 inline-block mt-1">
+                  {reminderCommands.cron}
+                </code>
+              </p>
+              <p>
+                3) Проверить журналы автосверки:
+                <br />
+                <button
+                  onClick={() => void copyCommand('logs', reminderCommands.logs)}
+                  className="mb-1 px-2 py-1 bg-white border border-sky-200 text-sky-700 rounded text-[11px] font-bold hover:bg-sky-100 transition"
+                >
+                  {copiedCommand === 'logs' ? 'Скопировано' : 'Скопировать команду'}
+                </button>
+                <br />
+                <code className="bg-white border border-sky-200 rounded px-2 py-1 inline-block mt-1">
+                  {reminderCommands.logs}
+                </code>
+              </p>
+            </div>
+          )}
+        </div>
 
         {loading ? (
           <div className="bg-white rounded-2xl shadow-sm border p-12 text-center">
