@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
-import { getDbClient, initDatabase, confirmPayment, attachTransactionToPendingPayment } from '@/lib/database';
+import { getDbClient, initDatabase, confirmPayment, attachTransactionToPendingPayment, reconcilePendingPaymentsForEmail } from '@/lib/database';
 import { sendPaymentCreditedEmail } from '@/lib/email-service';
 import { safeLog, safeError, safeWarn } from '@/lib/logger';
 import { SUBSCRIPTION_PACKAGES } from '@/lib/subscription-manager';
@@ -633,11 +633,20 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
         if (!attachResult.success) {
           safeWarn(`⚠️ [PAYANYWAY] Не удалось сохранить operationId ${operationId} для pending #${dbPaymentId}`);
         }
-        // Для invoice-flow безуспешное подтверждение не должно приводить к "новому" автозачислению.
-        // Это защищает от расхождений "зачислено в Opus, но нет валидной связки с исходным инвойсом".
-        safeError(`❌ [PAYANYWAY] confirmPayment(${dbPaymentId}) не удался; автозачисление запрещено`);
-        const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
-        return new Response(xml, { status: 200, headers: { 'Content-Type': 'application/xml; charset=UTF-8' } });
+        // Пытаемся сразу дозавершить pending с известным operationId.
+        try {
+          const reconcileResult = await reconcilePendingPaymentsForEmail(email, 10);
+          const confirmedNow = reconcileResult.success
+            && reconcileResult.confirmedPayments.some(p => Number(p.paymentId) === Number(dbPaymentId));
+          if (confirmedNow) {
+            credited = true;
+            safeLog(`✅ [PAYANYWAY] Платёж #${dbPaymentId} дозавершён через reconcile`);
+          } else {
+            safeWarn(`⚠️ [PAYANYWAY] confirmPayment(${dbPaymentId}) не удался, будет дозавершён позже`);
+          }
+        } catch (reconcileError: any) {
+          safeWarn(`⚠️ [PAYANYWAY] reconcile после неудачного confirmPayment не удался: ${reconcileError?.message}`);
+        }
       } else {
         alreadyDone = confirmResult.alreadyProcessed ?? false;
         credited = !alreadyDone;
