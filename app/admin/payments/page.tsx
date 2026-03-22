@@ -56,6 +56,7 @@ export default function AdminPaymentsPage() {
   const [period, setPeriod] = useState<'all' | 'today' | '7d' | '30d'>('all')
   const [showOpsReminder, setShowOpsReminder] = useState(false)
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null)
+  const [reconcilingNow, setReconcilingNow] = useState(false)
 
   const isAdmin = (session?.user as any)?.isAdmin
 
@@ -146,6 +147,31 @@ export default function AdminPaymentsPage() {
       setTimeout(() => setCopiedCommand((prev) => (prev === key ? null : prev)), 1500)
     } catch {
       setError('Не удалось скопировать команду. Скопируйте вручную из блока ниже.')
+    }
+  }
+
+  const runReconcileNow = async () => {
+    setReconcilingNow(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/payments/reconcile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 200 }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.success) {
+        setError(data?.error || 'Не удалось запустить сверку')
+        return
+      }
+      const processed = Number(data.processed || 0)
+      const confirmed = Number(data.confirmed || 0)
+      setNotice(`Сверка выполнена: обработано ${processed}, подтверждено ${confirmed}.`)
+      await loadPayments()
+    } catch (err: any) {
+      setError(err.message || 'Ошибка запуска сверки')
+    } finally {
+      setReconcilingNow(false)
     }
   }
 
@@ -278,12 +304,21 @@ export default function AdminPaymentsPage() {
             <p className="text-sm text-sky-900">
               <strong>Напоминалка по платежам:</strong> если оплата прошла в PayAnyWay, но в Opus не отразилась сразу — используйте автосверку.
             </p>
-            <button
-              onClick={() => setShowOpsReminder(prev => !prev)}
-              className="px-3 py-1.5 bg-white border border-sky-200 text-sky-700 rounded-lg text-xs font-bold hover:bg-sky-100 transition"
-            >
-              {showOpsReminder ? 'Скрыть шаги' : 'Показать шаги'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => void runReconcileNow()}
+                disabled={reconcilingNow}
+                className="px-3 py-1.5 bg-sky-600 text-white border border-sky-700 rounded-lg text-xs font-bold hover:bg-sky-700 transition disabled:opacity-60"
+              >
+                {reconcilingNow ? 'Сверяем…' : 'Запустить сверку сейчас'}
+              </button>
+              <button
+                onClick={() => setShowOpsReminder(prev => !prev)}
+                className="px-3 py-1.5 bg-white border border-sky-200 text-sky-700 rounded-lg text-xs font-bold hover:bg-sky-100 transition"
+              >
+                {showOpsReminder ? 'Скрыть шаги' : 'Показать шаги'}
+              </button>
+            </div>
           </div>
           {showOpsReminder && (
             <div className="mt-4 text-xs text-sky-900 space-y-3">
