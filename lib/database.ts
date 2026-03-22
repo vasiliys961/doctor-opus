@@ -483,12 +483,17 @@ export async function confirmPayment(paymentId: number, transactionId: string) {
       [email, units]
     );
 
-    // 5. Логируем транзакцию начисления
-    await client.query(
-      `INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
-       SELECT $1, $2, $3, $4, balance FROM user_balances WHERE email = $1`,
-      [email, units, 'Пополнение баланса (оплата)', JSON.stringify({ paymentId, transactionId })]
-    );
+    // 5. Логируем транзакцию начисления.
+    // Лог не должен ронять подтверждение успешного платежа.
+    try {
+      await client.query(
+        `INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
+         SELECT $1, $2, $3, $4::jsonb, balance FROM user_balances WHERE email = $1`,
+        [email, units, 'Пополнение баланса (оплата)', JSON.stringify({ paymentId, transactionId })]
+      );
+    } catch (logError) {
+      safeError('⚠️ [DATABASE] Ошибка записи credit_transactions (продолжаем):', logError);
+    }
 
     await client.query('COMMIT');
 
