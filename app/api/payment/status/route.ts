@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { sql } from '@/lib/database';
+import { initDatabase, reconcilePendingPaymentsForEmail, sql } from '@/lib/database';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +12,10 @@ export async function GET() {
     if (!email) {
       return NextResponse.json({ success: false, error: 'Необходима авторизация' }, { status: 401 });
     }
+
+    await initDatabase();
+    // Автодозавершение "подвисших" pending оплат, если transaction_id уже известен.
+    await reconcilePendingPaymentsForEmail(email, 10);
 
     const balanceResult = await sql`
       SELECT balance, total_spent, updated_at

@@ -509,6 +509,72 @@ export async function confirmPayment(paymentId: number, transactionId: string) {
 }
 
 /**
+ * Привязать operationId к pending-платежу.
+ * Используется как "страховка": если webhook пришел, но confirmPayment временно не отработал,
+ * мы сохраняем transaction_id и сможем дозавершить платеж позже.
+ */
+export async function attachTransactionToPendingPayment(paymentId: number, transactionId: string) {
+  try {
+    await sql`
+      UPDATE payments
+      SET
+        transaction_id = COALESCE(transaction_id, ${transactionId}),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${paymentId}
+        AND status = 'pending'
+    `;
+    return { success: true };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка привязки transaction_id к pending-платежу:', error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Переобрабатывает pending-платежи пользователя, у которых уже есть transaction_id.
+ * Это позволяет автоматически дозавершать оплаты при временных сбоях webhook-пайплайна.
+ */
+export async function reconcilePendingPaymentsForEmail(email: string, limit = 10) {
+  try {
+    const pendingWithTx = await sql`
+      SELECT id, transaction_id
+      FROM payments
+      WHERE email = ${email}
+        AND status = 'pending'
+        AND transaction_id IS NOT NULL
+      ORDER BY created_at ASC
+      LIMIT ${limit}
+    `;
+
+    let processed = 0;
+    let confirmed = 0;
+    const failures: Array<{ paymentId: number; reason: string }> = [];
+
+    for (const row of pendingWithTx.rows) {
+      processed += 1;
+      const paymentId = Number(row.id);
+      const txId = String(row.transaction_id || '').trim();
+      if (!txId) {
+        failures.push({ paymentId, reason: 'empty transaction_id' });
+        continue;
+      }
+
+      const result = await confirmPayment(paymentId, txId);
+      if (result.success) {
+        confirmed += 1;
+      } else {
+        failures.push({ paymentId, reason: 'confirmPayment failed' });
+      }
+    }
+
+    return { success: true, processed, confirmed, failures };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка reconcile pending платежей:', error);
+    return { success: false, processed: 0, confirmed: 0, failures: [] };
+  }
+}
+
+/**
  * Получение баланса пользователя
  */
 export async function getUserBalance(email: string) {

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
-import { getDbClient, initDatabase, confirmPayment } from '@/lib/database';
+import { getDbClient, initDatabase, confirmPayment, attachTransactionToPendingPayment } from '@/lib/database';
 import { safeLog, safeError, safeWarn } from '@/lib/logger';
 import { SUBSCRIPTION_PACKAGES } from '@/lib/subscription-manager';
 
@@ -627,6 +627,11 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
       // Invoice API: обновляем запись payments(id=dbPaymentId) до completed
       const confirmResult = await confirmPayment(dbPaymentId, operationId);
       if (!confirmResult.success) {
+        // Сохраняем operationId в pending, чтобы можно было дозавершить платеж позже (автосверка/status-check).
+        const attachResult = await attachTransactionToPendingPayment(dbPaymentId, operationId);
+        if (!attachResult.success) {
+          safeWarn(`⚠️ [PAYANYWAY] Не удалось сохранить operationId ${operationId} для pending #${dbPaymentId}`);
+        }
         // Для invoice-flow безуспешное подтверждение не должно приводить к "новому" автозачислению.
         // Это защищает от расхождений "зачислено в Opus, но нет валидной связки с исходным инвойсом".
         safeError(`❌ [PAYANYWAY] confirmPayment(${dbPaymentId}) не удался; автозачисление запрещено`);
