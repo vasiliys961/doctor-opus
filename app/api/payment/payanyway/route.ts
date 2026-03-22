@@ -116,28 +116,38 @@ function parseEncodedPairs(
   });
 }
 
-/** Проверяет MD5-подпись входящего запроса используя raw значения */
-function validateSignatureRaw(raw: Record<string, string>, isCheck: boolean): boolean {
-  const command = raw.MNT_COMMAND || '';
-  const id = raw.MNT_ID || '';
-  const txId = raw.MNT_TRANSACTION_ID || '';
-  const opId = raw.MNT_OPERATION_ID || '';
-  const amount = raw.MNT_AMOUNT || '';
-  const currency = raw.MNT_CURRENCY_CODE || '';
-  const subscriberId = raw.MNT_SUBSCRIBER_ID || '';
-  const testMode = raw.MNT_TEST_MODE || '';
-  const signature = raw.MNT_SIGNATURE || '';
+function buildSignatureSource(data: Record<string, string>, isCheck: boolean): string {
+  const command = data.MNT_COMMAND || '';
+  const id = data.MNT_ID || '';
+  const txId = data.MNT_TRANSACTION_ID || '';
+  const opId = data.MNT_OPERATION_ID || '';
+  const amount = data.MNT_AMOUNT || '';
+  const currency = data.MNT_CURRENCY_CODE || '';
+  const subscriberId = data.MNT_SUBSCRIBER_ID || '';
+  const testMode = data.MNT_TEST_MODE || '';
 
-  const str = isCheck
+  return isCheck
     ? `${command}${id}${txId}${opId}${amount}${currency}${subscriberId}${testMode}${MNT_SECRET}`
     : `${id}${txId}${opId}${amount}${currency}${subscriberId}${testMode}${MNT_SECRET}`;
-  const expected = crypto.createHash('md5').update(str).digest('hex');
+}
 
-  safeLog(`💳 [PAYANYWAY] Строка для подписи: ${str.replace(MNT_SECRET, '***')}`);
-  safeLog(`💳 [PAYANYWAY] Ожидаемая подпись: ${expected}`);
+/** Проверяет MD5-подпись входящего запроса (совместимо с raw/decode вариациями кодирования) */
+function validateSignature(raw: Record<string, string>, decoded: Record<string, string>, isCheck: boolean): boolean {
+  const signature = (raw.MNT_SIGNATURE || decoded.MNT_SIGNATURE || '').toLowerCase();
+
+  const rawSource = buildSignatureSource(raw, isCheck);
+  const rawExpected = crypto.createHash('md5').update(rawSource).digest('hex').toLowerCase();
+
+  const decodedSource = buildSignatureSource(decoded, isCheck);
+  const decodedExpected = crypto.createHash('md5').update(decodedSource).digest('hex').toLowerCase();
+
+  safeLog(`💳 [PAYANYWAY] Строка подписи (raw): ${rawSource.replace(MNT_SECRET, '***')}`);
+  safeLog(`💳 [PAYANYWAY] Ожидаемая подпись (raw): ${rawExpected}`);
+  safeLog(`💳 [PAYANYWAY] Строка подписи (decoded): ${decodedSource.replace(MNT_SECRET, '***')}`);
+  safeLog(`💳 [PAYANYWAY] Ожидаемая подпись (decoded): ${decodedExpected}`);
   safeLog(`💳 [PAYANYWAY] Полученная подпись: ${signature}`);
 
-  return expected.toLowerCase() === signature.toLowerCase();
+  return signature === rawExpected || signature === decodedExpected;
 }
 
 /** Подпись для ответа: MD5(resultCode + MNT_ID + MNT_TRANSACTION_ID + SECRET) */
@@ -548,7 +558,7 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
     const isCheck = (data.MNT_COMMAND || '').toUpperCase() === 'CHECK' || !data.MNT_OPERATION_ID;
 
     // Проверяем подпись с учетом типа запроса (Check/Pay)
-    if (!validateSignatureRaw(raw, isCheck)) {
+    if (!validateSignature(raw, data, isCheck)) {
       safeError('❌ [PAYANYWAY] Неверная подпись!');
       const xml = isCheck
         ? buildCheckUrlXml(txId, amount || 0, receiptContext, pkg)
