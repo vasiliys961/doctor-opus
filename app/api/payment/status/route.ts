@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { initDatabase, reconcilePendingPaymentsForEmail, sql } from '@/lib/database';
+import { sendPaymentCreditedEmail } from '@/lib/email-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,32 @@ export async function GET() {
 
     await initDatabase();
     // Автодозавершение "подвисших" pending оплат, если transaction_id уже известен.
-    await reconcilePendingPaymentsForEmail(email, 10);
+    const reconcile = await reconcilePendingPaymentsForEmail(email, 10);
+    if (reconcile.success && reconcile.confirmedPayments.length > 0) {
+      for (const confirmed of reconcile.confirmedPayments) {
+        try {
+          const balanceResult = await sql`
+            SELECT balance
+            FROM user_balances
+            WHERE email = ${confirmed.email}
+            LIMIT 1
+          `;
+          const balanceAfter = balanceResult.rows[0]?.balance != null
+            ? Number(balanceResult.rows[0].balance)
+            : null;
+          await sendPaymentCreditedEmail({
+            email: confirmed.email,
+            amountRub: confirmed.amount,
+            units: confirmed.units,
+            balanceAfter,
+            paymentId: confirmed.paymentId,
+            transactionId: confirmed.transactionId,
+          });
+        } catch (mailError) {
+          console.warn('⚠️ [PAYMENT STATUS] Не удалось отправить email о дозачислении:', mailError);
+        }
+      }
+    }
 
     const balanceResult = await sql`
       SELECT balance, total_spent, updated_at

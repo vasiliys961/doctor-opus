@@ -1,0 +1,20 @@
+name: Payment Reconcile RU
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  reconcile-ru:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger RU payment reconcile
+        env:
+          RECONCILE_SECRET: ${{ secrets.PAYMENT_RECONCILE_SECRET }}
+        run: |
+          if [ -z "$RECONCILE_SECRET" ]; then
+            echo "PAYMENT_RECONCILE_SECRET is not set, skipping."
+            exit 0
+          fi
+          curl -fsS "https://doctor-opus.ru/api/payment/reconcile?secret=$RECONCILE_SECRET&limit=200"

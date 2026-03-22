@@ -441,7 +441,7 @@ export async function confirmPayment(paymentId: number, transactionId: string) {
 
     // 1. Блокируем строку платежа для эксклюзивного доступа
     const { rows: paymentRows } = await client.query(
-      `SELECT id, email, units, status FROM payments WHERE id = $1 FOR UPDATE`,
+      `SELECT id, email, amount, units, status FROM payments WHERE id = $1 FOR UPDATE`,
       [paymentId]
     );
 
@@ -456,7 +456,15 @@ export async function confirmPayment(paymentId: number, transactionId: string) {
     if (payment.status === 'completed') {
       await client.query('ROLLBACK');
       safeLog(`ℹ️ [DATABASE] Платеж #${paymentId} уже был подтверждён (идемпотентность)`);
-      return { success: true, alreadyProcessed: true };
+      return {
+        success: true,
+        alreadyProcessed: true,
+        paymentId,
+        email: payment.email,
+        amount: Number(payment.amount),
+        units: Number(payment.units),
+        transactionId,
+      };
     }
 
     if (payment.status !== 'pending') {
@@ -471,7 +479,7 @@ export async function confirmPayment(paymentId: number, transactionId: string) {
     );
 
     // 4. Начисляем баланс (с блокировкой строки баланса)
-    const { email, units } = payment;
+    const { email, units, amount } = payment;
     
     await client.query(
       `INSERT INTO user_balances (email, balance)
@@ -498,7 +506,14 @@ export async function confirmPayment(paymentId: number, transactionId: string) {
     await client.query('COMMIT');
 
     safeLog(`💰 [DATABASE] Баланс пользователя ${email} пополнен на ${units} ед. (платеж #${paymentId})`);
-    return { success: true };
+    return {
+      success: true,
+      paymentId,
+      email,
+      amount: Number(amount),
+      units: Number(units),
+      transactionId,
+    };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     safeError('❌ [DATABASE] Ошибка подтверждения платежа:', error);
@@ -548,6 +563,13 @@ export async function reconcilePendingPaymentsForEmail(email: string, limit = 10
 
     let processed = 0;
     let confirmed = 0;
+    const confirmedPayments: Array<{
+      paymentId: number;
+      email: string;
+      amount: number;
+      units: number;
+      transactionId: string;
+    }> = [];
     const failures: Array<{ paymentId: number; reason: string }> = [];
 
     for (const row of pendingWithTx.rows) {
@@ -562,15 +584,83 @@ export async function reconcilePendingPaymentsForEmail(email: string, limit = 10
       const result = await confirmPayment(paymentId, txId);
       if (result.success) {
         confirmed += 1;
+        if (!result.alreadyProcessed && result.email) {
+          confirmedPayments.push({
+            paymentId: Number(result.paymentId || paymentId),
+            email: String(result.email),
+            amount: Number(result.amount || 0),
+            units: Number(result.units || 0),
+            transactionId: String(result.transactionId || txId),
+          });
+        }
       } else {
         failures.push({ paymentId, reason: 'confirmPayment failed' });
       }
     }
 
-    return { success: true, processed, confirmed, failures };
+    return { success: true, processed, confirmed, confirmedPayments, failures };
   } catch (error) {
     safeError('❌ [DATABASE] Ошибка reconcile pending платежей:', error);
-    return { success: false, processed: 0, confirmed: 0, failures: [] };
+    return { success: false, processed: 0, confirmed: 0, confirmedPayments: [], failures: [] };
+  }
+}
+
+/**
+ * Глобальная автосверка pending платежей с известным transaction_id.
+ * Используется фоновым reconcile endpoint.
+ */
+export async function reconcilePendingPayments(limit = 100) {
+  try {
+    const pendingWithTx = await sql`
+      SELECT id, email, transaction_id
+      FROM payments
+      WHERE status = 'pending'
+        AND transaction_id IS NOT NULL
+      ORDER BY created_at ASC
+      LIMIT ${limit}
+    `;
+
+    let processed = 0;
+    let confirmed = 0;
+    const confirmedPayments: Array<{
+      paymentId: number;
+      email: string;
+      amount: number;
+      units: number;
+      transactionId: string;
+    }> = [];
+    const failures: Array<{ paymentId: number; reason: string }> = [];
+
+    for (const row of pendingWithTx.rows) {
+      processed += 1;
+      const paymentId = Number(row.id);
+      const txId = String(row.transaction_id || '').trim();
+      if (!txId) {
+        failures.push({ paymentId, reason: 'empty transaction_id' });
+        continue;
+      }
+
+      const result = await confirmPayment(paymentId, txId);
+      if (result.success) {
+        confirmed += 1;
+        if (!result.alreadyProcessed && result.email) {
+          confirmedPayments.push({
+            paymentId: Number(result.paymentId || paymentId),
+            email: String(result.email),
+            amount: Number(result.amount || 0),
+            units: Number(result.units || 0),
+            transactionId: String(result.transactionId || txId),
+          });
+        }
+      } else {
+        failures.push({ paymentId, reason: 'confirmPayment failed' });
+      }
+    }
+
+    return { success: true, processed, confirmed, confirmedPayments, failures };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка глобальной reconcile pending платежей:', error);
+    return { success: false, processed: 0, confirmed: 0, confirmedPayments: [], failures: [] };
   }
 }
 

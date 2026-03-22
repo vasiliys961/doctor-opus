@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions, isAdminEmail } from '@/lib/auth';
 import { sql } from '@/lib/database';
 import { CLINIC_CONFIG } from '@/lib/config';
+import { sendClinicInviteEmail } from '@/lib/email-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,23 @@ function parseClinicId(idRaw: string): number | null {
 async function ensureClinicExists(clinicId: number): Promise<boolean> {
   const clinic = await sql`SELECT id FROM clinics WHERE id = ${clinicId} LIMIT 1`;
   return clinic.rows.length > 0;
+}
+
+async function ensureClinicInvitesTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS clinic_invites (
+      id SERIAL PRIMARY KEY,
+      clinic_id INTEGER NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+      email VARCHAR(255) NOT NULL,
+      role VARCHAR(32) NOT NULL DEFAULT 'doctor',
+      status VARCHAR(32) NOT NULL DEFAULT 'pending',
+      resend_count INTEGER NOT NULL DEFAULT 0,
+      last_sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (clinic_id, email)
+    )
+  `;
 }
 
 export async function GET(
@@ -100,6 +118,14 @@ export async function POST(
 
   if (!email) return badRequest('Email is required');
 
+  const clinicInfo = await sql`
+    SELECT id, name
+    FROM clinics
+    WHERE id = ${clinicId}
+    LIMIT 1
+  `;
+  const clinicName = String(clinicInfo.rows[0]?.name || `Клиника #${clinicId}`);
+
   const userResult = await sql`
     SELECT id, email, name
     FROM users
@@ -107,10 +133,70 @@ export async function POST(
     LIMIT 1
   `;
   if (userResult.rows.length === 0) {
-    return badRequest(`User not found: ${email}`);
+    await ensureClinicInvitesTable();
+    const existingInvite = await sql`
+      SELECT id, resend_count, status
+      FROM clinic_invites
+      WHERE clinic_id = ${clinicId}
+        AND email = ${email}
+      LIMIT 1
+    `;
+
+    if (existingInvite.rows.length === 0) {
+      await sql`
+        INSERT INTO clinic_invites (clinic_id, email, role, status, resend_count, last_sent_at)
+        VALUES (${clinicId}, ${email}, ${role}, 'pending', 0, CURRENT_TIMESTAMP)
+      `;
+      await sendClinicInviteEmail({ to: email, clinicName, role, isReminder: false });
+      return NextResponse.json({
+        success: true,
+        invited: true,
+        resent: false,
+        message: `Приглашение отправлено на ${email}`,
+      });
+    }
+
+    const invite = existingInvite.rows[0];
+    const resendCount = Number(invite.resend_count || 0);
+    if (resendCount >= 1) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Повторное приглашение для ${email} уже отправлялось один раз`,
+        },
+        { status: 429 }
+      );
+    }
+
+    await sql`
+      UPDATE clinic_invites
+      SET
+        role = ${role},
+        status = 'pending',
+        resend_count = resend_count + 1,
+        last_sent_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${invite.id}
+    `;
+    await sendClinicInviteEmail({ to: email, clinicName, role, isReminder: true });
+    return NextResponse.json({
+      success: true,
+      invited: true,
+      resent: true,
+      message: `Повторное приглашение отправлено на ${email}`,
+    });
   }
 
   const user = userResult.rows[0];
+  // Если пользователь уже зарегистрирован, отмечаем приглашение как принятое (если было).
+  await ensureClinicInvitesTable();
+  await sql`
+    UPDATE clinic_invites
+    SET status = 'accepted', updated_at = CURRENT_TIMESTAMP
+    WHERE clinic_id = ${clinicId}
+      AND email = ${email}
+      AND status = 'pending'
+  `;
   const memberResult = await sql`
     INSERT INTO clinic_members (clinic_id, user_id, role, is_active)
     VALUES (${clinicId}, ${user.id}, ${role}, true)

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { getDbClient, initDatabase, confirmPayment, attachTransactionToPendingPayment } from '@/lib/database';
+import { sendPaymentCreditedEmail } from '@/lib/email-service';
 import { safeLog, safeError, safeWarn } from '@/lib/logger';
 import { SUBSCRIPTION_PACKAGES } from '@/lib/subscription-manager';
 
@@ -664,6 +665,17 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
       safeLog(`ℹ️ [PAYANYWAY] Операция ${operationId} уже обработана`);
     } else if (credited) {
       safeLog(`💰 [PAYANYWAY] Баланс ${email} пополнен на ${pkg.units} ед.`);
+      try {
+        await sendPaymentCreditedEmail({
+          email,
+          amountRub: amount,
+          units: pkg.units,
+          paymentId: dbPaymentId ?? undefined,
+          transactionId: operationId,
+        });
+      } catch (mailError: any) {
+        safeWarn(`⚠️ [PAYANYWAY] Не удалось отправить email о пополнении: ${mailError?.message}`);
+      }
     }
 
     const xml = buildPayUrlXml(txId, '200', receiptContext, pkg);

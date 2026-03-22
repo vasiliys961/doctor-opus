@@ -31,6 +31,7 @@ export default function ClinicMembersPage() {
   const [members, setMembers] = useState<ClinicMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<ClinicMember['role']>('doctor')
   const [saving, setSaving] = useState(false)
@@ -69,6 +70,7 @@ export default function ClinicMembersPage() {
 
     setSaving(true)
     setError('')
+    setNotice('')
     try {
       const response = await fetch(`/api/admin/clinics/${clinicId}/members`, {
         method: 'POST',
@@ -84,6 +86,7 @@ export default function ClinicMembersPage() {
         setError(data.error || 'Не удалось добавить участника')
         return
       }
+      setNotice(data.message || 'Изменения сохранены')
       setEmail('')
       setRole('doctor')
       await loadMembers()
@@ -169,6 +172,11 @@ export default function ClinicMembersPage() {
             {error}
           </div>
         )}
+        {notice && !error && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl mb-6">
+            {notice}
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-sm border p-6 mb-6">
           <h2 className="text-lg font-bold text-slate-800 mb-4">Добавить / назначить участника</h2>
@@ -200,7 +208,7 @@ export default function ClinicMembersPage() {
             </button>
           </form>
           <p className="text-xs text-slate-500 mt-3">
-            Пользователь должен быть заранее зарегистрирован в системе.
+            Если пользователя еще нет в системе, ему будет отправлено приглашение. Допускается один автоматический повтор приглашения.
           </p>
         </div>
 
