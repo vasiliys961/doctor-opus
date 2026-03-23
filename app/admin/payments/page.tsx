@@ -285,8 +285,11 @@ export default function AdminPaymentsPage() {
 
       const processed = Number(data.processed || 0)
       const confirmed = Number(data.confirmed || 0)
+      const alreadyProcessed = Number(data.alreadyProcessed || 0)
       const failuresCount = Array.isArray(data.failures) ? data.failures.length : 0
-      setNotice(`Ручной дожим выполнен: обработано ${processed}, подтверждено ${confirmed}, ошибок ${failuresCount}.`)
+      setNotice(
+        `Ручной дожим выполнен: обработано ${processed}, подтверждено ${confirmed}, уже было обработано ${alreadyProcessed}, ошибок ${failuresCount}.`
+      )
       await loadPayments()
     } catch (err: any) {
       setError(err.message || 'Ошибка ручного дожима')
@@ -509,6 +512,9 @@ export default function AdminPaymentsPage() {
           />
           <p className="mt-2 text-[11px] text-amber-800">
             Принимаются форматы: <code>paymentId -&gt; operationId</code>, <code>operationId paymentId</code> и сырой экспорт PayAnyWay (в т.ч. 2-строчный: строка с CTID + строка <code>выполнена operationId</code>).
+          </p>
+          <p className="mt-1 text-[11px] text-amber-700">
+            Повторный дожим одной и той же операции не увеличивает баланс повторно — такая операция будет отмечена как уже обработанная.
           </p>
         </div>
 

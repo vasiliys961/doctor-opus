@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
 
     let processed = 0;
     let confirmed = 0;
+    let alreadyProcessed = 0;
     const confirmedPayments: Array<{
       paymentId: number;
       email: string;
@@ -105,7 +106,9 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        if (!confirmResult.alreadyProcessed) {
+        if (confirmResult.alreadyProcessed) {
+          alreadyProcessed += 1;
+        } else {
           confirmed += 1;
           confirmedPayments.push({
             paymentId: Number(confirmResult.paymentId || pair.paymentId),
@@ -149,6 +152,7 @@ export async function POST(request: NextRequest) {
       by: session.user.email,
       processed,
       confirmed,
+      alreadyProcessed,
       failures: failures.length,
     });
 
@@ -156,6 +160,7 @@ export async function POST(request: NextRequest) {
       success: true,
       processed,
       confirmed,
+      alreadyProcessed,
       confirmedPayments,
       failures,
       initiatedBy: session.user.email,
