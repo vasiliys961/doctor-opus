@@ -499,8 +499,14 @@ ${attributesXml}
  * XML-ответ на Check URL (проверочный запрос до оплаты).
  * resultCode 402 = заказ готов к оплате.
  */
-function buildCheckUrlXml(txId: string, amount: number, context: ReceiptContext, pkg: Package | null): string {
-  const resultCode = '402';
+function buildCheckUrlXml(
+  txId: string,
+  amount: number,
+  context: ReceiptContext,
+  pkg: Package | null,
+  resultCode = '402',
+  description = 'Order created, but not paid'
+): string {
   const signature = buildResponseSignature(resultCode, txId);
   const itemPrice = pkg ? pkg.priceRub : amount;
   const inventoryItem = buildInventoryItem(
@@ -515,7 +521,7 @@ function buildCheckUrlXml(txId: string, amount: number, context: ReceiptContext,
   <MNT_ID>${MNT_ID}</MNT_ID>
   <MNT_TRANSACTION_ID>${escapeXml(txId)}</MNT_TRANSACTION_ID>
   <MNT_RESULT_CODE>${resultCode}</MNT_RESULT_CODE>
-  <MNT_DESCRIPTION>Order created, but not paid</MNT_DESCRIPTION>
+  <MNT_DESCRIPTION>${escapeXml(description)}</MNT_DESCRIPTION>
   <MNT_AMOUNT>${itemPrice.toFixed(2)}</MNT_AMOUNT>
   <MNT_SIGNATURE>${signature}</MNT_SIGNATURE>
   <MNT_ATTRIBUTES>
@@ -554,15 +560,15 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
       });
     }
 
-    // Check URL: по спецификации определяется MNT_COMMAND=CHECK
-    // (добавлен fallback по отсутствию MNT_OPERATION_ID для совместимости)
-    const isCheck = (data.MNT_COMMAND || '').toUpperCase() === 'CHECK' || !data.MNT_OPERATION_ID;
+    // Check URL определяем только по явной команде CHECK.
+    // Это исключает ошибочную классификацию Pay callback как Check при неполных данных.
+    const isCheck = (data.MNT_COMMAND || '').toUpperCase() === 'CHECK';
 
     // Проверяем подпись с учетом типа запроса (Check/Pay)
     if (!validateSignature(raw, data, isCheck)) {
       safeError('❌ [PAYANYWAY] Неверная подпись!');
       const xml = isCheck
-        ? buildCheckUrlXml(txId, amount || 0, receiptContext, pkg)
+        ? buildCheckUrlXml(txId, amount || 0, receiptContext, pkg, '500', 'Invalid signature')
         : buildPayUrlXml(txId, '500', receiptContext, pkg);
       return new Response(xml, {
         status: 200,
@@ -694,7 +700,11 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
     });
   } catch (error: any) {
     safeError('❌ [PAYANYWAY] Ошибка обработки webhook:', error?.message);
-    return new Response('FAIL', { status: 500 });
+    const xml = buildPayUrlXml('', '500', { customerEmail: '' }, null);
+    return new Response(xml, {
+      status: 200,
+      headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
+    });
   }
 }
 
