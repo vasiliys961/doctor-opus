@@ -181,12 +181,38 @@ export default function AdminPaymentsPage() {
     const pairs: Array<{ paymentId: number; operationId: string }> = []
     const lines = text.split('\n').map(v => v.trim()).filter(Boolean)
     for (const line of lines) {
-      const match = line.match(/^#?(\d+)\s*(?:->|=>|:|,|\s)\s*(\d{6,})$/)
-      if (!match) continue
-      pairs.push({
-        paymentId: Number(match[1]),
-        operationId: match[2],
-      })
+      // Формат 1: paymentId -> operationId (рекомендуемый)
+      const direct = line.match(/^#?(\d+)\s*(?:->|=>|:|,|\s)\s*(\d{6,})$/)
+      if (direct) {
+        pairs.push({
+          paymentId: Number(direct[1]),
+          operationId: direct[2],
+        })
+        continue
+      }
+
+      // Формат 2: operationId<TAB/space>paymentId (как в выгрузке PayAnyWay)
+      const reverse = line.match(/^(\d{6,})\s*(?:->|=>|:|,|\s)\s*#?(\d+)$/)
+      if (reverse) {
+        pairs.push({
+          paymentId: Number(reverse[2]),
+          operationId: reverse[1],
+        })
+        continue
+      }
+
+      // Формат 3: "сырой" экспорт строки из PayAnyWay:
+      // 23.03.2026, 19:24  1424670709  24  390.00  user@mail.ru
+      const rawExport = line.match(
+        /^(?:\d{2}\.\d{2}\.\d{4},\s*\d{2}:\d{2}\s+)?(\d{9,})\s+(\d+)\s+\d+(?:[.,]\d+)?\s+[^\s@]+@[^\s@]+\.[^\s@]+$/i
+      )
+      if (rawExport) {
+        pairs.push({
+          paymentId: Number(rawExport[2]),
+          operationId: rawExport[1],
+        })
+        continue
+      }
     }
     return pairs
   }
@@ -197,7 +223,7 @@ export default function AdminPaymentsPage() {
     try {
       const pairs = parseManualPairs(manualPairsText)
       if (pairs.length === 0) {
-        setError('Не удалось распознать пары. Формат строки: 24 -> 1424670709')
+        setError('Не удалось распознать пары. Формат: 24 -> 1424670709, 1424670709 24 или строка экспорта PayAnyWay.')
         return
       }
 
@@ -433,11 +459,11 @@ export default function AdminPaymentsPage() {
           <textarea
             value={manualPairsText}
             onChange={(e) => setManualPairsText(e.target.value)}
-            placeholder={'24 -> 1424670709\n23 -> 1424656576'}
+            placeholder={'24 -> 1424670709\n23 -> 1424656576\n1424670709 24\n1424656576 23\n23.03.2026, 19:24 1424670709 24 390.00 user@mail.ru'}
             className="mt-3 w-full min-h-[90px] rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-slate-700 font-mono"
           />
           <p className="mt-2 text-[11px] text-amber-800">
-            Принимаются строки только в формате: <code>paymentId -&gt; operationId</code>. Пример: <code>24 -&gt; 1424670709</code>.
+            Принимаются форматы: <code>paymentId -&gt; operationId</code>, <code>operationId paymentId</code> и сырой экспорт строки PayAnyWay.
           </p>
         </div>
 
