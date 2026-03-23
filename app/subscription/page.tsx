@@ -226,7 +226,7 @@ export default function SubscriptionPage() {
       } else if (data.hasPendingPayments) {
         if (!isBackground) {
           setPaymentCheckStatus('pending')
-          setPaymentCheckMessage('Оплата ещё в обработке. Не оплачивайте повторно: обычно подтверждение занимает до 1–10 минут.')
+          setPaymentCheckMessage('Оплата ещё в обработке. Не оплачивайте повторно: обычно подтверждение занимает до 1–10 минут, в редких случаях — до 2–3 дней.')
         }
       } else {
         if (!isBackground) {
@@ -363,6 +363,7 @@ export default function SubscriptionPage() {
           <p>
             Статус <strong>pending</strong> в Doctor Opus не списывает деньги сам по себе. Если страница оплаты зависла,
             но вы уже подтвердили карту или СБП, не оплачивайте повторно — операция обычно подтягивается автоматически.
+            В редких случаях зачисление может занять до 2–3 дней.
           </p>
         </div>
 

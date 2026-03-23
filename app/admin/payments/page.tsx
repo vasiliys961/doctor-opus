@@ -57,6 +57,8 @@ export default function AdminPaymentsPage() {
   const [showOpsReminder, setShowOpsReminder] = useState(false)
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null)
   const [reconcilingNow, setReconcilingNow] = useState(false)
+  const [manualPairsText, setManualPairsText] = useState('')
+  const [manualReconciling, setManualReconciling] = useState(false)
 
   const isAdmin = (session?.user as any)?.isAdmin
 
@@ -172,6 +174,53 @@ export default function AdminPaymentsPage() {
       setError(err.message || 'Ошибка запуска сверки')
     } finally {
       setReconcilingNow(false)
+    }
+  }
+
+  const parseManualPairs = (text: string): Array<{ paymentId: number; operationId: string }> => {
+    const pairs: Array<{ paymentId: number; operationId: string }> = []
+    const lines = text.split('\n').map(v => v.trim()).filter(Boolean)
+    for (const line of lines) {
+      const match = line.match(/^#?(\d+)\s*(?:->|=>|:|,|\s)\s*(\d{6,})$/)
+      if (!match) continue
+      pairs.push({
+        paymentId: Number(match[1]),
+        operationId: match[2],
+      })
+    }
+    return pairs
+  }
+
+  const runManualReconcile = async () => {
+    setManualReconciling(true)
+    setError('')
+    try {
+      const pairs = parseManualPairs(manualPairsText)
+      if (pairs.length === 0) {
+        setError('Не удалось распознать пары. Формат строки: 24 -> 1424670709')
+        return
+      }
+
+      const res = await fetch('/api/admin/payments/manual-reconcile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pairs }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.success) {
+        setError(data?.error || 'Не удалось выполнить ручной дожим')
+        return
+      }
+
+      const processed = Number(data.processed || 0)
+      const confirmed = Number(data.confirmed || 0)
+      const failuresCount = Array.isArray(data.failures) ? data.failures.length : 0
+      setNotice(`Ручной дожим выполнен: обработано ${processed}, подтверждено ${confirmed}, ошибок ${failuresCount}.`)
+      await loadPayments()
+    } catch (err: any) {
+      setError(err.message || 'Ошибка ручного дожима')
+    } finally {
+      setManualReconciling(false)
     }
   }
 
@@ -366,6 +415,30 @@ export default function AdminPaymentsPage() {
               </p>
             </div>
           )}
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-sm text-amber-900">
+              <strong>Ручной дожим pending без transaction_id:</strong> вставьте пары <code>CTID -&gt; Номер операции</code> по одной на строку.
+            </p>
+            <button
+              onClick={() => void runManualReconcile()}
+              disabled={manualReconciling}
+              className="px-3 py-1.5 bg-amber-600 text-white border border-amber-700 rounded-lg text-xs font-bold hover:bg-amber-700 transition disabled:opacity-60"
+            >
+              {manualReconciling ? 'Дожимаем…' : 'Дожать по парам'}
+            </button>
+          </div>
+          <textarea
+            value={manualPairsText}
+            onChange={(e) => setManualPairsText(e.target.value)}
+            placeholder={'24 -> 1424670709\n23 -> 1424656576'}
+            className="mt-3 w-full min-h-[90px] rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-slate-700 font-mono"
+          />
+          <p className="mt-2 text-[11px] text-amber-800">
+            Принимаются строки только в формате: <code>paymentId -&gt; operationId</code>. Пример: <code>24 -&gt; 1424670709</code>.
+          </p>
         </div>
 
         {loading ? (
