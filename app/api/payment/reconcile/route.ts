@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { initDatabase, reconcilePendingPayments, sql } from '@/lib/database';
 import { sendPaymentCreditedEmail } from '@/lib/email-service';
 import { safeError, safeLog } from '@/lib/logger';
+import { bridgePendingPaymentsWithPayAnyWay } from '@/lib/payment/payanyway-bridge-reconcile';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,10 +17,16 @@ function isAuthorized(request: NextRequest): boolean {
 
 async function runReconcile(limit: number) {
   await initDatabase();
+  const bridge = await bridgePendingPaymentsWithPayAnyWay({ limit });
   const result = await reconcilePendingPayments(limit);
 
-  if (result.success && result.confirmedPayments.length > 0) {
-    for (const confirmed of result.confirmedPayments) {
+  const mergedConfirmedPayments = [
+    ...(bridge.confirmedPayments || []),
+    ...(result.confirmedPayments || []),
+  ];
+
+  if (mergedConfirmedPayments.length > 0) {
+    for (const confirmed of mergedConfirmedPayments) {
       try {
         const balanceResult = await sql`
           SELECT balance
@@ -45,7 +52,12 @@ async function runReconcile(limit: number) {
     }
   }
 
-  return result;
+  return {
+    ...result,
+    bridge,
+    confirmedPayments: mergedConfirmedPayments,
+    confirmed: Number(result.confirmed || 0) + Number(bridge.confirmed || 0),
+  };
 }
 
 export async function GET(request: NextRequest) {

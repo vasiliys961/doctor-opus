@@ -4,6 +4,7 @@ import { authOptions, isAdminEmail } from '@/lib/auth';
 import { initDatabase, reconcilePendingPayments, sql } from '@/lib/database';
 import { sendPaymentCreditedEmail } from '@/lib/email-service';
 import { safeError, safeLog } from '@/lib/logger';
+import { bridgePendingPaymentsWithPayAnyWay } from '@/lib/payment/payanyway-bridge-reconcile';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,10 +26,15 @@ export async function POST(request: NextRequest) {
     const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 200, 1), 500);
 
     await initDatabase();
+    const bridge = await bridgePendingPaymentsWithPayAnyWay({ limit });
     const result = await reconcilePendingPayments(limit);
+    const confirmedPayments = [
+      ...(bridge.confirmedPayments || []),
+      ...(result.confirmedPayments || []),
+    ];
 
-    if (result.success && result.confirmedPayments.length > 0) {
-      for (const confirmed of result.confirmedPayments) {
+    if (confirmedPayments.length > 0) {
+      for (const confirmed of confirmedPayments) {
         try {
           const balanceResult = await sql`
             SELECT balance
@@ -59,13 +65,22 @@ export async function POST(request: NextRequest) {
       limit,
       success: result.success,
       processed: result.processed,
-      confirmed: result.confirmed,
+      confirmed: Number(result.confirmed || 0) + Number(bridge.confirmed || 0),
       failures: result.failures.length,
+      bridge: {
+        success: bridge.success,
+        scanned: bridge.scanned,
+        attached: bridge.attached,
+        confirmed: bridge.confirmed,
+      },
     });
 
     return NextResponse.json({
       success: true,
       ...result,
+      bridge,
+      confirmedPayments,
+      confirmed: Number(result.confirmed || 0) + Number(bridge.confirmed || 0),
       initiatedBy: session.user.email,
     });
   } catch (error: any) {

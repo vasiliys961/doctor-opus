@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { initDatabase, reconcilePendingPaymentsForEmail, sql } from '@/lib/database';
 import { sendPaymentCreditedEmail } from '@/lib/email-service';
+import { bridgePendingPaymentsWithPayAnyWay } from '@/lib/payment/payanyway-bridge-reconcile';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,10 +16,16 @@ export async function GET() {
     }
 
     await initDatabase();
+    // Bridge-сверка: ищем успешные операции PayAnyWay для pending без transaction_id.
+    const bridge = await bridgePendingPaymentsWithPayAnyWay({ email, limit: 10 });
     // Автодозавершение "подвисших" pending оплат, если transaction_id уже известен.
     const reconcile = await reconcilePendingPaymentsForEmail(email, 10);
-    if (reconcile.success && reconcile.confirmedPayments.length > 0) {
-      for (const confirmed of reconcile.confirmedPayments) {
+    const confirmedPayments = [
+      ...(bridge.confirmedPayments || []),
+      ...(reconcile.confirmedPayments || []),
+    ];
+    if (confirmedPayments.length > 0) {
+      for (const confirmed of confirmedPayments) {
         try {
           const balanceResult = await sql`
             SELECT balance
@@ -70,6 +77,7 @@ export async function GET() {
       totalSpent: balanceRow ? Number(balanceRow.total_spent || 0) : 0,
       balanceUpdatedAt: balanceRow?.updated_at || null,
       hasPendingPayments,
+      bridge,
       lastCompletedPayment: lastCompletedPayment
         ? {
             id: lastCompletedPayment.id,

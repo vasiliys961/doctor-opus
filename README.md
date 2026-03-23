@@ -149,6 +149,7 @@ curl -I https://doctor-opus.ru
 - Для SMTP Timeweb заполните `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
 - Для платежей (PayAnyWay) заполните `PAYMENT_PROVIDER=payanyway`, `PAYANYWAY_MNT_ID`, `PAYANYWAY_SECRET`, `PAYANYWAY_TEST_MODE`.
 - Storefront-callback включайте только при необходимости: `PAYANYWAY_STOREFRONT_ENABLED=true` и обязательно задайте `PAYANYWAY_STOREFRONT_TOKEN`.
+- Для bridge-reconcile (автозакрытие `pending` без `transaction_id` через API PayAnyWay) задайте `PAYANYWAY_OPERATION_LOOKUP_KEY`, `PAYANYWAY_OPERATION_LOOKUP_SECRET`, при необходимости `PAYANYWAY_OPERATION_LOOKUP_ACCOUNT`.
 
 ---
 

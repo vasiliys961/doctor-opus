@@ -1,12 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { SUBSCRIPTION_PACKAGES, getBalance, isSubscriptionEnabled } from '@/lib/subscription-manager'
 import type { SubscriptionBalance } from '@/lib/subscription-manager'
 import Link from 'next/link'
 import { isOnboardingCompleted } from '@/lib/onboarding'
 
 export default function SubscriptionPage() {
+  const AUTO_CHECK_INTERVAL_MS = 30_000
+  const AUTO_CHECK_MAX_ATTEMPTS = 10
+
   const [currentBalance, setCurrentBalance] = useState<SubscriptionBalance | null>(null)
   const [mounted, setMounted] = useState(false)
   const [isOnboardingDone, setIsOnboardingDone] = useState(false)
@@ -19,6 +22,79 @@ export default function SubscriptionPage() {
   const [checkingPayment, setCheckingPayment] = useState(false)
   const [paymentCheckMessage, setPaymentCheckMessage] = useState<string | null>(null)
   const [paymentCheckStatus, setPaymentCheckStatus] = useState<'success' | 'pending' | 'error' | null>(null)
+  const [autoCheckAttemptsLeft, setAutoCheckAttemptsLeft] = useState(0)
+  const [showCreditedToast, setShowCreditedToast] = useState(false)
+  const autoCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const autoCheckInFlightRef = useRef(false)
+  const autoCheckAttemptsLeftRef = useRef(0)
+
+  const stopAutoCheck = () => {
+    if (autoCheckIntervalRef.current) {
+      clearInterval(autoCheckIntervalRef.current)
+      autoCheckIntervalRef.current = null
+    }
+    autoCheckAttemptsLeftRef.current = 0
+    setAutoCheckAttemptsLeft(0)
+    autoCheckInFlightRef.current = false
+  }
+
+  const startAutoCheck = () => {
+    stopAutoCheck()
+    autoCheckAttemptsLeftRef.current = AUTO_CHECK_MAX_ATTEMPTS
+    setAutoCheckAttemptsLeft(AUTO_CHECK_MAX_ATTEMPTS)
+
+    autoCheckIntervalRef.current = setInterval(async () => {
+      if (autoCheckInFlightRef.current) return
+      if (autoCheckAttemptsLeftRef.current <= 0) {
+        stopAutoCheck()
+        return
+      }
+      autoCheckAttemptsLeftRef.current -= 1
+      setAutoCheckAttemptsLeft(autoCheckAttemptsLeftRef.current)
+
+      autoCheckInFlightRef.current = true
+      try {
+        await handleCheckPayment({ silent: true })
+      } finally {
+        autoCheckInFlightRef.current = false
+      }
+    }, AUTO_CHECK_INTERVAL_MS)
+  }
+
+  const playSuccessTone = () => {
+    try {
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
+      if (!AudioCtx) return
+      const ctx = new AudioCtx()
+      const oscillator = ctx.createOscillator()
+      const gain = ctx.createGain()
+
+      oscillator.type = 'sine'
+      oscillator.frequency.value = 880
+      gain.gain.value = 0.03
+
+      oscillator.connect(gain)
+      gain.connect(ctx.destination)
+
+      const now = ctx.currentTime
+      oscillator.start(now)
+      oscillator.stop(now + 0.12)
+      gain.gain.setValueAtTime(0.03, now)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12)
+
+      setTimeout(() => {
+        ctx.close().catch(() => null)
+      }, 250)
+    } catch {
+      // Безопасно игнорируем, если аудио недоступно или заблокировано браузером.
+    }
+  }
+
+  const showCreditToast = () => {
+    setShowCreditedToast(true)
+    setTimeout(() => setShowCreditedToast(false), 5000)
+    playSuccessTone()
+  }
 
   useEffect(() => {
     const refreshOnboardingStatus = () => setIsOnboardingDone(isOnboardingCompleted())
@@ -32,8 +108,9 @@ export default function SubscriptionPage() {
     const status = params.get('status')
     if (status === 'success') {
       setPaymentCheckStatus('success')
-      setPaymentCheckMessage('Оплата прошла успешно! Баланс обновится автоматически в течение нескольких секунд.')
+      setPaymentCheckMessage('Оплата принята. Запускаем автопроверку зачисления каждые 30 секунд (до 10 минут).')
       handleCheckPayment()
+      startAutoCheck()
     } else if (status === 'fail') {
       setPaymentCheckStatus('error')
       setPaymentCheckMessage('Оплата не прошла или была отменена. Попробуйте ещё раз.')
@@ -44,6 +121,7 @@ export default function SubscriptionPage() {
     document.addEventListener('visibilitychange', refreshOnboardingStatus)
 
     return () => {
+      stopAutoCheck()
       window.removeEventListener('onboardingCompleted', refreshOnboardingStatus)
       window.removeEventListener('focus', refreshOnboardingStatus)
       document.removeEventListener('visibilitychange', refreshOnboardingStatus)
@@ -81,10 +159,13 @@ export default function SubscriptionPage() {
     }
   }
 
-  const handleCheckPayment = async () => {
+  const handleCheckPayment = async (options?: { silent?: boolean }) => {
+    const isSilent = Boolean(options?.silent)
     setCheckingPayment(true)
-    setPaymentCheckMessage(null)
-    setPaymentCheckStatus(null)
+    if (!isSilent) {
+      setPaymentCheckMessage(null)
+      setPaymentCheckStatus(null)
+    }
     try {
       const response = await fetch('/api/payment/status', { cache: 'no-store' })
       const data = await response.json()
@@ -115,18 +196,22 @@ export default function SubscriptionPage() {
       window.dispatchEvent(new Event('balanceUpdated'))
 
       if (balanceIncreased) {
+        stopAutoCheck()
         setPaymentCheckStatus('success')
         setPaymentCheckMessage(`Оплата найдена — баланс обновлён до ${serverBalance.toFixed(2)} ед.`)
+        showCreditToast()
       } else if (data.hasPendingPayments) {
         setPaymentCheckStatus('pending')
-        setPaymentCheckMessage('Оплата ещё в обработке. Попробуйте проверить снова через 1–2 минуты.')
+        setPaymentCheckMessage('Оплата ещё в обработке. Не оплачивайте повторно: обычно подтверждение занимает до 1–10 минут.')
       } else {
         setPaymentCheckStatus('pending')
-        setPaymentCheckMessage('Зачисление пока не найдено. Если в PayAnyWay статус «уведомление не отправлено» — обратитесь в поддержку.')
+        setPaymentCheckMessage('Зачисление пока не найдено. Если оплата была подтверждена в банке/СБП, нажмите «Проверить оплату сейчас» через 1–2 минуты.')
       }
     } catch {
-      setPaymentCheckStatus('error')
-      setPaymentCheckMessage('Ошибка проверки оплаты. Попробуйте позже.')
+      if (!isSilent) {
+        setPaymentCheckStatus('error')
+        setPaymentCheckMessage('Ошибка проверки оплаты. Попробуйте позже.')
+      }
     } finally {
       setCheckingPayment(false)
     }
@@ -159,6 +244,13 @@ export default function SubscriptionPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-emerald-50 p-6">
       <div className="max-w-6xl mx-auto">
+        {showCreditedToast && (
+          <div className="fixed top-4 right-4 z-50 max-w-sm bg-emerald-600 text-white rounded-lg shadow-xl px-4 py-3 border border-emerald-500">
+            <p className="font-bold text-sm">Баланс пополнен</p>
+            <p className="text-xs opacity-95">Платёж подтверждён автоматически. Можно продолжать работу.</p>
+          </div>
+        )}
+
         <h1 className="text-4xl font-bold text-gray-800 mb-2">
           💎 Пакеты единиц
         </h1>
@@ -228,8 +320,22 @@ export default function SubscriptionPage() {
               : 'bg-amber-50 text-amber-800 border-amber-200'
           }`}>
             {paymentCheckMessage}
+            {autoCheckAttemptsLeft > 0 && (
+              <div className="mt-2 text-xs opacity-80">
+                Автопроверка активна: осталось попыток {autoCheckAttemptsLeft} (каждые 30 секунд).
+              </div>
+            )}
           </div>
         )}
+
+        {/* ВАЖНО ПРО PENDING И ЗАВИСАНИЕ СТРАНИЦЫ */}
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-6 text-sm text-indigo-900">
+          <p className="font-bold mb-1">Важно:</p>
+          <p>
+            Статус <strong>pending</strong> в Doctor Opus не списывает деньги сам по себе. Если страница оплаты зависла,
+            но вы уже подтвердили карту или СБП, не оплачивайте повторно — операция обычно подтягивается автоматически.
+          </p>
+        </div>
 
         {/* ИНДИВИДУАЛЬНЫЕ ПАКЕТЫ */}
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Для индивидуальных врачей</h2>
@@ -377,7 +483,7 @@ export default function SubscriptionPage() {
             <div>
               <h3 className="text-lg font-bold text-gray-800">Проверка зачисления</h3>
               <p className="text-sm text-gray-600">
-                Если после оплаты баланс не обновился автоматически — нажмите кнопку ниже.
+                Если после оплаты баланс не обновился или страница зависла, нажмите кнопку. Повторную оплату делать не нужно.
               </p>
             </div>
             <button
@@ -385,7 +491,7 @@ export default function SubscriptionPage() {
               disabled={checkingPayment}
               className="shrink-0 px-5 py-2.5 rounded-lg font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 transition"
             >
-              {checkingPayment ? 'Проверяем…' : 'Проверить оплату'}
+              {checkingPayment ? 'Проверяем…' : 'Проверить оплату сейчас'}
             </button>
           </div>
         </div>
