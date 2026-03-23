@@ -116,15 +116,31 @@ export default function SubscriptionPage() {
       setPaymentCheckMessage('Оплата не прошла или была отменена. Попробуйте ещё раз.')
     }
 
+    const syncStatusSilently = () => {
+      handleCheckPayment({ silent: true, background: true })
+    }
+    syncStatusSilently()
+
+    const onFocus = () => {
+      refreshOnboardingStatus()
+      syncStatusSilently()
+    }
+    const onVisibilityChange = () => {
+      refreshOnboardingStatus()
+      if (document.visibilityState === 'visible') {
+        syncStatusSilently()
+      }
+    }
+
     window.addEventListener('onboardingCompleted', refreshOnboardingStatus)
-    window.addEventListener('focus', refreshOnboardingStatus)
-    document.addEventListener('visibilitychange', refreshOnboardingStatus)
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
     return () => {
       stopAutoCheck()
       window.removeEventListener('onboardingCompleted', refreshOnboardingStatus)
-      window.removeEventListener('focus', refreshOnboardingStatus)
-      document.removeEventListener('visibilitychange', refreshOnboardingStatus)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -159,10 +175,13 @@ export default function SubscriptionPage() {
     }
   }
 
-  const handleCheckPayment = async (options?: { silent?: boolean }) => {
+  const handleCheckPayment = async (options?: { silent?: boolean; background?: boolean }) => {
     const isSilent = Boolean(options?.silent)
-    setCheckingPayment(true)
-    if (!isSilent) {
+    const isBackground = Boolean(options?.background)
+    if (!isBackground) {
+      setCheckingPayment(true)
+    }
+    if (!isSilent && !isBackground) {
       setPaymentCheckMessage(null)
       setPaymentCheckStatus(null)
     }
@@ -170,8 +189,10 @@ export default function SubscriptionPage() {
       const response = await fetch('/api/payment/status', { cache: 'no-store' })
       const data = await response.json()
       if (!response.ok || !data?.success) {
-        setPaymentCheckStatus('error')
-        setPaymentCheckMessage(data?.error || 'Не удалось проверить статус оплаты. Попробуйте позже.')
+        if (!isBackground) {
+          setPaymentCheckStatus('error')
+          setPaymentCheckMessage(data?.error || 'Не удалось проверить статус оплаты. Попробуйте позже.')
+        }
         return
       }
 
@@ -197,23 +218,31 @@ export default function SubscriptionPage() {
 
       if (balanceIncreased) {
         stopAutoCheck()
-        setPaymentCheckStatus('success')
-        setPaymentCheckMessage(`Оплата найдена — баланс обновлён до ${serverBalance.toFixed(2)} ед.`)
+        if (!isBackground) {
+          setPaymentCheckStatus('success')
+          setPaymentCheckMessage(`Оплата найдена — баланс обновлён до ${serverBalance.toFixed(2)} ед.`)
+        }
         showCreditToast()
       } else if (data.hasPendingPayments) {
-        setPaymentCheckStatus('pending')
-        setPaymentCheckMessage('Оплата ещё в обработке. Не оплачивайте повторно: обычно подтверждение занимает до 1–10 минут.')
+        if (!isBackground) {
+          setPaymentCheckStatus('pending')
+          setPaymentCheckMessage('Оплата ещё в обработке. Не оплачивайте повторно: обычно подтверждение занимает до 1–10 минут.')
+        }
       } else {
-        setPaymentCheckStatus('pending')
-        setPaymentCheckMessage('Зачисление пока не найдено. Если оплата была подтверждена в банке/СБП, нажмите «Проверить оплату сейчас» через 1–2 минуты.')
+        if (!isBackground) {
+          setPaymentCheckStatus('pending')
+          setPaymentCheckMessage('Зачисление пока не найдено. Если оплата была подтверждена в банке/СБП, нажмите «Проверить оплату сейчас» через 1–2 минуты.')
+        }
       }
     } catch {
-      if (!isSilent) {
+      if (!isSilent && !isBackground) {
         setPaymentCheckStatus('error')
         setPaymentCheckMessage('Ошибка проверки оплаты. Попробуйте позже.')
       }
     } finally {
-      setCheckingPayment(false)
+      if (!isBackground) {
+        setCheckingPayment(false)
+      }
     }
   }
 
