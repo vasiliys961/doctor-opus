@@ -180,41 +180,86 @@ export default function AdminPaymentsPage() {
   const parseManualPairs = (text: string): Array<{ paymentId: number; operationId: string }> => {
     const pairs: Array<{ paymentId: number; operationId: string }> = []
     const lines = text.split('\n').map(v => v.trim()).filter(Boolean)
+    const pendingByCtid = new Map<string, number>()
+    let lastRawPaymentId: number | null = null
+    const opIdPattern = '[A-Za-z0-9_-]{6,}'
+
+    const pushPair = (paymentIdRaw: string | number, operationIdRaw: string) => {
+      const paymentId = Number(paymentIdRaw)
+      const operationId = String(operationIdRaw || '').trim()
+      if (!Number.isInteger(paymentId) || paymentId <= 0) return
+      if (!operationId) return
+      pairs.push({ paymentId, operationId })
+    }
+
     for (const line of lines) {
       // Формат 1: paymentId -> operationId (рекомендуемый)
-      const direct = line.match(/^#?(\d+)\s*(?:->|=>|:|,|\s)\s*(\d{6,})$/)
+      const direct = line.match(new RegExp(`^#?(\\d+)\\s*(?:->|=>|:|,)\\s*(${opIdPattern})$`, 'i'))
       if (direct) {
-        pairs.push({
-          paymentId: Number(direct[1]),
-          operationId: direct[2],
-        })
+        pushPair(direct[1], direct[2])
         continue
       }
 
-      // Формат 2: operationId<TAB/space>paymentId (как в выгрузке PayAnyWay)
-      const reverse = line.match(/^(\d{6,})\s*(?:->|=>|:|,|\s)\s*#?(\d+)$/)
+      // Формат 1b: paymentId operationId (через пробел; operationId должен быть не только из цифр)
+      const directSpace = line.match(new RegExp(`^#?(\\d+)\\s+(${opIdPattern})$`, 'i'))
+      if (directSpace && /[A-Za-z_-]/.test(directSpace[2])) {
+        pushPair(directSpace[1], directSpace[2])
+        continue
+      }
+
+      // Формат 2: operationId -> paymentId
+      const reverse = line.match(new RegExp(`^(${opIdPattern})\\s*(?:->|=>|:|,)\\s*#?(\\d+)$`, 'i'))
       if (reverse) {
-        pairs.push({
-          paymentId: Number(reverse[2]),
-          operationId: reverse[1],
-        })
+        pushPair(reverse[2], reverse[1])
         continue
       }
 
-      // Формат 3: "сырой" экспорт строки из PayAnyWay:
-      // 23.03.2026, 19:24  1424670709  24  390.00  user@mail.ru
-      const rawExport = line.match(
+      // Формат 2b: operationId paymentId (через пробел; operationId должен быть не только из цифр)
+      const reverseSpace = line.match(new RegExp(`^(${opIdPattern})\\s+#?(\\d+)$`, 'i'))
+      if (reverseSpace && /[A-Za-z_-]/.test(reverseSpace[1])) {
+        pushPair(reverseSpace[2], reverseSpace[1])
+        continue
+      }
+
+      // Формат 3: строка "сырого" экспорта PayAnyWay с CTID + paymentId.
+      // Пример: 23.03.2026, 21:55 1424816178 25 390.00 user@mail.ru
+      const rawHeader = line.match(
         /^(?:\d{2}\.\d{2}\.\d{4},\s*\d{2}:\d{2}\s+)?(\d{9,})\s+(\d+)\s+\d+(?:[.,]\d+)?\s+[^\s@]+@[^\s@]+\.[^\s@]+$/i
       )
-      if (rawExport) {
-        pairs.push({
-          paymentId: Number(rawExport[2]),
-          operationId: rawExport[1],
-        })
+      if (rawHeader) {
+        const ctid = rawHeader[1]
+        const paymentId = Number(rawHeader[2])
+        if (Number.isInteger(paymentId) && paymentId > 0) {
+          pendingByCtid.set(ctid, paymentId)
+          lastRawPaymentId = paymentId
+        }
+        continue
+      }
+
+      // Формат 4: вторая строка из raw-экспорта: "выполнена 200e1qc8h2"
+      const statusLine = line.match(new RegExp(`^(?:выполнена|успешно|оплачен[ао]?|success(?:ful)?|completed)\\s+(${opIdPattern})$`, 'i'))
+      if (statusLine && lastRawPaymentId) {
+        pushPair(lastRawPaymentId, statusLine[1])
+        lastRawPaymentId = null
+        continue
+      }
+
+      // Формат 5: CTID -> operationId, если в том же блоке уже была строка CTID + paymentId.
+      const ctidToOperation = line.match(new RegExp(`^(\\d{9,})\\s*(?:->|=>|:|,)\\s*(${opIdPattern})$`, 'i'))
+      if (ctidToOperation) {
+        const paymentId = pendingByCtid.get(ctidToOperation[1])
+        if (paymentId) {
+          pushPair(paymentId, ctidToOperation[2])
+        }
         continue
       }
     }
-    return pairs
+
+    const uniq = new Map<string, { paymentId: number; operationId: string }>()
+    for (const pair of pairs) {
+      uniq.set(`${pair.paymentId}:${pair.operationId}`, pair)
+    }
+    return Array.from(uniq.values())
   }
 
   const runManualReconcile = async () => {
@@ -459,11 +504,11 @@ export default function AdminPaymentsPage() {
           <textarea
             value={manualPairsText}
             onChange={(e) => setManualPairsText(e.target.value)}
-            placeholder={'24 -> 1424670709\n23 -> 1424656576\n1424670709 24\n1424656576 23\n23.03.2026, 19:24 1424670709 24 390.00 user@mail.ru'}
+            placeholder={'24 -> 200e1qc8h2\n200e1qc8h2 24\n23.03.2026, 21:55 1424816178 25 390.00 user@mail.ru\nвыполнена 200e1qc8h2'}
             className="mt-3 w-full min-h-[90px] rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-slate-700 font-mono"
           />
           <p className="mt-2 text-[11px] text-amber-800">
-            Принимаются форматы: <code>paymentId -&gt; operationId</code>, <code>operationId paymentId</code> и сырой экспорт строки PayAnyWay.
+            Принимаются форматы: <code>paymentId -&gt; operationId</code>, <code>operationId paymentId</code> и сырой экспорт PayAnyWay (в т.ч. 2-строчный: строка с CTID + строка <code>выполнена operationId</code>).
           </p>
         </div>
 
