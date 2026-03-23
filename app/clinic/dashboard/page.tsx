@@ -64,9 +64,9 @@ export default function ClinicDashboardPage() {
           <div>
             <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
               <span className="bg-indigo-600 text-white p-2 rounded-xl shadow-lg text-2xl">🏢</span>
-              Панель управления клиникой
+              Аналитика расхода единиц
             </h1>
-            <p className="text-slate-500 mt-1 italic">Аналитика использования ресурсов ИИ по отделениям</p>
+            <p className="text-slate-500 mt-1 italic">Статистика использования ИИ по разделам и специальностям</p>
           </div>
           <Link 
             href="/balance" 
@@ -164,7 +164,7 @@ export default function ClinicDashboardPage() {
 
             <div className="mt-8 p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
               <p className="text-xs text-indigo-700 leading-relaxed italic">
-                💡 <strong>Совет для администратора:</strong> Эта панель помогает контролировать, какие подразделения наиболее активно используют ИИ-инструменты. Если юниты расходуются слишком быстро, обратите внимание на отделения с наибольшим процентом затрат.
+                💡 <strong>Подсказка:</strong> Это аналитика расхода единиц по вашим операциям. Для проверки статусов оплат (ожидает/оплачен) используйте админ-панель платежей.
               </p>
             </div>
           </>

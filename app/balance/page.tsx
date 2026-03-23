@@ -62,7 +62,7 @@ export default function BalancePage() {
             href="/clinic/dashboard"
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition shadow-md font-bold text-sm"
           >
-            🏢 Панель клиники (Аудит)
+            🏢 Аналитика расхода единиц
           </Link>
         </div>
 

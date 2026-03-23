@@ -286,7 +286,7 @@ export default function SubscriptionPage() {
         <p className="text-gray-600 mb-4">
           Единицы используются для оплаты анализов и консультаций.{' '}
           <Link href="/clinic/dashboard" className="ml-2 text-indigo-600 font-bold hover:underline">
-            🏢 Панель для клиник →
+            🏢 Аналитика расхода единиц →
           </Link>
         </p>
 

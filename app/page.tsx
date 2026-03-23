@@ -202,7 +202,7 @@ export default async function HomePage() {
               <li><Link href="/docs/privacy" className="text-sm text-slate-600 hover:text-teal-600 transition-colors">Политика конфиденциальности</Link></li>
               <li><Link href="/docs/terms" className="text-sm text-slate-600 hover:text-teal-600 transition-colors">Условия использования</Link></li>
               <li><Link href="/docs/consent" className="text-sm text-slate-600 hover:text-teal-600 transition-colors">Согласие на обработку</Link></li>
-              <li><Link href="/clinic/dashboard" className="text-sm font-bold text-indigo-600 hover:text-indigo-700 transition-colors">🏢 Панель клиники</Link></li>
+              <li><Link href="/clinic/dashboard" className="text-sm font-bold text-indigo-600 hover:text-indigo-700 transition-colors">🏢 Аналитика расхода единиц</Link></li>
             </ul>
           </div>
 
