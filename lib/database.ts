@@ -496,7 +496,9 @@ export async function confirmPayment(paymentId: number, transactionId: string) {
     try {
       await client.query(
         `INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
-         SELECT $1, $2, $3, $4::jsonb, balance FROM user_balances WHERE email = $1`,
+         SELECT $1::varchar, $2::numeric, $3::text, $4::jsonb, balance
+         FROM user_balances
+         WHERE email = $1::varchar`,
         [email, units, 'Пополнение баланса (оплата)', JSON.stringify({ paymentId, transactionId })]
       );
     } catch (logError) {
