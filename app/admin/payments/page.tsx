@@ -52,6 +52,7 @@ export default function AdminPaymentsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [manualReconcileAdvice, setManualReconcileAdvice] = useState<string[]>([])
   const [refunding, setRefunding] = useState<number | null>(null)
   const [period, setPeriod] = useState<'all' | 'today' | '7d' | '30d'>('all')
   const [showOpsReminder, setShowOpsReminder] = useState(false)
@@ -265,6 +266,7 @@ export default function AdminPaymentsPage() {
   const runManualReconcile = async () => {
     setManualReconciling(true)
     setError('')
+    setManualReconcileAdvice([])
     try {
       const pairs = parseManualPairs(manualPairsText)
       if (pairs.length === 0) {
@@ -286,13 +288,32 @@ export default function AdminPaymentsPage() {
       const processed = Number(data.processed || 0)
       const confirmed = Number(data.confirmed || 0)
       const alreadyProcessed = Number(data.alreadyProcessed || 0)
-      const failuresCount = Array.isArray(data.failures) ? data.failures.length : 0
+      const failures = Array.isArray(data.failures) ? data.failures : []
+      const failuresCount = failures.length
       setNotice(
         `Ручной дожим выполнен: обработано ${processed}, подтверждено ${confirmed}, уже было обработано ${alreadyProcessed}, ошибок ${failuresCount}.`
       )
+      const advice: string[] = []
+      if (confirmed > 0) {
+        advice.push('Оплата подтверждена: обновите страницу пользователя и проверьте рост баланса.')
+      }
+      if (alreadyProcessed > 0) {
+        advice.push('Операция уже была обработана раньше: повторно баланс не увеличивается (это защита от дублей).')
+      }
+      if (failures.some((f: any) => String(f?.reason || '').includes('transaction already used by payment #'))) {
+        advice.push('Номер операции уже привязан к другому платежу: проверьте правильность пары paymentId -> operationId в выгрузке PayAnyWay.')
+      }
+      if (failures.some((f: any) => String(f?.reason || '') === 'payment not found')) {
+        advice.push('Платеж с таким paymentId не найден: проверьте ID в Opus и повторите дожим.')
+      }
+      if (failures.some((f: any) => String(f?.reason || '') === 'attach transaction failed' || String(f?.reason || '') === 'confirmPayment failed')) {
+        advice.push('Техническая ошибка дожима: запустите автосверку и проверьте логи приложения за последние 10 минут.')
+      }
+      setManualReconcileAdvice(advice)
       await loadPayments()
     } catch (err: any) {
       setError(err.message || 'Ошибка ручного дожима')
+      setManualReconcileAdvice([])
     } finally {
       setManualReconciling(false)
     }
@@ -362,6 +383,11 @@ export default function AdminPaymentsPage() {
         {notice && !error && (
           <div className="bg-blue-50 border border-blue-200 text-blue-700 p-4 rounded-xl mb-6">
             ℹ️ {notice}
+          </div>
+        )}
+        {manualReconcileAdvice.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl mb-6 text-sm">
+            <strong>Что делать:</strong> {manualReconcileAdvice.join(' ')}
           </div>
         )}
 
