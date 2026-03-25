@@ -124,6 +124,64 @@ export async function sendPaymentCreditedEmail(args: {
 }
 
 /**
+ * Уведомление о том, что оплата пока не подтверждена.
+ * Важно: формулировки нейтральные (без утверждения о списании/возврате банком).
+ */
+export async function sendPaymentPendingHelpEmail(args: {
+  email: string;
+  paymentId: number;
+  amountRub: number;
+  createdAt?: string | Date | null;
+}) {
+  try {
+    const provider = getEmailProvider();
+    if (!provider) {
+      console.warn('⚠️ [EMAIL] Провайдер не настроен. Письмо о pending-оплате не отправлено.');
+      return { success: false, error: 'Email provider not configured' };
+    }
+
+    const amount = Number(args.amountRub || 0).toFixed(2);
+    const created = args.createdAt ? new Date(args.createdAt) : null;
+    const createdPart = created && !Number.isNaN(created.getTime())
+      ? created.toLocaleString('ru-RU')
+      : null;
+
+    return await provider.send({
+      to: args.email,
+      subject: 'Doctor Opus: оплата пока не подтверждена',
+      html: `
+        <div style="font-family: sans-serif; max-width: 640px; margin: 0 auto; color: #1f2937;">
+          <h2 style="color:#b45309;">Оплата пока не подтверждена</h2>
+          <p>Мы видим созданный платеж в Doctor Opus, но подтверждение от платежной системы пока не получено.</p>
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 16px;margin:14px 0;">
+            <p style="margin: 6px 0;"><strong>ID платежа:</strong> #${args.paymentId}</p>
+            <p style="margin: 6px 0;"><strong>Сумма:</strong> ${amount} ₽</p>
+            ${createdPart ? `<p style="margin: 6px 0;"><strong>Время создания:</strong> ${createdPart}</p>` : ''}
+          </div>
+
+          <h3 style="margin: 16px 0 8px;">Что делать</h3>
+          <ol style="margin: 0 0 10px 18px; padding: 0; line-height: 1.6;">
+            <li>Откройте страницу пакетов в Doctor Opus и нажмите <strong>«Проверить оплату сейчас»</strong>.</li>
+            <li>Если подтверждения нет, проверьте статус операции в банке/СБП.</li>
+            <li>Если списание не подтверждено банком, безопасно повторите оплату по новой ссылке.</li>
+          </ol>
+
+          <p style="color:#64748b;">
+            Важно: статус pending в сервисе сам по себе не означает повторное списание.
+            Если нужна помощь, ответьте на это письмо и приложите скрин операции (дата, сумма, номер).
+          </p>
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;" />
+          <p style="font-size:12px;color:#94a3b8;">Doctor Opus</p>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error('❌ [EMAIL] Ошибка отправки уведомления о pending-оплате:', err);
+    return { success: false, error: err };
+  }
+}
+
+/**
  * Письмо-приглашение в клинику (первичное или повторное).
  */
 export async function sendClinicInviteEmail(args: {

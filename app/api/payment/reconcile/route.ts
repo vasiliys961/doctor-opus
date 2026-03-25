@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { expireStalePendingPayments, initDatabase, reconcilePendingPayments, sql } from '@/lib/database';
-import { sendPaymentCreditedEmail } from '@/lib/email-service';
+import { expireStalePendingPayments, initDatabase, reconcilePendingPayments, releasePendingNoticeReservation, reservePendingNoticeCandidates, sql } from '@/lib/database';
+import { sendPaymentCreditedEmail, sendPaymentPendingHelpEmail } from '@/lib/email-service';
 import { safeError, safeLog } from '@/lib/logger';
 import { bridgePendingPaymentsWithPayAnyWay } from '@/lib/payment/payanyway-bridge-reconcile';
 
@@ -18,6 +18,7 @@ function isAuthorized(request: NextRequest): boolean {
 async function runReconcile(limit: number) {
   await initDatabase();
   const expired = await expireStalePendingPayments();
+  const pendingNoticeReserve = await reservePendingNoticeCandidates();
   const bridge = await bridgePendingPaymentsWithPayAnyWay({ limit });
   const result = await reconcilePendingPayments(limit);
 
@@ -53,9 +54,42 @@ async function runReconcile(limit: number) {
     }
   }
 
+  let pendingNoticeSent = 0;
+  let pendingNoticeFailed = 0;
+  if (pendingNoticeReserve.success && pendingNoticeReserve.reserved.length > 0) {
+    const failedPaymentIds: number[] = [];
+    for (const row of pendingNoticeReserve.reserved) {
+      try {
+        const mailResult = await sendPaymentPendingHelpEmail({
+          email: row.email,
+          paymentId: row.paymentId,
+          amountRub: row.amountRub,
+          createdAt: row.createdAt,
+        });
+        if (mailResult?.success) {
+          pendingNoticeSent += 1;
+        } else {
+          pendingNoticeFailed += 1;
+          failedPaymentIds.push(row.paymentId);
+        }
+      } catch {
+        pendingNoticeFailed += 1;
+        failedPaymentIds.push(row.paymentId);
+      }
+    }
+    if (failedPaymentIds.length > 0) {
+      await releasePendingNoticeReservation(failedPaymentIds);
+    }
+  }
+
   return {
     ...result,
     expired,
+    pendingNotices: {
+      reserved: pendingNoticeReserve.success ? pendingNoticeReserve.reserved.length : 0,
+      sent: pendingNoticeSent,
+      failed: pendingNoticeFailed,
+    },
     bridge,
     confirmedPayments: mergedConfirmedPayments,
     confirmed: Number(result.confirmed || 0) + Number(bridge.confirmed || 0),

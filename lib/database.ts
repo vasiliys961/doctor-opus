@@ -115,6 +115,12 @@ export async function initDatabase() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
+    try {
+      await sql`
+        ALTER TABLE payments
+        ADD COLUMN IF NOT EXISTS pending_notice_sent_at TIMESTAMP WITH TIME ZONE
+      `;
+    } catch {}
 
     // Таблица балансов пользователей (Версия 3.40.0)
     await sql`
@@ -710,6 +716,77 @@ export async function expireStalePendingPayments(args?: { email?: string; staleM
   } catch (error) {
     safeError('❌ [DATABASE] Ошибка авто-истечения stale pending платежей:', error);
     return { success: false, staleMinutes: 0, expiredCount: 0, expiredPaymentIds: [] as number[] };
+  }
+}
+
+/**
+ * Резервирует pending-платежи для одноразовой отправки письма-подсказки пользователю.
+ * Возвращает только те записи, которые были помечены текущим вызовом.
+ */
+export async function reservePendingNoticeCandidates(args?: { staleMinutes?: number; limit?: number }) {
+  try {
+    const staleMinutesRaw = Number(
+      args?.staleMinutes ??
+      process.env.PAYMENT_PENDING_NOTIFY_AFTER_MINUTES ??
+      15
+    );
+    const staleMinutes = Math.min(Math.max(Number.isFinite(staleMinutesRaw) ? staleMinutesRaw : 15, 5), 60 * 24 * 14);
+    const limitRaw = Number(args?.limit ?? process.env.PAYMENT_PENDING_NOTIFY_LIMIT ?? 50);
+    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 500);
+
+    const reserved = await sql`
+      WITH candidates AS (
+        SELECT id
+        FROM payments
+        WHERE status = 'pending'
+          AND transaction_id IS NULL
+          AND pending_notice_sent_at IS NULL
+          AND created_at < CURRENT_TIMESTAMP - make_interval(mins => ${staleMinutes})
+        ORDER BY created_at ASC
+        LIMIT ${limit}
+      )
+      UPDATE payments p
+      SET pending_notice_sent_at = CURRENT_TIMESTAMP
+      FROM candidates c
+      WHERE p.id = c.id
+      RETURNING p.id, p.email, p.amount, p.units, p.created_at
+    `;
+
+    return {
+      success: true,
+      staleMinutes,
+      reserved: reserved.rows.map((row: any) => ({
+        paymentId: Number(row.id),
+        email: String(row.email),
+        amountRub: Number(row.amount || 0),
+        units: Number(row.units || 0),
+        createdAt: row.created_at,
+      })),
+    };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка резервирования pending для email-уведомлений:', error);
+    return { success: false, staleMinutes: 0, reserved: [] as any[] };
+  }
+}
+
+/**
+ * Снимает резерв отправки письма для повторной попытки, если email не отправился.
+ */
+export async function releasePendingNoticeReservation(paymentIds: number[]) {
+  try {
+    const ids = Array.from(new Set((paymentIds || []).map(v => Number(v)).filter(v => Number.isInteger(v) && v > 0)));
+    if (ids.length === 0) return { success: true, released: 0 };
+
+    const res = await sql`
+      UPDATE payments
+      SET pending_notice_sent_at = NULL
+      WHERE id = ANY(${ids}::int[])
+      RETURNING id
+    `;
+    return { success: true, released: res.rows.length };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка снятия резерва pending email-уведомлений:', error);
+    return { success: false, released: 0 };
   }
 }
 
