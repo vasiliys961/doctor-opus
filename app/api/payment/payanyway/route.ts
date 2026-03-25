@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
-import { getDbClient, initDatabase, confirmPayment, attachTransactionToPendingPayment, reconcilePendingPaymentsForEmail } from '@/lib/database';
+import { getDbClient, initDatabase, confirmPayment, attachTransactionToPendingPayment, reconcilePendingPaymentsForEmail, sql } from '@/lib/database';
 import { sendPaymentCreditedEmail } from '@/lib/email-service';
 import { safeLog, safeError, safeWarn } from '@/lib/logger';
 import { SUBSCRIPTION_PACKAGES } from '@/lib/subscription-manager';
@@ -631,6 +631,43 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
     let alreadyDone = false;
 
     if (dbPaymentId) {
+      // Дополнительная валидация callback против заказа в БД:
+      // защищает от случайного/ошибочного подтверждения не того платежа.
+      const paymentRowResult = await sql`
+        SELECT id, email, amount, status
+        FROM payments
+        WHERE id = ${dbPaymentId}
+        LIMIT 1
+      `;
+      const paymentRow = paymentRowResult.rows[0];
+      if (!paymentRow) {
+        safeError(`❌ [PAYANYWAY] Платёж #${dbPaymentId} не найден в БД`);
+        const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
+        return new Response(xml, {
+          status: 200,
+          headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
+        });
+      }
+
+      const expectedAmount = Number(paymentRow.amount || 0);
+      const amountDiff = Math.abs(expectedAmount - amount);
+      if (!Number.isFinite(expectedAmount) || amountDiff > 0.01) {
+        safeError(`❌ [PAYANYWAY] Несовпадение суммы callback для #${dbPaymentId}: expected=${expectedAmount}, got=${amount}`);
+        const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
+        return new Response(xml, {
+          status: 200,
+          headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
+        });
+      }
+      if ((data.MNT_CURRENCY_CODE || '').toUpperCase() !== 'RUB') {
+        safeError(`❌ [PAYANYWAY] Некорректная валюта callback для #${dbPaymentId}: ${data.MNT_CURRENCY_CODE}`);
+        const xml = buildPayUrlXml(txId, '500', receiptContext, pkg);
+        return new Response(xml, {
+          status: 200,
+          headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
+        });
+      }
+
       // Invoice API: обновляем запись payments(id=dbPaymentId) до completed
       const confirmResult = await confirmPayment(dbPaymentId, operationId);
       if (!confirmResult.success) {
@@ -691,6 +728,17 @@ async function handlePayanyway(raw: Record<string, string>, decoded: Record<stri
       } catch (mailError: any) {
         safeWarn(`⚠️ [PAYANYWAY] Не удалось отправить email о пополнении: ${mailError?.message}`);
       }
+    }
+
+    // Критично: если платеж не подтвержден/не зачислен, нельзя возвращать 200.
+    // Возвращаем 302, чтобы MONETA.Assistant повторила отправку уведомления.
+    if (!alreadyDone && !credited) {
+      safeWarn(`⚠️ [PAYANYWAY] Операция ${operationId} пока не зафиксирована, отвечаем 302 для ретрая callback`);
+      const xml = buildPayUrlXml(txId, '302', receiptContext, pkg);
+      return new Response(xml, {
+        status: 200,
+        headers: { 'Content-Type': 'application/xml; charset=UTF-8' },
+      });
     }
 
     const xml = buildPayUrlXml(txId, '200', receiptContext, pkg);
