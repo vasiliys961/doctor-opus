@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions, isAdminEmail } from '@/lib/auth';
-import { initDatabase, reconcilePendingPayments, sql } from '@/lib/database';
+import { expireStalePendingPayments, initDatabase, reconcilePendingPayments, sql } from '@/lib/database';
 import { sendPaymentCreditedEmail } from '@/lib/email-service';
 import { safeError, safeLog } from '@/lib/logger';
 import { bridgePendingPaymentsWithPayAnyWay } from '@/lib/payment/payanyway-bridge-reconcile';
@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 200, 1), 500);
 
     await initDatabase();
+    const expired = await expireStalePendingPayments();
     const bridge = await bridgePendingPaymentsWithPayAnyWay({ limit });
     const result = await reconcilePendingPayments(limit);
     const confirmedPayments = [
@@ -73,11 +74,13 @@ export async function POST(request: NextRequest) {
         attached: bridge.attached,
         confirmed: bridge.confirmed,
       },
+      expired,
     });
 
     return NextResponse.json({
       success: true,
       ...result,
+      expired,
       bridge,
       confirmedPayments,
       confirmed: Number(result.confirmed || 0) + Number(bridge.confirmed || 0),

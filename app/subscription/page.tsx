@@ -22,6 +22,13 @@ export default function SubscriptionPage() {
   const [checkingPayment, setCheckingPayment] = useState(false)
   const [paymentCheckMessage, setPaymentCheckMessage] = useState<string | null>(null)
   const [paymentCheckStatus, setPaymentCheckStatus] = useState<'success' | 'pending' | 'error' | null>(null)
+  const [pendingInfo, setPendingInfo] = useState<{
+    paymentId: number;
+    amount: number;
+    reason: string;
+    action: string;
+    ageMinutes: number;
+  } | null>(null)
   const [autoCheckAttemptsLeft, setAutoCheckAttemptsLeft] = useState(0)
   const [showCreditedToast, setShowCreditedToast] = useState(false)
   const autoCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -200,6 +207,7 @@ export default function SubscriptionPage() {
       const serverTotalSpent = Number(data.totalSpent ?? 0)
       const prevBalance = currentBalance?.currentCredits ?? 0
       const balanceIncreased = serverBalance > prevBalance
+      const pendingDiagnostic = data.pendingDiagnostic || null
 
       setCurrentBalance((prev) => {
         const initialCredits = Math.max(serverBalance + serverTotalSpent, prev?.initialCredits ?? 0, 10)
@@ -218,20 +226,39 @@ export default function SubscriptionPage() {
 
       if (balanceIncreased) {
         stopAutoCheck()
+        setPendingInfo(null)
         if (!isBackground) {
           setPaymentCheckStatus('success')
           setPaymentCheckMessage(`Оплата найдена — баланс обновлён до ${serverBalance.toFixed(2)} ед.`)
         }
         showCreditToast()
       } else if (data.hasPendingPayments) {
+        if (pendingDiagnostic) {
+          setPendingInfo({
+            paymentId: Number(pendingDiagnostic.paymentId),
+            amount: Number(pendingDiagnostic.amount || 0),
+            reason: String(pendingDiagnostic.reason || ''),
+            action: String(pendingDiagnostic.action || ''),
+            ageMinutes: Number(pendingDiagnostic.ageMinutes || 0),
+          })
+        }
         if (!isBackground) {
           setPaymentCheckStatus('pending')
-          setPaymentCheckMessage('Оплата ещё в обработке. Не оплачивайте повторно: обычно подтверждение занимает до 1–10 минут, в редких случаях — до 2–3 дней.')
+          setPaymentCheckMessage(
+            pendingDiagnostic
+              ? `Оплата #${pendingDiagnostic.paymentId} (${Number(pendingDiagnostic.amount || 0).toFixed(0)} ₽) ещё в обработке.`
+              : 'Оплата ещё в обработке. Не оплачивайте повторно: обычно подтверждение занимает до 1–10 минут.'
+          )
         }
       } else {
+        setPendingInfo(null)
         if (!isBackground) {
           setPaymentCheckStatus('pending')
-          setPaymentCheckMessage('Зачисление пока не найдено. Если оплата была подтверждена в банке/СБП, нажмите «Проверить оплату сейчас» через 1–2 минуты.')
+          setPaymentCheckMessage(
+            Number(data?.expiredByCleanup?.expiredCount || 0) > 0
+              ? 'Старые незавершенные платежи автоматически помечены как истекшие. Создайте новую оплату и завершите ее в PayAnyWay.'
+              : 'Зачисление пока не найдено. Если оплата была подтверждена в банке/СБП, нажмите «Проверить оплату сейчас» через 1–2 минуты.'
+          )
         }
       }
     } catch {
@@ -354,6 +381,19 @@ export default function SubscriptionPage() {
                 Автопроверка активна: осталось попыток {autoCheckAttemptsLeft} (каждые 30 секунд).
               </div>
             )}
+          </div>
+        )}
+        {pendingInfo && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-6 text-sm text-amber-900">
+            <p>
+              <strong>Почему pending:</strong> {pendingInfo.reason}
+            </p>
+            <p className="mt-1">
+              <strong>Что делать:</strong> {pendingInfo.action}
+            </p>
+            <p className="mt-1 text-xs opacity-80">
+              Платеж #{pendingInfo.paymentId}, сумма {pendingInfo.amount.toFixed(0)} ₽, время ожидания: {pendingInfo.ageMinutes} мин.
+            </p>
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initDatabase, reconcilePendingPayments, sql } from '@/lib/database';
+import { expireStalePendingPayments, initDatabase, reconcilePendingPayments, sql } from '@/lib/database';
 import { sendPaymentCreditedEmail } from '@/lib/email-service';
 import { safeError, safeLog } from '@/lib/logger';
 import { bridgePendingPaymentsWithPayAnyWay } from '@/lib/payment/payanyway-bridge-reconcile';
@@ -17,6 +17,7 @@ function isAuthorized(request: NextRequest): boolean {
 
 async function runReconcile(limit: number) {
   await initDatabase();
+  const expired = await expireStalePendingPayments();
   const bridge = await bridgePendingPaymentsWithPayAnyWay({ limit });
   const result = await reconcilePendingPayments(limit);
 
@@ -54,6 +55,7 @@ async function runReconcile(limit: number) {
 
   return {
     ...result,
+    expired,
     bridge,
     confirmedPayments: mergedConfirmedPayments,
     confirmed: Number(result.confirmed || 0) + Number(bridge.confirmed || 0),

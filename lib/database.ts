@@ -667,6 +667,53 @@ export async function reconcilePendingPayments(limit = 100) {
 }
 
 /**
+ * Автоматически помечает "зависшие" pending без transaction_id как expired.
+ * Это убирает вечные pending, когда пользователь не завершил оплату.
+ */
+export async function expireStalePendingPayments(args?: { email?: string; staleMinutes?: number }) {
+  try {
+    const staleMinutesRaw = Number(
+      args?.staleMinutes ??
+      process.env.PAYMENT_PENDING_EXPIRE_MINUTES ??
+      120
+    );
+    const staleMinutes = Math.min(Math.max(Number.isFinite(staleMinutesRaw) ? staleMinutesRaw : 120, 10), 60 * 24 * 14);
+    const email = String(args?.email || '').trim().toLowerCase();
+
+    const result = email
+      ? await sql`
+          UPDATE payments
+          SET status = 'expired',
+              updated_at = CURRENT_TIMESTAMP
+          WHERE status = 'pending'
+            AND transaction_id IS NULL
+            AND email = ${email}
+            AND created_at < CURRENT_TIMESTAMP - make_interval(mins => ${staleMinutes})
+          RETURNING id
+        `
+      : await sql`
+          UPDATE payments
+          SET status = 'expired',
+              updated_at = CURRENT_TIMESTAMP
+          WHERE status = 'pending'
+            AND transaction_id IS NULL
+            AND created_at < CURRENT_TIMESTAMP - make_interval(mins => ${staleMinutes})
+          RETURNING id
+        `;
+
+    return {
+      success: true,
+      staleMinutes,
+      expiredCount: result.rows.length,
+      expiredPaymentIds: result.rows.map((row: any) => Number(row.id)),
+    };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка авто-истечения stale pending платежей:', error);
+    return { success: false, staleMinutes: 0, expiredCount: 0, expiredPaymentIds: [] as number[] };
+  }
+}
+
+/**
  * Получение баланса пользователя
  */
 export async function getUserBalance(email: string) {
