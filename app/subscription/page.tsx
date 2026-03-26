@@ -14,7 +14,7 @@ export default function SubscriptionPage() {
     'https://vtb.paymo.ru/collect-money/qr/?transaction=35214b36-08dc-403e-ae5e-183ad31bafee'
   const VTB_QR_IMAGE_URL =
     process.env.NEXT_PUBLIC_VTB_QR_IMAGE_URL ||
-    `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(VTB_PAY_URL)}`
+    '/payment/vtb-qr.png'
 
   const [currentBalance, setCurrentBalance] = useState<SubscriptionBalance | null>(null)
   const [mounted, setMounted] = useState(false)
