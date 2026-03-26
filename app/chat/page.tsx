@@ -17,7 +17,6 @@ import { anonymizeMedicalImage } from '@/lib/image-compression'
 import { anonymizeText } from '@/lib/anonymization'
 import mammoth from 'mammoth'
 
-type ModelType = 'opus' | 'sonnet'
 type ResponseStyle = 'brief' | 'detailed'
 const MAX_CHAT_FILES_PER_BATCH = 4;
 const MAX_CHAT_TOTAL_BYTES_PER_BATCH = 16 * 1024 * 1024;
@@ -36,6 +35,14 @@ const specialtyMap: Record<string, Specialty> = {
   'Ревматолог': 'rheumatology',
   'Академический поиск': 'openevidence',
   'ИИ-Эксперт': 'ai_assistant',
+};
+
+const getDisplayModelName = (model: 'opus' | 'sonnet' | 'gpt52' | 'gemini') => {
+  if (model === 'gpt52') return 'openai/gpt-5.4';
+  if (model === 'sonnet') return 'anthropic/claude-sonnet-4.6';
+  if (model === 'opus') return 'anthropic/claude-opus-4.6';
+  if (model === 'gemini') return 'google/gemini-3-flash-preview';
+  return model;
 };
 
 export default function ChatPage() {
@@ -217,11 +224,7 @@ export default function ChatPage() {
       // ВАЖНО: отправляем на сервер ключ модели (sonnet/gpt52/opus/gemini).
       // displayModelName используется только для UI — чтобы не показывать 'gpt52' пользователю.
       const modelName = model
-      const displayModelName = model === 'gpt52' ? 'openai/gpt-5.4'
-        : model === 'sonnet' ? 'anthropic/claude-sonnet-4.6'
-        : model === 'opus' ? 'anthropic/claude-opus-4.6'
-        : model === 'gemini' ? 'google/gemini-3-flash-preview'
-        : model
+      const displayModelName = getDisplayModelName(model)
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -390,6 +393,7 @@ export default function ChatPage() {
       // ВАЖНО: отправляем на сервер ключ модели (sonnet/gpt52/opus/gemini),
       // а не строковый id провайдера. Сервер сам выберет актуальный id (например Sonnet 4.6).
       const modelName = model
+      const displayModelName = getDisplayModelName(model)
 
       if (filesToSend.length > 0) {
         const fileBatches = splitFilesIntoBatches(filesToSend);
