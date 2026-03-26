@@ -205,6 +205,10 @@ export async function GET(request: NextRequest) {
         approved_at,
         credited_payment_id,
         payment_transaction_id,
+        refund_amount,
+        refund_transaction_id,
+        refunded_by,
+        refunded_at,
         created_at,
         updated_at
       FROM payment_confirmation_requests

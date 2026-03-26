@@ -142,6 +142,10 @@ export async function initDatabase() {
         approved_at TIMESTAMP WITH TIME ZONE,
         credited_payment_id INTEGER REFERENCES payments(id) ON DELETE SET NULL,
         payment_transaction_id VARCHAR(120),
+        refund_amount DECIMAL(10, 2),
+        refund_transaction_id VARCHAR(120),
+        refunded_by VARCHAR(255),
+        refunded_at TIMESTAMP WITH TIME ZONE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
@@ -156,6 +160,30 @@ export async function initDatabase() {
       await sql`
         ALTER TABLE payment_confirmation_requests
         ADD COLUMN IF NOT EXISTS bank_operation_id VARCHAR(120)
+      `;
+    } catch {}
+    try {
+      await sql`
+        ALTER TABLE payment_confirmation_requests
+        ADD COLUMN IF NOT EXISTS refund_amount DECIMAL(10, 2)
+      `;
+    } catch {}
+    try {
+      await sql`
+        ALTER TABLE payment_confirmation_requests
+        ADD COLUMN IF NOT EXISTS refund_transaction_id VARCHAR(120)
+      `;
+    } catch {}
+    try {
+      await sql`
+        ALTER TABLE payment_confirmation_requests
+        ADD COLUMN IF NOT EXISTS refunded_by VARCHAR(255)
+      `;
+    } catch {}
+    try {
+      await sql`
+        ALTER TABLE payment_confirmation_requests
+        ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP WITH TIME ZONE
       `;
     } catch {}
     await sql`
@@ -700,6 +728,81 @@ export async function approvePaymentConfirmationRequest(args: {
       SET status = 'pending_review', updated_at = CURRENT_TIMESTAMP
       WHERE id = ${requestId}
     `;
+    return { success: false, error };
+  }
+}
+
+export async function markPaymentConfirmationRequestRefunded(args: {
+  requestId: number;
+  adminEmail: string;
+  refundAmount?: number | null;
+  refundTransactionId?: string | null;
+  adminComment?: string | null;
+}) {
+  const requestId = Number(args.requestId);
+  const adminEmail = String(args.adminEmail || '').trim().toLowerCase();
+  const refundAmountRaw = Number(args.refundAmount ?? 0);
+  const refundAmount = Number.isFinite(refundAmountRaw) && refundAmountRaw > 0 ? refundAmountRaw : null;
+  const refundTransactionId = String(args.refundTransactionId || '').trim() || null;
+  const adminComment = String(args.adminComment || '').trim() || null;
+
+  if (!Number.isInteger(requestId) || requestId <= 0 || !adminEmail) {
+    return { success: false, error: 'invalid request args' };
+  }
+
+  try {
+    const lockClient = await getDbClient();
+    try {
+      await lockClient.query('BEGIN');
+      const lockResult = await lockClient.query(
+        `SELECT id, provider, status
+         FROM payment_confirmation_requests
+         WHERE id = $1
+         FOR UPDATE`,
+        [requestId]
+      );
+      if (lockResult.rows.length === 0) {
+        await lockClient.query('ROLLBACK');
+        return { success: false, error: 'request not found' };
+      }
+
+      const req = lockResult.rows[0];
+      if (req.provider !== 'vtb') {
+        await lockClient.query('ROLLBACK');
+        return { success: false, error: 'unsupported provider' };
+      }
+      if (req.status === 'approved') {
+        await lockClient.query('ROLLBACK');
+        return { success: false, error: 'request already approved' };
+      }
+      if (req.status === 'refund_done') {
+        await lockClient.query('COMMIT');
+        return { success: true, alreadyProcessed: true, requestId };
+      }
+
+      await lockClient.query(
+        `UPDATE payment_confirmation_requests
+         SET status = 'refund_done',
+             admin_comment = $2,
+             refund_amount = $3,
+             refund_transaction_id = $4,
+             refunded_by = $5,
+             refunded_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [requestId, adminComment, refundAmount, refundTransactionId, adminEmail]
+      );
+      await lockClient.query('COMMIT');
+    } catch (error) {
+      try { await lockClient.query('ROLLBACK'); } catch {}
+      throw error;
+    } finally {
+      lockClient.release();
+    }
+
+    return { success: true, alreadyProcessed: false, requestId };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка фиксации возврата по заявке подтверждения оплаты:', error);
     return { success: false, error };
   }
 }

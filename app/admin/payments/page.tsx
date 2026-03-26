@@ -63,6 +63,10 @@ interface PaymentConfirmationRequest {
   approved_at: string | null
   credited_payment_id: number | null
   payment_transaction_id: string | null
+  refund_amount: string | null
+  refund_transaction_id: string | null
+  refunded_by: string | null
+  refunded_at: string | null
   created_at: string
   updated_at: string
 }
@@ -86,6 +90,7 @@ export default function AdminPaymentsPage() {
   const [manualReconciling, setManualReconciling] = useState(false)
   const [paymentConfirmationRequests, setPaymentConfirmationRequests] = useState<PaymentConfirmationRequest[]>([])
   const [approvingRequestId, setApprovingRequestId] = useState<number | null>(null)
+  const [markingRefundRequestId, setMarkingRefundRequestId] = useState<number | null>(null)
   const [showProcessedRequests, setShowProcessedRequests] = useState(false)
 
   const isAdmin = (session?.user as any)?.isAdmin
@@ -372,6 +377,50 @@ export default function AdminPaymentsPage() {
       setError(err?.message || 'Ошибка подтверждения заявки')
     } finally {
       setApprovingRequestId(null)
+    }
+  }
+
+  const markRefundDoneForRequest = async (requestId: number) => {
+    const refundAmountRaw = prompt('Сумма возврата (₽). Можно оставить пустым:', '')
+    if (refundAmountRaw === null) return
+    const refundAmount = refundAmountRaw.trim() ? Number(refundAmountRaw.trim().replace(',', '.')) : null
+    if (refundAmount != null && (!Number.isFinite(refundAmount) || refundAmount <= 0)) {
+      setError('Сумма возврата должна быть положительным числом')
+      return
+    }
+
+    const refundTransactionId = prompt('ID операции возврата (опционально):', '') || ''
+    const adminComment = prompt('Комментарий по возврату (опционально):', '') || ''
+    if (!confirm(`Зафиксировать возврат по заявке #${requestId}?`)) return
+
+    setMarkingRefundRequestId(requestId)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/payments/vtb/mark-refunded', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId,
+          refundAmount,
+          refundTransactionId: refundTransactionId.trim() || null,
+          adminComment: adminComment.trim() || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.success) {
+        setError(data?.error || 'Не удалось зафиксировать возврат')
+        return
+      }
+      setNotice(
+        data?.alreadyProcessed
+          ? `Возврат по заявке #${requestId} уже был зафиксирован ранее.`
+          : `Возврат по заявке #${requestId} отмечен как выполненный.`
+      )
+      await loadPayments()
+    } catch (err: any) {
+      setError(err?.message || 'Ошибка фиксации возврата')
+    } finally {
+      setMarkingRefundRequestId(null)
     }
   }
 
@@ -701,21 +750,49 @@ export default function AdminPaymentsPage() {
                           )}
                         </td>
                         <td className="px-3 py-2 text-xs">
-                          {req.status === 'approved'
-                            ? '✅ Подтверждено'
-                            : req.status === 'processing'
-                            ? '⏳ Обрабатывается'
-                            : '🟡 На проверке'}
+                          {req.status === 'approved' ? (
+                            <div>
+                              <div className="text-emerald-700 font-semibold">✅ Начислено</div>
+                              {req.credited_payment_id && (
+                                <div className="text-[11px] text-slate-500">payment #{req.credited_payment_id}</div>
+                              )}
+                            </div>
+                          ) : req.status === 'refund_done' ? (
+                            <div>
+                              <div className="text-rose-700 font-semibold">↩️ Возврат выполнен</div>
+                              {req.refund_amount && (
+                                <div className="text-[11px] text-slate-500">Сумма возврата: {Number(req.refund_amount).toFixed(0)} ₽</div>
+                              )}
+                              {req.refund_transaction_id && (
+                                <div className="text-[11px] text-slate-500">ID возврата: {req.refund_transaction_id}</div>
+                              )}
+                            </div>
+                          ) : req.status === 'processing' ? (
+                            '⏳ Обрабатывается'
+                          ) : score.score === 2 ? (
+                            <span className="text-emerald-700 font-semibold">🟢 Готово к подтверждению</span>
+                          ) : (
+                            '🟡 На проверке'
+                          )}
                         </td>
                         <td className="px-3 py-2 text-center">
                           {isPending ? (
-                            <button
-                              onClick={() => void approveConfirmationRequest(req.id)}
-                              disabled={approvingRequestId === req.id}
-                              className="px-3 py-1.5 bg-teal-600 text-white text-[11px] rounded-md font-bold hover:bg-teal-700 disabled:opacity-60"
-                            >
-                              {approvingRequestId === req.id ? 'Подтверждаем…' : 'Подтвердить и начислить'}
-                            </button>
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => void approveConfirmationRequest(req.id)}
+                                disabled={approvingRequestId === req.id || markingRefundRequestId === req.id}
+                                className="px-3 py-1.5 bg-teal-600 text-white text-[11px] rounded-md font-bold hover:bg-teal-700 disabled:opacity-60"
+                              >
+                                {approvingRequestId === req.id ? 'Подтверждаем…' : 'Подтвердить и начислить'}
+                              </button>
+                              <button
+                                onClick={() => void markRefundDoneForRequest(req.id)}
+                                disabled={approvingRequestId === req.id || markingRefundRequestId === req.id}
+                                className="px-3 py-1.5 bg-white border border-rose-300 text-rose-700 text-[11px] rounded-md font-bold hover:bg-rose-50 disabled:opacity-60"
+                              >
+                                {markingRefundRequestId === req.id ? 'Фиксируем…' : 'Возврат выполнен'}
+                              </button>
+                            </div>
                           ) : (
                             <span className="text-[11px] text-slate-400">—</span>
                           )}
