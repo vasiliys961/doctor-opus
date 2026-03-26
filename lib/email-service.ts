@@ -245,6 +245,8 @@ export async function sendPaymentConfirmationRequestedAlertEmail(args: {
   claimedAmount: number;
   paidAt?: string | null;
   payerName?: string | null;
+  cardLast4?: string | null;
+  bankOperationId?: string | null;
   payerMessage?: string | null;
   comment?: string | null;
 }) {
@@ -276,7 +278,9 @@ export async function sendPaymentConfirmationRequestedAlertEmail(args: {
             <p style="margin: 6px 0;"><strong>Ожидаемая сумма:</strong> ${expectedAmount} ₽</p>
             <p style="margin: 6px 0;"><strong>Указанная пользователем сумма:</strong> ${claimedAmount} ₽</p>
             <p style="margin: 6px 0;"><strong>Время оплаты:</strong> ${paidAtText}</p>
-            <p style="margin: 6px 0;"><strong>Имя плательщика:</strong> ${args.payerName || 'не указано'}</p>
+            <p style="margin: 6px 0;"><strong>Email плательщика:</strong> ${args.payerName || 'не указано'}</p>
+            <p style="margin: 6px 0;"><strong>Последние 4 цифры карты:</strong> ${args.cardLast4 || 'не указано'}</p>
+            <p style="margin: 6px 0;"><strong>Номер операции банка:</strong> ${args.bankOperationId || 'не указано'}</p>
             <p style="margin: 6px 0;"><strong>Сообщение получателю:</strong> ${args.payerMessage || 'не указано'}</p>
             <p style="margin: 6px 0;"><strong>Комментарий:</strong> ${args.comment || 'не указано'}</p>
           </div>

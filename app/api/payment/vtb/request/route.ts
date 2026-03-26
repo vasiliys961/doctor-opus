@@ -20,6 +20,8 @@ export async function POST(request: NextRequest) {
     const claimedAmount = Number(body?.claimedAmount || 0);
     const paidAt = body?.paidAt ? String(body.paidAt) : null;
     const payerName = body?.payerName ? String(body.payerName) : null;
+    const cardLast4 = body?.cardLast4 ? String(body.cardLast4) : null;
+    const bankOperationId = body?.bankOperationId ? String(body.bankOperationId) : null;
     const payerMessage = body?.payerMessage ? String(body.payerMessage) : null;
     const comment = body?.comment ? String(body.comment) : null;
 
@@ -36,6 +38,9 @@ export async function POST(request: NextRequest) {
     if (!Number.isFinite(claimedAmount) || claimedAmount <= 0) {
       return NextResponse.json({ success: false, error: 'Укажите сумму оплаты' }, { status: 400 });
     }
+    if (cardLast4 && !/^\d{4}$/.test(cardLast4.trim())) {
+      return NextResponse.json({ success: false, error: 'Последние 4 цифры карты должны содержать ровно 4 цифры' }, { status: 400 });
+    }
 
     await initDatabase();
     const createResult = await createPaymentConfirmationRequest({
@@ -47,6 +52,8 @@ export async function POST(request: NextRequest) {
       claimedAmount,
       paidAt,
       payerName,
+      cardLast4,
+      bankOperationId,
       payerMessage,
       userComment: comment,
     });
@@ -68,6 +75,8 @@ export async function POST(request: NextRequest) {
       claimedAmount,
       paidAt,
       payerName,
+      cardLast4,
+      bankOperationId,
       payerMessage,
       comment,
     });

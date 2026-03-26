@@ -28,7 +28,9 @@ export default function SubscriptionPage() {
   const [vtbFormData, setVtbFormData] = useState({
     claimedAmount: '',
     paidAt: '',
-    payerName: '',
+    payerEmail: '',
+    cardLast4: '',
+    bankOperationId: '',
     payerMessage: '',
     comment: '',
   })
@@ -294,7 +296,9 @@ export default function SubscriptionPage() {
     setVtbFormData({
       claimedAmount: String(amountRub),
       paidAt: new Date().toISOString().slice(0, 16),
-      payerName: '',
+      payerEmail: '',
+      cardLast4: '',
+      bankOperationId: '',
       payerMessage: '',
       comment: '',
     })
@@ -315,6 +319,15 @@ export default function SubscriptionPage() {
         setPayError('Укажите корректную сумму оплаты.')
         return
       }
+      const payerEmail = String(vtbFormData.payerEmail || '').trim()
+      if (payerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail)) {
+        setPayError('Укажите корректный email плательщика или оставьте поле пустым.')
+        return
+      }
+      if (vtbFormData.cardLast4 && !/^\d{4}$/.test(vtbFormData.cardLast4.trim())) {
+        setPayError('Последние 4 цифры карты должны содержать ровно 4 цифры.')
+        return
+      }
 
       const response = await fetch('/api/payment/vtb/request', {
         method: 'POST',
@@ -323,7 +336,9 @@ export default function SubscriptionPage() {
           packageId: vtbFormOpenFor,
           claimedAmount,
           paidAt: vtbFormData.paidAt || null,
-          payerName: vtbFormData.payerName || null,
+          payerName: payerEmail || null,
+          cardLast4: vtbFormData.cardLast4 || null,
+          bankOperationId: vtbFormData.bankOperationId || null,
           payerMessage: vtbFormData.payerMessage || null,
           comment: vtbFormData.comment || null,
         }),
@@ -769,15 +784,39 @@ export default function SubscriptionPage() {
               </label>
             </div>
             <label className="text-xs text-slate-600 block mt-3">
-              Имя плательщика
+              Email плательщика (если отличается от аккаунта)
               <input
-                type="text"
-                value={vtbFormData.payerName}
-                onChange={(e) => setVtbFormData((prev) => ({ ...prev, payerName: e.target.value }))}
+                type="email"
+                value={vtbFormData.payerEmail}
+                onChange={(e) => setVtbFormData((prev) => ({ ...prev, payerEmail: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                placeholder="Как в переводе VTB"
+                placeholder="Например: payer@example.com"
               />
             </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <label className="text-xs text-slate-600">
+                Последние 4 цифры карты (опционально)
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={vtbFormData.cardLast4}
+                  onChange={(e) => setVtbFormData((prev) => ({ ...prev, cardLast4: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="1234"
+                />
+              </label>
+              <label className="text-xs text-slate-600">
+                Номер операции банка (если есть)
+                <input
+                  type="text"
+                  value={vtbFormData.bankOperationId}
+                  onChange={(e) => setVtbFormData((prev) => ({ ...prev, bankOperationId: e.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="ID операции / RRN / UTRN"
+                />
+              </label>
+            </div>
             <label className="text-xs text-slate-600 block mt-3">
               Сообщение получателю (если указывали)
               <input
@@ -797,6 +836,9 @@ export default function SubscriptionPage() {
                 placeholder="Например: оплата с карты ...1234"
               />
             </label>
+            <p className="text-[11px] text-slate-500 mt-2">
+              Полный номер карты не указывайте. Для сверки достаточно последних 4 цифр.
+            </p>
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 onClick={closeVtbForm}

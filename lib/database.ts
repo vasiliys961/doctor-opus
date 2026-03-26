@@ -132,6 +132,8 @@ export async function initDatabase() {
         claimed_amount DECIMAL(10, 2) NOT NULL,
         paid_at TIMESTAMP WITH TIME ZONE,
         payer_name VARCHAR(255),
+        card_last4 VARCHAR(4),
+        bank_operation_id VARCHAR(120),
         payer_message TEXT,
         user_comment TEXT,
         status VARCHAR(50) NOT NULL DEFAULT 'pending_review',
@@ -144,6 +146,18 @@ export async function initDatabase() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
+    try {
+      await sql`
+        ALTER TABLE payment_confirmation_requests
+        ADD COLUMN IF NOT EXISTS card_last4 VARCHAR(4)
+      `;
+    } catch {}
+    try {
+      await sql`
+        ALTER TABLE payment_confirmation_requests
+        ADD COLUMN IF NOT EXISTS bank_operation_id VARCHAR(120)
+      `;
+    } catch {}
     await sql`
       CREATE INDEX IF NOT EXISTS idx_payment_confirmation_requests_provider_status_created
       ON payment_confirmation_requests(provider, status, created_at DESC)
@@ -471,6 +485,8 @@ export async function createPaymentConfirmationRequest(data: {
   claimedAmount: number;
   paidAt?: string | null;
   payerName?: string | null;
+  cardLast4?: string | null;
+  bankOperationId?: string | null;
   payerMessage?: string | null;
   userComment?: string | null;
 }) {
@@ -483,6 +499,9 @@ export async function createPaymentConfirmationRequest(data: {
     const claimedAmount = Number(data.claimedAmount || 0);
     const paidAt = data.paidAt ? new Date(data.paidAt) : null;
     const payerName = String(data.payerName || '').trim() || null;
+    const cardLast4Raw = String(data.cardLast4 || '').trim();
+    const cardLast4 = /^\d{4}$/.test(cardLast4Raw) ? cardLast4Raw : null;
+    const bankOperationId = String(data.bankOperationId || '').trim() || null;
     const payerMessage = String(data.payerMessage || '').trim() || null;
     const userComment = String(data.userComment || '').trim() || null;
 
@@ -515,6 +534,8 @@ export async function createPaymentConfirmationRequest(data: {
         claimed_amount,
         paid_at,
         payer_name,
+        card_last4,
+        bank_operation_id,
         payer_message,
         user_comment
       )
@@ -527,6 +548,8 @@ export async function createPaymentConfirmationRequest(data: {
         ${claimedAmount},
         ${paidAt && !Number.isNaN(paidAt.getTime()) ? paidAt.toISOString() : null},
         ${payerName},
+        ${cardLast4},
+        ${bankOperationId},
         ${payerMessage},
         ${userComment}
       )

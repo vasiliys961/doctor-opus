@@ -195,6 +195,8 @@ export async function GET(request: NextRequest) {
         claimed_amount,
         paid_at,
         payer_name,
+        card_last4,
+        bank_operation_id,
         payer_message,
         user_comment,
         status,

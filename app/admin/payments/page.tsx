@@ -53,6 +53,8 @@ interface PaymentConfirmationRequest {
   claimed_amount: string
   paid_at: string | null
   payer_name: string | null
+  card_last4: string | null
+  bank_operation_id: string | null
   payer_message: string | null
   user_comment: string | null
   status: string
@@ -399,9 +401,9 @@ export default function AdminPaymentsPage() {
     const expected = Number(req.expected_amount || 0)
     const claimed = Number(req.claimed_amount || 0)
     const amountMatches = Math.abs(expected - claimed) < 0.01
-    const hasMessage = Boolean(String(req.payer_message || '').trim())
-    const score = (amountMatches ? 1 : 0) + (hasMessage ? 1 : 0)
-    return { amountMatches, hasMessage, score }
+    const hasReference = Boolean(String(req.payer_message || '').trim() || String(req.bank_operation_id || '').trim())
+    const score = (amountMatches ? 1 : 0) + (hasReference ? 1 : 0)
+    return { amountMatches, hasReference, score }
   }
 
   const sortedPaymentConfirmationRequests = [...filteredPaymentConfirmationRequests].sort((a, b) => {
@@ -668,7 +670,10 @@ export default function AdminPaymentsPage() {
                         <td className="px-3 py-2 text-xs text-slate-800">
                           <div>{req.email}</div>
                           <div className="text-[11px] text-slate-500">
-                            {req.payer_name || 'Имя не указано'}
+                            Email плательщика: {req.payer_name || 'не указан'}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Карта: {req.card_last4 ? `**** ${req.card_last4}` : 'не указано'}
                           </div>
                         </td>
                         <td className="px-3 py-2 text-xs text-slate-700">{req.package_id}</td>
@@ -683,12 +688,17 @@ export default function AdminPaymentsPage() {
                           <div className={score.amountMatches ? 'text-emerald-700' : 'text-rose-700'}>
                             {score.amountMatches ? 'Сумма совпала' : 'Сумма не совпала'}
                           </div>
-                          <div className={score.hasMessage ? 'text-emerald-700' : 'text-amber-700'}>
-                            {score.hasMessage ? 'Есть сообщение' : 'Сообщение не указано'}
+                          <div className={score.hasReference ? 'text-emerald-700' : 'text-amber-700'}>
+                            {score.hasReference ? 'Есть идентификатор' : 'Нет сообщения/номера операции'}
                           </div>
                         </td>
                         <td className="px-3 py-2 text-xs text-slate-600">
                           {req.paid_at ? formatDate(req.paid_at) : 'Не указано'}
+                          {req.bank_operation_id && (
+                            <div className="text-[11px] text-slate-500 mt-1">
+                              Операция: {req.bank_operation_id}
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-xs">
                           {req.status === 'approved'
