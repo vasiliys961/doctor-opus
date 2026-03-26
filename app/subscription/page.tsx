@@ -507,6 +507,10 @@ export default function SubscriptionPage() {
             Подтверждение обычно занимает 1–10 минут, в редких случаях до 24–72 часов.
             До проверки статуса не оплачивайте повторно.
           </p>
+          <p className="mt-2 text-[12px] bg-white/70 border border-teal-200 rounded-md px-3 py-2">
+            Пополнение баланса может зачисляться с задержкой. Если уже оплатили, дождитесь проверки статуса в Doctor Opus
+            и не выполняйте повторный платеж до ответа администратора.
+          </p>
         </div>
         <div className="bg-white border border-teal-200 rounded-xl p-5 mb-8 shadow-sm">
           <h3 className="text-lg font-bold text-slate-900 mb-2">QR для оплаты через VTB</h3>
@@ -539,9 +543,9 @@ export default function SubscriptionPage() {
 
         {/* ИНДИВИДУАЛЬНЫЕ ПАКЕТЫ */}
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Для индивидуальных врачей</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto mb-12">
           {Object.entries(SUBSCRIPTION_PACKAGES)
-            .filter(([, pkg]) => pkg.category === 'individual')
+            .filter(([key, pkg]) => pkg.category === 'individual' && key !== 'pro')
             .map(([key, pkg]) => {
               const pricePerCredit = (pkg.priceRub / pkg.credits).toFixed(2)
               const isRecommended = pkg.recommended
@@ -742,6 +746,9 @@ export default function SubscriptionPage() {
             <h3 className="text-xl font-bold text-slate-900">Подтверждение оплаты через VTB</h3>
             <p className="text-sm text-slate-600 mt-1">
               Укажите данные платежа. Администратор проверит заявку и зачислит единицы.
+            </p>
+            <p className="text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mt-3">
+              Важно: пополнение баланса может занять время. После отправки заявки не оплачивайте повторно до проверки.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
               <label className="text-xs text-slate-600">

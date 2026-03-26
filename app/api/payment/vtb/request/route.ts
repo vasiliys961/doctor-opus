@@ -29,6 +29,12 @@ export async function POST(request: NextRequest) {
     if (!pkg) {
       return NextResponse.json({ success: false, error: 'Неверный пакет' }, { status: 400 });
     }
+    if (packageId === 'pro') {
+      return NextResponse.json(
+        { success: false, error: 'Пакет «Профи» больше не доступен для новых оплат' },
+        { status: 400 }
+      );
+    }
     if (pkg.category === 'team') {
       return NextResponse.json(
         { success: false, error: 'Для медцентров используйте оплату/счет через PayAnyWay' },
