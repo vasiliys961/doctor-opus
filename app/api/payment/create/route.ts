@@ -25,6 +25,12 @@ export async function POST(request: NextRequest) {
     }
 
     const pkg = SUBSCRIPTION_PACKAGES[packageId as keyof typeof SUBSCRIPTION_PACKAGES];
+    if (pkg.category === 'individual') {
+      return NextResponse.json(
+        { success: false, error: 'Для индивидуальных пакетов используйте оплату через VTB' },
+        { status: 400 }
+      );
+    }
     
     // Инициализация БД
     await initDatabase();

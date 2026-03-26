@@ -502,7 +502,7 @@ export default function SubscriptionPage() {
         <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-8 text-sm text-teal-900">
           <p className="font-bold mb-1">Резервный канал оплаты через VTB</p>
           <p>
-            Для индивидуальных пакетов доступна кнопка <strong>«Оплатить через VTB»</strong> и подтверждение
+            Для индивидуальных пакетов используйте только <strong>«Оплатить через VTB»</strong> и подтверждение
             <strong> «Я оплатил»</strong>. Укажите сумму выбранного пакета и отправьте заявку на проверку.
             Подтверждение обычно занимает 1–10 минут, в редких случаях до 24–72 часов.
             До проверки статуса не оплачивайте повторно.
@@ -588,27 +588,6 @@ export default function SubscriptionPage() {
                     )}
                   </div>
 
-                  <button
-                    onClick={() => handleBuyPackage(key)}
-                    disabled={isLoading || payingPackage !== null}
-                    className={`w-full mt-2 py-3 rounded-xl font-bold text-sm transition-all ${
-                      isRecommended
-                        ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-white hover:from-yellow-500 hover:to-amber-600 shadow-md'
-                        : 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white hover:from-teal-600 hover:to-emerald-700'
-                    } disabled:opacity-60 disabled:cursor-not-allowed`}
-                  >
-                    {isLoading ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                        </svg>
-                        Переход к оплате…
-                      </span>
-                    ) : (
-                      `Оплатить через карту/СБП ${pkg.priceRub.toLocaleString('ru-RU')} ₽`
-                    )}
-                  </button>
                   <div className="mt-2 grid grid-cols-1 gap-2">
                     <a
                       href={VTB_PAY_URL}
@@ -625,6 +604,9 @@ export default function SubscriptionPage() {
                       Я оплатил
                     </button>
                   </div>
+                  <p className="mt-2 text-[11px] text-slate-500">
+                    Для индивидуальных пакетов оплата идет через VTB, с подтверждением в Doctor Opus.
+                  </p>
                 </div>
               )
             })}
@@ -684,11 +666,11 @@ export default function SubscriptionPage() {
                           Переход к оплате…
                         </span>
                       ) : (
-                        `Выставить счет / оплатить через PayAnyWay ${pkg.priceRub.toLocaleString('ru-RU')} ₽`
+                        `Выставить счет через PayAnyWay ${pkg.priceRub.toLocaleString('ru-RU')} ₽`
                       )}
                     </button>
                     <p className="mt-2 text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1.5">
-                      Для медцентров используем оплату/счет через PayAnyWay для более формализованного контура.
+                      Для клиник и медцентров используем выставление счета через PayAnyWay.
                     </p>
                   </div>
                 )
