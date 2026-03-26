@@ -43,6 +43,28 @@ interface DbInfo {
   source: string
 }
 
+interface PaymentConfirmationRequest {
+  id: number
+  email: string
+  provider: string
+  package_id: string
+  expected_amount: string
+  expected_units: string
+  claimed_amount: string
+  paid_at: string | null
+  payer_name: string | null
+  payer_message: string | null
+  user_comment: string | null
+  status: string
+  admin_comment: string | null
+  approved_by: string | null
+  approved_at: string | null
+  credited_payment_id: number | null
+  payment_transaction_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 export default function AdminPaymentsPage() {
   const { data: session } = useSession()
   const [payments, setPayments] = useState<Payment[]>([])
@@ -60,6 +82,9 @@ export default function AdminPaymentsPage() {
   const [reconcilingNow, setReconcilingNow] = useState(false)
   const [manualPairsText, setManualPairsText] = useState('')
   const [manualReconciling, setManualReconciling] = useState(false)
+  const [paymentConfirmationRequests, setPaymentConfirmationRequests] = useState<PaymentConfirmationRequest[]>([])
+  const [approvingRequestId, setApprovingRequestId] = useState<number | null>(null)
+  const [showProcessedRequests, setShowProcessedRequests] = useState(false)
 
   const isAdmin = (session?.user as any)?.isAdmin
 
@@ -77,6 +102,7 @@ export default function AdminPaymentsPage() {
         setSummary(data.summary || null)
         setPaidUsersList(data.paidUsersList || [])
         setDbInfo(data.dbInfo || null)
+        setPaymentConfirmationRequests(data.paymentConfirmationRequests || [])
         if (data.notice) setNotice(data.notice)
       } else {
         setError(data.error || 'Ошибка загрузки')
@@ -319,6 +345,34 @@ export default function AdminPaymentsPage() {
     }
   }
 
+  const approveConfirmationRequest = async (requestId: number) => {
+    if (!confirm(`Подтвердить заявку #${requestId} и начислить пакет пользователю?`)) return
+    setApprovingRequestId(requestId)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/payments/vtb/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.success) {
+        setError(data?.error || 'Не удалось подтвердить заявку')
+        return
+      }
+      setNotice(
+        data?.alreadyProcessed
+          ? `Заявка #${requestId} уже была обработана ранее.`
+          : `Заявка #${requestId} подтверждена, начисление выполнено (payment #${Number(data.paymentId || 0)}).`
+      )
+      await loadPayments()
+    } catch (err: any) {
+      setError(err?.message || 'Ошибка подтверждения заявки')
+    } finally {
+      setApprovingRequestId(null)
+    }
+  }
+
   const statusBadge = (status: string) => {
     const styles: Record<string, string> = {
       completed: 'bg-green-100 text-green-700',
@@ -336,6 +390,26 @@ export default function AdminPaymentsPage() {
       </span>
     )
   }
+
+  const filteredPaymentConfirmationRequests = showProcessedRequests
+    ? paymentConfirmationRequests
+    : paymentConfirmationRequests.filter((req) => req.status === 'pending_review')
+
+  const getRequestScore = (req: PaymentConfirmationRequest) => {
+    const expected = Number(req.expected_amount || 0)
+    const claimed = Number(req.claimed_amount || 0)
+    const amountMatches = Math.abs(expected - claimed) < 0.01
+    const hasMessage = Boolean(String(req.payer_message || '').trim())
+    const score = (amountMatches ? 1 : 0) + (hasMessage ? 1 : 0)
+    return { amountMatches, hasMessage, score }
+  }
+
+  const sortedPaymentConfirmationRequests = [...filteredPaymentConfirmationRequests].sort((a, b) => {
+    const scoreA = getRequestScore(a).score
+    const scoreB = getRequestScore(b).score
+    if (scoreA !== scoreB) return scoreA - scoreB
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 p-4 sm:p-6">
@@ -542,6 +616,107 @@ export default function AdminPaymentsPage() {
           <p className="mt-1 text-[11px] text-amber-700">
             Повторный дожим одной и той же операции не увеличивает баланс повторно — такая операция будет отмечена как уже обработанная.
           </p>
+        </div>
+
+        <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 mb-6">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm text-teal-900">
+              <strong>VTB fallback заявки “Я оплатил”:</strong> сверяйте сумму/время и подтверждайте начисление кнопкой.
+              Повторное подтверждение одной заявки безопасно (идемпотентно).
+            </p>
+            <button
+              onClick={() => setShowProcessedRequests((prev) => !prev)}
+              className="shrink-0 px-2.5 py-1.5 rounded-md border border-teal-300 bg-white text-teal-700 text-[11px] font-bold hover:bg-teal-50 transition"
+            >
+              {showProcessedRequests ? 'Скрыть обработанные' : 'Показать обработанные'}
+            </button>
+          </div>
+          <p className="text-[11px] text-teal-700 mt-2">
+            Сейчас показано: {filteredPaymentConfirmationRequests.length}{' '}
+            {showProcessedRequests ? '(все статусы)' : '(только pending_review)'}.
+          </p>
+          {sortedPaymentConfirmationRequests.length === 0 ? (
+            <p className="text-xs text-teal-700 mt-2">Подходящих заявок нет.</p>
+          ) : (
+            <div className="overflow-x-auto mt-3">
+              <table className="min-w-full divide-y divide-teal-100 bg-white rounded-lg">
+                <thead className="bg-teal-100/60">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-teal-700 uppercase">ID</th>
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-teal-700 uppercase">Пользователь</th>
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-teal-700 uppercase">Пакет</th>
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-teal-700 uppercase">Сумма</th>
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-teal-700 uppercase">Скоринг</th>
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-teal-700 uppercase">Время</th>
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-teal-700 uppercase">Статус</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-bold text-teal-700 uppercase">Действие</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-teal-50">
+                  {sortedPaymentConfirmationRequests.map((req) => {
+                    const isPending = req.status === 'pending_review'
+                    const score = getRequestScore(req)
+                    const scoreClass =
+                      score.score === 2
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : score.score === 1
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-rose-100 text-rose-700'
+                    return (
+                      <tr key={req.id} className="hover:bg-teal-50/40">
+                        <td className="px-3 py-2 text-xs font-mono text-slate-700">#{req.id}</td>
+                        <td className="px-3 py-2 text-xs text-slate-800">
+                          <div>{req.email}</div>
+                          <div className="text-[11px] text-slate-500">
+                            {req.payer_name || 'Имя не указано'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{req.package_id}</td>
+                        <td className="px-3 py-2 text-xs text-slate-700">
+                          <div>Ожидалось: {Number(req.expected_amount).toFixed(0)} ₽</div>
+                          <div>Указано: {Number(req.claimed_amount).toFixed(0)} ₽</div>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-700">
+                          <div className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold ${scoreClass}`}>
+                            Скор: {score.score}/2
+                          </div>
+                          <div className={score.amountMatches ? 'text-emerald-700' : 'text-rose-700'}>
+                            {score.amountMatches ? 'Сумма совпала' : 'Сумма не совпала'}
+                          </div>
+                          <div className={score.hasMessage ? 'text-emerald-700' : 'text-amber-700'}>
+                            {score.hasMessage ? 'Есть сообщение' : 'Сообщение не указано'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-600">
+                          {req.paid_at ? formatDate(req.paid_at) : 'Не указано'}
+                        </td>
+                        <td className="px-3 py-2 text-xs">
+                          {req.status === 'approved'
+                            ? '✅ Подтверждено'
+                            : req.status === 'processing'
+                            ? '⏳ Обрабатывается'
+                            : '🟡 На проверке'}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {isPending ? (
+                            <button
+                              onClick={() => void approveConfirmationRequest(req.id)}
+                              disabled={approvingRequestId === req.id}
+                              className="px-3 py-1.5 bg-teal-600 text-white text-[11px] rounded-md font-bold hover:bg-teal-700 disabled:opacity-60"
+                            >
+                              {approvingRequestId === req.id ? 'Подтверждаем…' : 'Подтвердить и начислить'}
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {loading ? (

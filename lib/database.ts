@@ -121,6 +121,37 @@ export async function initDatabase() {
         ADD COLUMN IF NOT EXISTS pending_notice_sent_at TIMESTAMP WITH TIME ZONE
       `;
     } catch {}
+    await sql`
+      CREATE TABLE IF NOT EXISTS payment_confirmation_requests (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        provider VARCHAR(32) NOT NULL DEFAULT 'vtb',
+        package_id VARCHAR(100) NOT NULL,
+        expected_amount DECIMAL(10, 2) NOT NULL,
+        expected_units DECIMAL(10, 2) NOT NULL,
+        claimed_amount DECIMAL(10, 2) NOT NULL,
+        paid_at TIMESTAMP WITH TIME ZONE,
+        payer_name VARCHAR(255),
+        payer_message TEXT,
+        user_comment TEXT,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending_review',
+        admin_comment TEXT,
+        approved_by VARCHAR(255),
+        approved_at TIMESTAMP WITH TIME ZONE,
+        credited_payment_id INTEGER REFERENCES payments(id) ON DELETE SET NULL,
+        payment_transaction_id VARCHAR(120),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_payment_confirmation_requests_provider_status_created
+      ON payment_confirmation_requests(provider, status, created_at DESC)
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_payment_confirmation_requests_email_created
+      ON payment_confirmation_requests(email, created_at DESC)
+    `;
 
     // Таблица балансов пользователей (Версия 3.40.0)
     await sql`
@@ -427,6 +458,225 @@ export async function createPayment(data: {
     return { success: true, paymentId: result.rows[0].id };
   } catch (error) {
     safeError('❌ [DATABASE] Ошибка создания платежа:', error);
+    return { success: false, error };
+  }
+}
+
+export async function createPaymentConfirmationRequest(data: {
+  email: string;
+  provider?: 'vtb';
+  packageId: string;
+  expectedAmount: number;
+  expectedUnits: number;
+  claimedAmount: number;
+  paidAt?: string | null;
+  payerName?: string | null;
+  payerMessage?: string | null;
+  userComment?: string | null;
+}) {
+  try {
+    const email = String(data.email || '').trim().toLowerCase();
+    const provider = String(data.provider || 'vtb').trim().toLowerCase();
+    const packageId = String(data.packageId || '').trim();
+    const expectedAmount = Number(data.expectedAmount || 0);
+    const expectedUnits = Number(data.expectedUnits || 0);
+    const claimedAmount = Number(data.claimedAmount || 0);
+    const paidAt = data.paidAt ? new Date(data.paidAt) : null;
+    const payerName = String(data.payerName || '').trim() || null;
+    const payerMessage = String(data.payerMessage || '').trim() || null;
+    const userComment = String(data.userComment || '').trim() || null;
+
+    if (!email || !packageId || !Number.isFinite(expectedAmount) || !Number.isFinite(expectedUnits) || !Number.isFinite(claimedAmount)) {
+      return { success: false, error: 'invalid request data' };
+    }
+
+    const recentPending = await sql`
+      SELECT id
+      FROM payment_confirmation_requests
+      WHERE email = ${email}
+        AND provider = ${provider}
+        AND package_id = ${packageId}
+        AND status = 'pending_review'
+        AND created_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    if (recentPending.rows.length > 0) {
+      return { success: true, requestId: Number(recentPending.rows[0].id), reused: true };
+    }
+
+    const result = await sql`
+      INSERT INTO payment_confirmation_requests (
+        email,
+        provider,
+        package_id,
+        expected_amount,
+        expected_units,
+        claimed_amount,
+        paid_at,
+        payer_name,
+        payer_message,
+        user_comment
+      )
+      VALUES (
+        ${email},
+        ${provider},
+        ${packageId},
+        ${expectedAmount},
+        ${expectedUnits},
+        ${claimedAmount},
+        ${paidAt && !Number.isNaN(paidAt.getTime()) ? paidAt.toISOString() : null},
+        ${payerName},
+        ${payerMessage},
+        ${userComment}
+      )
+      RETURNING id
+    `;
+    return { success: true, requestId: Number(result.rows[0].id), reused: false };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка создания заявки подтверждения оплаты:', error);
+    return { success: false, error };
+  }
+}
+
+export async function approvePaymentConfirmationRequest(args: {
+  requestId: number;
+  adminEmail: string;
+  adminComment?: string;
+}) {
+  const requestId = Number(args.requestId);
+  const adminEmail = String(args.adminEmail || '').trim().toLowerCase();
+  const adminComment = String(args.adminComment || '').trim() || null;
+
+  if (!Number.isInteger(requestId) || requestId <= 0 || !adminEmail) {
+    return { success: false, error: 'invalid request args' };
+  }
+
+  const client = await getDbClient();
+  let lockedRequest: any = null;
+  try {
+    await client.query('BEGIN');
+    const lockResult = await client.query(
+      `SELECT id, email, provider, package_id, expected_amount, expected_units, status
+       FROM payment_confirmation_requests
+       WHERE id = $1
+       FOR UPDATE`,
+      [requestId]
+    );
+
+    if (lockResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { success: false, error: 'request not found' };
+    }
+
+    lockedRequest = lockResult.rows[0];
+    if (lockedRequest.provider !== 'vtb') {
+      await client.query('ROLLBACK');
+      return { success: false, error: 'unsupported provider' };
+    }
+
+    if (lockedRequest.status === 'approved') {
+      await client.query('COMMIT');
+      return {
+        success: true,
+        alreadyProcessed: true,
+        requestId,
+      };
+    }
+
+    if (lockedRequest.status !== 'pending_review') {
+      await client.query('ROLLBACK');
+      return { success: false, error: `request status is ${lockedRequest.status}` };
+    }
+
+    await client.query(
+      `UPDATE payment_confirmation_requests
+       SET status = 'processing', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [requestId]
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    safeError('❌ [DATABASE] Ошибка блокировки заявки подтверждения оплаты:', error);
+    return { success: false, error };
+  } finally {
+    client.release();
+  }
+
+  try {
+    const payment = await createPayment({
+      email: String(lockedRequest.email),
+      amount: Number(lockedRequest.expected_amount || 0),
+      units: Number(lockedRequest.expected_units || 0),
+      package_id: String(lockedRequest.package_id),
+    });
+    if (!payment.success || !payment.paymentId) {
+      await sql`
+        UPDATE payment_confirmation_requests
+        SET status = 'pending_review',
+            admin_comment = ${`Ошибка создания платежа в Opus: ${String((payment as any).error || 'unknown')}`},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${requestId}
+      `;
+      return { success: false, error: 'payment create failed' };
+    }
+
+    const transactionId = `vtb_req_${requestId}`;
+    const attachResult = await attachTransactionToPendingPayment(Number(payment.paymentId), transactionId);
+    if (!attachResult.success) {
+      await sql`
+        UPDATE payment_confirmation_requests
+        SET status = 'pending_review',
+            admin_comment = 'Ошибка привязки transaction_id к pending платежу',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${requestId}
+      `;
+      return { success: false, error: 'attach transaction failed' };
+    }
+
+    const confirmResult = await confirmPayment(Number(payment.paymentId), transactionId);
+    if (!confirmResult.success) {
+      await sql`
+        UPDATE payment_confirmation_requests
+        SET status = 'pending_review',
+            admin_comment = 'Ошибка confirmPayment при админ-подтверждении',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${requestId}
+      `;
+      return { success: false, error: 'confirm payment failed' };
+    }
+
+    await sql`
+      UPDATE payment_confirmation_requests
+      SET
+        status = 'approved',
+        admin_comment = ${adminComment},
+        approved_by = ${adminEmail},
+        approved_at = CURRENT_TIMESTAMP,
+        credited_payment_id = ${Number(confirmResult.paymentId || payment.paymentId)},
+        payment_transaction_id = ${transactionId},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${requestId}
+    `;
+
+    return {
+      success: true,
+      alreadyProcessed: Boolean(confirmResult.alreadyProcessed),
+      requestId,
+      paymentId: Number(confirmResult.paymentId || payment.paymentId),
+      transactionId,
+      email: String(confirmResult.email || lockedRequest.email || ''),
+      amount: Number(confirmResult.amount || lockedRequest.expected_amount || 0),
+      units: Number(confirmResult.units || lockedRequest.expected_units || 0),
+    };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка выполнения админ-подтверждения платежа:', error);
+    await sql`
+      UPDATE payment_confirmation_requests
+      SET status = 'pending_review', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${requestId}
+    `;
     return { success: false, error };
   }
 }

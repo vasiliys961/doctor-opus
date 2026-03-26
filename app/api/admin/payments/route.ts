@@ -184,6 +184,32 @@ export async function GET(request: NextRequest) {
     const totalPaymentsAllTimeResult = await sql`
       SELECT COUNT(*)::int AS total_payments_all_time FROM payments
     `;
+    const paymentConfirmationRequestsResult = await sql`
+      SELECT
+        id,
+        email,
+        provider,
+        package_id,
+        expected_amount,
+        expected_units,
+        claimed_amount,
+        paid_at,
+        payer_name,
+        payer_message,
+        user_comment,
+        status,
+        admin_comment,
+        approved_by,
+        approved_at,
+        credited_payment_id,
+        payment_transaction_id,
+        created_at,
+        updated_at
+      FROM payment_confirmation_requests
+      WHERE provider = 'vtb'
+      ORDER BY created_at DESC
+      LIMIT 100
+    `;
     const balanceBucketsResult = await sql`
       SELECT
         COUNT(*) FILTER (WHERE balance <= 0)::int AS exhausted_users,
@@ -220,6 +246,7 @@ export async function GET(request: NextRequest) {
         nearLimitUsers,
       },
       paidUsersList: paidUsersResult.rows,
+      paymentConfirmationRequests: paymentConfirmationRequestsResult.rows,
     });
   } catch (error: any) {
     console.error('❌ [ADMIN PAYMENTS] Ошибка:', error);

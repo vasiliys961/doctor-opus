@@ -9,6 +9,12 @@ import { isOnboardingCompleted } from '@/lib/onboarding'
 export default function SubscriptionPage() {
   const AUTO_CHECK_INTERVAL_MS = 30_000
   const AUTO_CHECK_MAX_ATTEMPTS = 10
+  const VTB_PAY_URL =
+    process.env.NEXT_PUBLIC_VTB_PAYMENT_URL ||
+    'https://vtb.paymo.ru/collect-money/qr/?transaction=35214b36-08dc-403e-ae5e-183ad31bafee'
+  const VTB_QR_IMAGE_URL =
+    process.env.NEXT_PUBLIC_VTB_QR_IMAGE_URL ||
+    `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(VTB_PAY_URL)}`
 
   const [currentBalance, setCurrentBalance] = useState<SubscriptionBalance | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -17,6 +23,15 @@ export default function SubscriptionPage() {
   // Состояние оплаты per-package
   const [payingPackage, setPayingPackage] = useState<string | null>(null)
   const [payError, setPayError] = useState<string | null>(null)
+  const [vtbFormOpenFor, setVtbFormOpenFor] = useState<string | null>(null)
+  const [vtbSubmitting, setVtbSubmitting] = useState(false)
+  const [vtbFormData, setVtbFormData] = useState({
+    claimedAmount: '',
+    paidAt: '',
+    payerName: '',
+    payerMessage: '',
+    comment: '',
+  })
 
   // Проверка зачисления
   const [checkingPayment, setCheckingPayment] = useState(false)
@@ -273,6 +288,68 @@ export default function SubscriptionPage() {
     }
   }
 
+  const openVtbFormForPackage = (packageId: string, amountRub: number) => {
+    setPayError(null)
+    setVtbFormOpenFor(packageId)
+    setVtbFormData({
+      claimedAmount: String(amountRub),
+      paidAt: new Date().toISOString().slice(0, 16),
+      payerName: '',
+      payerMessage: '',
+      comment: '',
+    })
+  }
+
+  const closeVtbForm = () => {
+    if (vtbSubmitting) return
+    setVtbFormOpenFor(null)
+  }
+
+  const handleVtbRequestSubmit = async () => {
+    if (!vtbFormOpenFor) return
+    setVtbSubmitting(true)
+    setPayError(null)
+    try {
+      const claimedAmount = Number(vtbFormData.claimedAmount || 0)
+      if (!Number.isFinite(claimedAmount) || claimedAmount <= 0) {
+        setPayError('Укажите корректную сумму оплаты.')
+        return
+      }
+
+      const response = await fetch('/api/payment/vtb/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          packageId: vtbFormOpenFor,
+          claimedAmount,
+          paidAt: vtbFormData.paidAt || null,
+          payerName: vtbFormData.payerName || null,
+          payerMessage: vtbFormData.payerMessage || null,
+          comment: vtbFormData.comment || null,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.success) {
+        if (response.status === 401) {
+          setPayError('Для отправки заявки необходимо войти в аккаунт.')
+        } else {
+          setPayError(data?.error || 'Не удалось отправить заявку на подтверждение оплаты.')
+        }
+        return
+      }
+
+      setPaymentCheckStatus('pending')
+      setPaymentCheckMessage(
+        `Заявка #${Number(data.requestId)} отправлена админу. Проверка обычно занимает 1–10 минут. В редких случаях до 24–72 часов.`
+      )
+      setVtbFormOpenFor(null)
+    } catch {
+      setPayError('Ошибка соединения при отправке заявки. Попробуйте снова.')
+    } finally {
+      setVtbSubmitting(false)
+    }
+  }
+
   if (mounted && !isSubscriptionEnabled()) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
@@ -407,6 +484,44 @@ export default function SubscriptionPage() {
           </p>
         </div>
 
+        <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-8 text-sm text-teal-900">
+          <p className="font-bold mb-1">Резервный канал оплаты через VTB</p>
+          <p>
+            Для индивидуальных пакетов доступна кнопка <strong>«Оплатить через VTB»</strong> и подтверждение
+            <strong> «Я оплатил»</strong>. Укажите сумму выбранного пакета и отправьте заявку на проверку.
+            Подтверждение обычно занимает 1–10 минут, в редких случаях до 24–72 часов.
+            До проверки статуса не оплачивайте повторно.
+          </p>
+        </div>
+        <div className="bg-white border border-teal-200 rounded-xl p-5 mb-8 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-900 mb-2">QR для оплаты через VTB</h3>
+          <p className="text-sm text-slate-600 mb-4">
+            Отсканируйте QR в приложении банка или откройте VTB-страницу по кнопке ниже.
+            Этот способ используется для индивидуальных пакетов. Перед оплатой проверьте сумму выбранного пакета.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-5 items-start">
+            <img
+              src={VTB_QR_IMAGE_URL}
+              alt="QR-код для оплаты через VTB"
+              className="w-56 h-56 rounded-lg border border-slate-200 bg-white p-2"
+              loading="lazy"
+            />
+            <div className="space-y-2 text-sm text-slate-700">
+              <p>1) Откройте банк и отсканируйте QR.</p>
+              <p>2) Укажите сумму выбранного пакета Doctor Opus.</p>
+              <p>3) После оплаты нажмите кнопку <strong>«Я оплатил»</strong> под нужным пакетом.</p>
+              <a
+                href={VTB_PAY_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition"
+              >
+                Открыть страницу VTB
+              </a>
+            </div>
+          </div>
+        </div>
+
         {/* ИНДИВИДУАЛЬНЫЕ ПАКЕТЫ */}
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Для индивидуальных врачей</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto mb-12">
@@ -476,9 +591,25 @@ export default function SubscriptionPage() {
                         Переход к оплате…
                       </span>
                     ) : (
-                      `Оплатить ${pkg.priceRub.toLocaleString('ru-RU')} ₽`
+                      `Оплатить через карту/СБП ${pkg.priceRub.toLocaleString('ru-RU')} ₽`
                     )}
                   </button>
+                  <div className="mt-2 grid grid-cols-1 gap-2">
+                    <a
+                      href={VTB_PAY_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full py-2 rounded-lg border border-indigo-200 text-indigo-700 text-xs font-bold text-center hover:bg-indigo-50 transition"
+                    >
+                      Оплатить через VTB
+                    </a>
+                    <button
+                      onClick={() => openVtbFormForPackage(key, pkg.priceRub)}
+                      className="w-full py-2 rounded-lg border border-emerald-200 text-emerald-700 text-xs font-bold hover:bg-emerald-50 transition"
+                    >
+                      Я оплатил
+                    </button>
+                  </div>
                 </div>
               )
             })}
@@ -538,9 +669,12 @@ export default function SubscriptionPage() {
                           Переход к оплате…
                         </span>
                       ) : (
-                        `Оплатить ${pkg.priceRub.toLocaleString('ru-RU')} ₽`
+                        `Выставить счет / оплатить через PayAnyWay ${pkg.priceRub.toLocaleString('ru-RU')} ₽`
                       )}
                     </button>
+                    <p className="mt-2 text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1.5">
+                      Для медцентров используем оплату/счет через PayAnyWay для более формализованного контура.
+                    </p>
                   </div>
                 )
               })}
@@ -605,6 +739,83 @@ export default function SubscriptionPage() {
           </p>
         </div>
       </div>
+      {vtbFormOpenFor && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 p-5">
+            <h3 className="text-xl font-bold text-slate-900">Подтверждение оплаты через VTB</h3>
+            <p className="text-sm text-slate-600 mt-1">
+              Укажите данные платежа. Администратор проверит заявку и зачислит единицы.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+              <label className="text-xs text-slate-600">
+                Сумма, ₽
+                <input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={vtbFormData.claimedAmount}
+                  onChange={(e) => setVtbFormData((prev) => ({ ...prev, claimedAmount: e.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="text-xs text-slate-600">
+                Время оплаты
+                <input
+                  type="datetime-local"
+                  value={vtbFormData.paidAt}
+                  onChange={(e) => setVtbFormData((prev) => ({ ...prev, paidAt: e.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+            <label className="text-xs text-slate-600 block mt-3">
+              Имя плательщика
+              <input
+                type="text"
+                value={vtbFormData.payerName}
+                onChange={(e) => setVtbFormData((prev) => ({ ...prev, payerName: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Как в переводе VTB"
+              />
+            </label>
+            <label className="text-xs text-slate-600 block mt-3">
+              Сообщение получателю (если указывали)
+              <input
+                type="text"
+                value={vtbFormData.payerMessage}
+                onChange={(e) => setVtbFormData((prev) => ({ ...prev, payerMessage: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Например: DO-123ABC"
+              />
+            </label>
+            <label className="text-xs text-slate-600 block mt-3">
+              Комментарий (опционально)
+              <textarea
+                value={vtbFormData.comment}
+                onChange={(e) => setVtbFormData((prev) => ({ ...prev, comment: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm min-h-[72px]"
+                placeholder="Например: оплата с карты ...1234"
+              />
+            </label>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={closeVtbForm}
+                disabled={vtbSubmitting}
+                className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm hover:bg-slate-50 disabled:opacity-60"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleVtbRequestSubmit}
+                disabled={vtbSubmitting}
+                className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-bold hover:bg-teal-700 disabled:opacity-60"
+              >
+                {vtbSubmitting ? 'Отправляем…' : 'Отправить заявку «Я оплатил»'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

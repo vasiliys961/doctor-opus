@@ -232,3 +232,62 @@ export async function sendClinicInviteEmail(args: {
     return { success: false, error: err };
   }
 }
+
+/**
+ * Уведомление администратору о новой заявке "Я оплатил" через VTB fallback.
+ */
+export async function sendPaymentConfirmationRequestedAlertEmail(args: {
+  to: string;
+  userEmail: string;
+  requestId: number;
+  packageName: string;
+  expectedAmount: number;
+  claimedAmount: number;
+  paidAt?: string | null;
+  payerName?: string | null;
+  payerMessage?: string | null;
+  comment?: string | null;
+}) {
+  try {
+    const provider = getEmailProvider();
+    if (!provider) {
+      console.warn('⚠️ [EMAIL] Провайдер не настроен. Email админу по заявке оплаты не отправлен.');
+      return { success: false, error: 'Email provider not configured' };
+    }
+
+    const expectedAmount = Number(args.expectedAmount || 0).toFixed(2);
+    const claimedAmount = Number(args.claimedAmount || 0).toFixed(2);
+    const paidAt = args.paidAt ? new Date(args.paidAt) : null;
+    const paidAtText = paidAt && !Number.isNaN(paidAt.getTime())
+      ? paidAt.toLocaleString('ru-RU')
+      : 'не указано';
+
+    return await provider.send({
+      to: args.to,
+      subject: `Doctor Opus: новая заявка на подтверждение оплаты #${args.requestId}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 640px; margin: 0 auto; color: #1f2937;">
+          <h2 style="color:#0f766e;">Новая заявка «Я оплатил»</h2>
+          <p>Пользователь отправил заявку на подтверждение оплаты через VTB fallback.</p>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin:14px 0;">
+            <p style="margin: 6px 0;"><strong>ID заявки:</strong> #${args.requestId}</p>
+            <p style="margin: 6px 0;"><strong>Email пользователя:</strong> ${args.userEmail}</p>
+            <p style="margin: 6px 0;"><strong>Пакет:</strong> ${args.packageName}</p>
+            <p style="margin: 6px 0;"><strong>Ожидаемая сумма:</strong> ${expectedAmount} ₽</p>
+            <p style="margin: 6px 0;"><strong>Указанная пользователем сумма:</strong> ${claimedAmount} ₽</p>
+            <p style="margin: 6px 0;"><strong>Время оплаты:</strong> ${paidAtText}</p>
+            <p style="margin: 6px 0;"><strong>Имя плательщика:</strong> ${args.payerName || 'не указано'}</p>
+            <p style="margin: 6px 0;"><strong>Сообщение получателю:</strong> ${args.payerMessage || 'не указано'}</p>
+            <p style="margin: 6px 0;"><strong>Комментарий:</strong> ${args.comment || 'не указано'}</p>
+          </div>
+          <p style="color:#64748b;">Откройте админку платежей и нажмите «Подтвердить и начислить», если данные корректны.</p>
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;" />
+          <p style="font-size:12px;color:#94a3b8;">Doctor Opus</p>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error('❌ [EMAIL] Ошибка отправки алерта администратору по заявке оплаты:', err);
+    return { success: false, error: err };
+  }
+}
