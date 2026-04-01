@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { anonymizeText, anonymizeObject } from '@/lib/anonymization';
 import { checkRateLimit, RATE_LIMIT_CHAT, getRateLimitKey } from '@/lib/rate-limiter';
 import { checkAndDeductBalance } from '@/lib/server-billing';
+import { searchPubMedEvidence, buildPubMedContextBlock } from '@/lib/pubmed-rag';
 
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
@@ -214,7 +215,33 @@ export async function POST(request: NextRequest) {
     const dialogueInstruction = hasDialogueContext
       ? 'РЕЖИМ ДИАЛОГА: Отвечай как продолжение текущей беседы. Учитывай входящие замечания пользователя и отвечай точечно по новому вопросу. Не повторяй полностью структуру и длинные блоки из первого ответа, если пользователь явно не попросил повторить.'
       : 'РЕЖИМ ДИАЛОГА: Сформируй базовый первичный ответ по запросу.';
-    const finalMessage = `${preparedMessage}\n\n${styleInstruction}\n${dialogueInstruction}`;
+    let pubMedContext = '';
+    let pubMedRuntimeInstruction = '';
+    const enableMedicalBrowsing = process.env.ENABLE_MEDICAL_BROWSING === 'true';
+    const isAcademicSearch =
+      specialty === 'openevidence' ||
+      model === 'perplexity' ||
+      model === 'perplexity/sonar';
+
+    if (enableMedicalBrowsing && isAcademicSearch) {
+      const maxResults = Number(process.env.PUBMED_TOP_K || 5);
+      const timeoutMs = Number(process.env.PUBMED_TIMEOUT_MS || 3500);
+      try {
+        const articles = await searchPubMedEvidence(message, { maxResults, timeoutMs });
+        pubMedContext = buildPubMedContextBlock(articles);
+        console.log(`[PUBMED RAG] enabled=${enableMedicalBrowsing} academic=${isAcademicSearch} specialty=${specialty || 'n/a'} model=${model || 'n/a'} results=${articles.length}`);
+        pubMedRuntimeInstruction = articles.length > 0
+          ? 'ONLINE-ПОИСК УЖЕ ВЫПОЛНЕН на сервере через PubMed. Не пиши, что у тебя нет live-доступа. Используй найденные источники и укажи PMID в разделе "Источники (PubMed)".'
+          : 'ONLINE-ПОИСК PubMed уже выполнен на сервере, но релевантных источников не найдено по текущему запросу/фильтрам. Не пиши, что у тебя нет live-доступа; сообщи, что по текущему поиску источники не найдены и предложи уточнить запрос.';
+      } catch (error) {
+        // Безопасный fallback: чат продолжает работу без online retrieval.
+        console.warn('PubMed retrieval failed, fallback to default chat mode:', error);
+        console.log(`[PUBMED RAG] enabled=${enableMedicalBrowsing} academic=${isAcademicSearch} specialty=${specialty || 'n/a'} model=${model || 'n/a'} results=error`);
+        pubMedRuntimeInstruction = 'Попытка онлайн-поиска PubMed была выполнена на сервере, но завершилась технической ошибкой retrieval. Не пиши, что у тебя нет live-доступа; кратко сообщи о временной недоступности поиска и продолжи экспертный ответ.';
+      }
+    }
+
+    const finalMessage = `${preparedMessage}\n\n${styleInstruction}\n${dialogueInstruction}${pubMedRuntimeInstruction ? `\n${pubMedRuntimeInstruction}` : ''}${pubMedContext ? `\n\n${pubMedContext}` : ''}`;
 
     // Обработка стриминга с логированием
     const handleStreaming = async (stream: ReadableStream) => {
