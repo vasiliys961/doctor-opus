@@ -218,10 +218,15 @@ export async function POST(request: NextRequest) {
     let pubMedContext = '';
     let pubMedRuntimeInstruction = '';
     const enableMedicalBrowsing = process.env.ENABLE_MEDICAL_BROWSING === 'true';
+    const evidenceQueryPattern = /(pubmed|pmid|doi|meta-anal|meta analysis|метаанализ|систематич|guideline|клиническ\w*\s+рекомендац|amr|antibiotic|resistance|стать[яи]|исследован)/i;
+    const looksLikeEvidenceQuery = evidenceQueryPattern.test(message);
     const isAcademicSearch =
       specialty === 'openevidence' ||
       model === 'perplexity' ||
-      model === 'perplexity/sonar';
+      model === 'perplexity/sonar' ||
+      looksLikeEvidenceQuery;
+
+    console.log(`[PUBMED RAG] gate enabled=${enableMedicalBrowsing} specialty=${specialty || 'n/a'} model=${model || 'n/a'} evidenceQuery=${looksLikeEvidenceQuery} academic=${isAcademicSearch}`);
 
     if (enableMedicalBrowsing && isAcademicSearch) {
       const maxResults = Number(process.env.PUBMED_TOP_K || 5);
