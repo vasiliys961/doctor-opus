@@ -1,0 +1,97 @@
+export interface MarketplaceConfig {
+  project: {
+    name: string;
+    tagline: string;
+    version: string;
+    submission_language: 'en';
+  };
+  mcp_server: {
+    name: string;
+    description: string;
+    endpoint_url: string;
+    transport: 'http/sse';
+    tools: string[];
+  };
+  triz_mcp_server: {
+    name: string;
+    description: string;
+    endpoint_url: string;
+    transport: 'http/sse';
+    tools: string[];
+  };
+  a2a_agent: {
+    name: string;
+    description: string;
+    agent_card_url: string;
+    task_endpoint_url: string;
+    supports_streaming: true;
+  };
+  compliance: {
+    synthetic_data_only: true;
+    contains_phi: false;
+    fhir_version: 'R4';
+  };
+  submission_assets: {
+    demo_video_url: string;
+    repository_url: string;
+    devpost_url: string;
+  };
+}
+
+export function buildMarketplaceConfig(baseUrl: string): MarketplaceConfig {
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+
+  return {
+    project: {
+      name: 'Doctor Opus Clinical Orchestrator',
+      tagline: 'FHIR-native MCP + A2A clinical orchestration with contradiction-aware reasoning',
+      version: '1.0.0',
+      submission_language: 'en'
+    },
+    mcp_server: {
+      name: 'Doctor Opus Clinical Superpowers',
+      description: 'Multi-modal clinical AI tools for ECG, imaging, histology, genetics, labs, and report generation',
+      endpoint_url: `${normalizedBaseUrl}/mcp`,
+      transport: 'http/sse',
+      tools: [
+        'analyze_ecg',
+        'analyze_xray',
+        'analyze_ct',
+        'analyze_mri',
+        'analyze_ultrasound',
+        'analyze_histology',
+        'analyze_genetics',
+        'summarize_labs',
+        'generate_report'
+      ]
+    },
+    triz_mcp_server: {
+      name: 'Doctor Opus TRIZ Clinical Contradiction Engine',
+      description: 'Detects and resolves clinical tradeoffs such as urgency vs diagnostic certainty',
+      endpoint_url: `${normalizedBaseUrl}/triz-mcp`,
+      transport: 'http/sse',
+      tools: [
+        'detect_clinical_contradictions',
+        'resolve_tradeoffs',
+        'generate_priority_plan'
+      ]
+    },
+    a2a_agent: {
+      name: 'Doctor Opus Clinical Orchestrator',
+      description: 'A FHIR-native clinical AI agent orchestrating MCP tools and TRIZ reasoning to return structured DiagnosticReport outputs',
+      agent_card_url: `${normalizedBaseUrl}/.well-known/agent.json`,
+      task_endpoint_url: `${normalizedBaseUrl}/a2a`,
+      supports_streaming: true
+    },
+    compliance: {
+      synthetic_data_only: true,
+      contains_phi: false,
+      fhir_version: 'R4'
+    },
+    submission_assets: {
+      demo_video_url: process.env.HACKATHON_DEMO_VIDEO_URL?.trim() || 'https://youtube.com/your-demo-video',
+      repository_url: process.env.HACKATHON_REPOSITORY_URL?.trim() || 'https://github.com/your-org/doctor-opus-hackathon',
+      devpost_url: process.env.HACKATHON_DEVPOST_URL?.trim() || 'https://devpost.com/software/your-project-slug'
+    }
+  };
+}

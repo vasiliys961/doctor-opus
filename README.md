@@ -42,6 +42,12 @@ A comprehensive web application for physicians and expert clinics, built on **Ne
 - **Packages:** Starter (50 cr. / $9.99), Standard (150 cr. / $24.99), Pro (500 cr. / $69.99).
 - **Transparent pricing:** Exact credit cost displayed after every analysis.
 
+### 🧩 Hackathon Interoperability MVP (Agents Assemble)
+- **FHIR MVP:** Clinical payload → HL7 FHIR R4 `Bundle` conversion endpoint.
+- **MCP MVP:** Built-in tool registry with callable tools for protocol lookup and triage.
+- **A2A MVP:** Agent-to-agent task dispatch (radiology / labs / triage) via dedicated API route.
+- **Chat bridge:** Optional interoperability context (`FHIR + MCP + A2A`) can be injected into `api/chat`.
+
 ---
 
 ## 🛠️ Tech Stack

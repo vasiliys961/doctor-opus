@@ -6,6 +6,10 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText, anonymizeObject } from '@/lib/anonymization';
 import { checkRateLimit, RATE_LIMIT_CHAT, getRateLimitKey } from '@/lib/rate-limiter';
+import { buildFhirInteropSummary } from '@/lib/hackathon/fhir';
+import { dispatchA2ATask } from '@/lib/hackathon/a2a';
+import { executeHackathonMcpTool } from '@/lib/hackathon/mcp';
+import { FhirBundleBuildInput, HackathonA2ATask, HackathonMcpToolCall } from '@/lib/hackathon/types';
 
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
@@ -38,6 +42,57 @@ function buildLanguageInstruction(language: ResponseLanguage): string {
 - Reply in English.
 - Keep wording professional and concise.
 - Preserve standard international medical terminology.`;
+}
+
+interface ChatInteropPayload {
+  fhirData?: FhirBundleBuildInput;
+  a2aTask?: HackathonA2ATask;
+  mcpToolCall?: HackathonMcpToolCall;
+}
+
+function buildInteropInstruction(interop?: ChatInteropPayload): string {
+  if (!interop) return '';
+
+  const sections: string[] = ['INTEROPERABILITY CONTEXT (MVP HACKATHON):'];
+
+  if (interop.fhirData?.patient) {
+    sections.push(buildFhirInteropSummary(interop.fhirData));
+  }
+
+  if (interop.a2aTask) {
+    const a2aResult = dispatchA2ATask(interop.a2aTask);
+    sections.push(
+      [
+        'A2A CONTEXT:',
+        `- taskId: ${a2aResult.taskId}`,
+        `- assignedAgent: ${a2aResult.assignedAgent}`,
+        `- status: ${a2aResult.status}`,
+        `- summary: ${a2aResult.summary}`
+      ].join('\n')
+    );
+  }
+
+  if (interop.mcpToolCall?.tool) {
+    try {
+      const mcpResult = executeHackathonMcpTool(interop.mcpToolCall);
+      sections.push(
+        [
+          'MCP TOOL RESULT:',
+          `- tool: ${mcpResult.tool as string}`,
+          `- result: ${JSON.stringify(mcpResult.result)}`
+        ].join('\n')
+      );
+    } catch {
+      sections.push('MCP TOOL RESULT:\n- tool execution failed, ignore MCP context.');
+    }
+  }
+
+  if (sections.length === 1) {
+    return '';
+  }
+
+  sections.push('Use this context as additional evidence, but keep clinical safety priority.');
+  return sections.join('\n\n');
 }
 
 /**
@@ -74,6 +129,7 @@ export async function POST(request: NextRequest) {
     let specialty: string | undefined;
     let systemPrompt: string | undefined;
     let responseStyle: 'brief' | 'detailed' = 'detailed';
+    let interop: ChatInteropPayload | undefined;
 
     // Проверяем, является ли запрос FormData (с файлами) или JSON
     if (contentType.includes('multipart/form-data')) {
@@ -92,6 +148,14 @@ export async function POST(request: NextRequest) {
       useStreaming = formData.get('useStreaming') === 'true';
       model = formData.get('model') as string | undefined;
       responseStyle = ((formData.get('responseStyle') as string) === 'brief' ? 'brief' : 'detailed');
+      const interopPayload = formData.get('interop') as string | null;
+      if (interopPayload) {
+        try {
+          interop = anonymizeObject(JSON.parse(interopPayload));
+        } catch (e) {
+          console.warn('Failed to parse interop payload:', e);
+        }
+      }
       
       // Получаем файлы
       const fileEntries = formData.getAll('files') as File[];
@@ -105,6 +169,7 @@ export async function POST(request: NextRequest) {
       specialty = body.specialty;
       systemPrompt = body.systemPrompt;
       responseStyle = body.responseStyle === 'brief' ? 'brief' : 'detailed';
+      interop = anonymizeObject(body.interop || undefined);
     }
 
     if (files.length > 0) {
@@ -170,7 +235,10 @@ RESPONSE FORMAT:
     const dialogueInstruction = hasDialogueContext
       ? 'DIALOGUE MODE: Continue the current conversation. Address new clinician remarks directly and avoid repeating the full structure of the first response unless explicitly requested.'
       : 'DIALOGUE MODE: Provide a clear initial baseline response for this request.';
-    const finalMessage = `${preparedMessage}\n\n${styleInstruction}\n${dialogueInstruction}`;
+    const interopInstruction = buildInteropInstruction(interop);
+    const finalMessage = interopInstruction
+      ? `${preparedMessage}\n\n${styleInstruction}\n${dialogueInstruction}\n\n${interopInstruction}`
+      : `${preparedMessage}\n\n${styleInstruction}\n${dialogueInstruction}`;
 
     // Обработка стриминга с логированием
     const handleStreaming = async (stream: ReadableStream) => {

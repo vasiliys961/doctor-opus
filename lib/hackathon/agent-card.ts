@@ -1,0 +1,74 @@
+export interface AgentCard {
+  name: string;
+  description: string;
+  url: string;
+  version: string;
+  capabilities: {
+    streaming: boolean;
+    pushNotifications: boolean;
+  };
+  provider: {
+    organization: string;
+    website: string;
+  };
+  defaultInputModes: string[];
+  defaultOutputModes: string[];
+  skills: Array<{
+    id: string;
+    name: string;
+    description: string;
+    inputModes: string[];
+    outputModes: string[];
+    tags: string[];
+    examples: string[];
+  }>;
+  security: {
+    auth: string;
+    notes: string;
+  };
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '');
+}
+
+export function buildDoctorOpusAgentCard(baseUrl: string): AgentCard {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+
+  return {
+    name: 'Doctor Opus Clinical Orchestrator',
+    description:
+      'A FHIR-native clinical AI agent that orchestrates multi-modal medical analysis using ECG, imaging, labs, histology, and genetics tools. It applies contradiction-aware TRIZ-inspired reasoning to return explainable clinical second opinions as structured DiagnosticReport outputs.',
+    url: `${normalizedBaseUrl}/a2a`,
+    version: '1.0.0',
+    capabilities: {
+      streaming: true,
+      pushNotifications: false
+    },
+    provider: {
+      organization: 'Doctor Opus',
+      website: normalizedBaseUrl
+    },
+    defaultInputModes: ['text', 'data'],
+    defaultOutputModes: ['text', 'data'],
+    skills: [
+      {
+        id: 'clinical_second_opinion',
+        name: 'Clinical Second Opinion',
+        description:
+          'Analyzes FHIR patient context, orchestrates MCP diagnostic tools, resolves clinical contradictions, and returns a structured FHIR DiagnosticReport.',
+        inputModes: ['text', 'data'],
+        outputModes: ['text', 'data'],
+        tags: ['healthcare', 'fhir', 'clinical-ai', 'second-opinion', 'diagnostic-report'],
+        examples: [
+          'Perform chest CT triage with contradiction-aware prioritization.',
+          'Generate a second-opinion DiagnosticReport from synthetic FHIR context.'
+        ]
+      }
+    ],
+    security: {
+      auth: 'bearer',
+      notes: 'Synthetic/de-identified data only for hackathon demo.'
+    }
+  };
+}
