@@ -112,7 +112,7 @@ export async function GET() {
     `;
 
     const paymentsResult = await sql`
-      SELECT id, amount, units, status, transaction_id, created_at, updated_at
+      SELECT id, amount, units, status, transaction_id, package_id, created_at, updated_at
       FROM payments
       WHERE email = ${email}
       ORDER BY created_at DESC

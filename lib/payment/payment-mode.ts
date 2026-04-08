@@ -1,10 +1,13 @@
 import type { PaymentProviderType } from './types';
 
-/** Режим PayAnyWay (например EN / legacy). Во всех остальных случаях — Yagoda. */
+/**
+ * Проект переключен на Yagoda.
+ * Сохраняем функцию для совместимости, но всегда возвращаем false.
+ */
 export function isPayanywayPaymentMode(): boolean {
-  return (process.env.PAYMENT_PROVIDER || '').trim().toLowerCase() === 'payanyway';
+  return false;
 }
 
 export function getPublicPaymentProvider(): PaymentProviderType {
-  return isPayanywayPaymentMode() ? 'payanyway' : 'yagoda';
+  return 'yagoda';
 }

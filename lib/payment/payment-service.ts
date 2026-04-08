@@ -3,8 +3,7 @@ import { PayanywayProvider } from './providers/payanyway';
 import { YagodaProvider } from './providers/yagoda';
 
 function resolveActiveProvider(): PaymentProviderType {
-  const raw = (process.env.PAYMENT_PROVIDER || '').trim().toLowerCase();
-  return raw === 'payanyway' ? 'payanyway' : 'yagoda';
+  return 'yagoda';
 }
 
 class PaymentService {

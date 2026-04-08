@@ -231,7 +231,7 @@ export default function SubscriptionPage() {
     }
   }
 
-  const isYagodaUi = payConfig?.provider === 'yagoda'
+  const isYagodaUi = true
 
   const handleYagodaTopup = async () => {
     if (yagodaPaying || !payConfig) return

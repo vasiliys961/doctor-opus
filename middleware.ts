@@ -50,7 +50,7 @@ export async function middleware(request: NextRequest) {
   );
 
   const isPublicApi = publicApiPaths.some(p =>
-    path.startsWith(p)
+    path === p || path.startsWith(p + '/')
   );
 
   if (isPublicPath || isPublicApi) {
