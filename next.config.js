@@ -80,6 +80,12 @@ const nextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      // Webhook в кабинете Yagoda часто указывают со слэшем в конце
+      { source: '/api/payment/ya/', destination: '/api/payment/ya' },
+    ];
+  },
 }
 
 module.exports = withPWA(nextConfig);

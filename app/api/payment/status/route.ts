@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth';
 import { expireStalePendingPayments, initDatabase, reconcilePendingPaymentsForEmail, sql } from '@/lib/database';
 import { sendPaymentCreditedEmail } from '@/lib/email-service';
 import { bridgePendingPaymentsWithPayAnyWay } from '@/lib/payment/payanyway-bridge-reconcile';
+import { isPayanywayPaymentMode } from '@/lib/payment/payment-mode';
+import { reconcileYagodaPendingForEmail } from '@/lib/payment/yagoda-reconcile';
+import { YAGODA_TOPUP_PACKAGE_ID } from '@/lib/payment/credit-pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +14,7 @@ function buildPendingDiagnostic(payment: any) {
   const createdAt = new Date(payment.created_at);
   const ageMinutes = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 60000));
   const hasTx = Boolean(payment.transaction_id);
+  const isYagoda = payment.package_id === YAGODA_TOPUP_PACKAGE_ID;
 
   if (hasTx) {
     return {
@@ -23,14 +27,18 @@ function buildPendingDiagnostic(payment: any) {
   if (ageMinutes < 5) {
     return {
       reason: 'Платеж только создан и еще не завершен в платежной форме.',
-      action: 'Завершите оплату в PayAnyWay или подождите 1-2 минуты и нажмите "Проверить оплату сейчас".',
+      action: isYagoda
+        ? 'Завершите оплату в Yagoda или подождите 1–2 минуты и нажмите «Проверить оплату сейчас».'
+        : 'Завершите оплату в PayAnyWay или подождите 1-2 минуты и нажмите "Проверить оплату сейчас".',
       ageMinutes,
     };
   }
 
   if (ageMinutes < 30) {
     return {
-      reason: 'Платеж не завершен в PayAnyWay или страница оплаты была закрыта.',
+      reason: isYagoda
+        ? 'Платеж не завершен в Yagoda или страница оплаты была закрыта.'
+        : 'Платеж не завершен в PayAnyWay или страница оплаты была закрыта.',
       action: 'Проверьте оплату в банке. Если списания не было — повторите оплату по новой ссылке.',
       ageMinutes,
     };
@@ -53,13 +61,22 @@ export async function GET() {
 
     await initDatabase();
     const expired = await expireStalePendingPayments({ email });
-    // Bridge-сверка: ищем успешные операции PayAnyWay для pending без transaction_id.
-    const bridge = await bridgePendingPaymentsWithPayAnyWay({ email, limit: 10 });
-    // Автодозавершение "подвисших" pending оплат, если transaction_id уже известен.
-    const reconcile = await reconcilePendingPaymentsForEmail(email, 10);
+
+    let bridge: { confirmedPayments?: any[] } = { confirmedPayments: [] };
+    let reconcile: { confirmedPayments?: any[] } = { confirmedPayments: [] };
+    let yagodaRec: { confirmedPayments?: any[]; success?: boolean } = { confirmedPayments: [] };
+
+    if (isPayanywayPaymentMode()) {
+      bridge = await bridgePendingPaymentsWithPayAnyWay({ email, limit: 10 });
+      reconcile = await reconcilePendingPaymentsForEmail(email, 10);
+    } else {
+      yagodaRec = await reconcileYagodaPendingForEmail(email, 10);
+    }
+
     const confirmedPayments = [
       ...(bridge.confirmedPayments || []),
       ...(reconcile.confirmedPayments || []),
+      ...(yagodaRec.confirmedPayments || []),
     ];
     if (confirmedPayments.length > 0) {
       for (const confirmed of confirmedPayments) {

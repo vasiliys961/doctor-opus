@@ -40,6 +40,8 @@ export async function middleware(request: NextRequest) {
   const publicApiPaths = [
     '/api/auth',              // NextAuth (login, session, providers) + /api/auth/register
     '/api/payment/payanyway', // Webhook для платежей PayAnyWay (Moneta.ru)
+    '/api/payment/ya',        // Webhook Yagoda (уведомление об оплате заказа)
+    '/api/payment/config',    // Публичные параметры оплаты для UI (курс, минимум)
     '/api/payment/reconcile', // Фоновая автосверка pending-платежей (защищена отдельным secret)
   ];
 

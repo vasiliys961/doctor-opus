@@ -48,6 +48,13 @@ export default function SubscriptionPage() {
   } | null>(null)
   const [autoCheckAttemptsLeft, setAutoCheckAttemptsLeft] = useState(0)
   const [showCreditedToast, setShowCreditedToast] = useState(false)
+  const [payConfig, setPayConfig] = useState<{
+    provider: string
+    creditPriceRub: number
+    minTopupRub: number
+  } | null>(null)
+  const [yagodaAmount, setYagodaAmount] = useState('250')
+  const [yagodaPaying, setYagodaPaying] = useState(false)
   const autoCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const autoCheckInFlightRef = useRef(false)
   const autoCheckAttemptsLeftRef = useRef(0)
@@ -121,6 +128,30 @@ export default function SubscriptionPage() {
   }
 
   useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await fetch('/api/payment/config', { cache: 'no-store' })
+        const j = await r.json()
+        if (!cancelled && j?.provider) {
+          setPayConfig({
+            provider: j.provider,
+            creditPriceRub: Number(j.creditPriceRub) || 2.5,
+            minTopupRub: Number(j.minTopupRub) || 250,
+          })
+        }
+      } catch {
+        if (!cancelled) {
+          setPayConfig({ provider: 'yagoda', creditPriceRub: 2.5, minTopupRub: 250 })
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     const refreshOnboardingStatus = () => setIsOnboardingDone(isOnboardingCompleted())
 
     setMounted(true)
@@ -130,12 +161,13 @@ export default function SubscriptionPage() {
     // Показываем сообщение об успешной/неуспешной оплате из URL
     const params = new URLSearchParams(window.location.search)
     const status = params.get('status')
-    if (status === 'success') {
+    const payment = params.get('payment')
+    if (status === 'success' || payment === 'success') {
       setPaymentCheckStatus('success')
       setPaymentCheckMessage('Оплата принята. Запускаем автопроверку зачисления каждые 30 секунд (до 10 минут).')
       handleCheckPayment()
       startAutoCheck()
-    } else if (status === 'fail') {
+    } else if (status === 'fail' || payment === 'failed') {
       setPaymentCheckStatus('error')
       setPaymentCheckMessage('Оплата не прошла или была отменена. Попробуйте ещё раз.')
     }
@@ -196,6 +228,44 @@ export default function SubscriptionPage() {
       setPayError('Ошибка соединения. Проверьте интернет и попробуйте снова.')
     } finally {
       setPayingPackage(null)
+    }
+  }
+
+  const isYagodaUi = payConfig?.provider === 'yagoda'
+
+  const handleYagodaTopup = async () => {
+    if (yagodaPaying || !payConfig) return
+    setPayError(null)
+    const amount = Number(String(yagodaAmount).replace(',', '.'))
+    if (!Number.isFinite(amount)) {
+      setPayError('Укажите корректную сумму')
+      return
+    }
+    if (amount < payConfig.minTopupRub) {
+      setPayError(`Минимальная сумма ${payConfig.minTopupRub} ₽`)
+      return
+    }
+    setYagodaPaying(true)
+    try {
+      const res = await fetch('/api/payment/yagoda/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amountRub: amount }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.success || !data?.paymentUrl) {
+        if (res.status === 401) {
+          setPayError('Для оплаты необходимо войти в аккаунт.')
+        } else {
+          setPayError(data?.error || 'Не удалось создать платёж. Попробуйте ещё раз.')
+        }
+        return
+      }
+      window.location.href = data.paymentUrl
+    } catch {
+      setPayError('Ошибка соединения. Проверьте интернет и попробуйте снова.')
+    } finally {
+      setYagodaPaying(false)
     }
   }
 
@@ -399,33 +469,47 @@ export default function SubscriptionPage() {
           </div>
         )}
 
-        <h1 className="text-4xl font-bold text-gray-800 mb-2">
-          💎 Пакеты единиц
-        </h1>
-        <p className="text-gray-600 mb-4">
-          Единицы используются для оплаты анализов и консультаций.{' '}
-          <Link href="/clinic/dashboard" className="ml-2 text-indigo-600 font-bold hover:underline">
-            🏢 Аналитика расхода единиц →
-          </Link>
-        </p>
+        {isYagodaUi && payConfig ? (
+          <>
+            <h1 className="text-4xl font-bold text-gray-800 mb-2">Пополнение баланса</h1>
+            <p className="text-gray-600 mb-4">
+              Единицы списываются за анализы и ИИ-консультации. Оплата через Yagoda; кассовый чек формирует платёжный партнёр.
+              Курс: <strong>{payConfig.creditPriceRub} ₽</strong> за 1 ед., минимум <strong>{payConfig.minTopupRub} ₽</strong>.{' '}
+              <Link href="/clinic/dashboard" className="text-indigo-600 font-bold hover:underline">
+                Аналитика расхода →
+              </Link>
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-4xl font-bold text-gray-800 mb-2">💎 Пакеты единиц</h1>
+            <p className="text-gray-600 mb-4">
+              Единицы используются для оплаты анализов и консультаций.{' '}
+              <Link href="/clinic/dashboard" className="ml-2 text-indigo-600 font-bold hover:underline">
+                🏢 Аналитика расхода единиц →
+              </Link>
+            </p>
+          </>
+        )}
 
-        {/* БЕТА-БАННЕР */}
-        <div className="bg-gradient-to-r from-amber-100 via-yellow-50 to-amber-100 border-2 border-amber-300 rounded-xl p-6 mb-8 shadow-lg">
-          <div className="flex items-start gap-4">
-            <div className="text-4xl">🚀</div>
-            <div className="flex-1">
-              <h3 className="text-xl font-bold text-amber-900 mb-2">Открытое бета-тестирование до 31 мая 2026</h3>
-              <p className="text-amber-800 mb-3">
-                Сейчас действуют специальные цены от <strong>1.99 ₽/ед.</strong>{' '}
-                После окончания бета-периода базовая цена составит <strong>3 ₽/ед.</strong> Скидки за объём сохранятся.
-              </p>
-              <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
-                💎 Все, кто зарегистрировался до 31 мая, смогут купить ещё{' '}
-                <strong>до 2 пакетов по текущим ценам</strong> в течение 3 месяцев после изменения тарифов.
-              </p>
+        {!isYagodaUi && (
+          <div className="bg-gradient-to-r from-amber-100 via-yellow-50 to-amber-100 border-2 border-amber-300 rounded-xl p-6 mb-8 shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="text-4xl">🚀</div>
+              <div className="flex-1">
+                <h3 className="text-xl font-bold text-amber-900 mb-2">Открытое бета-тестирование до 31 мая 2026</h3>
+                <p className="text-amber-800 mb-3">
+                  Сейчас действуют специальные цены от <strong>1.99 ₽/ед.</strong>{' '}
+                  После окончания бета-периода базовая цена составит <strong>3 ₽/ед.</strong> Скидки за объём сохранятся.
+                </p>
+                <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
+                  💎 Все, кто зарегистрировался до 31 мая, смогут купить ещё{' '}
+                  <strong>до 2 пакетов по текущим ценам</strong> в течение 3 месяцев после изменения тарифов.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {balanceContent}
 
@@ -489,7 +573,7 @@ export default function SubscriptionPage() {
           </div>
         )}
 
-        {/* ВАЖНО ПРО PENDING И ЗАВИСАНИЕ СТРАНИЦЫ */}
+        {!isYagodaUi && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-6 text-sm text-indigo-900">
           <p className="font-bold mb-1">Важно:</p>
           <p>
@@ -498,7 +582,20 @@ export default function SubscriptionPage() {
             В редких случаях зачисление может занять до 2–3 дней.
           </p>
         </div>
+        )}
 
+        {isYagodaUi && payConfig && (
+        <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-6 text-sm text-teal-900">
+          <p className="font-bold mb-1">После оплаты</p>
+          <p>
+            Баланс обновляется автоматически (webhook Yagoda). Если сразу не видите единицы — нажмите «Проверить оплату сейчас»
+            или обновите страницу через минуту. Повторно оплачивать тот же счёт не нужно.
+          </p>
+        </div>
+        )}
+
+        {!isYagodaUi && (
+        <>
         <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-8 text-sm text-teal-900">
           <p className="font-bold mb-1">Резервный канал оплаты через VTB</p>
           <p>
@@ -681,6 +778,62 @@ export default function SubscriptionPage() {
               })}
           </div>
         </div>
+        </>
+        )}
+
+        {isYagodaUi && payConfig && (
+        <div className="bg-white rounded-xl shadow-lg border border-teal-200 p-6 mb-8">
+          <h3 className="text-xl font-bold text-slate-900 mb-2">Сумма пополнения</h3>
+          <p className="text-sm text-slate-600 mb-4">
+            От {payConfig.minTopupRub} ₽. Курс <strong>{payConfig.creditPriceRub} ₽</strong> за 1 ед. баланса (начисление целыми единицами).
+          </p>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {[250, 500, 1000, 2500].map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setYagodaAmount(String(v))}
+                className="px-3 py-1.5 rounded-lg border border-teal-200 text-sm font-bold text-teal-800 hover:bg-teal-50"
+              >
+                {v} ₽
+              </button>
+            ))}
+          </div>
+          <label className="block text-sm text-slate-700 mb-2">
+            Сумма, ₽
+            <input
+              type="number"
+              min={payConfig.minTopupRub}
+              step={0.01}
+              value={yagodaAmount}
+              onChange={(e) => setYagodaAmount(e.target.value)}
+              className="mt-1 w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2"
+            />
+          </label>
+          <p className="text-sm text-slate-600 mb-4">
+            К начислению (ориентир):{' '}
+            <strong>
+              {(() => {
+                const a = Number(String(yagodaAmount).replace(',', '.'))
+                if (!Number.isFinite(a) || !payConfig) return '—'
+                const unitKop = Math.round(payConfig.creditPriceRub * 100)
+                const amountKop = Math.round(a * 100)
+                if (unitKop <= 0) return '—'
+                return String(Math.floor(amountKop / unitKop))
+              })()}
+            </strong>
+            {' '}ед.
+          </p>
+          <button
+            type="button"
+            onClick={handleYagodaTopup}
+            disabled={yagodaPaying}
+            className="px-6 py-3 rounded-xl bg-teal-600 text-white font-bold hover:bg-teal-700 disabled:opacity-50"
+          >
+            {yagodaPaying ? 'Переход к оплате…' : 'Перейти к оплате в Yagoda'}
+          </button>
+        </div>
+        )}
 
         {/* ПРОВЕРКА ЗАЧИСЛЕНИЯ */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-5 mb-8">
@@ -692,7 +845,8 @@ export default function SubscriptionPage() {
               </p>
             </div>
             <button
-              onClick={handleCheckPayment}
+              type="button"
+              onClick={() => void handleCheckPayment()}
               disabled={checkingPayment}
               className="shrink-0 px-5 py-2.5 rounded-lg font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 transition"
             >
