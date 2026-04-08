@@ -53,6 +53,7 @@ export default function AdminPaymentsPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [refunding, setRefunding] = useState<number | null>(null)
+  const [reconcilingYagodaPaymentId, setReconcilingYagodaPaymentId] = useState<number | null>(null)
   const [period, setPeriod] = useState<'all' | 'today' | '7d' | '30d'>('all')
 
   const isAdmin = (session?.user as any)?.isAdmin
@@ -119,6 +120,36 @@ export default function AdminPaymentsPage() {
     }
   }
 
+  const reconcileWithYagoda = async (paymentId: number) => {
+    setReconcilingYagodaPaymentId(paymentId)
+    setError('')
+    setNotice('')
+    try {
+      const res = await fetch('/api/admin/payments/yagoda/reconcile-one', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.success) {
+        setError(data?.error || 'Не удалось сверить платеж с Yagoda')
+        return
+      }
+      if (!data.reconciled) {
+        setNotice(`Платеж #${paymentId}: в Yagoda пока нет статуса paid/payed (${data?.yagodaStatus || 'нет статуса'}).`)
+      } else if (data.alreadyProcessed) {
+        setNotice(`Платеж #${paymentId} уже был зачислен ранее.`)
+      } else {
+        setNotice(`Платеж #${paymentId} зачислен: +${Number(data.units || 0).toFixed(0)} ед.`)
+      }
+      await loadPayments()
+    } catch (err: any) {
+      setError(err?.message || 'Ошибка сверки с Yagoda')
+    } finally {
+      setReconcilingYagodaPaymentId(null)
+    }
+  }
+
   if (!isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -164,6 +195,10 @@ export default function AdminPaymentsPage() {
       </span>
     )
   }
+
+  const failedYagodaPayments = payments.filter(
+    (p) => p.package_id === 'yagoda_topup' && (p.status === 'failed' || p.status === 'pending')
+  )
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 p-4 sm:p-6">
@@ -221,6 +256,13 @@ export default function AdminPaymentsPage() {
           </div>
         )}
 
+        {failedYagodaPayments.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl mb-6 text-sm">
+            <strong>Страховка Yagoda:</strong> найдено {failedYagodaPayments.length} платеж(ей) со статусом pending/failed.
+            Можно нажать «Сверить с Yagoda» в таблице и доначислить в один клик, если в Yagoda уже paid/payed.
+          </div>
+        )}
+
         {loading ? (
           <div className="bg-white rounded-2xl shadow-sm border p-12 text-center">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-4"></div>
@@ -258,17 +300,28 @@ export default function AdminPaymentsPage() {
                       <td className="px-4 py-3">{statusBadge(p.status)}</td>
                       <td className="px-4 py-3 text-xs text-slate-400">{formatDate(p.created_at)}</td>
                       <td className="px-4 py-3 text-center">
-                        {p.status === 'completed' ? (
-                          <button
-                            onClick={() => void handleRefund(p.id)}
-                            disabled={refunding === p.id}
-                            className="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg transition-all disabled:opacity-50 shadow-sm"
-                          >
-                            {refunding === p.id ? '⏳...' : '🛑 Возврат'}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-300">—</span>
-                        )}
+                        <div className="flex flex-col items-center gap-1">
+                          {p.status === 'completed' ? (
+                            <button
+                              onClick={() => void handleRefund(p.id)}
+                              disabled={refunding === p.id || reconcilingYagodaPaymentId === p.id}
+                              className="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg transition-all disabled:opacity-50 shadow-sm"
+                            >
+                              {refunding === p.id ? '⏳...' : '🛑 Возврат'}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
+                          {p.package_id === 'yagoda_topup' && (p.status === 'failed' || p.status === 'pending') && (
+                            <button
+                              onClick={() => void reconcileWithYagoda(p.id)}
+                              disabled={reconcilingYagodaPaymentId === p.id || refunding === p.id}
+                              className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold rounded-md transition disabled:opacity-50"
+                            >
+                              {reconcilingYagodaPaymentId === p.id ? 'Проверяем…' : 'Сверить с Yagoda'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

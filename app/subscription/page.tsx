@@ -164,6 +164,9 @@ export default function SubscriptionPage() {
             Аналитика расхода единиц
           </Link>
         </p>
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-6 text-sm text-emerald-800">
+          Пополнение баланса через <strong>СБП</strong> обычно проходит быстрее.
+        </div>
 
         {mounted && currentBalance && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
