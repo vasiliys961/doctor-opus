@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { expireStalePendingPayments, initDatabase, reconcilePendingPaymentsForEmail, sql } from '@/lib/database';
+import { expireStalePendingPayments, initDatabase, sql } from '@/lib/database';
 import { sendPaymentCreditedEmail } from '@/lib/email-service';
-import { bridgePendingPaymentsWithPayAnyWay } from '@/lib/payment/payanyway-bridge-reconcile';
-import { isPayanywayPaymentMode } from '@/lib/payment/payment-mode';
 import { reconcileYagodaPendingForEmail } from '@/lib/payment/yagoda-reconcile';
 import { YAGODA_TOPUP_PACKAGE_ID } from '@/lib/payment/credit-pricing';
 
@@ -27,18 +25,14 @@ function buildPendingDiagnostic(payment: any) {
   if (ageMinutes < 5) {
     return {
       reason: 'Платеж только создан и еще не завершен в платежной форме.',
-      action: isYagoda
-        ? 'Завершите оплату в Yagoda или подождите 1–2 минуты и нажмите «Проверить оплату сейчас».'
-        : 'Завершите оплату в PayAnyWay или подождите 1-2 минуты и нажмите "Проверить оплату сейчас".',
+      action: 'Завершите оплату в Yagoda или подождите 1–2 минуты и нажмите «Проверить оплату сейчас».',
       ageMinutes,
     };
   }
 
   if (ageMinutes < 30) {
     return {
-      reason: isYagoda
-        ? 'Платеж не завершен в Yagoda или страница оплаты была закрыта.'
-        : 'Платеж не завершен в PayAnyWay или страница оплаты была закрыта.',
+      reason: 'Платеж не завершен в Yagoda или страница оплаты была закрыта.',
       action: 'Проверьте оплату в банке. Если списания не было — повторите оплату по новой ссылке.',
       ageMinutes,
     };
@@ -61,21 +55,9 @@ export async function GET() {
 
     await initDatabase();
     const expired = await expireStalePendingPayments({ email });
-
-    let bridge: { confirmedPayments?: any[] } = { confirmedPayments: [] };
-    let reconcile: { confirmedPayments?: any[] } = { confirmedPayments: [] };
-    let yagodaRec: { confirmedPayments?: any[]; success?: boolean } = { confirmedPayments: [] };
-
-    if (isPayanywayPaymentMode()) {
-      bridge = await bridgePendingPaymentsWithPayAnyWay({ email, limit: 10 });
-      reconcile = await reconcilePendingPaymentsForEmail(email, 10);
-    } else {
-      yagodaRec = await reconcileYagodaPendingForEmail(email, 10);
-    }
+    const yagodaRec: { confirmedPayments?: any[]; success?: boolean } = await reconcileYagodaPendingForEmail(email, 10);
 
     const confirmedPayments = [
-      ...(bridge.confirmedPayments || []),
-      ...(reconcile.confirmedPayments || []),
       ...(yagodaRec.confirmedPayments || []),
     ];
     if (confirmedPayments.length > 0) {
@@ -138,7 +120,6 @@ export async function GET() {
       balanceUpdatedAt: balanceRow?.updated_at || null,
       hasPendingPayments,
       expiredByCleanup: expired,
-      bridge,
       pendingDiagnostic: pendingDiagnostic
         ? {
             paymentId: Number(lastPendingPayment.id),

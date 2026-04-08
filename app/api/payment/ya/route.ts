@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initDatabase, confirmPayment } from '@/lib/database';
 import { safeLog, safeWarn } from '@/lib/logger';
-import { isPayanywayPaymentMode } from '@/lib/payment/payment-mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,10 +16,6 @@ function verifyWebhookSecret(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  if (isPayanywayPaymentMode()) {
-    return NextResponse.json({ ok: false }, { status: 404 });
-  }
-
   if (!verifyWebhookSecret(request)) {
     safeWarn('⚠️ [YAGODA WEBHOOK] Отклонено: неверный секрет');
     return NextResponse.json({ ok: false }, { status: 401 });

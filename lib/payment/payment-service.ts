@@ -1,5 +1,4 @@
 import { PaymentProvider, PaymentProviderType } from './types';
-import { PayanywayProvider } from './providers/payanyway';
 import { YagodaProvider } from './providers/yagoda';
 
 function resolveActiveProvider(): PaymentProviderType {
@@ -12,7 +11,6 @@ class PaymentService {
 
   constructor() {
     this.providers = {
-      payanyway: new PayanywayProvider(),
       yagoda: new YagodaProvider(),
     };
 

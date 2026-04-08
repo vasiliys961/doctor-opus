@@ -38,6 +38,6 @@ export interface PaymentProvider {
   }>;
 }
 
-export type PaymentProviderType = 'payanyway' | 'yagoda';
+export type PaymentProviderType = 'yagoda';
 
 export type RefundStatus = 'pending' | 'approved' | 'completed' | 'rejected';

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { paymentService } from "@/lib/payment/payment-service";
 import { SUBSCRIPTION_PACKAGES } from "@/lib/subscription-manager";
-import { savePaymentConsent, initDatabase, createPayment } from "@/lib/database";
+import { initDatabase, createPayment } from "@/lib/database";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { packageId, isRecurring } = await request.json();
+    const { packageId } = await request.json();
 
     if (!packageId || !SUBSCRIPTION_PACKAGES[packageId as keyof typeof SUBSCRIPTION_PACKAGES]) {
       return NextResponse.json(
@@ -25,31 +25,8 @@ export async function POST(request: NextRequest) {
     }
 
     const pkg = SUBSCRIPTION_PACKAGES[packageId as keyof typeof SUBSCRIPTION_PACKAGES];
-    if (pkg.category === 'individual') {
-      return NextResponse.json(
-        { success: false, error: 'Для индивидуальных пакетов используйте оплату через VTB' },
-        { status: 400 }
-      );
-    }
-    
     // Инициализация БД
     await initDatabase();
-
-    // Логируем согласие пользователя (требование эквайринга)
-    if (isRecurring) {
-      try {
-        await savePaymentConsent({
-          email: session.user.email || 'unknown',
-          package_id: packageId,
-          consent_type: 'recurring_agreement',
-          ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-          user_agent: request.headers.get('user-agent') || 'unknown'
-        });
-      } catch (dbError) {
-        console.error('⚠️ [PAYMENT] Ошибка сохранения согласия в БД:', dbError);
-        // Не прерываем платеж из-за ошибки лога
-      }
-    }
 
     // Создаем запись о платеже в БД
     const paymentResult = await createPayment({
@@ -72,7 +49,6 @@ export async function POST(request: NextRequest) {
       orderId: invId,
       description: `Активация пакета ${pkg.name} для ${session.user.email}`,
       email: session.user.email || undefined,
-      isRecurring
     });
 
     return NextResponse.json({

@@ -8,19 +8,11 @@ import {
   validateTopupAmountRub,
   YAGODA_TOPUP_PACKAGE_ID,
 } from '@/lib/payment/credit-pricing';
-import { isPayanywayPaymentMode } from '@/lib/payment/payment-mode';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    if (isPayanywayPaymentMode()) {
-      return NextResponse.json(
-        { success: false, error: 'На этом окружении используется PayAnyWay, не Yagoda' },
-        { status: 400 }
-      );
-    }
-
     const session = await getServerSession(authOptions);
     const email = session?.user?.email?.trim().toLowerCase();
     if (!email) {
