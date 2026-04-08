@@ -472,24 +472,31 @@ export async function createPayment(data: {
   amount: number;
   units: number;
   package_id: string;
-}) {
+}, options?: { reusePendingWindowMinutes?: number }) {
   try {
+    const reusePendingWindowMinutesRaw = Number(options?.reusePendingWindowMinutes ?? 30);
+    const reusePendingWindowMinutes = Number.isFinite(reusePendingWindowMinutesRaw)
+      ? Math.max(0, Math.min(24 * 60, Math.floor(reusePendingWindowMinutesRaw)))
+      : 30;
+
     // Если пользователь нажал "Оплатить" несколько раз подряд, переиспользуем свежий pending-инвойс.
-    const recentPending = await sql`
-      SELECT id
-      FROM payments
-      WHERE email = ${data.email}
-        AND amount = ${data.amount}
-        AND units = ${data.units}
-        AND package_id = ${data.package_id}
-        AND status = 'pending'
-        AND transaction_id IS NULL
-        AND created_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes'
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
-    if (recentPending.rows.length > 0) {
-      return { success: true, paymentId: recentPending.rows[0].id, reused: true };
+    if (reusePendingWindowMinutes > 0) {
+      const recentPending = await sql`
+        SELECT id
+        FROM payments
+        WHERE email = ${data.email}
+          AND amount = ${data.amount}
+          AND units = ${data.units}
+          AND package_id = ${data.package_id}
+          AND status = 'pending'
+          AND transaction_id IS NULL
+          AND created_at >= CURRENT_TIMESTAMP - make_interval(mins => ${reusePendingWindowMinutes})
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      if (recentPending.rows.length > 0) {
+        return { success: true, paymentId: recentPending.rows[0].id, reused: true };
+      }
     }
 
     const result = await sql`
@@ -1069,6 +1076,7 @@ export async function expireStalePendingPayments(args?: { email?: string; staleM
               updated_at = CURRENT_TIMESTAMP
           WHERE status = 'pending'
             AND transaction_id IS NULL
+            AND package_id IS DISTINCT FROM 'yagoda_topup'
             AND email = ${email}
             AND created_at < CURRENT_TIMESTAMP - make_interval(mins => ${staleMinutes})
           RETURNING id
@@ -1079,6 +1087,7 @@ export async function expireStalePendingPayments(args?: { email?: string; staleM
               updated_at = CURRENT_TIMESTAMP
           WHERE status = 'pending'
             AND transaction_id IS NULL
+            AND package_id IS DISTINCT FROM 'yagoda_topup'
             AND created_at < CURRENT_TIMESTAMP - make_interval(mins => ${staleMinutes})
           RETURNING id
         `;

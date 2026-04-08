@@ -26,17 +26,23 @@ export async function reconcileYagodaPendingForEmail(
   try {
     await initDatabase();
 
-    const pending = await sql`
+    const candidates = await sql`
       SELECT id, email, amount, units
       FROM payments
       WHERE email = ${email}
-        AND status = 'pending'
+        AND (
+          status = 'pending'
+          OR (
+            status = 'failed'
+            AND created_at >= CURRENT_TIMESTAMP - INTERVAL '72 hours'
+          )
+        )
         AND package_id = ${YAGODA_TOPUP_PACKAGE_ID}
       ORDER BY created_at DESC
       LIMIT ${limit}
     `;
 
-    const rows = pending.rows as Array<{
+    const rows = candidates.rows as Array<{
       id: number;
       email: string;
       amount: string | number;

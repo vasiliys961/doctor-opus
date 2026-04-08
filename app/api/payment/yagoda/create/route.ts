@@ -30,35 +30,51 @@ export async function POST(request: NextRequest) {
     const units = creditsFromAmountRub(amountRub);
     await initDatabase();
 
-    const paymentResult = await createPayment({
-      email,
-      amount: Number(amountRub.toFixed(2)),
-      units,
-      package_id: YAGODA_TOPUP_PACKAGE_ID,
-    });
-
-    if (!paymentResult.success || !paymentResult.paymentId) {
-      return NextResponse.json(
-        { success: false, error: 'Не удалось создать платёж в базе' },
-        { status: 500 }
-      );
-    }
-
     const provider = paymentService.getProvider();
-    const paymentUrl = await provider.generatePaymentUrl({
-      amount: Number(amountRub.toFixed(2)),
-      orderId: paymentResult.paymentId,
-      description: `Пополнение баланса Doctor Opus: ${units} ед.`,
-      email,
-    });
+    const normalizedAmount = Number(amountRub.toFixed(2));
+
+    const createAndGenerate = async (reusePendingWindowMinutes: number) => {
+      const paymentResult = await createPayment(
+        {
+          email,
+          amount: normalizedAmount,
+          units,
+          package_id: YAGODA_TOPUP_PACKAGE_ID,
+        },
+        { reusePendingWindowMinutes }
+      );
+      if (!paymentResult.success || !paymentResult.paymentId) {
+        throw new Error('Не удалось создать платёж в базе');
+      }
+
+      const paymentUrl = await provider.generatePaymentUrl({
+        amount: normalizedAmount,
+        orderId: paymentResult.paymentId,
+        description: `Пополнение баланса Doctor Opus: ${units} ед.`,
+        email,
+      });
+
+      return { paymentResult, paymentUrl };
+    };
+
+    let generated: { paymentResult: { paymentId: number; reused?: boolean }; paymentUrl: string };
+    try {
+      generated = await createAndGenerate(30);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message.toLowerCase() : '';
+      const isDuplicateOrder = msg.includes('уже существует') || msg.includes('already exists');
+      if (!isDuplicateOrder) throw err;
+      // Страховка от конфликта order_id в Yagoda: создаем новый payment.id без reuse.
+      generated = await createAndGenerate(0);
+    }
 
     return NextResponse.json({
       success: true,
-      paymentUrl,
-      paymentId: paymentResult.paymentId,
+      paymentUrl: generated.paymentUrl,
+      paymentId: generated.paymentResult.paymentId,
       units,
-      amountRub: Number(amountRub.toFixed(2)),
-      reused: Boolean((paymentResult as { reused?: boolean }).reused),
+      amountRub: normalizedAmount,
+      reused: Boolean(generated.paymentResult.reused),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Ошибка создания платежа';
