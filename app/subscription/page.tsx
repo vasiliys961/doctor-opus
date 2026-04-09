@@ -167,6 +167,10 @@ export default function SubscriptionPage() {
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-6 text-sm text-emerald-800">
           Пополнение баланса через <strong>СБП</strong> обычно проходит быстрее.
         </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 text-sm text-amber-900">
+          Doctor Opus является информационным сервисом для медицинских специалистов и не предназначен для автономной постановки диагноза.
+          Все клинические решения принимаются врачом самостоятельно на основании собственной профессиональной оценки.
+        </div>
 
         {mounted && currentBalance && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
