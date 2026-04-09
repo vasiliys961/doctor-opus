@@ -229,7 +229,7 @@ export default function ECGPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">📈 Анализ ЭКГ</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">📈 Разбор ЭКГ</h1>
       
       <AnalysisTips 
         content={{

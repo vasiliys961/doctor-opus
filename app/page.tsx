@@ -23,6 +23,18 @@ export default async function HomePage() {
           />
         </div>
       </a>
+
+      <section className="mb-5 sm:mb-6 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 sm:p-5 shadow-sm">
+        <p className="text-xs sm:text-sm font-bold uppercase tracking-wide text-indigo-900 mb-2">
+          Позиция до ответа РЗН
+        </p>
+        <p className="text-sm sm:text-base text-indigo-900 leading-relaxed">
+          Запрос о квалификации направлен в Росздравнадзор 10 апреля 2026 г. (исх. №...).
+          Ожидаем официального ответа регулятора.
+          Продукт функционирует как информационный ассистент врача и учебная платформа
+          в соответствии с ГОСТ Р 72484-2025.
+        </p>
+      </section>
       
       <SpendingSummary />
       {/* HERO-блок */}
@@ -44,8 +56,8 @@ export default async function HomePage() {
               (ГОСТ Р 72484-2025, п. 3.5.6, п. 4.4)
             </p>
             <p className="max-w-lg text-sm sm:text-base text-primary-900 mb-4 sm:mb-6">
-              Единый ИИ‑центр для описания ЭКГ, рентгена, КТ, МРТ, УЗИ, гистологии и генетики.
-              Профессиональная интерпретация данных с выводом результатов в формате «аналитический разбор» для врача.
+              Единый ИИ‑центр для работы с данными ЭКГ, рентгена, КТ, МРТ, УЗИ, гистологии и генетики.
+              Профессиональный аналитический разбор данных с выводом результатов в формате «аналитический разбор» для врача.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 sm:mb-6">
@@ -59,7 +71,7 @@ export default async function HomePage() {
                 </Link>
               </div>
               <div className="flex flex-col gap-2">
-                <p className="text-[10px] text-secondary-700 italic px-2">Модуль анализа VCF-файлов и интерпретации исследований.</p>
+                <p className="text-[10px] text-secondary-700 italic px-2">Модуль анализа VCF-файлов и аналитического разбора исследований.</p>
                 <Link
                   href="/genetic"
                   className="bg-secondary-500 hover:bg-secondary-600 active:bg-secondary-700 text-white font-semibold py-3 px-4 sm:px-6 rounded-full transition-colors text-center touch-manipulation shadow-lg"
