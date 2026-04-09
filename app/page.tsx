@@ -45,12 +45,12 @@ export default async function HomePage() {
             </p>
             <p className="max-w-lg text-sm sm:text-base text-primary-900 mb-4 sm:mb-6">
               Единый ИИ‑центр для описания ЭКГ, рентгена, КТ, МРТ, УЗИ, гистологии и генетики.
-              Профессиональная интерпретация данных с выводом результатов в формате «консультативное заключение» для врача.
+              Профессиональная интерпретация данных с выводом результатов в формате «аналитический разбор» для врача.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 sm:mb-6">
               <div className="flex flex-col gap-2">
-                <p className="text-[10px] text-primary-700 italic px-2">Система формирует Консультативное заключение. Ответственность несёт лечащий врач.</p>
+                <p className="text-[10px] text-primary-700 italic px-2">Система формирует аналитический разбор. Ответственность несёт лечащий врач.</p>
                 <Link
                   href="/image-analysis"
                   className="bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white font-semibold py-3 px-4 sm:px-6 rounded-full transition-colors text-center touch-manipulation shadow-lg"

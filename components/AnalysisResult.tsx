@@ -683,7 +683,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mt-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-xl font-bold text-primary-900">🩺 Консультативное заключение</h3>
+          <h3 className="text-xl font-bold text-primary-900">🩺 Аналитический разбор</h3>
           {loading && (
             <div className="flex items-center space-x-2 mt-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
@@ -732,7 +732,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
                 ? 'bg-orange-500 hover:bg-orange-600 text-white'
                 : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
             }`}
-            title="Озвучить заключение"
+            title="Озвучить разбор"
           >
             {speaking ? '⏹ Стоп' : '🔊 Озвучить'}
           </button>
@@ -740,7 +740,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             <button
               onClick={handleTransferToEcgProtocol}
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
-              title="Оформить короткое заключение функционалиста по шаблону"
+              title="Оформить короткий аналитический разбор функционалиста по шаблону"
             >
               🫀 В протокол ЭКГ
             </button>
@@ -749,7 +749,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             <button
               onClick={() => handleTransferToProtocol(false)}
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
-              title="Передать очищенное заключение в раздел Протокол"
+              title="Передать очищенный аналитический разбор в раздел Протокол"
             >
               📄 В протокол
             </button>
@@ -878,7 +878,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       <div className="mt-8 pt-4 border-t border-gray-100">
         <div className="flex flex-col md:flex-row justify-between gap-4 text-[10px] text-gray-400">
           <div className="space-y-1 max-w-2xl">
-            <p><strong>⚠️ Верификация:</strong> Данное консультативное заключение требует обязательной проверки и подписи лечащего врача. Doctor Opus — информационно-аналитический сервис, не являющийся медицинской организацией и не оказывающий медицинских услуг. Все данные носят ознакомительный характер.</p>
+            <p><strong>⚠️ Верификация:</strong> Данный аналитический разбор требует обязательной проверки и подписи лечащего врача. Doctor Opus — информационно-аналитический сервис, не являющийся медицинской организацией и не оказывающий медицинских услуг. Все данные носят ознакомительный характер.</p>
             <p><strong>ℹ️ О тарификации:</strong> Стоимость отражает цену сервиса (модели + инфраструктура: серверная обработка, хранение, доставка). Повторные запросы к тем же данным тарифицируются заново, если они не были сохранены в кэше системы.</p>
           </div>
           <div className="text-right">

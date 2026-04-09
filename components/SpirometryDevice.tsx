@@ -596,7 +596,7 @@ export default function SpirometryDevice() {
               onClick={analyze}
               className="w-full py-5 bg-violet-600 hover:bg-violet-700 text-white text-xl font-black rounded-2xl transition-all shadow-xl"
             >
-              🧠 Получить заключение ИИ (GPT-5.4)
+              🧠 Получить второе мнение ИИ
             </button>
           </div>
         </div>
@@ -618,7 +618,7 @@ export default function SpirometryDevice() {
       {step === 'done' && analysisResult && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold text-gray-800">📋 Заключение по спирометрии</h3>
+            <h3 className="text-lg font-bold text-gray-800">📋 Аналитический разбор по спирометрии</h3>
             <button onClick={reset} className="px-4 py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-lg text-sm font-bold">
               🔄 Новое исследование
             </button>

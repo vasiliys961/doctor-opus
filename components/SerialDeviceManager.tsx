@@ -703,7 +703,7 @@ export default function SerialDeviceManager() {
               onClick={buildAndAnalyze}
               className="w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white text-xl font-black rounded-2xl transition-all shadow-xl"
             >
-              🧠 Получить заключение ИИ
+              🧠 Получить второе мнение ИИ
             </button>
           </div>
         </div>
@@ -729,7 +729,7 @@ export default function SerialDeviceManager() {
       {step === 'done' && analysisResult && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold text-gray-800">📋 Заключение ИИ</h3>
+            <h3 className="text-lg font-bold text-gray-800">📋 Аналитический разбор ИИ</h3>
             <button onClick={resetAll} className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-sm font-bold transition-all">
               🔄 Новая запись
             </button>

@@ -13,7 +13,7 @@ export default function GlucosePage() {
         <div className="h-1.5 w-24 bg-emerald-600 rounded-full mb-3" />
         <p className="text-slate-500 max-w-2xl text-sm">
           Загрузите CSV-файл из FreeStyle Libre, Dexcom или другого CGM-монитора.
-          Система построит AGP-профиль и даст клиническое заключение эндокринолога на основе GPT-5.4.
+          Система построит AGP-профиль и даст аналитический разбор на основе GPT-5.4.
         </p>
       </div>
       <GlucoseProfile />

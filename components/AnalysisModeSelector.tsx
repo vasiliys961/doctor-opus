@@ -28,7 +28,7 @@ export default function AnalysisModeSelector({
     {
       value: 'fast',
       label: '⚡ Быстрый анализ',
-      description: 'Gemini 3.1 — компактное заключение для первичного просмотра',
+      description: 'Gemini 3.1 — компактный аналитический разбор для первичного просмотра',
       icon: '⚡'
     },
     {

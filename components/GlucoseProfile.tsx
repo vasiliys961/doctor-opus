@@ -577,7 +577,7 @@ export default function GlucoseProfile() {
               {isAnalyzing ? (
                 <><div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />Анализирую гликемический профиль...</>
               ) : (
-                <>🧠 Получить клиническое заключение (GPT-5.4)</>
+                <>🧠 Получить второе мнение ИИ</>
               )}
             </button>
           )}
@@ -586,7 +586,7 @@ export default function GlucoseProfile() {
           {analysisResult && (
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-gray-800">📋 Клиническое заключение</h3>
+                <h3 className="text-lg font-bold text-gray-800">📋 Аналитический разбор</h3>
                 <button onClick={() => setAnalysisResult('')} className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-sm font-bold">
                   🔄 Повторный анализ
                 </button>

@@ -207,14 +207,14 @@ export default function Navigation() {
             </div>
           )}
           <div className="mt-6 p-4 bg-primary-800/50 rounded-lg text-sm border border-primary-700">
-            <p className="font-semibold mb-1">Клинический Ассистент v3.50</p>
-            <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Клиническая версия</p>
+            <p className="font-semibold mb-1">Doctor Opus v3.50</p>
+            <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Информационно-аналитическая версия</p>
             <ul className="space-y-1 text-xs opacity-70">
               <li>• Opus 4.6 + Gemini 3.1</li>
-              <li>• Просмотр DICOM + измерения</li>
-              <li>• Мультимодальный анализ (изображения + лаборатория)</li>
-              <li>• Анализ динамики и RAG</li>
-              <li className="text-teal-400 font-bold mt-2">🛡️ Поддержка клинических решений</li>
+              <li>• Анализ медицинских изображений и документов</li>
+              <li>• Структурирование данных и сравнение в динамике</li>
+              <li>• RAG-поиск по персональной библиотеке</li>
+              <li className="text-teal-400 font-bold mt-2">ℹ️ Не является медицинским изделием</li>
             </ul>
           </div>
         </div>
