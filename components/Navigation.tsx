@@ -33,7 +33,6 @@ export default function Navigation() {
     { name: '🎬 Клинический разбор видео', href: '/video' },
     { name: '📄 Сканирование документов', href: '/document' },
     { name: '🧬 Генетический профиль', href: '/genetic' },
-    { name: '🧪 Лаборатория (USB)', href: '/devices' },
     { name: '👤 База данных пациентов', href: '/patients' },
     { name: '📊 Расход единиц', href: '/statistics' },
   ]
@@ -175,6 +174,11 @@ export default function Navigation() {
                 </Link>
               )
             })}
+          </div>
+          <div className="mt-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900">
+            <p className="text-[11px] leading-snug font-semibold">
+              ℹ️ Интеллектуальный цифровой ассистент (ГОСТ Р 72484-2025). Не является медицинским изделием. Решение принимает врач.
+            </p>
           </div>
           {isAdmin && (
             <div className="mt-4 pt-4 border-t border-primary-700">

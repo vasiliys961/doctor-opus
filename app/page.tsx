@@ -33,10 +33,16 @@ export default async function HomePage() {
               Информационно‑аналитическая платформа для врачей
             </div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight text-gray-900 mb-3">
-              Правильное время<br />
-              для экспертного<br />
-              <span className="text-primary-600">консультативного мнения</span>
+              Интеллектуальный цифровой ассистент<br />
+              <span className="text-primary-600">и учебная платформа второго мнения</span>
             </h1>
+            <p className="max-w-2xl rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wide text-amber-900 mb-3 leading-snug">
+              🎓 Учебная платформа и система второго мнения
+              <br />
+              для медицинских специалистов и студентов
+              <br />
+              (ГОСТ Р 72484-2025, п. 3.5.6, п. 4.4)
+            </p>
             <p className="max-w-lg text-sm sm:text-base text-primary-900 mb-4 sm:mb-6">
               Единый ИИ‑центр для описания ЭКГ, рентгена, КТ, МРТ, УЗИ, гистологии и генетики.
               Профессиональная интерпретация данных с выводом результатов в формате «консультативное заключение» для врача.
@@ -49,7 +55,7 @@ export default async function HomePage() {
                   href="/image-analysis"
                   className="bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white font-semibold py-3 px-4 sm:px-6 rounded-full transition-colors text-center touch-manipulation shadow-lg"
                 >
-                  🩺 Получить консультацию по данным
+                  🩺 Получить второе мнение ИИ
                 </Link>
               </div>
               <div className="flex flex-col gap-2">
@@ -120,9 +126,6 @@ export default async function HomePage() {
           <Link href="/video" className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
             🎬 Анализ видео
           </Link>
-          <Link href="/devices" className="bg-white hover:bg-indigo-50 active:bg-indigo-100 border-2 border-indigo-200 hover:border-indigo-400 text-indigo-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
-            🔬 Лаборатория
-          </Link>
           <a href="/calculators" target="_blank" rel="noopener noreferrer" className="bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 border-2 border-indigo-200 hover:border-indigo-400 text-indigo-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation">
             🧮 Мед. калькуляторы
           </a>
@@ -157,12 +160,6 @@ export default async function HomePage() {
             <h3 className="font-bold text-base sm:text-lg mb-2">🧬 Генетика & фармакогеномика</h3>
             <p className="text-xs sm:text-sm text-gray-600">
               Разбор VCF/PDF, анализ генетики и экспертный обзор.
-            </p>
-          </div>
-          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-indigo-100">
-            <h3 className="font-bold text-base sm:text-lg mb-2">🧪 Лаборатория (USB)</h3>
-            <p className="text-xs sm:text-sm text-gray-600">
-              ЭКГ, спирометрия, глюкозный профиль CGM, УЗИ/эндоскоп — прямое подключение через USB.
             </p>
           </div>
           <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-rose-100">
