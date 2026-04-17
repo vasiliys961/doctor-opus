@@ -224,3 +224,46 @@ export function getAnalysisCost(mode: string, imageCount: number): number {
   const baseCost = mode === 'fast' ? 0.5 : 1.5;
   return imageCount > 1 ? baseCost * Math.min(imageCount, 5) : baseCost;
 }
+
+/**
+ * Возврат ранее списанных единиц при ошибке бизнес-операции.
+ * Делает "обратное списание" через существующий биллинг-контур.
+ */
+export async function refundChargedBalanceOnFailure(params: {
+  email?: string | null;
+  guestKey?: string | null;
+  amount: number;
+  operation: string;
+  metadata?: Record<string, any>;
+}): Promise<{ success: boolean; error?: string }> {
+  const amount = Number(params.amount || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { success: false, error: 'invalid amount' };
+  }
+
+  try {
+    if (params.email) {
+      const result = await checkAndDeductBalance(
+        params.email,
+        -amount,
+        params.operation,
+        params.metadata || {}
+      );
+      return result.allowed ? { success: true } : { success: false, error: result.error || 'refund failed' };
+    }
+
+    if (params.guestKey) {
+      const result = await checkAndDeductGuestBalance(
+        params.guestKey,
+        -amount,
+        params.operation,
+        params.metadata || {}
+      );
+      return result.allowed ? { success: true } : { success: false, error: result.error || 'refund failed' };
+    }
+
+    return { success: false, error: 'no billing subject provided' };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'refund exception' };
+  }
+}

@@ -3,7 +3,7 @@ import { getSpeechProvider } from '@/lib/speech-provider';
 import { AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE } from '@/lib/cost-calculator';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 
 /**
@@ -12,10 +12,15 @@ import { getRateLimitKey } from '@/lib/rate-limiter';
  * По умолчанию — AssemblyAI.
  */
 export async function POST(request: NextRequest) {
+  let billedAmount = 0;
+  let billingEmail: string | null = null;
+  let billingGuestKey: string | null = null;
   try {
     const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email || null;
     const guestKey = userEmail ? null : getRateLimitKey(request);
+    billingEmail = userEmail;
+    billingGuestKey = guestKey;
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -55,6 +60,7 @@ export async function POST(request: NextRequest) {
         { status: 402 }
       );
     }
+    billedAmount = estimatedCost;
 
     const arrayBuffer = await file.arrayBuffer();
     let mimeType = file.type || 'audio/webm';
@@ -121,6 +127,18 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Error transcribing audio:', error);
+    if (billedAmount > 0) {
+      const refundResult = await refundChargedBalanceOnFailure({
+        email: billingEmail,
+        guestKey: billingGuestKey,
+        amount: billedAmount,
+        operation: 'Audio transcription (auto refund on failure)',
+        metadata: { billedAmount },
+      });
+      if (!refundResult.success) {
+        console.error('❌ [TRANSCRIBE] Не удалось выполнить авто-возврат:', refundResult.error);
+      }
+    }
     return NextResponse.json(
       { success: false, error: 'Audio transcription error' },
       { status: 500 }

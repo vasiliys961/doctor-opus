@@ -21,7 +21,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
 import { checkRateLimit, RATE_LIMIT_ANALYSIS, getRateLimitKey } from '@/lib/rate-limiter';
-import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
+import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost, refundChargedBalanceOnFailure } from '@/lib/server-billing';
 
 const execPromise = promisify(exec);
 
@@ -34,6 +34,9 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024;
 export async function POST(request: NextRequest) {
   const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   let billingContext: { email: string; estimatedCost: number } | null = null;
+  let billedAmount = 0;
+  let billingEmail: string | null = null;
+  let billingGuestKey: string | null = null;
   
   const handleStreamingResponse = async (stream: ReadableStream, modelName: string) => {
     const wrapStreamWithBillingReconcile = (
@@ -186,6 +189,8 @@ export async function POST(request: NextRequest) {
     // Серверное списание юнитов (до выполнения анализа)
     const userEmail = session?.user?.email || null;
     const guestKey = userEmail ? null : rlKey;
+    billingEmail = userEmail;
+    billingGuestKey = guestKey;
     // Считаем файлы для оценки стоимости
     let imgCount = formData.get('file') ? 1 : 0;
     let fi = 0;
@@ -198,6 +203,7 @@ export async function POST(request: NextRequest) {
     if (userEmail) {
       billingContext = { email: userEmail, estimatedCost };
     }
+    billedAmount = estimatedCost;
     
     if (!billing.allowed) {
       return NextResponse.json(
@@ -452,6 +458,18 @@ ${descriptionFromStep1}`;
       return NextResponse.json({ success: true, result, model: modelToUse, mode, cost: displayedCost });
     }
   } catch (error: any) {
+    if (billedAmount > 0) {
+      const refundResult = await refundChargedBalanceOnFailure({
+        email: billingEmail,
+        guestKey: billingGuestKey,
+        amount: billedAmount,
+        operation: 'Image analysis (auto refund on failure)',
+        metadata: { analysisId, billedAmount },
+      });
+      if (!refundResult.success) {
+        console.error('❌ [ANALYZE IMAGE] Не удалось выполнить авто-возврат:', refundResult.error);
+      }
+    }
     const { safeErrorMessage } = await import('@/lib/safe-error');
     return NextResponse.json({ success: false, error: safeErrorMessage(error, 'Image analysis error') }, { status: 500 });
   }

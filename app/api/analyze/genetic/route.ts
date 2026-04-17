@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
-import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -31,10 +31,15 @@ function estimateGeneticExtractionCost(fileSizeBytes: number): number {
  * НИКАКОЙ клинической трактовки здесь нет — она выполняется в /api/analyze/genetic/consult.
  */
 export async function POST(request: NextRequest) {
+  let billedAmount = 0;
+  let billingEmail: string | null = null;
+  let billingGuestKey: string | null = null;
   try {
     const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email || null;
     const guestKey = userEmail ? null : getRateLimitKey(request);
+    billingEmail = userEmail;
+    billingGuestKey = guestKey;
 
     console.log('🧬 [GENETIC] Этап 1: начало обработки запроса (только извлечение)...');
 
@@ -70,6 +75,7 @@ export async function POST(request: NextRequest) {
         { status: 402 }
       );
     }
+    billedAmount = estimatedCost;
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
@@ -342,6 +348,18 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
     });
   } catch (error: any) {
     console.error('❌ [GENETIC] Критическая ошибка на этапе извлечения:', error);
+    if (billedAmount > 0) {
+      const refundResult = await refundChargedBalanceOnFailure({
+        email: billingEmail,
+        guestKey: billingGuestKey,
+        amount: billedAmount,
+        operation: 'Genetic extraction (auto refund on failure)',
+        metadata: { source: 'genetic_extract_file', billedAmount },
+      });
+      if (!refundResult.success) {
+        console.error('❌ [GENETIC] Не удалось выполнить авто-возврат:', refundResult.error);
+      }
+    }
     return NextResponse.json(
       {
         success: false,

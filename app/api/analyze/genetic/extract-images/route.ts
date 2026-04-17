@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
-import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -19,10 +19,15 @@ function estimateExtractImagesCost(imagesCount: number): number {
  * API endpoint для извлечения генетических данных из изображений (конвертированных на клиенте)
  */
 export async function POST(request: NextRequest) {
+  let billedAmount = 0;
+  let billingEmail: string | null = null;
+  let billingGuestKey: string | null = null;
   try {
     const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email || null;
     const guestKey = userEmail ? null : getRateLimitKey(request);
+    billingEmail = userEmail;
+    billingGuestKey = guestKey;
 
     console.log('🧬 [GENETIC IMAGES] Начало обработки изображений...');
 
@@ -54,6 +59,7 @@ export async function POST(request: NextRequest) {
         { status: 402 }
       );
     }
+    billedAmount = estimatedCost;
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
@@ -355,6 +361,18 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
 
   } catch (error: any) {
     console.error('❌ [GENETIC IMAGES] Критическая ошибка:', error);
+    if (billedAmount > 0) {
+      const refundResult = await refundChargedBalanceOnFailure({
+        email: billingEmail,
+        guestKey: billingGuestKey,
+        amount: billedAmount,
+        operation: 'Genetic extraction (images) auto refund on failure',
+        metadata: { source: 'genetic_extract_images', billedAmount },
+      });
+      if (!refundResult.success) {
+        console.error('❌ [GENETIC IMAGES] Не удалось выполнить авто-возврат:', refundResult.error);
+      }
+    }
     return NextResponse.json(
       {
         success: false,

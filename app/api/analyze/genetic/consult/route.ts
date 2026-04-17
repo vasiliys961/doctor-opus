@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
-import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 
 // Максимальное время выполнения запроса (5 минут)
@@ -41,10 +41,15 @@ function estimateConsultCost(params: {
  *  - professor → Claude Sonnet 4.6 (подробное экспертное заключение)
  */
 export async function POST(request: NextRequest) {
+  let billedAmount = 0;
+  let billingEmail: string | null = null;
+  let billingGuestKey: string | null = null;
   try {
     const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email || null;
     const guestKey = userEmail ? null : getRateLimitKey(request);
+    billingEmail = userEmail;
+    billingGuestKey = guestKey;
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
@@ -98,6 +103,7 @@ export async function POST(request: NextRequest) {
         { status: 402 }
       );
     }
+    billedAmount = estimatedCost;
 
     const analysis = isAnonymous ? anonymizeText(rawAnalysis) : rawAnalysis;
     const clinicalContext = isAnonymous ? anonymizeText(rawClinicalContext) : rawClinicalContext;
@@ -376,6 +382,18 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('❌ [GENETIC CONSULT] Ошибка:', error);
+    if (billedAmount > 0) {
+      const refundResult = await refundChargedBalanceOnFailure({
+        email: billingEmail,
+        guestKey: billingGuestKey,
+        amount: billedAmount,
+        operation: 'Genetic consult (auto refund on failure)',
+        metadata: { source: 'genetic_consult', billedAmount },
+      });
+      if (!refundResult.success) {
+        console.error('❌ [GENETIC CONSULT] Не удалось выполнить авто-возврат:', refundResult.error);
+      }
+    }
     return NextResponse.json(
       {
         success: false,
