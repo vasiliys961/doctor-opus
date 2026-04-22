@@ -350,7 +350,7 @@ export async function POST(request: NextRequest) {
       mode === 'fast'
         ? MODELS.GEMINI_3_FLASH
         : mode === 'validated'
-          ? MODELS.OPUS
+          ? MODELS.OPUS_VALIDATED
           : MODELS.GPT_5_2; // optimized по умолчанию всегда GPT-5.4
     let modelToUse = normalizedCustomModel || defaultModelByMode;
     const allowedModels = new Set([
@@ -358,6 +358,7 @@ export async function POST(request: NextRequest) {
       MODELS.GPT_5_2,
       MODELS.SONNET,
       MODELS.OPUS,
+      MODELS.OPUS_VALIDATED,
     ]);
     if (!allowedModels.has(modelToUse)) {
       modelToUse = defaultModelByMode;

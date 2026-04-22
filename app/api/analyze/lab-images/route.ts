@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     let modelToUse = model || MODELS.GEMINI_3_FLASH;
     if (!model) {
       if (mode === 'optimized') modelToUse = MODELS.SONNET;
-      else if (mode === 'validated') modelToUse = MODELS.OPUS;
+      else if (mode === 'validated') modelToUse = MODELS.OPUS_VALIDATED;
     }
 
     console.log(`🔬 [LAB IMAGES] Получено ${images.length} изображений для анализа, режим: ${mode}, модель: ${modelToUse}, streaming: ${useStreaming}`);

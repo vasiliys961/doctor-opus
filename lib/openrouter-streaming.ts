@@ -11,7 +11,8 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Актуальные модели (последние флагманы 2025-2026)
 const MODELS = {
-  OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6
+  OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6 (default)
+  OPUS_VALIDATED: 'anthropic/claude-opus-4.7',             // Claude Opus 4.7 — только validated-режим
   SONNET: 'anthropic/claude-sonnet-4.6',                 // Claude Sonnet 4.6
   GPT_5_2: 'openai/gpt-5.4',                        // GPT-5.4 Chat (legacy key name kept for compatibility)
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5

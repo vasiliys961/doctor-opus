@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     if (!model) {
       if (mode === 'fast') modelToUse = MODELS.GEMINI_3_FLASH;
       else if (mode === 'optimized') modelToUse = MODELS.SONNET;
-      else if (mode === 'validated') modelToUse = MODELS.OPUS;
+      else if (mode === 'validated') modelToUse = MODELS.OPUS_VALIDATED;
     }
 
     const arrayBuffer = await file.arrayBuffer();
