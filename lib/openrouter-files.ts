@@ -5,7 +5,7 @@
 
 import { MODELS } from './openrouter';
 import { calculateCost, formatCostLog } from './cost-calculator';
-import { Specialty, TITAN_CONTEXTS, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
+import { Specialty, TITAN_CONTEXTS, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, resolvePromptRuntimeVars } from './prompts';
 import { isGeoRestrictionStatus, isOpenAIGeoRestrictionError } from './geo-restriction';
 import mammoth from 'mammoth';
 
@@ -276,7 +276,7 @@ export async function sendTextRequestWithFiles(
   const messages = [
     {
       role: 'system' as const,
-      content: systemPrompt
+      content: resolvePromptRuntimeVars(systemPrompt)
     },
     ...history.map(msg => ({
       role: msg.role as 'user' | 'assistant',
@@ -404,7 +404,7 @@ export async function sendTextRequestStreamingWithFiles(
   const messages = [
     {
       role: 'system' as const,
-      content: systemPrompt
+      content: resolvePromptRuntimeVars(systemPrompt)
     },
     ...history.map(msg => ({
       role: msg.role as 'user' | 'assistant',

@@ -4,7 +4,7 @@
  */
 
 import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
-import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
+import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, prepareVisionDataForTextPrompt, resolvePromptRuntimeVars } from './prompts';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -280,7 +280,7 @@ export async function analyzeImageFastStreaming(
       const mainPrompt = `Below are the extracted image data. As an expert medical AI assistant with professor-level competency, analyze them.
     
 === STRUCTURED DATA FROM GEMINI 3.0 ===
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 === CONTEXT ===
 ${clinicalContext || 'None'}
@@ -301,7 +301,7 @@ ${directivePrompt}`;
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
             { role: 'user', content: mainPrompt }
           ],
           max_tokens: 8000, // Оптимизировано: быстрый режим Gemini, достаточно для базового протокола
@@ -436,7 +436,7 @@ export async function analyzeImageOpusTwoStageStreaming(
       const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
 ### TECHNICAL IMAGE DATA (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.`;
 
@@ -465,7 +465,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
           body: JSON.stringify({
             model: targetModel,
             messages: [
-              { role: 'system', content: systemPrompt },
+              { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
               {
                 role: 'user',
                 content: [
@@ -669,7 +669,7 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
 ### ${isComparative ? 'COMPARATIVE IMAGE DATA' : 'DATA FROM MULTIPLE IMAGES OF A SINGLE STUDY'} (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.`;
 
@@ -730,7 +730,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
             body: JSON.stringify({
               model: targetModel,
               messages: [
-                { role: 'system', content: systemPrompt },
+                { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
                 { role: 'user', content: contentItems }
               ],
               max_tokens: 12000, // Оптимизировано: множественные изображения, сравнительный анализ
@@ -895,7 +895,7 @@ export async function analyzeMultipleImagesWithJSONStreaming(
       const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
 ### СТРУКТУРИРОВАННЫЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЙ (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE EXPERT REPORT.`;
 
@@ -955,7 +955,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
             body: JSON.stringify({
               model: targetModel,
               messages: [
-                { role: 'system', content: systemPrompt },
+                { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
                 { role: 'user', content: contentItems }
               ],
               max_tokens: 10000, // Оптимизировано: validated режим с JSON-контекстом
@@ -1053,7 +1053,7 @@ export async function analyzeImageWithJSONStreaming(
   const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
 ### TECHNICAL IMAGE DATA (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.`;
 
@@ -1081,7 +1081,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
       body: JSON.stringify({
         model: targetModel,
         messages: [
-          { role: 'system', content: systemPrompt },
+          { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
           { 
             role: 'user', 
             content: [
@@ -1171,7 +1171,7 @@ export async function sendTextRequestStreaming(
       }
 
       const messages = [
-        { role: 'system' as const, content: systemPrompt },
+        { role: 'system' as const, content: resolvePromptRuntimeVars(systemPrompt) },
         ...history.map(msg => ({ role: msg.role as 'user' | 'assistant', content: msg.content })),
         { role: 'user' as const, content: prompt }
       ];
@@ -1353,7 +1353,7 @@ export async function analyzeImageStreaming(
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
             { 
               role: 'user', 
               content: [
@@ -1467,7 +1467,7 @@ export async function analyzeMultipleImagesStreaming(
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
             { role: 'user', content: contentItems }
           ],
           max_tokens: 12000, // Оптимизировано: множественные изображения

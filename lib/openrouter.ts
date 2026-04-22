@@ -5,7 +5,7 @@
  */
 
 import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
-import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
+import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, prepareVisionDataForTextPrompt, resolvePromptRuntimeVars } from './prompts';
 import { safeLog, safeError, safeWarn } from './logger';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
 
@@ -225,7 +225,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   ] : [
     {
       role: 'system' as const,
-      content: SYSTEM_PROMPT
+      content: resolvePromptRuntimeVars(SYSTEM_PROMPT)
     },
     {
       role: 'user' as const,
@@ -364,7 +364,7 @@ export async function analyzeImageFast(options: {
     const contextPrompt = `Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. На основе этих данных и своей экспертизы дай клиническую директиву. ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
 
 === СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI 3.0) ===
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 \n=== ИНСТРУКЦИЯ ===
 ${directivePrompt}
 ${options.clinicalContext ? `\nКонтекст пациента: ${options.clinicalContext}` : ''}
@@ -372,7 +372,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
 ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.`;
     
     const messages = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: resolvePromptRuntimeVars(SYSTEM_PROMPT) },
       { role: 'user', content: contextPrompt }
     ];
 
@@ -473,13 +473,13 @@ export async function analyzeImageOpusTwoStage(options: {
     const mainPrompt = `ИНСТРУКЦИЯ: ${directiveCriteria}
 
 ### ТЕХНИЧЕСКИЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЯ (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ НА РУССКОМ ЯЗЫКЕ.`;
 
     const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
     const messages = [
-      { role: 'system' as const, content: basePrompt },
+      { role: 'system' as const, content: resolvePromptRuntimeVars(basePrompt) },
       { role: 'user' as const, content: mainPrompt }
     ];
 
@@ -819,7 +819,7 @@ export async function analyzeMultipleImagesTwoStage(options: {
       : 'Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. Проведи единый клинический анализ набора изображений одного исследования, без трактовки динамики во времени.'} ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
 
 ### ДАННЫЕ ОТ СПЕЦИАЛИСТА (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ НА РУССКОМ ЯЗЫКЕ.
 
@@ -841,7 +841,7 @@ ${directiveCriteria}`;
         body: JSON.stringify({
           model: targetModel,
           messages: [
-            { role: 'system' as const, content: basePrompt },
+            { role: 'system' as const, content: resolvePromptRuntimeVars(basePrompt) },
             { role: 'user' as const, content: contextPrompt }
           ],
           max_tokens: 12000, // Оптимизировано: множественные изображения
@@ -959,7 +959,7 @@ export async function analyzeMultipleImages(options: {
   const messages = [
     {
       role: 'system' as const,
-      content: SYSTEM_PROMPT
+      content: resolvePromptRuntimeVars(SYSTEM_PROMPT)
     },
     {
       role: 'user' as const,
@@ -1070,7 +1070,7 @@ export async function sendTextRequest(
   const messages = [
     {
       role: 'system' as const,
-      content: systemPrompt
+      content: resolvePromptRuntimeVars(systemPrompt)
     },
     ...history.map(msg => ({
       role: msg.role as 'user' | 'assistant',
