@@ -41,6 +41,13 @@ export async function middleware(request: NextRequest) {
     '/api/auth',              // NextAuth (login, session, providers) + /api/auth/register
     '/api/payment/ya',        // Webhook Yagoda (уведомление об оплате заказа)
     '/api/payment/config',    // Публичные параметры оплаты для UI (курс, минимум)
+    '/api/chat',              // Гостевой режим чата (ограничивается rate-limit/billing внутри роутов)
+    '/api/analyze',           // Гостевой анализ (контроль внутри роутов)
+    '/api/scan',              // Гостевое сканирование документов
+    '/api/transcribe',        // Гостевая транскрибация
+    '/api/extract',           // Гостевое извлечение данных
+    '/api/protocol',          // Генерация протокола для гостя
+    '/api/protocols/search',  // Поиск протоколов для гостя
   ];
 
   const isPublicPath = publicPaths.some(p =>
