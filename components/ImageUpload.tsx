@@ -5,6 +5,9 @@ import JSZip from 'jszip'
 import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compression'
 import ImageEditor from './ImageEditor'
 
+const DICOM_PREAMBLE_SIZE = 132
+const DICOM_MAGIC = [0x44, 0x49, 0x43, 0x4d] // "DICM"
+
 interface DrawingPath {
   points: Array<{ x: number; y: number }>
   brushSize: number
@@ -14,6 +17,30 @@ interface ImageUploadProps {
   onUpload: (file: File, additionalFiles?: File[], originalFiles?: File[]) => void
   accept?: string
   maxSize?: number // в MB
+}
+
+async function hasDicomSignature(file: File): Promise<boolean> {
+  try {
+    if (file.size < DICOM_PREAMBLE_SIZE) return false
+    const header = new Uint8Array(await file.slice(0, DICOM_PREAMBLE_SIZE).arrayBuffer())
+    return DICOM_MAGIC.every((byte, idx) => header[128 + idx] === byte)
+  } catch {
+    return false
+  }
+}
+
+async function isDicomLikeFile(file: File): Promise<boolean> {
+  const fileName = file.name.toLowerCase()
+  if (fileName.endsWith('.dcm') || fileName.endsWith('.dicom') || file.type === 'application/dicom') {
+    return true
+  }
+
+  // У многих PACS DICOM-файлы идут без расширения и MIME.
+  if (!fileName.includes('.') || !file.type || file.type === 'application/octet-stream') {
+    return hasDicomSignature(file)
+  }
+
+  return false
 }
 
 export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', maxSize = 500 }: ImageUploadProps) {
@@ -130,11 +157,8 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
     // 1. Обработка группы файлов (FileList или массив) - например, при загрузке папки
     if (input instanceof FileList || Array.isArray(input)) {
       const files = Array.from(input);
-      const dicomFiles = files.filter(f => 
-        f.name.toLowerCase().endsWith('.dcm') || 
-        f.name.toLowerCase().endsWith('.dicom') || 
-        f.type === 'application/dicom'
-      );
+      const dicomChecks = await Promise.all(files.map(file => isDicomLikeFile(file)));
+      const dicomFiles = files.filter((_, index) => dicomChecks[index]);
 
       if (dicomFiles.length > 0) {
         setIsCompressing(true);
@@ -221,7 +245,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
 
     const fileName = file.name.toLowerCase();
     const isZip = fileName.endsWith('.zip');
-    const isDicom = fileName.endsWith('.dcm') || fileName.endsWith('.dicom') || file.type === 'application/dicom';
+    const isDicom = await isDicomLikeFile(file);
     const isVideo = file.type.startsWith('video/');
     const isImage = file.type.startsWith('image/');
 
