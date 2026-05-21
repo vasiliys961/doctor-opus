@@ -20,6 +20,7 @@ declare global {
 type ScanMode = 'local' | 'ai'
 
 export default function DocumentPage() {
+  const BRIDGE_DOCUMENT_SCAN_KEY = 'mobile_bridge_document_scan_draft'
   const [file, setFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [processedImage, setProcessedImage] = useState<string | null>(null)
@@ -236,6 +237,43 @@ export default function DocumentPage() {
     // Анализ ИИ теперь запускается только вручную кнопкой
   }
 
+  useEffect(() => {
+    const raw = localStorage.getItem(BRIDGE_DOCUMENT_SCAN_KEY)
+    if (!raw) return
+
+    const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
+      const match = dataUrl.match(/^data:(.+);base64,(.*)$/)
+      if (!match) throw new Error('Некорректный формат data URL')
+      const mimeType = match[1] || fallbackType
+      const base64 = match[2]
+      const binary = atob(base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i)
+      }
+      const ext = mimeType.includes('pdf') ? 'pdf' : (mimeType.split('/')[1] || 'jpg')
+      return new File([bytes], `${fileName}.${ext}`, { type: mimeType })
+    }
+
+    void (async () => {
+      try {
+        const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string }
+        if (payload.text?.trim()) {
+          setResult((prev) => (prev ? `${prev}\n\n${payload.text}` : payload.text || ''))
+        }
+        if (payload.dataUrl) {
+          const imported = dataUrlToFile(payload.dataUrl, payload.title || 'mobile_document', payload.mimeType || 'image/jpeg')
+          setScanMode('ai')
+          await handleUpload(imported)
+        }
+      } catch (error) {
+        console.error('Ошибка импорта mobile bridge в сканирование документов:', error)
+      } finally {
+        localStorage.removeItem(BRIDGE_DOCUMENT_SCAN_KEY)
+      }
+    })()
+  }, [])
+
   const runAIAnalysis = async (imageData: string) => {
     setLoading(true)
     setCurrentCost(0)
@@ -308,7 +346,9 @@ export default function DocumentPage() {
     <>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-primary-900 mb-6">📄 Сканирование документов</h1>
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-primary-900">📄 Сканирование документов</h1>
+        </div>
         
         <div className="flex gap-4 mb-8">
           <button
@@ -358,13 +398,15 @@ export default function DocumentPage() {
         />
         
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">
-            {scanMode === 'local' ? '1. Загрузите или сфотографируйте документ' : 'Загрузите документ для распознавания'}
-          </h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-semibold">
+              {scanMode === 'local' ? '1. Загрузите или сфотографируйте документ' : 'Загрузите документ для распознавания'}
+            </h2>
+          </div>
           <p className="text-sm text-gray-600 mb-4">
             Поддерживаемые форматы: PDF, изображения (JPG, PNG)
           </p>
-          <ImageUpload onUpload={handleUpload} accept=".pdf,image/*" maxSize={50} />
+          <ImageUpload onUpload={handleUpload} accept=".pdf,image/*" maxSize={50} bridgePullTarget="document_scan" />
         </div>
 
         {/* Прогресс конвертации PDF */}

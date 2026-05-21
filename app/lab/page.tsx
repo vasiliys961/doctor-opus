@@ -21,6 +21,7 @@ declare global {
 }
 
 export default function LabPage() {
+  const BRIDGE_LAB_ANALYSIS_KEY = 'mobile_bridge_lab_analysis_draft'
   const [file, setFile] = useState<File | null>(null)
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
@@ -52,6 +53,30 @@ export default function LabPage() {
     }
   }, [])
 
+  useEffect(() => {
+    const raw = localStorage.getItem(BRIDGE_LAB_ANALYSIS_KEY)
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string }
+      if (payload.text?.trim()) {
+        setClinicalContext((prev) => (prev ? `${prev}\n\n${payload.text}` : payload.text || ''))
+      }
+      if (payload.dataUrl) {
+        const extension = payload.mimeType?.includes('png') ? 'png' : payload.mimeType?.includes('webp') ? 'webp' : 'jpg'
+        const syncedFile = dataUrlToFile(
+          payload.dataUrl,
+          `${payload.title || 'mobile_lab'}.${extension}`,
+          payload.mimeType || 'image/jpeg'
+        )
+        handleFileSelect(syncedFile)
+      }
+    } catch (error) {
+      console.error('Ошибка импорта mobile bridge в лабораторию:', error)
+    } finally {
+      localStorage.removeItem(BRIDGE_LAB_ANALYSIS_KEY)
+    }
+  }, [])
+
   const [clinicalContext, setClinicalContext] = useState('')
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
@@ -60,6 +85,16 @@ export default function LabPage() {
   const [showEditor, setShowEditor] = useState(false)
   const [processedImages, setProcessedImages] = useState<string[]>([])
   const [currentEditorIndex, setCurrentEditorIndex] = useState(0)
+
+  const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
+    const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
+    if (!match) throw new Error('Неверный формат data URL')
+    const mimeType = match[1] || fallbackType
+    const binary = atob(match[2])
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return new File([bytes], fileName, { type: mimeType })
+  }
 
   const convertPDFToImages = async (pdfFile: File): Promise<string[]> => {
     if (!window.pdfjsLib) {
@@ -386,7 +421,9 @@ export default function LabPage() {
   return (
     <>
       <div className="container mx-auto px-4 py-8 max-w-7xl">
-        <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 Разбор лабораторных данных</h1>
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-primary-900">🔬 Анализ лабораторных данных</h1>
+        </div>
         
         <AnalysisTips 
           content={{
@@ -483,7 +520,7 @@ export default function LabPage() {
           <p className="text-sm text-gray-600 mb-4">
             Поддерживаемые форматы: PDF, XLSX, XLS, CSV, изображения (JPG, PNG)
           </p>
-          <ImageUpload onUpload={handleUpload} accept=".pdf,.xlsx,.xls,.csv,image/*" maxSize={50} />
+          <ImageUpload onUpload={handleUpload} accept=".pdf,.xlsx,.xls,.csv,image/*" maxSize={50} bridgePullTarget="lab_analysis" />
 
           {file && processedImages.length > 0 && (
             <div className="mt-6 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">

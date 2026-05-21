@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
@@ -18,6 +18,7 @@ import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
 const Dicom3DViewer = dynamic(() => import('@/components/Dicom3DViewer'), { ssr: false })
 
 export default function CTPage() {
+  const BRIDGE_CT_ANALYSIS_KEY = 'mobile_bridge_ct_analysis_draft'
   const [file, setFile] = useState<File | null>(null)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [originalDicomStack, setOriginalDicomStack] = useState<File[]>([])
@@ -36,6 +37,40 @@ export default function CTPage() {
   const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
   const [history, setHistory] = useState<Array<{role: string, content: string}>>([])
   const [showEditor, setShowEditor] = useState(false)
+
+  const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
+    const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
+    if (!match) throw new Error('Неверный формат data URL')
+    const mimeType = match[1] || fallbackType
+    const binary = atob(match[2])
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return new File([bytes], fileName, { type: mimeType })
+  }
+
+  useEffect(() => {
+    const raw = localStorage.getItem(BRIDGE_CT_ANALYSIS_KEY)
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string }
+      if (payload.text?.trim()) {
+        setClinicalContext((prev) => (prev ? `${prev}\n\n${payload.text}` : payload.text || ''))
+      }
+      if (payload.dataUrl) {
+        const extension = payload.mimeType?.includes('png') ? 'png' : payload.mimeType?.includes('webp') ? 'webp' : 'jpg'
+        const syncedFile = dataUrlToFile(
+          payload.dataUrl,
+          `${payload.title || 'mobile_ct'}.${extension}`,
+          payload.mimeType || 'image/jpeg'
+        )
+        handleUpload(syncedFile)
+      }
+    } catch (error) {
+      console.error('Ошибка импорта mobile bridge в КТ:', error)
+    } finally {
+      localStorage.removeItem(BRIDGE_CT_ANALYSIS_KEY)
+    }
+  }, [])
 
   // Применение маски ко всем срезам/кадрам
   const applyMaskToAllSlices = async (drawingPaths: DrawingPath[], editedFirstFile: File) => {
@@ -254,11 +289,13 @@ export default function CTPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🩻 Разбор КТ</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-primary-900">🩻 Анализ КТ</h1>
+      </div>
       
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг (сначала структурированное описание плотности HU и структур, затем текстовый разбор), даёт компактный аналитический разбор и общий сигнал риска.",
+          fast: "двухэтапный скрининг (сначала структурированное описание плотности HU и структур, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и качества для КТ‑исследований.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев.",
           extra: [
@@ -274,7 +311,7 @@ export default function CTPage() {
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Загрузите КТ изображение или DICOM файл</h2>
-        <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
+        <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} bridgePullTarget="ct_analysis" />
       </div>
 
       {file && imagePreview && (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -26,6 +26,24 @@ export default function AdvancedAnalysisPage() {
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [showEditor, setShowEditor] = useState(false)
   const [isAnonymous, setIsAnonymous] = useState(false)
+  const BRIDGE_CONTEXT_KEY = 'mobile_bridge_clinical_context_draft'
+
+  useEffect(() => {
+    const raw = localStorage.getItem(BRIDGE_CONTEXT_KEY)
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw) as { title?: string; text?: string }
+      const text = String(payload.text || '').trim()
+      const prefix = payload.title ? `[Смартфон: ${payload.title}]` : '[Смартфон]'
+      if (text) {
+        setAdditionalContext((prev) => (prev ? `${prev}\n\n${prefix}\n${text}` : `${prefix}\n${text}`))
+      }
+    } catch (error) {
+      console.error('Ошибка импорта mobile bridge в clinical context:', error)
+    } finally {
+      localStorage.removeItem(BRIDGE_CONTEXT_KEY)
+    }
+  }, [])
 
   const handleMainImageUpload = (file: File) => {
     setMainImage(file)
@@ -116,9 +134,11 @@ export default function AdvancedAnalysisPage() {
 
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-7xl">
-      <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 mb-4 sm:mb-6">
-        🔬 Расширенный ИИ-анализ с контекстом
-      </h1>
+      <div className="mb-4 flex items-center justify-between sm:mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-primary-900">
+          🔬 Расширенный ИИ-анализ с контекстом
+        </h1>
+      </div>
 
       <AnalysisTips 
         content={{
@@ -136,7 +156,7 @@ export default function AdvancedAnalysisPage() {
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <div className="mb-6">
           <h2 className="text-lg sm:text-xl font-semibold mb-3">📷 Основное изображение</h2>
-          <ImageUpload onUpload={handleMainImageUpload} accept="image/*" maxSize={50} />
+          <ImageUpload onUpload={handleMainImageUpload} accept="image/*" maxSize={50} bridgePullTarget="clinical_context" />
           {mainImagePreview && (
             <div className="mt-4 flex flex-col items-center">
               <img src={mainImagePreview} alt="Превью" className="max-h-64 rounded-lg shadow-md" />

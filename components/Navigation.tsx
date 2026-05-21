@@ -15,24 +15,26 @@ export default function Navigation() {
     { name: '🏠 Главная', href: '/' },
     { name: '📘 Инструкция для врача', href: '/manual' },
     { name: '🤖 ИИ-Ассистент', href: '/chat' },
+    { name: '📲 Подключить смартфон', href: '/mobile-bridge' },
     { name: '📚 Персональная библиотека', href: '/library' },
     { name: '📝 Протокол приёма', href: '/protocol' },
     { name: '🧮 Мед. калькуляторы', href: '/calculators' },
     { name: '📚 Клинические рекомендации', href: '/protocols' },
-    { name: '📈 Работа с данными ЭКГ', href: '/ecg' },
-    { name: '🔍 Изображение+синхронизация', href: '/image-analysis' },
+    { name: '📈 Оценка ЭКГ', href: '/ecg' },
+    { name: '🔍 Медицинские изображения', href: '/image-analysis' },
     { name: '🔬 Клинический разбор', href: '/advanced' },
     { name: '📊 Сравнение с предыдущим', href: '/comparative' },
-    { name: '🩻 Работа с данными рентгена', href: '/xray' },
-    { name: '🧠 Работа с данными МРТ', href: '/mri' },
-    { name: '🩻 Работа с данными КТ', href: '/ct' },
+    { name: '🩻 Описание рентгена', href: '/xray' },
+    { name: '🧠 Описание МРТ', href: '/mri' },
+    { name: '🩻 Описание КТ', href: '/ct' },
     { name: '🔬 3D-визуализация', href: '/advanced-3d' },
-    { name: '🔊 Работа с данными УЗИ', href: '/ultrasound' },
+    { name: '🔊 Описание УЗИ', href: '/ultrasound' },
     { name: '🔬 Оценка дерматоскопии', href: '/dermatoscopy' },
     { name: '🔬 Оценка лабораторных данных', href: '/lab' },
     { name: '🎬 Клинический разбор видео', href: '/video' },
     { name: '📄 Сканирование документов', href: '/document' },
     { name: '🧬 Генетический профиль', href: '/genetic' },
+    { name: '🧪 Лаборатория (USB)', href: '/devices' },
     { name: '👤 База данных пациентов', href: '/patients' },
     { name: '📊 Расход единиц', href: '/statistics' },
   ]
@@ -175,11 +177,6 @@ export default function Navigation() {
               )
             })}
           </div>
-          <div className="mt-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900">
-            <p className="text-[11px] leading-snug font-semibold">
-              ℹ️ Интеллектуальный цифровой ассистент (ГОСТ Р 72484-2025). Не является медицинским изделием. Решение принимает врач.
-            </p>
-          </div>
           {isAdmin && (
             <div className="mt-4 pt-4 border-t border-primary-700">
               <Link
@@ -207,14 +204,14 @@ export default function Navigation() {
             </div>
           )}
           <div className="mt-6 p-4 bg-primary-800/50 rounded-lg text-sm border border-primary-700">
-            <p className="font-semibold mb-1">Doctor Opus v3.50</p>
-            <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Информационно-аналитическая версия</p>
+            <p className="font-semibold mb-1">Клинический Ассистент v3.50</p>
+            <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Клиническая версия</p>
             <ul className="space-y-1 text-xs opacity-70">
               <li>• Opus 4.6 + Gemini 3.1</li>
-              <li>• Анализ медицинских изображений и документов</li>
-              <li>• Структурирование данных и сравнение в динамике</li>
-              <li>• RAG-поиск по персональной библиотеке</li>
-              <li className="text-teal-400 font-bold mt-2">ℹ️ Не является медицинским изделием</li>
+              <li>• Просмотр DICOM + измерения</li>
+              <li>• Мультимодальный анализ (изображения + лаборатория)</li>
+              <li>• Анализ динамики и RAG</li>
+              <li className="text-teal-400 font-bold mt-2">🛡️ Поддержка клинических решений</li>
             </ul>
           </div>
         </div>

@@ -629,7 +629,7 @@ export default function GeneticPage() {
         <p className="text-sm text-gray-600 mb-4">
           Поддерживаемые форматы: VCF, PDF, TXT, изображения
         </p>
-        <ImageUpload onUpload={handleUpload} accept=".vcf,.pdf,.txt,image/*" maxSize={50} />
+        <ImageUpload onUpload={handleUpload} accept=".vcf,.pdf,.txt,image/*" maxSize={50} bridgePullTarget="image_analysis" />
         
         {/* PDF обрабатывается сервером через Gemini Vision API */}
       </div>

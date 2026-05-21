@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import AudioUpload from '@/components/AudioUpload'
-
-const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
+import VoiceInput from '@/components/VoiceInput'
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -539,10 +538,13 @@ export default function ProtocolPage() {
   }
 
   return (
+    <>
     <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">
-        {selectedTemplateId === ECG_FUNCTIONAL_TEMPLATE_ID ? '🫀 Протокол ЭКГ' : '📝 Протокол приёма'}
-      </h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-primary-900">
+          {selectedTemplateId === ECG_FUNCTIONAL_TEMPLATE_ID ? '🫀 Протокол ЭКГ' : '📝 Протокол приёма'}
+        </h1>
+      </div>
       
       {showAudioUpload && (
         <div className="mb-4 bg-white rounded-lg shadow-lg p-4">
@@ -761,5 +763,6 @@ export default function ProtocolPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }

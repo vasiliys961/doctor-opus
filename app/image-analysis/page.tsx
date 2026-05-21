@@ -5,16 +5,15 @@ import { flushSync } from 'react-dom'
 import dynamic from 'next/dynamic'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
+import VoiceInput from '@/components/VoiceInput'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import PatientSelector from '@/components/PatientSelector'
-import DeviceSync from '@/components/DeviceSync'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 
 const DicomViewer = dynamic(() => import('@/components/DicomViewer'), { ssr: false })
-const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
 
 import { validateMedicalImage, ImageValidationResult } from '@/lib/image-validator'
 import { logUsage } from '@/lib/simple-logger'
@@ -23,6 +22,7 @@ import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-c
 import { getOnboardingStatus, isOnboardingCompleted, setOnboardingStatus } from '@/lib/onboarding'
 
 export default function ImageAnalysisPage() {
+  const BRIDGE_IMAGE_ANALYSIS_KEY = 'mobile_bridge_image_analysis_draft'
   const OPTIMIZED_MODEL_STORAGE_KEY = 'image-analysis.optimized-model'
   const [file, setFile] = useState<File | null>(null)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
@@ -82,6 +82,32 @@ export default function ImageAnalysisPage() {
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
     return new File([bytes], `${filename}.${ext}`, { type: mime })
   }
+
+  useEffect(() => {
+    const raw = localStorage.getItem(BRIDGE_IMAGE_ANALYSIS_KEY)
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string }
+      if (payload.text?.trim()) {
+        setClinicalContext((prev) => (prev ? `${prev}\n\n${payload.text}` : payload.text || ''))
+      }
+      if (payload.dataUrl) {
+        const syncedFile = dataUrlToFile(payload.dataUrl, payload.title || 'mobile_image_analysis')
+        setIsDicom(false)
+        setDicomAnalysisImage(null)
+        setValidation(null)
+        setAdditionalFiles([])
+        setFile(syncedFile)
+        setImagePreview(payload.dataUrl)
+        setResult('')
+        setError(null)
+      }
+    } catch (error) {
+      console.error('Ошибка импорта mobile bridge в анализ изображений:', error)
+    } finally {
+      localStorage.removeItem(BRIDGE_IMAGE_ANALYSIS_KEY)
+    }
+  }, [])
 
   const handleLabsFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -384,42 +410,19 @@ export default function ImageAnalysisPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🔍 Разбор медицинских изображений</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-primary-900">🔍 Анализ медицинских изображений</h1>
+      </div>
       
-      <DeviceSync 
-        currentImage={imagePreview}
-        onImageReceived={(base64) => {
-          try {
-            const syncedFile = dataUrlToFile(base64, 'synced_mobile_photo')
-            // Важно: если до этого пользователь открывал DICOM, UI мог остаться в DICOM-режиме
-            // и не показать обычный preview. При синхронизации со смартфона ожидаем обычное фото.
-            setIsDicom(false)
-            setDicomAnalysisImage(null)
-            setValidation(null)
-            setAdditionalFiles([])
-            setFile(syncedFile)
-            setImagePreview(base64)
-            setResult('')
-            setError(null)
-            // Подсказываем глазами, где появилось изображение.
-            window.setTimeout(() => {
-              document.getElementById('synced-image-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }, 50)
-          } catch (_e) {
-            setError('Не удалось принять снимок: некорректный формат данных')
-          }
-        }}
-      />
-
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг (сначала краткое структурированное описание исследования, затем текстовый разбор), даёт компактный аналитический разбор и общий сигнал риска, удобен для первичного просмотра и триажа.",
+          fast: "двухэтапный скрининг (сначала краткое структурированное описание исследования, затем текстовый разбор), даёт компактное заключение и общий сигнал риска, удобен для первичного просмотра и триажа.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и цены для большинства медицинских исследований.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для большинства медицинских изображений.",
             "💡 Система автоматически определяет тип изображения: ЭКГ, Рентген, КТ, МРТ, УЗИ, Дерматоскопия, Гистология, Офтальмология, Маммография. Поддерживается формат DICOM.",
-            "📸 Вы можете загрузить файл, сделать фото с камеры или использовать ссылку.",
+            "📸 Вы можете загрузить файл или сделать фото с камеры.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
             "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
           ]
@@ -433,7 +436,7 @@ export default function ImageAnalysisPage() {
         </p>
         
         <div data-tour="image-upload-zone">
-          <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
+          <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} bridgePullTarget="image_analysis" />
         </div>
 
         {validation && validation.warnings.length > 0 && (

@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import AudioUpload from '@/components/AudioUpload'
 import FileUpload from '@/components/FileUpload'
-import AnalysisTips from '@/components/AnalysisTips'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
@@ -20,6 +19,7 @@ import mammoth from 'mammoth'
 type ResponseStyle = 'brief' | 'detailed'
 const MAX_CHAT_FILES_PER_BATCH = 4;
 const MAX_CHAT_TOTAL_BYTES_PER_BATCH = 16 * 1024 * 1024;
+const BRIDGE_CHAT_KEY = 'mobile_bridge_chat_draft';
 
 const specialtyMap: Record<string, Specialty> = {
   'Кардиолог': 'cardiology',
@@ -196,6 +196,51 @@ export default function ChatPage() {
       } catch (e) {
         console.error('Ошибка при разборе данных анализа:', e);
       }
+    }
+  }, []);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(BRIDGE_CHAT_KEY);
+    if (!raw) return;
+
+    const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
+      const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
+      if (!match) throw new Error('Неверный формат data URL');
+      const mimeType = match[1] || fallbackType;
+      const base64 = match[2];
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return new File([bytes], fileName, { type: mimeType });
+    };
+
+    try {
+      const payload = JSON.parse(raw) as {
+        title?: string;
+        text?: string;
+        dataUrl?: string;
+        mimeType?: string;
+      };
+      const normalizedText = String(payload.text || '').trim();
+      if (normalizedText) {
+        setMessage(normalizedText);
+      } else if (payload.title) {
+        setMessage(`[Документ со смартфона] ${payload.title}`);
+      }
+
+      if (payload.dataUrl) {
+        const extension = payload.mimeType?.includes('pdf') ? 'pdf' : 'jpg';
+        const fileName = `${payload.title || 'mobile_scan'}.${extension}`;
+        const file = dataUrlToFile(payload.dataUrl, fileName, payload.mimeType || 'image/jpeg');
+        setSelectedFiles((prev) => [...prev, file]);
+        setShowFileUpload(true);
+      }
+    } catch (error) {
+      console.error('Ошибка импорта mobile bridge в чат:', error);
+    } finally {
+      localStorage.removeItem(BRIDGE_CHAT_KEY);
     }
   }, []);
 
@@ -1006,6 +1051,7 @@ export default function ChatPage() {
             }}
             multiple={true}
             maxSize={50}
+            bridgePullTarget="chat"
           />
           {selectedFiles.length > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-200">
@@ -1301,6 +1347,7 @@ export default function ChatPage() {
           }}
         />
       )}
+
     </div>
   )
 }

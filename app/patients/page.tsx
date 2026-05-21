@@ -6,8 +6,8 @@ import dynamic from 'next/dynamic'
 import { getAllPatients, savePatient, deletePatient, Patient, getPatientHistory, deleteHistoryRecord, AnalysisRecord } from '@/lib/patient-db'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import VoiceInput from '@/components/VoiceInput'
 
-const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
 const LabTrendChart = dynamic(() => import('@/components/LabTrendChart'), { ssr: false })
 
 function PatientsContent() {
@@ -232,12 +232,14 @@ function PatientsContent() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-primary-900">👤 База данных пациентов</h1>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-primary-500 hover:bg-primary-600 text-white px-6 py-2 rounded-lg transition-colors font-semibold"
-        >
-          ➕ Добавить пациента
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-primary-500 hover:bg-primary-600 text-white px-6 py-2 rounded-lg transition-colors font-semibold"
+          >
+            ➕ Добавить пациента
+          </button>
+        </div>
       </div>
 
       {/* Поиск */}

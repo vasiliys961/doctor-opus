@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisTips from '@/components/AnalysisTips'
@@ -20,6 +20,7 @@ const Dicom3DViewer = dynamic(() => import('@/components/Dicom3DViewer'), { ssr:
 import { logUsage } from '@/lib/simple-logger'
 
 export default function VideoPage() {
+  const BRIDGE_VIDEO_ANALYSIS_KEY = 'mobile_bridge_video_analysis_draft'
   const [file, setFile] = useState<File | null>(null)
   const [playlist, setPlaylist] = useState<File[]>([])
   const [result, setResult] = useState<string>('')
@@ -49,6 +50,50 @@ export default function VideoPage() {
   const [confirmNoPersonalData, setConfirmNoPersonalData] = useState(false)
   const [stage1TechnicalData, setStage1TechnicalData] = useState<string>('')
   const [showTechnicalData, setShowTechnicalData] = useState(false)
+
+  const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
+    const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
+    if (!match) throw new Error('Неверный формат data URL')
+    const mimeType = match[1] || fallbackType
+    const binary = atob(match[2])
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return new File([bytes], fileName, { type: mimeType })
+  }
+
+  useEffect(() => {
+    const raw = localStorage.getItem(BRIDGE_VIDEO_ANALYSIS_KEY)
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string }
+      if (payload.text?.trim()) {
+        setClinicalContext((prev) => (prev ? `${prev}\n\n${payload.text}` : payload.text || ''))
+      }
+      if (payload.dataUrl) {
+        const extension = payload.mimeType?.includes('png') ? 'png' : payload.mimeType?.includes('webp') ? 'webp' : 'jpg'
+        const syncedFile = dataUrlToFile(
+          payload.dataUrl,
+          `${payload.title || 'mobile_video_frame'}.${extension}`,
+          payload.mimeType || 'image/jpeg'
+        )
+        const preview = URL.createObjectURL(syncedFile)
+        setExtractedFrames((prev) => [
+          ...prev,
+          {
+            index: prev.length,
+            timestamp: 0,
+            file: syncedFile,
+            preview,
+            isAnonymized: false,
+          },
+        ])
+      }
+    } catch (error) {
+      console.error('Ошибка импорта mobile bridge в видео:', error)
+    } finally {
+      localStorage.removeItem(BRIDGE_VIDEO_ANALYSIS_KEY)
+    }
+  }, [])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -518,11 +563,13 @@ export default function VideoPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🎬 Разбор видео</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-primary-900">🎬 Анализ видео</h1>
+      </div>
       
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг (сначала структурированное описание видео через Gemini Vision, затем текстовый разбор через Gemini Flash), даёт компактный аналитический разбор и общий сигнал риска.",
+          fast: "двухэтапный скрининг (сначала структурированное описание видео через Gemini Vision, затем текстовый разбор через Gemini Flash), даёт компактное заключение и общий сигнал риска.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для детального клинического разбора видеоматериалов; самый дорогой режим.",
           extra: [
             "🛡️ Видео автоматически обрабатывается: система извлекает 5-12 ключевых кадров (адаптивно по длине видео).",

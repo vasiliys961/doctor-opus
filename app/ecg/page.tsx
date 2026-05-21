@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
@@ -17,6 +17,7 @@ import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-c
 import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
 
 export default function ECGPage() {
+  const BRIDGE_ECG_ANALYSIS_KEY = 'mobile_bridge_ecg_analysis_draft'
   const [file, setFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [result, setResult] = useState<string>('')
@@ -34,6 +35,40 @@ export default function ECGPage() {
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [showCaliper, setShowCaliper] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
+
+  const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
+    const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
+    if (!match) throw new Error('Неверный формат data URL')
+    const mimeType = match[1] || fallbackType
+    const binary = atob(match[2])
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return new File([bytes], fileName, { type: mimeType })
+  }
+
+  useEffect(() => {
+    const raw = localStorage.getItem(BRIDGE_ECG_ANALYSIS_KEY)
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string }
+      if (payload.text?.trim()) {
+        setClinicalContext((prev) => (prev ? `${prev}\n\n${payload.text}` : payload.text || ''))
+      }
+      if (payload.dataUrl) {
+        const extension = payload.mimeType?.includes('png') ? 'png' : payload.mimeType?.includes('webp') ? 'webp' : 'jpg'
+        const syncedFile = dataUrlToFile(
+          payload.dataUrl,
+          `${payload.title || 'mobile_ecg'}.${extension}`,
+          payload.mimeType || 'image/jpeg'
+        )
+        handleUpload(syncedFile)
+      }
+    } catch (error) {
+      console.error('Ошибка импорта mobile bridge в ЭКГ:', error)
+    } finally {
+      localStorage.removeItem(BRIDGE_ECG_ANALYSIS_KEY)
+    }
+  }, [])
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -229,11 +264,13 @@ export default function ECGPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">📈 Разбор ЭКГ</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-primary-900">📈 Анализ ЭКГ</h1>
+      </div>
       
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг ЭКГ (сначала детализированное, но компактное описание кривой, затем текстовый разбор), даёт краткий аналитический разбор и оценку риска, удобно для быстрого первичного просмотра.",
+          fast: "двухэтапный скрининг ЭКГ (сначала детализированное, но компактное описание кривой, затем текстовый разбор), даёт краткое заключение и оценку риска, удобно для быстрого первичного просмотра.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс глубины и качества для анализа кривых ЭКГ.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев.",
           extra: [
@@ -249,7 +286,7 @@ export default function ECGPage() {
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Загрузите изображение ЭКГ</h2>
         
-        <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} />
+        <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} bridgePullTarget="ecg_analysis" />
         
         {file && imagePreview && (
           <div className="mt-6">

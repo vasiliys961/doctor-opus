@@ -238,7 +238,7 @@ export default function DermatoscopyPage() {
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Загрузите изображение</h2>
-        <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} />
+        <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} bridgePullTarget="image_analysis" />
       </div>
 
       {file && imagePreview && (

@@ -8,6 +8,8 @@ import {
   LibraryDocument 
 } from '@/lib/library-db';
 
+const BRIDGE_LIBRARY_KEY = 'mobile_bridge_library_draft';
+
 export default function LibraryPage() {
   const [documents, setDocuments] = useState<LibraryDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -17,6 +19,38 @@ export default function LibraryPage() {
 
   useEffect(() => {
     fetchDocuments();
+  }, []);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(BRIDGE_LIBRARY_KEY);
+    if (!raw) return;
+
+    const dataUrlToFile = (dataUrl: string, fileName: string, mimeType = 'application/pdf'): File => {
+      const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
+      if (!match) throw new Error('Некорректный формат data URL');
+      const type = match[1] || mimeType;
+      const base64 = match[2];
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return new File([bytes], fileName, { type });
+    };
+
+    void (async () => {
+      try {
+        const payload = JSON.parse(raw) as { title?: string; dataUrl?: string; mimeType?: string };
+        if (!payload.dataUrl) return;
+        const fileName = payload.title?.trim() || 'mobile-upload.pdf';
+        const file = dataUrlToFile(payload.dataUrl, fileName, payload.mimeType || 'application/pdf');
+        await processPdfUpload(file);
+      } catch (err) {
+        console.error('Ошибка импорта mobile bridge в библиотеку:', err);
+      } finally {
+        localStorage.removeItem(BRIDGE_LIBRARY_KEY);
+      }
+    })();
   }, []);
 
   const fetchDocuments = async () => {
@@ -31,6 +65,43 @@ export default function LibraryPage() {
     }
   };
 
+  const processPdfUpload = async (file: File) => {
+    if (file.type !== 'application/pdf') {
+      throw new Error('Для библиотеки поддерживается только PDF');
+    }
+
+    setUploading(true);
+    setError(null);
+    setProgress('Отправка файла на локальный сервер...');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch('/api/library/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Ошибка при обработке PDF');
+    }
+
+    setProgress('Сохранение в локальную базу...');
+    const newDoc: LibraryDocument = {
+      id: crypto.randomUUID(),
+      name: result.data.name,
+      size: result.data.size,
+      uploaded_at: result.data.uploaded_at,
+      chunksCount: result.data.chunks.length
+    };
+
+    await saveDocument(newDoc, result.data.chunks);
+    await fetchDocuments();
+    setProgress('');
+    setUploading(false);
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -41,40 +112,8 @@ export default function LibraryPage() {
     }
 
     try {
-      setUploading(true);
-      setError(null);
-      setProgress('Отправка файла на локальный сервер...');
-      
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/library/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || 'Ошибка при обработке PDF');
-      }
-
-      setProgress('Сохранение в локальную базу...');
-
-      // Сохраняем результат в IndexedDB
-      const newDoc: LibraryDocument = {
-        id: crypto.randomUUID(),
-        name: result.data.name,
-        size: result.data.size,
-        uploaded_at: result.data.uploaded_at,
-        chunksCount: result.data.chunks.length
-      };
-
-      await saveDocument(newDoc, result.data.chunks);
-      await fetchDocuments();
-      
+      await processPdfUpload(file);
       event.target.value = '';
-      setProgress('');
     } catch (err: any) {
       console.error('Upload error:', err);
       setError(err.message || 'Ошибка при обработке PDF');
@@ -96,9 +135,11 @@ export default function LibraryPage() {
   return (
     <div className="max-w-4xl mx-auto py-4 sm:py-8">
       <div className="bg-white rounded-2xl shadow-sm p-6 mb-8 border border-gray-100">
-        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-primary-900">
-          <span>📚</span> Персональная библиотека
-        </h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-2xl font-bold flex items-center gap-2 text-primary-900">
+            <span>📚</span> Персональная библиотека
+          </h2>
+        </div>
         <p className="text-gray-600 mb-6 text-sm sm:text-base">
           Загружайте PDF-литературу. Файлы обрабатываются на **вашем локальном сервере** 
           (не отправляются в интернет) и сохраняются в браузер. Поддерживаются большие файлы до 100 МБ.

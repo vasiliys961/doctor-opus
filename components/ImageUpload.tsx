@@ -4,9 +4,7 @@ import { useState, useRef } from 'react'
 import JSZip from 'jszip'
 import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compression'
 import ImageEditor from './ImageEditor'
-
-const DICOM_PREAMBLE_SIZE = 132
-const DICOM_MAGIC = [0x44, 0x49, 0x43, 0x4d] // "DICM"
+import MobileBridgeInboxPicker from './MobileBridgeInboxPicker'
 
 interface DrawingPath {
   points: Array<{ x: number; y: number }>
@@ -17,33 +15,15 @@ interface ImageUploadProps {
   onUpload: (file: File, additionalFiles?: File[], originalFiles?: File[]) => void
   accept?: string
   maxSize?: number // в MB
+  bridgePullTarget?: string
 }
 
-async function hasDicomSignature(file: File): Promise<boolean> {
-  try {
-    if (file.size < DICOM_PREAMBLE_SIZE) return false
-    const header = new Uint8Array(await file.slice(0, DICOM_PREAMBLE_SIZE).arrayBuffer())
-    return DICOM_MAGIC.every((byte, idx) => header[128 + idx] === byte)
-  } catch {
-    return false
-  }
-}
-
-async function isDicomLikeFile(file: File): Promise<boolean> {
-  const fileName = file.name.toLowerCase()
-  if (fileName.endsWith('.dcm') || fileName.endsWith('.dicom') || file.type === 'application/dicom') {
-    return true
-  }
-
-  // У многих PACS DICOM-файлы идут без расширения и MIME.
-  if (!fileName.includes('.') || !file.type || file.type === 'application/octet-stream') {
-    return hasDicomSignature(file)
-  }
-
-  return false
-}
-
-export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', maxSize = 500 }: ImageUploadProps) {
+export default function ImageUpload({
+  onUpload,
+  accept = 'image/*,.dcm,.dicom',
+  maxSize = 500,
+  bridgePullTarget = '',
+}: ImageUploadProps) {
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -157,8 +137,11 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
     // 1. Обработка группы файлов (FileList или массив) - например, при загрузке папки
     if (input instanceof FileList || Array.isArray(input)) {
       const files = Array.from(input);
-      const dicomChecks = await Promise.all(files.map(file => isDicomLikeFile(file)));
-      const dicomFiles = files.filter((_, index) => dicomChecks[index]);
+      const dicomFiles = files.filter(f => 
+        f.name.toLowerCase().endsWith('.dcm') || 
+        f.name.toLowerCase().endsWith('.dicom') || 
+        f.type === 'application/dicom'
+      );
 
       if (dicomFiles.length > 0) {
         setIsCompressing(true);
@@ -245,7 +228,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
 
     const fileName = file.name.toLowerCase();
     const isZip = fileName.endsWith('.zip');
-    const isDicom = await isDicomLikeFile(file);
+    const isDicom = fileName.endsWith('.dcm') || fileName.endsWith('.dicom') || file.type === 'application/dicom';
     const isVideo = file.type.startsWith('video/');
     const isImage = file.type.startsWith('image/');
 
@@ -466,6 +449,19 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
                   >
                     папку целиком
                   </button>
+                </div>
+                <div>
+                  <span className="inline-block">
+                    <MobileBridgeInboxPicker
+                      onImport={(filesFromInbox) => {
+                        void handleFile(filesFromInbox);
+                      }}
+                      accept={accept}
+                      multiple={true}
+                      preferredTarget={bridgePullTarget}
+                      buttonClassName="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 hover:bg-indigo-100"
+                    />
+                  </span>
                 </div>
                 <div className="text-gray-500 text-sm italic">или просто перетащите сюда</div>
               </div>

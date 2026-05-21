@@ -72,6 +72,7 @@ export default function Advanced3DPage() {
               onUpload={handleUpload}
               accept=".dcm,.dicom,application/dicom"
               multiple={true}
+              bridgePullTarget="image_analysis"
             />
           </div>
         </div>

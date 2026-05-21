@@ -3,19 +3,22 @@
 import { useState, useRef } from 'react'
 import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compression'
 import ImageEditor from './ImageEditor'
+import MobileBridgeInboxPicker from './MobileBridgeInboxPicker'
 
 interface FileUploadProps {
   onUpload: (files: File[]) => void
   accept?: string
   maxSize?: number // в MB
   multiple?: boolean
+  bridgePullTarget?: string
 }
 
 export default function FileUpload({ 
   onUpload, 
   accept = 'image/*,application/pdf,.doc,.docx,.txt,.csv', 
   maxSize = 50,
-  multiple = true 
+  multiple = true,
+  bridgePullTarget = '',
 }: FileUploadProps) {
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -26,8 +29,10 @@ export default function FileUpload({
   const folderInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return
+  const handleFiles = async (filesInput: FileList | File[] | null) => {
+    if (!filesInput) return
+    const files = Array.isArray(filesInput) ? filesInput : Array.from(filesInput)
+    if (files.length === 0) return
 
     setError(null)
     const validFiles: File[] = []
@@ -35,7 +40,7 @@ export default function FileUpload({
     setIsCompressing(true)
 
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         // Проверка размера
         if (file.size > maxSize * 1024 * 1024) {
           setError(`Файл ${file.name} слишком большой. Максимальный размер: ${maxSize}MB`)
@@ -346,6 +351,15 @@ export default function FileUpload({
                 >
                   📷 Сделать фото
                 </button>
+                <MobileBridgeInboxPicker
+                  onImport={(filesFromInbox) => {
+                    void handleFiles(filesFromInbox)
+                  }}
+                  accept={accept}
+                  multiple={multiple}
+                  preferredTarget={bridgePullTarget}
+                  buttonClassName="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors font-semibold"
+                />
               </div>
               
               <span className="text-gray-600">или перетащите папку со снимками сюда</span>

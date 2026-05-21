@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -16,6 +16,7 @@ import { type ExtractedFrame, extractAndAnonymizeFrames, formatTimestamp } from 
 import ImageEditor from '@/components/ImageEditor'
 
 export default function UltrasoundPage() {
+  const BRIDGE_ULTRASOUND_ANALYSIS_KEY = 'mobile_bridge_ultrasound_analysis_draft'
   const [file, setFile] = useState<File | null>(null)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [imagePreview, setImagePreview] = useState<string | null>(null)
@@ -39,6 +40,40 @@ export default function UltrasoundPage() {
   const [extracting, setExtracting] = useState(false)
   const [editingFrameIndex, setEditingFrameIndex] = useState<number | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
+    const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
+    if (!match) throw new Error('Неверный формат data URL')
+    const mimeType = match[1] || fallbackType
+    const binary = atob(match[2])
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return new File([bytes], fileName, { type: mimeType })
+  }
+
+  useEffect(() => {
+    const raw = localStorage.getItem(BRIDGE_ULTRASOUND_ANALYSIS_KEY)
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string }
+      if (payload.text?.trim()) {
+        setClinicalContext((prev) => (prev ? `${prev}\n\n${payload.text}` : payload.text || ''))
+      }
+      if (payload.dataUrl) {
+        const extension = payload.mimeType?.includes('png') ? 'png' : payload.mimeType?.includes('webp') ? 'webp' : 'jpg'
+        const syncedFile = dataUrlToFile(
+          payload.dataUrl,
+          `${payload.title || 'mobile_ultrasound'}.${extension}`,
+          payload.mimeType || 'image/jpeg'
+        )
+        handleUpload(syncedFile)
+      }
+    } catch (error) {
+      console.error('Ошибка импорта mobile bridge в УЗИ:', error)
+    } finally {
+      localStorage.removeItem(BRIDGE_ULTRASOUND_ANALYSIS_KEY)
+    }
+  }, [])
 
   const analyzeUltrasound = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file && extractedFrames.length === 0) {
@@ -209,7 +244,9 @@ export default function UltrasoundPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🔊 Разбор УЗИ (Cine-loop)</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-primary-900">🔊 Анализ УЗИ (Cine-loop)</h1>
+      </div>
       
       <AnalysisTips 
         content={{
@@ -226,7 +263,7 @@ export default function UltrasoundPage() {
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6 text-center">
         <h2 className="text-xl font-semibold mb-4 text-left">Загрузите УЗИ (снимок или видео-петлю)</h2>
-        <ImageUpload onUpload={handleUpload} accept="image/*,video/*,.dcm,.dicom" maxSize={100} />
+        <ImageUpload onUpload={handleUpload} accept="image/*,video/*,.dcm,.dicom" maxSize={100} bridgePullTarget="ultrasound_analysis" />
       </div>
 
       {isVideo && videoUrl && (

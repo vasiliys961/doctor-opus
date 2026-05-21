@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
@@ -15,6 +15,7 @@ import { calculateCost } from '@/lib/cost-calculator'
 import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
 
 export default function XRayPage() {
+  const BRIDGE_XRAY_ANALYSIS_KEY = 'mobile_bridge_xray_analysis_draft'
   const [file, setFile] = useState<File | null>(null)
   const [archiveFile, setArchiveFile] = useState<File | null>(null)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
@@ -34,6 +35,40 @@ export default function XRayPage() {
   const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
   const [showEditor, setShowEditor] = useState(false)
   const [editingImageType, setEditingImageType] = useState<'current' | 'archive'>('current')
+
+  const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
+    const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
+    if (!match) throw new Error('Неверный формат data URL')
+    const mimeType = match[1] || fallbackType
+    const binary = atob(match[2])
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return new File([bytes], fileName, { type: mimeType })
+  }
+
+  useEffect(() => {
+    const raw = localStorage.getItem(BRIDGE_XRAY_ANALYSIS_KEY)
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string }
+      if (payload.text?.trim()) {
+        setClinicalContext((prev) => (prev ? `${prev}\n\n${payload.text}` : payload.text || ''))
+      }
+      if (payload.dataUrl) {
+        const extension = payload.mimeType?.includes('png') ? 'png' : payload.mimeType?.includes('webp') ? 'webp' : 'jpg'
+        const syncedFile = dataUrlToFile(
+          payload.dataUrl,
+          `${payload.title || 'mobile_xray'}.${extension}`,
+          payload.mimeType || 'image/jpeg'
+        )
+        handleUpload(syncedFile)
+      }
+    } catch (error) {
+      console.error('Ошибка импорта mobile bridge в рентген:', error)
+    } finally {
+      localStorage.removeItem(BRIDGE_XRAY_ANALYSIS_KEY)
+    }
+  }, [])
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -219,11 +254,13 @@ export default function XRayPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🩻 Разбор рентгена</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-primary-900">🩻 Анализ рентгена</h1>
+      </div>
       
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг рентгена (сначала структурированное описание снимка, затем текстовый разбор), даёт компактный аналитический разбор и общий сигнал риска.",
+          fast: "двухэтапный скрининг рентгена (сначала структурированное описание снимка, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и качества для анализа рентгенограмм.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев.",
           extra: [
@@ -261,13 +298,13 @@ export default function XRayPage() {
         <div className={`grid grid-cols-1 ${isComparisonMode ? 'lg:grid-cols-2' : ''} gap-6`}>
           <div>
             <p className="text-sm font-medium text-gray-700 mb-2">{isComparisonMode ? '🔵 ТЕКУЩИЙ СНИМОК (СТАЛО)' : 'Выберите снимок для анализа'}</p>
-            <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
+            <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} bridgePullTarget="xray_analysis" />
           </div>
           
           {isComparisonMode && (
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2 text-blue-600">⚪ АРХИВНЫЙ СНИМОК (БЫЛО)</p>
-              <ImageUpload onUpload={handleArchiveUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
+              <ImageUpload onUpload={handleArchiveUpload} accept="image/*,.dcm,.dicom" maxSize={500} bridgePullTarget="xray_analysis" />
             </div>
           )}
         </div>
