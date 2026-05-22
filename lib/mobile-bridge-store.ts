@@ -139,20 +139,6 @@ export function pushMobileBridgeEvent(
     ...payload,
   };
   session.events.push(event);
-
-  // Broadcast within active desktop sessions to avoid token drift issues
-  // (e.g. phone keeps an old token while desktop already rotated session).
-  for (const otherToken of Object.keys(store.sessions)) {
-    if (otherToken === token) continue;
-    const otherSession = store.sessions[otherToken];
-    if (otherSession.expiresAt <= Date.now()) continue;
-    otherSession.events.push({
-      id: otherSession.nextEventId++,
-      createdAt,
-      ...payload,
-    });
-    store.sessions[otherToken] = otherSession;
-  }
   store.sessions[token] = session;
   writeStore(store);
   return event;
@@ -170,16 +156,9 @@ export function getMobileBridgeEvents(token: string, sinceId: number): MobileBri
 export function clearMobileBridgeEvents(token: string): void {
   const store = readStore();
   cleanupExpiredSessions(store);
-
-  // We broadcast events across active sessions, so clear all active session event buffers.
-  for (const sessionToken of Object.keys(store.sessions)) {
-    const session = store.sessions[sessionToken];
-    session.events = [];
-    session.nextEventId = 1;
-    store.sessions[sessionToken] = session;
-  }
-
-  // Ensure caller token still has a valid session after clear.
-  getOrCreateMobileBridgeSession(store, token);
+  const session = getOrCreateMobileBridgeSession(store, token);
+  session.events = [];
+  session.nextEventId = 1;
+  store.sessions[token] = session;
   writeStore(store);
 }

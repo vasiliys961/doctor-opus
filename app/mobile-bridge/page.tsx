@@ -360,6 +360,17 @@ function appendToAccumulatedInbox(event: BridgeEvent): void {
     }
   }
 
+  const signature = `${event.createdAt}|${event.target}|${event.title}|${event.mimeType || ''}|${
+    event.dataUrl || event.text || ''
+  }`;
+  const alreadyExists = items.some((item) => {
+    const itemSignature = `${item.createdAt}|${item.target}|${item.title}|${item.mimeType || ''}|${
+      item.dataUrl || item.text || ''
+    }`;
+    return itemSignature === signature;
+  });
+  if (alreadyExists) return;
+
   const next: AccumulatedInboxEntry[] = [
     {
       id: `${event.id}-${event.createdAt}-${event.target}`,

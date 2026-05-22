@@ -59,7 +59,11 @@ export default function MobileBridgeInboxPicker({
     if (events.length === 0) return readAccumulatedInbox();
 
     const existing = readAccumulatedInbox();
-    const byId = new Map(existing.map((item) => [item.id, item] as const));
+    const buildSignature = (item: Pick<AccumulatedInboxEntry, 'createdAt' | 'target' | 'title' | 'mimeType' | 'dataUrl' | 'text'>) =>
+      `${item.createdAt}|${item.target}|${item.title}|${item.mimeType || ''}|${item.dataUrl || item.text || ''}`;
+    const bySignature = new Map(
+      existing.map((item) => [buildSignature(item), item] as const),
+    );
     let maxId = since;
 
     events.forEach((event) => {
@@ -75,12 +79,13 @@ export default function MobileBridgeInboxPicker({
         dataUrl: typeof event?.dataUrl === 'string' ? event.dataUrl : undefined,
         createdAt,
       };
-      const prev = byId.get(entry.id);
+      const signature = buildSignature(entry);
+      const prev = bySignature.get(signature);
       if (!prev) {
-        byId.set(entry.id, entry);
+        bySignature.set(signature, entry);
       } else {
         // Refresh entry when server now has richer payload (e.g. dataUrl for preview)
-        byId.set(entry.id, {
+        bySignature.set(signature, {
           ...prev,
           ...entry,
           dataUrl: entry.dataUrl || prev.dataUrl,
@@ -89,7 +94,7 @@ export default function MobileBridgeInboxPicker({
       }
       if (Number.isFinite(eventId)) maxId = Math.max(maxId, eventId);
     });
-    const merged = Array.from(byId.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const merged = Array.from(bySignature.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     try {
       localStorage.setItem(BRIDGE_ACCUMULATED_INBOX_KEY, JSON.stringify(merged.slice(0, 200)));
     } catch {
