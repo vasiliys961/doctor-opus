@@ -30,11 +30,9 @@ export default function Navigation() {
     { name: '🔬 3D-визуализация', href: '/advanced-3d' },
     { name: '🔊 Описание УЗИ', href: '/ultrasound' },
     { name: '🔬 Оценка дерматоскопии', href: '/dermatoscopy' },
-    { name: '🔬 Оценка лабораторных данных', href: '/lab' },
     { name: '🎬 Клинический разбор видео', href: '/video' },
     { name: '📄 Сканирование документов', href: '/document' },
     { name: '🧬 Генетический профиль', href: '/genetic' },
-    { name: '🧪 Лаборатория (USB)', href: '/devices' },
     { name: '👤 База данных пациентов', href: '/patients' },
     { name: '📊 Расход единиц', href: '/statistics' },
   ]
@@ -209,7 +207,7 @@ export default function Navigation() {
             <ul className="space-y-1 text-xs opacity-70">
               <li>• Opus 4.6 + Gemini 3.1</li>
               <li>• Просмотр DICOM + измерения</li>
-              <li>• Мультимодальный анализ (изображения + лаборатория)</li>
+              <li>• Мультимодальный анализ (изображения + документы)</li>
               <li>• Анализ динамики и RAG</li>
               <li className="text-teal-400 font-bold mt-2">🛡️ Поддержка клинических решений</li>
             </ul>

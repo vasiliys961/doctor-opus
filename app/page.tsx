@@ -163,12 +163,6 @@ export default async function HomePage() {
             </p>
           </div>
           <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
-            <h3 className="font-bold text-base sm:text-lg mb-2">🔬 Лабораторные данные</h3>
-            <p className="text-xs sm:text-sm text-gray-600">
-              Сканирование бланков, PDF-отчёты Холтера/СМАД/спирометрии, структурирование анализов.
-            </p>
-          </div>
-          <div className="module-card bg-white p-4 sm:p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-slate-100">
             <h3 className="font-bold text-base sm:text-lg mb-2">🧬 Генетика & фармакогеномика</h3>
             <p className="text-xs sm:text-sm text-gray-600">
               Разбор VCF/PDF, анализ генетики и экспертный обзор.
