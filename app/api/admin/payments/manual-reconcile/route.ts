@@ -41,6 +41,10 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ success: false, error: 'Доступ запрещен' }, { status: 403 });
     }
+    const adminEmail = session.user?.email;
+    if (!adminEmail) {
+      return NextResponse.json({ success: false, error: 'Email администратора не найден' }, { status: 403 });
+    }
 
     const body = await request.json().catch(() => ({}));
     const pairs = normalizePairs(Array.isArray(body?.pairs) ? body.pairs : []);
@@ -149,7 +153,7 @@ export async function POST(request: NextRequest) {
     }
 
     safeLog('🔧 [ADMIN MANUAL RECONCILE] Выполнено', {
-      by: session.user.email,
+      by: adminEmail,
       processed,
       confirmed,
       alreadyProcessed,
@@ -163,7 +167,7 @@ export async function POST(request: NextRequest) {
       alreadyProcessed,
       confirmedPayments,
       failures,
-      initiatedBy: session.user.email,
+      initiatedBy: adminEmail,
     });
   } catch (error: any) {
     safeError('❌ [ADMIN MANUAL RECONCILE] Ошибка:', error?.message || error);

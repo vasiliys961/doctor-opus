@@ -83,6 +83,7 @@ const TARGET_ROUTES: Record<InboxTarget, string> = {
 };
 
 function parseSingleEntry(storageKey: string, target: InboxTarget): InboxEntry[] {
+  if (typeof window === 'undefined') return [];
   const raw = localStorage.getItem(storageKey);
   if (!raw) return [];
   try {
@@ -116,6 +117,7 @@ function parseSingleEntry(storageKey: string, target: InboxTarget): InboxEntry[]
 }
 
 function parsePatientDbEntries(): InboxEntry[] {
+  if (typeof window === 'undefined') return [];
   const raw = localStorage.getItem(PATIENT_DB_KEY);
   if (!raw) return [];
   try {
@@ -156,6 +158,7 @@ export default function MobileBridgeInboxPage() {
   }, [version]);
 
   const removeEntry = useCallback((entry: InboxEntry) => {
+    if (typeof window === 'undefined') return;
     if (entry.storageKey === PATIENT_DB_KEY) {
       const raw = localStorage.getItem(PATIENT_DB_KEY);
       if (!raw) return;
@@ -180,6 +183,7 @@ export default function MobileBridgeInboxPage() {
   }, [router]);
 
   const clearAll = useCallback(() => {
+    if (typeof window === 'undefined') return;
     KEY_CONFIG.forEach((cfg) => localStorage.removeItem(cfg.storageKey));
     localStorage.removeItem(PATIENT_DB_KEY);
     refresh();

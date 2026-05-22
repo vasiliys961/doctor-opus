@@ -20,6 +20,10 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ success: false, error: 'Доступ запрещен' }, { status: 403 });
     }
+    const adminEmail = session.user?.email;
+    if (!adminEmail) {
+      return NextResponse.json({ success: false, error: 'Email администратора не найден' }, { status: 403 });
+    }
 
     const body = await request.json().catch(() => ({}));
     const limitRaw = Number(body?.limit || 200);
@@ -91,7 +95,7 @@ export async function POST(request: NextRequest) {
     }
 
     safeLog('🔄 [ADMIN RECONCILE] Выполнено', {
-      by: session.user.email,
+      by: adminEmail,
       limit,
       success: result.success,
       processed: result.processed,
@@ -111,9 +115,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    const { success: _resultSuccess, ...resultPayload } = result;
     return NextResponse.json({
       success: true,
-      ...result,
+      ...resultPayload,
       expired,
       pendingNotices: {
         reserved: pendingNoticeReserve.success ? pendingNoticeReserve.reserved.length : 0,
@@ -123,7 +128,7 @@ export async function POST(request: NextRequest) {
       bridge,
       confirmedPayments,
       confirmed: Number(result.confirmed || 0) + Number(bridge.confirmed || 0),
-      initiatedBy: session.user.email,
+      initiatedBy: adminEmail,
     });
   } catch (error: any) {
     safeError('❌ [ADMIN RECONCILE] Ошибка:', error?.message || error);
