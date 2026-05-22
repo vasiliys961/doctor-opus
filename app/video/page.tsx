@@ -8,6 +8,7 @@ import FeedbackForm from '@/components/FeedbackForm'
 import PatientSelector from '@/components/PatientSelector'
 import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import ImageEditor, { DrawingPath } from '@/components/ImageEditor'
+import MobileBridgeInboxPicker from '@/components/MobileBridgeInboxPicker'
 import { 
   extractAndAnonymizeFrames, 
   formatTimestamp, 
@@ -561,6 +562,24 @@ export default function VideoPage() {
     }
   }
 
+  const handleBridgeImport = (files: File[]) => {
+    if (!files || files.length === 0) return;
+    const first = files[0];
+    const isVideo = first.type.startsWith('video/');
+
+    if (isVideo) {
+      setFile(first);
+      setVideoUrl(URL.createObjectURL(first));
+      setPlaylist([]);
+      setExtractedFrames([]);
+      setConfirmNoPersonalData(false);
+      setError(null);
+      setResult('');
+      return;
+    }
+    setError('Из накопителя для этого раздела поддерживаются только видеофайлы.');
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="mb-6 flex items-center justify-between">
@@ -623,8 +642,15 @@ export default function VideoPage() {
                   папку целиком
                 </button>
               </div>
+              <MobileBridgeInboxPicker
+                onImport={handleBridgeImport}
+                accept="video/*"
+                multiple={false}
+                preferredTarget="video_analysis"
+                buttonClassName="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-100"
+              />
               <p className="text-sm text-gray-500">
-                Поддерживаются: Видео (MP4, MOV, AVI) или DICOM-серии (папка)
+                Поддерживаются: Видео (MP4, MOV, AVI)
               </p>
             </div>
           </div>

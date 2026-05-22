@@ -5,7 +5,19 @@ import { getRateLimitKey } from '@/lib/rate-limiter'
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
-const MODEL = 'openai/gpt-5.4'
+const PRIMARY_MODEL = 'openai/gpt-5.4'
+const FALLBACK_MODEL = 'anthropic/claude-sonnet-4.6'
+
+function shouldFallbackFromGpt54(status: number, errorText: string): boolean {
+  const normalized = (errorText || '').toLowerCase()
+  return (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes('permission_denied') ||
+    normalized.includes('provider returned error') ||
+    normalized.includes('azure')
+  )
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,7 +44,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: billing.error || 'Insufficient balance' }, { status: 402 })
     }
 
-    console.log('🫁 [SPIROMETRY] Анализ спирометрии, модель:', MODEL)
+    console.log('🫁 [SPIROMETRY] Анализ спирометрии, модель:', PRIMARY_MODEL)
 
     // Формируем сообщение
     const messages: any[] = []
@@ -58,25 +70,42 @@ export async function POST(request: NextRequest) {
       messages.push({ role: 'user', content: prompt })
     }
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.NEXTAUTH_URL || 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus — Spirometry',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages,
-        max_tokens: 2000,
-        temperature: 0.2,
-      }),
-    })
+    const runRequest = async (model: string) => {
+      return fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.NEXTAUTH_URL || 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus — Spirometry',
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          max_tokens: 2000,
+          temperature: 0.2,
+        }),
+      })
+    }
+
+    let modelUsed = PRIMARY_MODEL
+    let response = await runRequest(modelUsed)
 
     if (!response.ok) {
       const err = await response.text()
-      console.error('❌ [SPIROMETRY] OpenRouter error:', err)
+      if (modelUsed === PRIMARY_MODEL && shouldFallbackFromGpt54(response.status, err)) {
+        console.warn(`⚠️ [SPIROMETRY] ${PRIMARY_MODEL} недоступна, переключаемся на ${FALLBACK_MODEL}`)
+        modelUsed = FALLBACK_MODEL
+        response = await runRequest(modelUsed)
+      } else {
+        console.error('❌ [SPIROMETRY] OpenRouter error:', err)
+        return NextResponse.json({ success: false, error: 'AI error' }, { status: 500 })
+      }
+    }
+
+    if (!response.ok) {
+      const err = await response.text()
+      console.error('❌ [SPIROMETRY] OpenRouter fallback error:', err)
       return NextResponse.json({ success: false, error: 'AI error' }, { status: 500 })
     }
 
@@ -85,7 +114,7 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ [SPIROMETRY] Анализ завершён, символов:', result.length)
 
-    return NextResponse.json({ success: true, result, model: MODEL })
+    return NextResponse.json({ success: true, result, model: modelUsed })
   } catch (error: any) {
     console.error('❌ [SPIROMETRY] Ошибка:', error)
     return NextResponse.json({ success: false, error: 'Spirometry analysis error' }, { status: 500 })

@@ -46,7 +46,8 @@ const BRIDGE_DOCUMENT_SCAN_KEY = 'mobile_bridge_document_scan_draft';
 const PROTOCOL_DRAFT_KEY = 'protocol_draft';
 const BRIDGE_SESSION_STORAGE_KEY = 'mobile_bridge_desktop_session_v1';
 const BRIDGE_BASE_URL_STORAGE_KEY = 'mobile_bridge_base_url_v1';
-const BRIDGE_ACCUMULATED_INBOX_KEY = 'mobile_bridge_accumulated_inbox_v1';
+const BRIDGE_ACCUMULATED_INBOX_KEY = 'mobile_bridge_accumulated_inbox_v2';
+const BRIDGE_ACCUMULATED_INBOX_LEGACY_KEY = 'mobile_bridge_accumulated_inbox_v1';
 const BRIDGE_EVENT_CURSOR_KEY = 'mobile_bridge_event_cursor_v1';
 
 const INBOX_KEYS: Array<{ storageKey: string; target: BridgeTarget }> = [
@@ -157,6 +158,15 @@ function alignBaseUrlPortWithCurrentOrigin(value: string): string {
   }
 }
 
+function isLocalDevOrigin(origin: string): boolean {
+  try {
+    const host = new URL(origin).hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
 function routeEventToLocalStorage(event: BridgeEvent): void {
   const cleanText = event.text?.trim() || '';
   switch (event.target) {
@@ -209,17 +219,8 @@ function routeEventToLocalStorage(event: BridgeEvent): void {
       break;
     }
     case 'patient_db': {
-      const prev = localStorage.getItem(BRIDGE_PATIENT_KEY);
-      const parsed = prev ? JSON.parse(prev) : [];
-      const next = Array.isArray(parsed) ? parsed : [];
-      next.unshift({
-        title: event.title,
-        text: cleanText,
-        mimeType: event.mimeType,
-        dataUrl: event.dataUrl,
-        createdAt: event.createdAt,
-      });
-      localStorage.setItem(BRIDGE_PATIENT_KEY, JSON.stringify(next.slice(0, 20)));
+      // Legacy patient draft storage disabled: it quickly overflows localStorage with base64 payloads.
+      // Accumulated inbox is the single source of truth for Bridge files.
       break;
     }
     case 'image_analysis': {
@@ -372,7 +373,24 @@ function appendToAccumulatedInbox(event: BridgeEvent): void {
     ...items,
   ].slice(0, 200);
 
-  localStorage.setItem(BRIDGE_ACCUMULATED_INBOX_KEY, JSON.stringify(next));
+  try {
+    localStorage.setItem(BRIDGE_ACCUMULATED_INBOX_KEY, JSON.stringify(next));
+  } catch {
+    // Fallback for quota errors: keep fewer recent entries but preserve preview data
+    try {
+      localStorage.setItem(BRIDGE_ACCUMULATED_INBOX_KEY, JSON.stringify(next.slice(0, 30)));
+    } catch {
+      // Last resort: keep only metadata so list remains visible
+      const tiny = next.slice(0, 30).map((item) => ({
+        id: item.id,
+        target: item.target,
+        title: item.title,
+        mimeType: item.mimeType,
+        createdAt: item.createdAt,
+      }));
+      localStorage.setItem(BRIDGE_ACCUMULATED_INBOX_KEY, JSON.stringify(tiny));
+    }
+  }
 }
 
 export default function MobileBridgeDesktopPage() {
@@ -391,18 +409,31 @@ export default function MobileBridgeDesktopPage() {
   const [forceFreshSession, setForceFreshSession] = useState(false);
   const [pullTargetByContext, setPullTargetByContext] = useState<BridgeTarget | null>(null);
   const [accumulatedInbox, setAccumulatedInbox] = useState<AccumulatedInboxEntry[]>([]);
+  const [previewItem, setPreviewItem] = useState<AccumulatedInboxEntry | null>(null);
   const lastEventIdRef = useRef(0);
   const sessionRefreshInFlightRef = useRef(false);
   const inboxSectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const currentOrigin = normalizeBaseUrl(window.location.origin);
+    const currentIsLocal = isLocalDevOrigin(window.location.origin);
+
     if (publicBridgeUrl) {
       const normalized = normalizeBaseUrl(publicBridgeUrl);
       setBridgeBaseUrl(normalized);
       localStorage.setItem(BRIDGE_BASE_URL_STORAGE_KEY, normalized);
       return;
     }
+
+    // В production/staging всегда используем текущий origin страницы.
+    // Это исключает случайный LAN/localhost URL из старого кэша.
+    if (!currentIsLocal) {
+      setBridgeBaseUrl(currentOrigin);
+      localStorage.setItem(BRIDGE_BASE_URL_STORAGE_KEY, currentOrigin);
+      return;
+    }
+
     const cachedBaseUrl = localStorage.getItem(BRIDGE_BASE_URL_STORAGE_KEY)?.trim() || '';
     if (cachedBaseUrl) {
       const aligned = alignBaseUrlPortWithCurrentOrigin(cachedBaseUrl);
@@ -410,7 +441,7 @@ export default function MobileBridgeDesktopPage() {
       localStorage.setItem(BRIDGE_BASE_URL_STORAGE_KEY, aligned);
       return;
     }
-    setBridgeBaseUrl(normalizeBaseUrl(window.location.origin));
+    setBridgeBaseUrl(currentOrigin);
   }, [publicBridgeUrl]);
 
   useEffect(() => {
@@ -438,66 +469,26 @@ export default function MobileBridgeDesktopPage() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const persistedRaw = localStorage.getItem(BRIDGE_ACCUMULATED_INBOX_KEY);
-    if (persistedRaw) {
-      try {
-        const persisted = JSON.parse(persistedRaw) as AccumulatedInboxEntry[];
-        if (Array.isArray(persisted)) {
-          setAccumulatedInbox(
-            persisted
-              .filter((item) => item && item.id && item.title && item.createdAt)
-              .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-          );
-          return;
-        }
-      } catch {
-        // ignore and fallback to legacy per-section drafts
-      }
+    if (!persistedRaw) {
+      setAccumulatedInbox([]);
+      return;
     }
-
-    const entries: AccumulatedInboxEntry[] = [];
-    for (const cfg of INBOX_KEYS) {
-      const raw = localStorage.getItem(cfg.storageKey);
-      if (!raw) continue;
-      try {
-        const parsed = JSON.parse(raw) as {
-          title?: string;
-          text?: string;
-          rawText?: string;
-          createdAt?: string;
-          timestamp?: string;
-        };
-        entries.push({
-          id: `${cfg.storageKey}-0`,
-          target: cfg.target,
-          title: parsed.title || `${INBOX_TARGET_LABELS[cfg.target]} draft`,
-          text: parsed.text || parsed.rawText,
-          createdAt: parsed.createdAt || parsed.timestamp || new Date().toISOString(),
-        });
-      } catch {
-        // ignore broken payload
+    try {
+      const persisted = JSON.parse(persistedRaw) as AccumulatedInboxEntry[];
+      if (!Array.isArray(persisted)) {
+        setAccumulatedInbox([]);
+        return;
       }
+      setAccumulatedInbox(
+        persisted
+          .filter((item) => {
+            return Boolean(item && item.id && item.title && item.createdAt);
+          })
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      );
+    } catch {
+      setAccumulatedInbox([]);
     }
-
-    const rawPatientInbox = localStorage.getItem(BRIDGE_PATIENT_KEY);
-    if (rawPatientInbox) {
-      try {
-        const parsed = JSON.parse(rawPatientInbox) as Array<{ title?: string; text?: string; createdAt?: string }>;
-        if (Array.isArray(parsed)) {
-          parsed.forEach((item, idx) => {
-            entries.push({
-              id: `${BRIDGE_PATIENT_KEY}-${idx}`,
-              target: 'patient_db',
-              title: item.title || 'Patient draft',
-              text: item.text,
-              createdAt: item.createdAt || new Date().toISOString(),
-            });
-          });
-        }
-      } catch {
-        // ignore broken payload
-      }
-    }
-    setAccumulatedInbox(entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   }, [inboxVersion]);
 
   useEffect(() => {
@@ -656,19 +647,30 @@ export default function MobileBridgeDesktopPage() {
           throw new Error(data.error || 'Ошибка опроса');
         }
         const incoming: BridgeEvent[] = Array.isArray(data.events) ? data.events : [];
-        if (incoming.length > 0) {
-          incoming.forEach((event) => {
-            routeEventToLocalStorage(event);
-            appendToAccumulatedInbox(event);
-          });
-          lastEventIdRef.current = Math.max(lastEventIdRef.current, ...incoming.map((event) => event.id));
+        const filteredIncoming = incoming;
+        if (filteredIncoming.length > 0) {
+          let maxIncomingId = lastEventIdRef.current;
+          for (const event of filteredIncoming) {
+            try {
+              routeEventToLocalStorage(event);
+            } catch {
+              // ignore per-event localStorage write failures
+            }
+            try {
+              appendToAccumulatedInbox(event);
+            } catch {
+              // ignore per-event localStorage write failures
+            }
+            maxIncomingId = Math.max(maxIncomingId, event.id);
+          }
+          lastEventIdRef.current = maxIncomingId;
           if (typeof window !== 'undefined') {
             localStorage.setItem(
               BRIDGE_EVENT_CURSOR_KEY,
               JSON.stringify({ token, lastEventId: lastEventIdRef.current }),
             );
           }
-          setEvents((prev) => [...incoming.reverse(), ...prev].slice(0, 30));
+          setEvents((prev) => [...filteredIncoming.reverse(), ...prev].slice(0, 30));
           setInboxVersion((prev) => prev + 1);
         }
       } catch (err) {
@@ -694,6 +696,34 @@ export default function MobileBridgeDesktopPage() {
     setForceFreshSession(params.get('fresh') === '1');
   }, []);
 
+  const hardResetInbox = async () => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(BRIDGE_ACCUMULATED_INBOX_KEY);
+    localStorage.removeItem(BRIDGE_ACCUMULATED_INBOX_LEGACY_KEY);
+    INBOX_KEYS.forEach((cfg) => localStorage.removeItem(cfg.storageKey));
+    localStorage.removeItem(BRIDGE_PATIENT_KEY);
+    localStorage.removeItem(BRIDGE_EVENT_CURSOR_KEY);
+    lastEventIdRef.current = 0;
+    setAccumulatedInbox([]);
+    setEvents([]);
+    setInboxVersion((prev) => prev + 1);
+    if (token) {
+      try {
+        await fetch('/api/mobile-bridge/clear', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+      } catch {
+        // ignore server clear errors; local clear already applied
+      }
+    }
+    if (token) {
+      localStorage.setItem(BRIDGE_EVENT_CURSOR_KEY, JSON.stringify({ token, lastEventId: 0 }));
+    }
+    setInboxActionStatus('Накопитель очищен. Связка смартфона сохранена.');
+  };
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
@@ -701,6 +731,7 @@ export default function MobileBridgeDesktopPage() {
     localStorage.removeItem(BRIDGE_SESSION_STORAGE_KEY);
     localStorage.removeItem(BRIDGE_EVENT_CURSOR_KEY);
     localStorage.removeItem(BRIDGE_ACCUMULATED_INBOX_KEY);
+    localStorage.removeItem(BRIDGE_ACCUMULATED_INBOX_LEGACY_KEY);
     INBOX_KEYS.forEach((cfg) => localStorage.removeItem(cfg.storageKey));
     localStorage.removeItem(BRIDGE_PATIENT_KEY);
     lastEventIdRef.current = 0;
@@ -738,10 +769,7 @@ export default function MobileBridgeDesktopPage() {
           <p className="text-xs font-semibold text-gray-800">📥 Накопительный бокс входящих Bridge</p>
           <button
             onClick={() => {
-              localStorage.removeItem(BRIDGE_ACCUMULATED_INBOX_KEY);
-              INBOX_KEYS.forEach((cfg) => localStorage.removeItem(cfg.storageKey));
-              localStorage.removeItem(BRIDGE_PATIENT_KEY);
-              setInboxVersion((prev) => prev + 1);
+              void hardResetInbox();
             }}
             className="rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
           >
@@ -777,7 +805,7 @@ export default function MobileBridgeDesktopPage() {
                 </div>
                 {item.dataUrl && (
                   <button
-                    onClick={() => window.open(item.dataUrl, '_blank', 'noopener,noreferrer')}
+                    onClick={() => setPreviewItem(item)}
                     className="mt-1 rounded border border-gray-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-700 hover:bg-gray-100"
                   >
                     Просмотр
@@ -870,6 +898,7 @@ export default function MobileBridgeDesktopPage() {
               <li>Файлы не теряются и остаются в журнале с превью и временем поступления.</li>
               <li>В нужном разделе нажмите «Загрузить из накопителя» и выберите файлы как в проводнике.</li>
               <li>В чате выбранные файлы добавляются во вложения к текущему сообщению.</li>
+              <li>После первого сканирования QR токен скрывается из адреса телефона, дальше используйте чистую страницу камеры.</li>
             </ul>
           </section>
         </div>
@@ -893,6 +922,41 @@ export default function MobileBridgeDesktopPage() {
           </div>
         )}
       </section>
+
+      {previewItem && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/50 p-3">
+          <div className="w-full max-w-4xl rounded-xl bg-white p-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-gray-900">Просмотр: {previewItem.title}</h4>
+              <button
+                onClick={() => setPreviewItem(null)}
+                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                Закрыть
+              </button>
+            </div>
+            <div className="mt-3 max-h-[75vh] overflow-auto rounded border border-gray-200 bg-gray-50 p-2">
+              {previewItem.dataUrl?.startsWith('data:image/') ? (
+                <img src={previewItem.dataUrl} alt={previewItem.title} className="mx-auto max-h-[70vh] rounded border border-gray-200" />
+              ) : previewItem.dataUrl?.startsWith('data:video/') ? (
+                <video
+                  controls
+                  playsInline
+                  className="mx-auto max-h-[70vh] w-full rounded border border-gray-200 bg-black"
+                  src={previewItem.dataUrl}
+                />
+              ) : previewItem.dataUrl?.startsWith('data:application/pdf') ? (
+                <iframe title={previewItem.title} src={previewItem.dataUrl} className="h-[70vh] w-full rounded border border-gray-200 bg-white" />
+              ) : (
+                <div className="rounded bg-white p-3 text-xs text-gray-700">
+                  <p>Предпросмотр недоступен для этого формата.</p>
+                  <p className="mt-1 text-gray-500">Тип: {previewItem.mimeType || 'не указан'}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

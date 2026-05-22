@@ -51,6 +51,18 @@ function getChatFallbackModel(primaryModel: string): string | null {
   return null;
 }
 
+function shouldUsePermissionFallback(primaryModel: string, status: number, errorText: string): boolean {
+  if (primaryModel !== MODELS.GPT_5_2) return false;
+  const normalized = (errorText || '').toLowerCase();
+  return (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes('permission_denied') ||
+    normalized.includes('provider returned error') ||
+    normalized.includes('azure')
+  );
+}
+
 /**
  * Вспомогательная функция для преобразования потока с добавлением расчета стоимости
  */
@@ -1255,7 +1267,10 @@ export async function sendTextRequestStreaming(
       if (!response.ok) {
         const errorText = await response.text();
         const fallbackModel = getChatFallbackModel(modelUsed);
-        const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && (
+          (isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText)) ||
+          shouldUsePermissionFallback(modelUsed, response.status, errorText)
+        );
         if (shouldFallback) {
           console.warn(`⚠️ [TEXT STREAM FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
           modelUsed = fallbackModel!;

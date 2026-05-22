@@ -104,6 +104,18 @@ function getChatFallbackModel(primaryModel: string): string | null {
   return null;
 }
 
+function shouldUsePermissionFallback(primaryModel: string, status: number, errorText: string): boolean {
+  if (primaryModel !== MODELS.GPT_5_2) return false;
+  const normalized = (errorText || '').toLowerCase();
+  return (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes('permission_denied') ||
+    normalized.includes('provider returned error') ||
+    normalized.includes('azure')
+  );
+}
+
 type RoutingImageQuality = 'good' | 'moderate' | 'poor';
 
 interface RoutingMetadata {
@@ -507,7 +519,10 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
     let textResponse = await runStage2Request(textModel);
     if (!textResponse.ok) {
       const errorText = await textResponse.text();
-      const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(textModel, textResponse.status, errorText);
+      const shouldFallback = !!fallbackModel && (
+        shouldUseStage2GeoFallback(textModel, textResponse.status, errorText) ||
+        shouldUsePermissionFallback(textModel, textResponse.status, errorText)
+      );
       safeWarn(`[GEO-DEBUG] model=${textModel} status=${textResponse.status} shouldFallback=${shouldFallback} errorSnippet=${errorText.substring(0, 300)}`);
       if (shouldFallback) {
         safeWarn(`⚠️ [TWO-STAGE] Региональная недоступность ${textModel}, переключение на ${fallbackModel}`);
@@ -854,7 +869,10 @@ ${directiveCriteria}`;
     let textResponse = await runStage2Request(textModel);
     if (!textResponse.ok) {
       const errorText = await textResponse.text();
-      const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(textModel, textResponse.status, errorText);
+      const shouldFallback = !!fallbackModel && (
+        shouldUseStage2GeoFallback(textModel, textResponse.status, errorText) ||
+        shouldUsePermissionFallback(textModel, textResponse.status, errorText)
+      );
       if (shouldFallback) {
         safeWarn(`⚠️ [MULTI-TWO-STAGE] Региональная недоступность ${textModel}, переключение на ${fallbackModel}`);
         stage2ModelUsed = fallbackModel!;
@@ -1149,9 +1167,12 @@ export async function sendTextRequest(
     if (!response.ok) {
       const errorText = await response.text();
       const fallbackModel = getChatFallbackModel(selectedModel);
-      const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
+      const shouldFallback = !!fallbackModel && (
+        (isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText)) ||
+        shouldUsePermissionFallback(selectedModel, response.status, errorText)
+      );
       if (shouldFallback) {
-        safeWarn(`⚠️ [CHAT FALLBACK] Модель ${selectedModel} недоступна по региону, переключаемся на ${fallbackModel}`);
+        safeWarn(`⚠️ [CHAT FALLBACK] Модель ${selectedModel} временно недоступна у провайдера, переключаемся на ${fallbackModel}`);
         selectedModel = fallbackModel!;
         response = await sendWithRetries(selectedModel);
       } else {

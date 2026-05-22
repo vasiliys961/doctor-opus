@@ -16,6 +16,39 @@ const PRICE_UNITS_PER_1K_TOKENS_SONNET = 2.0; // 2 единицы за 1000 то
 const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4; // 0.4 единицы за 1000 токенов Gemini Flash
 const MIN_CONSULT_COST = 2;
 const MAX_CONSULT_COST = 20;
+const GPT_54_MODEL = 'openai/gpt-5.4';
+const OPUS_FALLBACK_MODEL = 'anthropic/claude-opus-4.6';
+
+function shouldFallbackFromGpt54(status: number, errorText: string): boolean {
+  const normalized = errorText.toLowerCase();
+  return (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes('permission_denied') ||
+    normalized.includes('provider returned error') ||
+    normalized.includes('azure')
+  );
+}
+
+function normalizeOpenRouterError(status: number, errorText: string): string {
+  const text = (errorText || '').trim();
+  try {
+    const parsed = JSON.parse(text);
+    const nestedMessage = parsed?.error?.metadata?.raw?.error?.message;
+    const directMessage = parsed?.error?.message;
+    const message = nestedMessage || directMessage;
+    if (typeof message === 'string' && message.trim()) {
+      return message.trim();
+    }
+  } catch {
+    // keep raw text fallback
+  }
+
+  if (status === 401 || status === 403) {
+    return 'Выбранная модель временно недоступна у провайдера. Попробуйте повторить запрос или выбрать Opus.';
+  }
+  return text.substring(0, 400) || `HTTP ${status}`;
+}
 
 function estimateConsultCost(params: {
   mode: string;
@@ -266,30 +299,63 @@ export async function POST(request: NextRequest) {
     }
 
     const consultModel =
-      model === 'gpt52' ? 'openai/gpt-5.4' : 
+      model === 'gpt52' ? GPT_54_MODEL : 
       mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.6';
 
-    const payload: any = {
-      model: consultModel,
-      messages: messages,
-      max_tokens: 12000, // Оптимизировано: генетическая консультация
-      temperature: 0.25,
-      stream: useStreaming,
-      stream_options: useStreaming ? { include_usage: true } : undefined,
+    const runOpenRouter = async (targetModel: string) => {
+      const payload: any = {
+        model: targetModel,
+        messages: messages,
+        max_tokens: 12000, // Оптимизировано: генетическая консультация
+        temperature: 0.25,
+        stream: useStreaming,
+        stream_options: useStreaming ? { include_usage: true } : undefined,
+      };
+
+      return fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus',
+        },
+        body: JSON.stringify(payload),
+      });
     };
 
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus',
-      },
-      body: JSON.stringify(payload),
-    });
+    let modelUsed = consultModel;
+    let response = await runOpenRouter(modelUsed);
+
+    if (!response.ok && modelUsed === GPT_54_MODEL) {
+      const gptErrorText = await response.text();
+      if (shouldFallbackFromGpt54(response.status, gptErrorText)) {
+        console.warn(`⚠️ [GENETIC CONSULT] ${GPT_54_MODEL} недоступна, переключаемся на ${OPUS_FALLBACK_MODEL}`);
+        modelUsed = OPUS_FALLBACK_MODEL;
+        response = await runOpenRouter(modelUsed);
+      } else {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Ошибка OpenRouter: ${normalizeOpenRouterError(response.status, gptErrorText)}`,
+          },
+          { status: response.status }
+        );
+      }
+    }
 
     // Режим streaming: проксируем поток OpenRouter как SSE
+    if (!response.ok) {
+      const errorText = await response.text();
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Ошибка OpenRouter: ${normalizeOpenRouterError(response.status, errorText)}`,
+        },
+        { status: response.status }
+      );
+    }
+
     if (useStreaming && response.body) {
       const readableStream = new ReadableStream({
         async start(controller) {
@@ -341,17 +407,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Ошибка OpenRouter: ${response.status} - ${errorText.substring(0, 200)}`,
-        },
-        { status: response.status }
-      );
-    }
-
     const data = await response.json();
     const result = data.choices?.[0]?.message?.content || '';
 
@@ -360,14 +415,14 @@ export async function POST(request: NextRequest) {
     const outputTokens: number = data.usage?.completion_tokens || 0;
 
     const pricePer1k =
-      consultModel.startsWith('google/gemini')
+      modelUsed.startsWith('google/gemini')
         ? PRICE_UNITS_PER_1K_TOKENS_GEMINI
         : PRICE_UNITS_PER_1K_TOKENS_SONNET;
 
     const approxCostUnits = Number(((tokensUsed / 1000) * pricePer1k).toFixed(2));
 
     console.log(
-      `✅ [GENETIC CONSULT] Заключение готово (${consultModel}). Токенов: ${tokensUsed} (in=${inputTokens}, out=${outputTokens}), ~${approxCostUnits} ед.`
+      `✅ [GENETIC CONSULT] Заключение готово (${modelUsed}). Токенов: ${tokensUsed} (in=${inputTokens}, out=${outputTokens}), ~${approxCostUnits} ед.`
     );
 
     return NextResponse.json({
@@ -377,7 +432,7 @@ export async function POST(request: NextRequest) {
       inputTokens,
       outputTokens,
       approxCostUnits,
-      model: consultModel,
+      model: modelUsed,
       mode,
     });
   } catch (error: any) {

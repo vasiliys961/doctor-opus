@@ -13,9 +13,6 @@ export async function GET(request: NextRequest) {
   }
 
   const events = getMobileBridgeEvents(token, Math.max(0, since));
-  if (!events) {
-    return NextResponse.json({ success: false, error: 'session not found or expired' }, { status: 404 });
-  }
 
   return NextResponse.json({ success: true, events });
 }

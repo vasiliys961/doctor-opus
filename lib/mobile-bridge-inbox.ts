@@ -25,8 +25,7 @@ export interface AccumulatedInboxEntry {
   createdAt: string;
 }
 
-export const BRIDGE_ACCUMULATED_INBOX_KEY = 'mobile_bridge_accumulated_inbox_v1';
-const BRIDGE_PATIENT_KEY = 'mobile_bridge_patient_draft';
+export const BRIDGE_ACCUMULATED_INBOX_KEY = 'mobile_bridge_accumulated_inbox_v2';
 
 const TARGET_LABELS: Record<BridgeTarget, string> = {
   auto_route: 'Авто',
@@ -102,35 +101,6 @@ export function readAccumulatedInbox(): AccumulatedInboxEntry[] {
       }
     } catch {
       // ignore broken accumulated storage
-    }
-  }
-
-  // Fallback for legacy/alternate payload: patient inbox draft list
-  const rawPatient = localStorage.getItem(BRIDGE_PATIENT_KEY);
-  if (rawPatient) {
-    try {
-      const parsed = JSON.parse(rawPatient) as Array<{
-        title?: string;
-        text?: string;
-        mimeType?: string;
-        dataUrl?: string;
-        createdAt?: string;
-      }>;
-      if (Array.isArray(parsed)) {
-        parsed.forEach((item, idx) => {
-          normalized.push({
-            id: `legacy-patient-${idx}-${item.createdAt || 'now'}`,
-            target: 'patient_db',
-            title: item.title || `mobile-bridge-${idx + 1}`,
-            text: item.text,
-            mimeType: item.mimeType,
-            dataUrl: item.dataUrl,
-            createdAt: item.createdAt || new Date().toISOString(),
-          });
-        });
-      }
-    } catch {
-      // ignore broken fallback payload
     }
   }
 

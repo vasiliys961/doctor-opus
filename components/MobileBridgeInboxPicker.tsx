@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import {
+  BRIDGE_ACCUMULATED_INBOX_KEY,
   entryToFile,
   getInboxItemTag,
   getInboxTargetLabel,
@@ -29,13 +30,96 @@ export default function MobileBridgeInboxPicker({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [previewItem, setPreviewItem] = useState<AccumulatedInboxEntry | null>(null);
   const [status, setStatus] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
-  const openPicker = () => {
-    const inbox = readAccumulatedInbox();
-    setItems(inbox);
-    setSelectedIds([]);
+  const BRIDGE_SESSION_STORAGE_KEY = 'mobile_bridge_desktop_session_v1';
+  const BRIDGE_EVENT_CURSOR_KEY = 'mobile_bridge_event_cursor_v1';
+
+  const syncInboxFromApi = async (): Promise<AccumulatedInboxEntry[] | null> => {
+    if (typeof window === 'undefined') return;
+    const rawSession = localStorage.getItem(BRIDGE_SESSION_STORAGE_KEY);
+    if (!rawSession) return null;
+
+    let token = '';
+    try {
+      const parsed = JSON.parse(rawSession) as { token?: string };
+      token = parsed.token?.trim() || '';
+    } catch {
+      token = '';
+    }
+    if (!token) return null;
+
+    // Always ask full list from current session to recover previews for legacy compact entries.
+    const since = 0;
+    const response = await fetch(`/api/mobile-bridge/events?token=${encodeURIComponent(token)}&since=0`);
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.success) return null;
+
+    const events = Array.isArray(data.events) ? data.events : [];
+    if (events.length === 0) return readAccumulatedInbox();
+
+    const existing = readAccumulatedInbox();
+    const byId = new Map(existing.map((item) => [item.id, item] as const));
+    let maxId = since;
+
+    events.forEach((event) => {
+      const eventId = Number(event?.id);
+      const createdAt = String(event?.createdAt || new Date().toISOString());
+      const target = String(event?.target || 'patient_db') as AccumulatedInboxEntry['target'];
+      const entry: AccumulatedInboxEntry = {
+        id: `${eventId || Date.now()}-${createdAt}-${target}`,
+        target,
+        title: String(event?.title || 'mobile-upload'),
+        text: typeof event?.text === 'string' ? event.text : undefined,
+        mimeType: typeof event?.mimeType === 'string' ? event.mimeType : undefined,
+        dataUrl: typeof event?.dataUrl === 'string' ? event.dataUrl : undefined,
+        createdAt,
+      };
+      const prev = byId.get(entry.id);
+      if (!prev) {
+        byId.set(entry.id, entry);
+      } else {
+        // Refresh entry when server now has richer payload (e.g. dataUrl for preview)
+        byId.set(entry.id, {
+          ...prev,
+          ...entry,
+          dataUrl: entry.dataUrl || prev.dataUrl,
+          mimeType: entry.mimeType || prev.mimeType,
+        });
+      }
+      if (Number.isFinite(eventId)) maxId = Math.max(maxId, eventId);
+    });
+    const merged = Array.from(byId.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    try {
+      localStorage.setItem(BRIDGE_ACCUMULATED_INBOX_KEY, JSON.stringify(merged.slice(0, 200)));
+    } catch {
+      // Storage may overflow on large payloads; keep UI data in memory anyway.
+    }
+    try {
+      localStorage.setItem(BRIDGE_EVENT_CURSOR_KEY, JSON.stringify({ token, lastEventId: maxId }));
+    } catch {
+      // ignore cursor write errors
+    }
+    return merged;
+  };
+
+  const openPicker = async () => {
+    setSyncing(true);
     setStatus('');
-    setOpen(true);
+    try {
+      const merged = await syncInboxFromApi();
+      if (merged) {
+        setItems(merged);
+      } else {
+        setItems(readAccumulatedInbox());
+      }
+    } catch {
+      setItems(readAccumulatedInbox());
+    } finally {
+      setSelectedIds([]);
+      setOpen(true);
+      setSyncing(false);
+    }
   };
 
   const toggleSelect = (id: string) => {
@@ -53,6 +137,15 @@ export default function MobileBridgeInboxPicker({
       return;
     }
     try {
+      const broken = selected.find((item) => {
+        const mime = (item.mimeType || '').toLowerCase();
+        const isMedia = mime.startsWith('image/') || mime.startsWith('video/') || mime.includes('pdf');
+        return isMedia && !item.dataUrl;
+      });
+      if (broken) {
+        setStatus('Для некоторых файлов нет тела данных. Повторите отправку со смартфона.');
+        return;
+      }
       const files = selected.map((item) => entryToFile(item));
       onImport(files);
       setStatus(`Добавлено файлов: ${files.length}.`);
@@ -65,13 +158,15 @@ export default function MobileBridgeInboxPicker({
   return (
     <>
       <button
-        onClick={openPicker}
+        onClick={() => {
+          void openPicker();
+        }}
         className={
           buttonClassName ||
           'px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors font-semibold'
         }
       >
-        📥 Загрузить из накопителя
+        {syncing ? '⏳ Синхронизация...' : '📥 Загрузить из накопителя'}
       </button>
 
       {open && (
@@ -167,6 +262,13 @@ export default function MobileBridgeInboxPicker({
             <div className="mt-3 max-h-[70vh] overflow-auto rounded border border-gray-200 bg-gray-50 p-2">
               {previewItem.dataUrl?.startsWith('data:image/') ? (
                 <img src={previewItem.dataUrl} alt={previewItem.title} className="mx-auto max-h-[65vh] rounded border border-gray-200" />
+              ) : previewItem.dataUrl?.startsWith('data:video/') ? (
+                <video
+                  controls
+                  playsInline
+                  className="mx-auto max-h-[65vh] w-full rounded border border-gray-200 bg-black"
+                  src={previewItem.dataUrl}
+                />
               ) : previewItem.dataUrl?.startsWith('data:application/pdf') ? (
                 <iframe title={previewItem.title} src={previewItem.dataUrl} className="h-[65vh] w-full rounded border border-gray-200 bg-white" />
               ) : (

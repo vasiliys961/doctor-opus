@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import { saveAnalysisResult, getAllPatients, Patient } from '@/lib/patient-db'
 import LibrarySearch from './LibrarySearch'
+import { markdownToPlainText } from '@/lib/markdown-to-plain-text'
 
 interface AnalysisResultProps {
   result: string
@@ -87,7 +88,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   }
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(result)
+    navigator.clipboard.writeText(markdownToPlainText(result))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -540,7 +541,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         })
       } else {
         // Fallback: копируем текст в буфер обмена
-        await navigator.clipboard.writeText(result)
+        await navigator.clipboard.writeText(markdownToPlainText(result))
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
         alert('Текст скопирован в буфер обмена!')
@@ -550,7 +551,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       if (error.name !== 'AbortError') {
         console.error('Ошибка при попытке поделиться:', error)
         // Fallback: копируем текст
-        await navigator.clipboard.writeText(result)
+        await navigator.clipboard.writeText(markdownToPlainText(result))
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
         alert('Текст скопирован в буфер обмена!')

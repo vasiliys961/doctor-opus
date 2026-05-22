@@ -48,6 +48,7 @@ export async function middleware(request: NextRequest) {
     '/api/extract',           // Гостевое извлечение данных
     '/api/protocol',          // Генерация протокола для гостя
     '/api/protocols/search',  // Поиск протоколов для гостя
+    '/api/mobile-bridge',     // Публичный мост смартфон -> накопитель (доступ по одноразовому токену сессии)
   ];
 
   const isPublicPath = publicPaths.some(p =>

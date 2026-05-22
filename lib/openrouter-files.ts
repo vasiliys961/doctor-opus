@@ -62,6 +62,18 @@ function getChatFallbackModel(primaryModel: string): string | null {
   return null;
 }
 
+function shouldUsePermissionFallback(primaryModel: string, status: number, errorText: string): boolean {
+  if (primaryModel !== MODELS.GPT_5_2) return false;
+  const normalized = (errorText || '').toLowerCase();
+  return (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes('permission_denied') ||
+    normalized.includes('provider returned error') ||
+    normalized.includes('azure')
+  );
+}
+
 /**
  * Извлечение текста из PDF через Gemini Flash (Vision API)
  * Используется как fallback для моделей, не поддерживающих PDF нативно
@@ -335,9 +347,12 @@ export async function sendTextRequestWithFiles(
     if (!response.ok) {
       const errorText = await response.text();
       const fallbackModel = getChatFallbackModel(modelUsed);
-      const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
+      const shouldFallback = !!fallbackModel && (
+        (isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText)) ||
+        shouldUsePermissionFallback(modelUsed, response.status, errorText)
+      );
       if (shouldFallback) {
-        console.warn(`⚠️ [FILES FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
+        console.warn(`⚠️ [FILES FALLBACK] ${modelUsed} временно недоступна у провайдера, переключаемся на ${fallbackModel}`);
         modelUsed = fallbackModel!;
         response = await runRequest(modelUsed);
       } else {
@@ -477,9 +492,12 @@ export async function sendTextRequestStreamingWithFiles(
       if (!response.ok) {
         const errorText = await response.text();
         const fallbackModel = getChatFallbackModel(modelUsed);
-        const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && (
+          (isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText)) ||
+          shouldUsePermissionFallback(modelUsed, response.status, errorText)
+        );
         if (shouldFallback) {
-          console.warn(`⚠️ [FILES STREAM FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
+          console.warn(`⚠️ [FILES STREAM FALLBACK] ${modelUsed} временно недоступна у провайдера, переключаемся на ${fallbackModel}`);
           modelUsed = fallbackModel!;
           response = await runStreamingRequest(modelUsed);
         } else {

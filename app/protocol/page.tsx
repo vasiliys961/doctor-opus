@@ -17,6 +17,7 @@ import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { saveDocument, getDocumentChunks, searchLibraryLocal } from '@/lib/library-db'
 import { anonymizeText } from '@/lib/anonymization'
+import { markdownToPlainText } from '@/lib/markdown-to-plain-text'
 import mammoth from 'mammoth'
 
 declare global {
@@ -537,6 +538,13 @@ export default function ProtocolPage() {
     }
   }
 
+  const handleCopyProtocol = async () => {
+    if (!protocol) return
+    const plainText = markdownToPlainText(protocol)
+    await navigator.clipboard.writeText(plainText)
+    alert('Скопировано без Markdown-разметки')
+  }
+
   return (
     <>
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -744,7 +752,7 @@ export default function ProtocolPage() {
             </div>
             {protocol && (
               <div className="flex gap-2">
-                <button onClick={() => { navigator.clipboard.writeText(protocol); alert('Скопировано'); }} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm">📋</button>
+                <button onClick={handleCopyProtocol} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm">📋</button>
                 <button onClick={handleExportToDocx} className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">📄 DOCX</button>
               </div>
             )}

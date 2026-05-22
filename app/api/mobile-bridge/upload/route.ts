@@ -3,7 +3,7 @@ import { pushMobileBridgeEvent } from '@/lib/mobile-bridge-store';
 
 export const runtime = 'nodejs';
 
-const MAX_DATA_URL_LENGTH = 12 * 1024 * 1024; // ~12 MB of base64 string
+const MAX_DATA_URL_LENGTH = 35 * 1024 * 1024; // allows ~20MB binary payload after base64 overhead
 
 function normalizeTarget(
   value: string,
@@ -156,10 +156,6 @@ export async function POST(request: NextRequest) {
     text,
     dataUrl,
   });
-
-  if (!event) {
-    return NextResponse.json({ success: false, error: 'session not found or expired' }, { status: 404 });
-  }
 
   return NextResponse.json({ success: true, eventId: event.id, routedTarget: resolvedTarget });
 }

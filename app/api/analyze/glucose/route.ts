@@ -5,7 +5,19 @@ import { getRateLimitKey } from '@/lib/rate-limiter'
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
-const MODEL = 'openai/gpt-5.4'
+const PRIMARY_MODEL = 'openai/gpt-5.4'
+const FALLBACK_MODEL = 'anthropic/claude-sonnet-4.6'
+
+function shouldFallbackFromGpt54(status: number, errorText: string): boolean {
+  const normalized = (errorText || '').toLowerCase()
+  return (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes('permission_denied') ||
+    normalized.includes('provider returned error') ||
+    normalized.includes('azure')
+  )
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,7 +51,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: billing.error || 'Insufficient balance' }, { status: 402 })
     }
 
-    console.log('🩸 [GLUCOSE] Анализ гликемического профиля, модель:', MODEL)
+    console.log('🩸 [GLUCOSE] Анализ гликемического профиля, модель:', PRIMARY_MODEL)
 
     // Суточный профиль по часам (топ проблемные периоды)
     const problematicHours = hourlyStats
@@ -102,20 +114,37 @@ ${file ? '\nПредоставлен AGP-график (см. изображен�
       messages.push({ role: 'user', content: prompt })
     }
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.NEXTAUTH_URL || 'https://doctor-opus.ru',
-        'X-Title': 'Doctor Opus — Glucose Profile',
-      },
-      body: JSON.stringify({ model: MODEL, messages, max_tokens: 2500, temperature: 0.2 }),
-    })
+    const runRequest = async (model: string) => {
+      return fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.NEXTAUTH_URL || 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus — Glucose Profile',
+        },
+        body: JSON.stringify({ model, messages, max_tokens: 2500, temperature: 0.2 }),
+      })
+    }
+
+    let modelUsed = PRIMARY_MODEL
+    let response = await runRequest(modelUsed)
 
     if (!response.ok) {
       const err = await response.text()
-      console.error('❌ [GLUCOSE] OpenRouter error:', err)
+      if (modelUsed === PRIMARY_MODEL && shouldFallbackFromGpt54(response.status, err)) {
+        console.warn(`⚠️ [GLUCOSE] ${PRIMARY_MODEL} недоступна, переключаемся на ${FALLBACK_MODEL}`)
+        modelUsed = FALLBACK_MODEL
+        response = await runRequest(modelUsed)
+      } else {
+        console.error('❌ [GLUCOSE] OpenRouter error:', err)
+        return NextResponse.json({ success: false, error: 'AI error' }, { status: 500 })
+      }
+    }
+
+    if (!response.ok) {
+      const err = await response.text()
+      console.error('❌ [GLUCOSE] OpenRouter fallback error:', err)
       return NextResponse.json({ success: false, error: 'AI error' }, { status: 500 })
     }
 
@@ -123,7 +152,7 @@ ${file ? '\nПредоставлен AGP-график (см. изображен�
     const result = data.choices?.[0]?.message?.content || ''
     console.log('✅ [GLUCOSE] Анализ завершён, символов:', result.length)
 
-    return NextResponse.json({ success: true, result, model: MODEL })
+    return NextResponse.json({ success: true, result, model: modelUsed })
   } catch (error: any) {
     console.error('❌ [GLUCOSE] Ошибка:', error)
     return NextResponse.json({ success: false, error: 'Glucose analysis error' }, { status: 500 })

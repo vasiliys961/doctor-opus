@@ -182,13 +182,16 @@ function processSSELine(
 
       return { content, done: false }
     } catch (e) {
-      // Если это не JSON, возможно это просто текст
-      if (data && data.length > 0 && !data.includes('[DONE]')) {
-        debugWarn('⚠️ [STREAMING UTILS] Ошибка парсинга JSON:', e, 'data:', data.substring(0, 100))
-        // Пробуем добавить как текст напрямую
-        return { content: data, done: false }
+      // Текстовый fallback допустим только при реальной ошибке JSON.parse.
+      // Если JSON распарсился, но внутри пришла ошибка провайдера, пробрасываем её наружу.
+      if (e instanceof SyntaxError) {
+        if (data && data.length > 0 && !data.includes('[DONE]')) {
+          debugWarn('⚠️ [STREAMING UTILS] Ошибка парсинга JSON:', e, 'data:', data.substring(0, 100))
+          return { content: data, done: false }
+        }
+        return { content: '', done: false }
       }
-      return { content: '', done: false }
+      throw e
     }
   } else if (line.trim() && !line.startsWith(':')) {
     // Если строка не начинается с "data: ", пробуем распарсить как JSON напрямую
