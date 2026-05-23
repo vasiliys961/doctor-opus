@@ -60,7 +60,7 @@ export async function compressMedicalImage(
  * Накладывает черные плашки на зоны риска (ФИО пациента) — КЛИЕНТ.
  * РАСШИРЕННАЯ ВЕРСИЯ: закрашивает верх, низ и боковые края.
  */
-export async function anonymizeMedicalImage(file: File): Promise<File> {
+export async function anonymizeMedicalImage(file: File, mode: 'strict' | 'soft' = 'strict'): Promise<File> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.src = URL.createObjectURL(file);
@@ -79,23 +79,30 @@ export async function anonymizeMedicalImage(file: File): Promise<File> {
 
       // Накладываем плашки (расширенные зоны)
       ctx.fillStyle = 'black';
-      
-      const topPercent = 0.10;      // 10% сверху
-      const bottomPercent = 0.15;   // 15% снизу (увеличено для скрытия печатей и подписей)
-      const sidePercent = 0.12;     // 12% с боков по всей высоте
-      
-      const topRows = Math.floor(canvas.height * topPercent);
-      const bottomRows = Math.floor(canvas.height * bottomPercent);
-      const sideCols = Math.floor(canvas.width * sidePercent);
 
-      // 1. Верхняя полоса
-      ctx.fillRect(0, 0, canvas.width, topRows);
-      // 2. Нижняя полоса
-      ctx.fillRect(0, canvas.height - bottomRows, canvas.width, bottomRows);
-      // 3. Левый край (по всей высоте)
-      ctx.fillRect(0, 0, sideCols, canvas.height);
-      // 4. Правый край (по всей высоте)
-      ctx.fillRect(canvas.width - sideCols, 0, sideCols, canvas.height);
+      if (mode === 'soft') {
+        // Щадящий режим для радиологии:
+        // скрываем только верхнюю сервисную строку, не закрывая поле снимка по краям/снизу.
+        const topRows = Math.floor(canvas.height * 0.08); // 8% сверху
+        ctx.fillRect(0, 0, canvas.width, topRows);
+      } else {
+        const topPercent = 0.10;      // 10% сверху
+        const bottomPercent = 0.15;   // 15% снизу (увеличено для скрытия печатей и подписей)
+        const sidePercent = 0.12;     // 12% с боков по всей высоте
+
+        const topRows = Math.floor(canvas.height * topPercent);
+        const bottomRows = Math.floor(canvas.height * bottomPercent);
+        const sideCols = Math.floor(canvas.width * sidePercent);
+
+        // 1. Верхняя полоса
+        ctx.fillRect(0, 0, canvas.width, topRows);
+        // 2. Нижняя полоса
+        ctx.fillRect(0, canvas.height - bottomRows, canvas.width, bottomRows);
+        // 3. Левый край (по всей высоте)
+        ctx.fillRect(0, 0, sideCols, canvas.height);
+        // 4. Правый край (по всей высоте)
+        ctx.fillRect(canvas.width - sideCols, 0, sideCols, canvas.height);
+      }
 
       canvas.toBlob((blob) => {
         if (!blob) {

@@ -436,7 +436,8 @@ export default function ChatPage() {
       try {
         const processed = await Promise.all(filesToSend.map(async (f) => {
           if (f.type.startsWith('image/')) {
-            return await anonymizeMedicalImage(f);
+            const anonymizationMode = specialty === 'radiology' ? 'soft' : 'strict';
+            return await anonymizeMedicalImage(f, anonymizationMode);
           }
           if (f.name.toLowerCase().endsWith('.docx') || f.name.toLowerCase().endsWith('.doc')) {
             return await anonymizeWordFile(f);
