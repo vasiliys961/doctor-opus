@@ -5,7 +5,8 @@ import {
   getAllDocuments, 
   saveDocument, 
   deleteDocument, 
-  LibraryDocument 
+  LibraryDocument,
+  type LibraryChunkInput
 } from '@/lib/library-db';
 
 const BRIDGE_LIBRARY_KEY = 'mobile_bridge_library_draft';
@@ -16,9 +17,31 @@ export default function LibraryPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>('');
+  const [pdfJsLoaded, setPdfJsLoaded] = useState(false);
+  const [indexingMode, setIndexingMode] = useState<'fast' | 'full'>('fast');
 
   useEffect(() => {
     fetchDocuments();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const w = window as any;
+    if (w.pdfjsLib) {
+      setPdfJsLoaded(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = '/pdfjs/pdf.min.js';
+    script.onload = () => {
+      const pdfjs = (window as any).pdfjsLib;
+      if (pdfjs) {
+        pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js';
+        setPdfJsLoaded(true);
+      }
+    };
+    script.onerror = () => setPdfJsLoaded(false);
+    document.head.appendChild(script);
   }, []);
 
   useEffect(() => {
@@ -65,6 +88,109 @@ export default function LibraryPage() {
     }
   };
 
+  const chunkPageText = (
+    text: string,
+    pageId: number,
+    chunkSize: number = 1200,
+    overlap: number = 150
+  ): LibraryChunkInput[] => {
+    const normalized = text.replace(/\s+/g, ' ').trim();
+    if (!normalized) return [];
+    if (normalized.length <= chunkSize) {
+      return [{ content: normalized, pageId, sourceType: 'text' }];
+    }
+
+    const result: LibraryChunkInput[] = [];
+    let offset = 0;
+    while (offset < normalized.length) {
+      let end = Math.min(normalized.length, offset + chunkSize);
+      if (end < normalized.length) {
+        const sentenceBoundary = normalized.lastIndexOf('. ', end);
+        if (sentenceBoundary > offset + Math.floor(chunkSize * 0.6)) {
+          end = sentenceBoundary + 1;
+        }
+      }
+      const part = normalized.slice(offset, end).trim();
+      if (part.length > 30) {
+        result.push({ content: part, pageId, sourceType: 'text' });
+      }
+      if (end >= normalized.length) break;
+      offset = Math.max(end - overlap, offset + 1);
+    }
+    return result;
+  };
+
+  const inferMedicalTags = (text: string, fileName: string): string[] => {
+    const haystack = `${fileName} ${text}`.toLowerCase();
+    const tags = new Set<string>();
+    if (/(экг|ecg|qt|ритм|qrs|st\s?segment)/.test(haystack)) tags.add('ecg');
+    if (/(дермат|nevus|melanoma|меланом|кож|lesion)/.test(haystack)) tags.add('dermatology');
+    if (/(рентген|xray|x-ray|thorax|легк)/.test(haystack)) tags.add('xray');
+    if (/(кт|\bct\b|томограф)/.test(haystack)) tags.add('ct');
+    if (/(мрт|mri)/.test(haystack)) tags.add('mri');
+    if (/(узи|ultrasound|эхо)/.test(haystack)) tags.add('ultrasound');
+    if (/(таблиц|диаграм|схем|figure|fig\.|chart)/.test(haystack)) tags.add('visual');
+    if (/(фармак|доз|терап|guideline|рекомендац)/.test(haystack)) tags.add('clinical-guidance');
+    return Array.from(tags);
+  };
+
+  const extractPdfChunksInBrowser = async (
+    file: File,
+    mode: 'fast' | 'full'
+  ): Promise<LibraryChunkInput[]> => {
+    if (typeof window === 'undefined') return [];
+    const pdfjs = (window as any).pdfjsLib;
+    if (!pdfjs) return [];
+
+    const arrayBuffer = await file.arrayBuffer();
+    const loadingTask = pdfjs.getDocument({ data: arrayBuffer, verbosity: 0 });
+    const pdf = await loadingTask.promise;
+    const chunks: LibraryChunkInput[] = [];
+    const maxPages = mode === 'fast' ? Math.min(pdf.numPages, 220) : pdf.numPages;
+    const chunkSize = mode === 'fast' ? 1300 : 1000;
+    const overlap = mode === 'fast' ? 120 : 180;
+
+    for (let pageNum = 1; pageNum <= maxPages; pageNum += 1) {
+      setProgress(`Извлечение текста страницы ${pageNum}/${maxPages} (${mode === 'fast' ? 'быстрый' : 'полный'} режим)...`);
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageText = (textContent.items || [])
+        .map((item: any) => String(item?.str || '').trim())
+        .filter(Boolean)
+        .join(' ');
+      const pageChunks = chunkPageText(pageText, pageNum, chunkSize, overlap);
+      const tags = inferMedicalTags(pageText, file.name);
+      if (pageChunks.length > 0) {
+        chunks.push(
+          ...pageChunks.map(chunk => ({
+            ...chunk,
+            tags,
+          }))
+        );
+      } else if (mode === 'full') {
+        // В полном режиме оставляем "якорь" страницы для последующего сопоставления,
+        // даже если текстового слоя почти нет.
+        chunks.push({
+          content: `Страница ${pageNum}: визуальный контент без извлеченного текстового слоя.`,
+          pageId: pageNum,
+          sourceType: 'caption',
+          tags: tags.length > 0 ? tags : ['visual'],
+        });
+      }
+    }
+
+    if (mode === 'fast' && pdf.numPages > maxPages) {
+      chunks.push({
+        content: `Документ содержит ${pdf.numPages} страниц. В быстром режиме проиндексированы первые ${maxPages}. Для полного охвата включите режим "Полный".`,
+        pageId: maxPages,
+        sourceType: 'caption',
+        tags: ['indexing-note'],
+      });
+    }
+
+    return chunks;
+  };
+
   const processPdfUpload = async (file: File) => {
     if (file.type !== 'application/pdf') {
       throw new Error('Для библиотеки поддерживается только PDF');
@@ -72,31 +198,48 @@ export default function LibraryPage() {
 
     setUploading(true);
     setError(null);
-    setProgress('Отправка файла на локальный сервер...');
+    setProgress(`Подготовка PDF в браузере (${indexingMode === 'fast' ? 'быстрый' : 'полный'} режим)...`);
+    let chunks: Array<string | LibraryChunkInput> = [];
 
-    const formData = new FormData();
-    formData.append('file', file);
+    if (pdfJsLoaded) {
+      try {
+        chunks = await extractPdfChunksInBrowser(file, indexingMode);
+      } catch {
+        chunks = [];
+      }
+    }
 
-    const response = await fetch('/api/library/upload', {
-      method: 'POST',
-      body: formData,
-    });
+    // Fallback: если браузерный путь недоступен или PDF без текстового слоя.
+    if (chunks.length === 0) {
+      setProgress('Локальное извлечение недоступно. Отправка файла на сервер...');
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch('/api/library/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-    const result = await response.json();
-    if (!result.success) {
-      throw new Error(result.error || 'Ошибка при обработке PDF');
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Ошибка при обработке PDF');
+      }
+      chunks = (result.data.chunks || []).map((content: string) => ({
+        content,
+        sourceType: 'text' as const,
+        tags: inferMedicalTags(content, file.name),
+      }));
     }
 
     setProgress('Сохранение в локальную базу...');
     const newDoc: LibraryDocument = {
       id: crypto.randomUUID(),
-      name: result.data.name,
-      size: result.data.size,
-      uploaded_at: result.data.uploaded_at,
-      chunksCount: result.data.chunks.length
+      name: file.name,
+      size: file.size,
+      uploaded_at: new Date().toISOString(),
+      chunksCount: chunks.length
     };
 
-    await saveDocument(newDoc, result.data.chunks);
+    await saveDocument(newDoc, chunks);
     await fetchDocuments();
     setProgress('');
     setUploading(false);
@@ -154,6 +297,38 @@ export default function LibraryPage() {
               </p>
               <p className="text-xs text-primary-500">До 100 МБ • Обработка на локальном сервере</p>
             </div>
+            <div className="mb-3 flex w-full items-center justify-center gap-2 px-4">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIndexingMode('fast');
+                }}
+                className={`rounded px-2 py-1 text-xs font-semibold ${
+                  indexingMode === 'fast'
+                    ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                    : 'bg-white text-gray-600 border border-gray-300'
+                }`}
+              >
+                Быстрый
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIndexingMode('full');
+                }}
+                className={`rounded px-2 py-1 text-xs font-semibold ${
+                  indexingMode === 'full'
+                    ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
+                    : 'bg-white text-gray-600 border border-gray-300'
+                }`}
+              >
+                Полный
+              </button>
+            </div>
             {!uploading && (
               <input 
                 type="file" 
@@ -175,6 +350,11 @@ export default function LibraryPage() {
             {error.includes('Python') && (
               <p className="text-xs mt-2 bg-red-100 p-2 rounded">
                 💡 Установите PyMuPDF: <code className="font-mono">pip install pymupdf</code>
+              </p>
+            )}
+            {error.includes('PDF') && (
+              <p className="text-xs mt-2 bg-red-100 p-2 rounded">
+                💡 Если у файла скан без текстового слоя — переключитесь на режим "Полный".
               </p>
             )}
           </div>

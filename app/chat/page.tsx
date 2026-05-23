@@ -11,7 +11,7 @@ import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { ChatSpecialistSelector } from '@/components/ChatSpecialistSelector'
 import { Specialty } from '@/lib/prompts'
-import { searchLibraryLocal } from '@/lib/library-db'
+import { searchLibraryLocal, searchLibraryLocalWithMeta } from '@/lib/library-db'
 import ImageEditor from '@/components/ImageEditor'
 import { anonymizeMedicalImage } from '@/lib/image-compression'
 import { anonymizeText } from '@/lib/anonymization'
@@ -88,6 +88,9 @@ export default function ChatPage() {
     files?: Array<{ name: string; size: number; type: string }>;
     cost?: number;
     model?: string;
+    ragRequested?: boolean;
+    ragUsed?: boolean;
+    ragSources?: string[];
   }>>([])
   const [loading, setLoading] = useState(false)
   const [showAudioUpload, setShowAudioUpload] = useState(false)
@@ -403,14 +406,25 @@ export default function ChatPage() {
     setLoading(true)
 
     let userMessage = message || (selectedFiles.length > 0 ? 'Проанализируйте прикрепленные файлы' : '')
+    let ragRequested = false
+    let ragUsed = false
+    let ragSources: string[] = []
     
     // Автоматический поиск в библиотеке (RAG), если включен тумблер
     if (useLibrary && message.trim()) {
+      ragRequested = true
       setSearchingLibrary(true)
       try {
-        const results = await searchLibraryLocal(message, 3)
-        if (results.length > 0) {
+        const hits = await searchLibraryLocalWithMeta(message, 3)
+        if (hits.length > 0) {
+          const results = hits.map(hit => hit.content)
+          ragSources = hits.map((hit, idx) => {
+            const name = hit.documentName || `Документ ${idx + 1}`
+            const pagePart = Number.isFinite(Number(hit.pageId)) ? `стр. ${hit.pageId}` : 'стр. ?'
+            return `${name} (${pagePart})`
+          })
           userMessage += `\n\n### КОНТЕКСТ ИЗ БИБЛИОТЕКИ:\n${results.join('\n---\n')}`
+          ragUsed = true
         }
       } catch (err) {
         console.error('Auto library search error:', err)
@@ -461,7 +475,10 @@ export default function ChatPage() {
     setMessages(prev => [...prev, { 
       role: 'user', 
       content: userMessage,
-      files: filesInfo.length > 0 ? filesInfo : undefined
+      files: filesInfo.length > 0 ? filesInfo : undefined,
+      ragRequested: ragRequested || undefined,
+      ragUsed: ragRequested ? ragUsed : undefined,
+      ragSources: ragRequested && ragUsed ? ragSources.slice(0, 3) : undefined
     }])
 
     const assistantMessageIndex = messages.length + 1
@@ -991,6 +1008,24 @@ export default function ChatPage() {
                         📎 <span className="max-w-[150px] sm:max-w-none truncate">{file.name}</span>
                       </span>
                     ))}
+                  </div>
+                )}
+                {msg.role === 'user' && msg.ragRequested && (
+                  <div className="mb-2">
+                    <span
+                      className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold ${
+                        msg.ragUsed
+                          ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                          : 'bg-amber-100 text-amber-700 border border-amber-200'
+                      }`}
+                    >
+                      {msg.ragUsed ? '📚 RAG: контекст найден' : '📚 RAG: контекст не найден'}
+                    </span>
+                    {msg.ragUsed && msg.ragSources && msg.ragSources.length > 0 && (
+                      <div className="mt-1 text-[10px] text-slate-600">
+                        Источники: {msg.ragSources.join('; ')}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="prose prose-sm max-w-none text-sm sm:text-base">
