@@ -1,12 +1,51 @@
 /**
  * Утилиты для обработки Server-Sent Events (SSE) streaming
  */
+import { calculateCost } from './cost-calculator'
 
 export interface StreamingHandler {
   onChunk: (content: string, accumulatedText: string) => void
   onUsage?: (usage: { total_cost: number; prompt_tokens: number; completion_tokens: number; model?: string }) => void
   onError?: (error: Error) => void
   onComplete?: (finalText: string) => void
+}
+
+function toFiniteNumber(value: unknown): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function resolveStreamingUsage(usage: any, model?: string): {
+  total_cost: number
+  prompt_tokens: number
+  completion_tokens: number
+} {
+  const promptTokens = toFiniteNumber(usage?.prompt_tokens)
+  const completionTokens = toFiniteNumber(usage?.completion_tokens)
+
+  const directTotalCost = Number(usage?.total_cost)
+  if (Number.isFinite(directTotalCost) && directTotalCost >= 0) {
+    return {
+      total_cost: directTotalCost,
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+    }
+  }
+
+  if (model) {
+    const estimated = calculateCost(promptTokens, completionTokens, model).totalCostUnits
+    return {
+      total_cost: estimated,
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+    }
+  }
+
+  return {
+    total_cost: 0,
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+  }
 }
 
 const STREAMING_DEBUG_ENABLED =
@@ -154,15 +193,21 @@ function processSSELine(
       
       // Проверяем наличие статистики использования (usage)
       if (json.usage && handler.onUsage) {
-        // Мы вызываем onUsage только если есть total_cost или это одиночный запрос (не последовательный)
-        // Чтобы не сбивать счетчик промежуточными данными
-        if (json.usage.total_cost !== undefined || json.usage.total_tokens !== undefined) {
+        // Пропускаем "пустые" usage-пакеты, но принимаем как точные, так и токен-основанные пакеты.
+        if (
+          json.usage.total_cost !== undefined ||
+          json.usage.total_tokens !== undefined ||
+          json.usage.prompt_tokens !== undefined ||
+          json.usage.completion_tokens !== undefined
+        ) {
+          const usageModel = typeof json.model === 'string' ? json.model : undefined
+          const resolved = resolveStreamingUsage(json.usage, usageModel)
           debugLog('📊 [STREAMING UTILS] Получена статистика использования:', json.usage)
           handler.onUsage({
-            total_cost: json.usage.total_cost || 0,
-            prompt_tokens: json.usage.prompt_tokens || 0,
-            completion_tokens: json.usage.completion_tokens || 0,
-            model: json.model
+            total_cost: resolved.total_cost,
+            prompt_tokens: resolved.prompt_tokens,
+            completion_tokens: resolved.completion_tokens,
+            model: usageModel
           })
         }
       }

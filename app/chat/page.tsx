@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import { logUsage } from '@/lib/simple-logger'
+import { calculateCost } from '@/lib/cost-calculator'
 import { ChatSpecialistSelector } from '@/components/ChatSpecialistSelector'
 import { Specialty } from '@/lib/prompts'
 import { searchLibraryLocal } from '@/lib/library-db'
@@ -43,6 +44,39 @@ const getDisplayModelName = (model: 'opus' | 'sonnet' | 'gpt52' | 'gemini') => {
   if (model === 'opus') return 'anthropic/claude-opus-4.6';
   if (model === 'gemini') return 'google/gemini-3-flash-preview';
   return model;
+};
+
+const formatUnknownError = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const asRecord = value as Record<string, unknown>;
+    const message = asRecord.message;
+    if (typeof message === 'string' && message.trim()) return message;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return 'Неизвестная ошибка';
+    }
+  }
+  return String(value ?? 'Неизвестная ошибка');
+};
+
+const resolveUsageCost = (
+  usage: { total_cost?: number; prompt_tokens?: number; completion_tokens?: number } | undefined,
+  modelName: string
+): number | undefined => {
+  if (!usage) return undefined;
+
+  const direct = Number(usage.total_cost);
+  if (Number.isFinite(direct) && direct >= 0) return direct;
+
+  const inputTokens = Number(usage.prompt_tokens);
+  const outputTokens = Number(usage.completion_tokens);
+  if (Number.isFinite(inputTokens) && Number.isFinite(outputTokens)) {
+    return calculateCost(inputTokens, outputTokens, modelName).totalCostUnits;
+  }
+
+  return undefined;
 };
 
 export default function ChatPage() {
@@ -572,12 +606,13 @@ export default function ChatPage() {
                     }
 
                     if (json.error) {
+                      const errorText = formatUnknownError(json.error)
                       setMessages(prev => {
                         const newMessages = [...prev]
                         if (newMessages[assistantMessageIndex]) {
                           newMessages[assistantMessageIndex] = {
                             role: 'assistant',
-                            content: `❌ Ошибка: ${json.error}`
+                            content: `❌ Ошибка: ${errorText}`
                           }
                         }
                         return newMessages
@@ -587,14 +622,16 @@ export default function ChatPage() {
                     }
 
                     // Обработка статистики использования
-                    if (json.usage && json.usage.total_cost) {
+                    if (json.usage) {
+                      const usageModel = json.model || displayModelName
+                      const resolvedCost = resolveUsageCost(json.usage, usageModel)
                       setMessages(prev => {
                         const newMessages = [...prev]
                         if (newMessages[assistantMessageIndex]) {
                           newMessages[assistantMessageIndex] = {
                             ...newMessages[assistantMessageIndex],
-                            cost: json.usage.total_cost,
-                            model: json.model || displayModelName
+                            cost: resolvedCost ?? newMessages[assistantMessageIndex].cost,
+                            model: usageModel
                           }
                         }
                         return newMessages
@@ -602,9 +639,9 @@ export default function ChatPage() {
 
                       logUsage({
                         section: 'chat',
-                        model: json.model || displayModelName,
-                        inputTokens: json.usage.prompt_tokens,
-                        outputTokens: json.usage.completion_tokens,
+                        model: usageModel,
+                        inputTokens: Number(json.usage.prompt_tokens) || 0,
+                        outputTokens: Number(json.usage.completion_tokens) || 0,
                         specialty: specialty
                       })
                       continue
@@ -618,7 +655,7 @@ export default function ChatPage() {
                         const newMessages = [...prev]
                         if (newMessages[assistantMessageIndex]) {
                           newMessages[assistantMessageIndex] = {
-                            role: 'assistant',
+                            ...newMessages[assistantMessageIndex],
                             content: accumulatedText
                           }
                         } else {
@@ -662,7 +699,7 @@ export default function ChatPage() {
               outputTokens: 1200,
             })
           } else {
-            setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${data.error}` }])
+            setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${formatUnknownError(data.error)}` }])
           }
         }
       } else {
@@ -730,12 +767,13 @@ export default function ChatPage() {
                     }
 
                     if (json.error) {
+                      const errorText = formatUnknownError(json.error)
                       setMessages(prev => {
                         const newMessages = [...prev]
                         if (newMessages[assistantMessageIndex]) {
                           newMessages[assistantMessageIndex] = {
                             role: 'assistant',
-                            content: `❌ Ошибка: ${json.error}`
+                            content: `❌ Ошибка: ${errorText}`
                           }
                         }
                         return newMessages
@@ -745,14 +783,16 @@ export default function ChatPage() {
                     }
 
                     // Обработка статистики использования
-                    if (json.usage && json.usage.total_cost) {
+                    if (json.usage) {
+                      const usageModel = json.model || displayModelName
+                      const resolvedCost = resolveUsageCost(json.usage, usageModel)
                       setMessages(prev => {
                         const newMessages = [...prev]
                         if (newMessages[assistantMessageIndex]) {
                           newMessages[assistantMessageIndex] = {
                             ...newMessages[assistantMessageIndex],
-                            cost: json.usage.total_cost,
-                            model: json.model || displayModelName
+                            cost: resolvedCost ?? newMessages[assistantMessageIndex].cost,
+                            model: usageModel
                           }
                         }
                         return newMessages
@@ -760,9 +800,9 @@ export default function ChatPage() {
                       
                       logUsage({
                         section: 'chat',
-                        model: json.model || displayModelName,
-                        inputTokens: json.usage.prompt_tokens,
-                        outputTokens: json.usage.completion_tokens,
+                        model: usageModel,
+                        inputTokens: Number(json.usage.prompt_tokens) || 0,
+                        outputTokens: Number(json.usage.completion_tokens) || 0,
                         specialty: specialty // Передаем специальность
                       })
                       continue;
@@ -778,7 +818,7 @@ export default function ChatPage() {
                         const newMessages = [...prev]
                         if (newMessages[assistantMessageIndex]) {
                           newMessages[assistantMessageIndex] = {
-                            role: 'assistant',
+                            ...newMessages[assistantMessageIndex],
                             content: accumulatedText
                           }
                         } else {
@@ -835,7 +875,7 @@ export default function ChatPage() {
               specialty: specialty // Передаем специальность
             })
           } else {
-            setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${data.error}` }])
+            setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${formatUnknownError(data.error)}` }])
           }
         }
       }
