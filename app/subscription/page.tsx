@@ -9,6 +9,11 @@ type PayConfig = {
   provider: string
   creditPriceRub: number
   minTopupRub: number
+  paymentAllowed: boolean
+  blockReason: string | null
+  blockCode: string | null
+  newUsersClosed: boolean
+  newUsersCutoffIso: string | null
 }
 
 export default function SubscriptionPage() {
@@ -38,11 +43,25 @@ export default function SubscriptionPage() {
             provider: String(j?.provider || 'yagoda'),
             creditPriceRub: Number(j?.creditPriceRub || 2.5),
             minTopupRub: Number(j?.minTopupRub || 250),
+            paymentAllowed: Boolean(j?.paymentAllowed ?? false),
+            blockReason: j?.blockReason ? String(j.blockReason) : null,
+            blockCode: j?.blockCode ? String(j.blockCode) : null,
+            newUsersClosed: Boolean(j?.newUsersClosed ?? false),
+            newUsersCutoffIso: j?.newUsersCutoffIso ? String(j.newUsersCutoffIso) : null,
           })
         }
       } catch {
         if (!cancelled) {
-          setPayConfig({ provider: 'yagoda', creditPriceRub: 2.5, minTopupRub: 250 })
+          setPayConfig({
+            provider: 'yagoda',
+            creditPriceRub: 2.5,
+            minTopupRub: 250,
+            paymentAllowed: false,
+            blockReason: 'Не удалось загрузить настройки оплаты.',
+            blockCode: 'config_unavailable',
+            newUsersClosed: false,
+            newUsersCutoffIso: null,
+          })
         }
       }
     }
@@ -95,6 +114,11 @@ export default function SubscriptionPage() {
 
   const handleCreatePayment = async () => {
     if (!payConfig) return
+    if (!payConfig.paymentAllowed) {
+      setMessageType('error')
+      setMessage(payConfig.blockReason || 'Оплата для вашего аккаунта временно недоступна.')
+      return
+    }
     const amount = Number(String(amountRub).replace(',', '.'))
 
     if (!Number.isFinite(amount)) {
@@ -171,6 +195,11 @@ export default function SubscriptionPage() {
           Doctor Opus является информационным сервисом для медицинских специалистов и не предназначен для автономной постановки диагноза.
           Все клинические решения принимаются врачом самостоятельно на основании собственной профессиональной оценки.
         </div>
+        {payConfig && !payConfig.paymentAllowed && (
+          <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 mb-6 text-sm text-rose-900">
+            {payConfig.blockReason || 'Оплата для вашего аккаунта временно недоступна.'}
+          </div>
+        )}
 
         {mounted && currentBalance && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
@@ -231,10 +260,10 @@ export default function SubscriptionPage() {
             <button
               type="button"
               onClick={handleCreatePayment}
-              disabled={paying}
+              disabled={paying || !payConfig?.paymentAllowed}
               className="px-6 py-3 rounded-xl bg-teal-600 text-white font-bold hover:bg-teal-700 disabled:opacity-50"
             >
-              {paying ? 'Переход к оплате…' : 'Перейти к оплате в Yagoda'}
+              {paying ? 'Переход к оплате…' : payConfig?.paymentAllowed ? 'Перейти к оплате в Yagoda' : 'Оплата недоступна'}
             </button>
             <button
               type="button"

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { paymentService } from "@/lib/payment/payment-service";
 import { SUBSCRIPTION_PACKAGES } from "@/lib/subscription-manager";
 import { initDatabase, createPayment } from "@/lib/database";
+import { getSubscriptionAccessForEmail } from '@/lib/payment/subscription-access';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,10 +28,23 @@ export async function POST(request: NextRequest) {
     const pkg = SUBSCRIPTION_PACKAGES[packageId as keyof typeof SUBSCRIPTION_PACKAGES];
     // Инициализация БД
     await initDatabase();
+    const email = session.user.email?.trim().toLowerCase() || 'unknown';
+    const access = await getSubscriptionAccessForEmail(email);
+    if (!access.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: access.reason || 'Подписка для новых аккаунтов временно закрыта.',
+          code: access.code || 'subscription_access_denied',
+          cutoffIso: access.cutoffIso,
+        },
+        { status: 403 }
+      );
+    }
 
     // Создаем запись о платеже в БД
     const paymentResult = await createPayment({
-      email: session.user.email || 'unknown',
+      email,
       amount: pkg.priceRub,
       units: pkg.credits,
       package_id: packageId
@@ -47,8 +61,8 @@ export async function POST(request: NextRequest) {
     const paymentUrl = await provider.generatePaymentUrl({
       amount: pkg.priceRub,
       orderId: invId,
-      description: `Активация пакета ${pkg.name} для ${session.user.email}`,
-      email: session.user.email || undefined,
+      description: `Активация пакета ${pkg.name} для ${email}`,
+      email: email || undefined,
     });
 
     return NextResponse.json({

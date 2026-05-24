@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { initDatabase, createPayment } from '@/lib/database';
 import { paymentService } from '@/lib/payment/payment-service';
+import { getSubscriptionAccessForEmail } from '@/lib/payment/subscription-access';
 import {
   creditsFromAmountRub,
   validateTopupAmountRub,
@@ -29,6 +30,18 @@ export async function POST(request: NextRequest) {
 
     const units = creditsFromAmountRub(amountRub);
     await initDatabase();
+    const access = await getSubscriptionAccessForEmail(email);
+    if (!access.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: access.reason || 'Подписка для новых аккаунтов временно закрыта.',
+          code: access.code || 'subscription_access_denied',
+          cutoffIso: access.cutoffIso,
+        },
+        { status: 403 }
+      );
+    }
 
     const provider = paymentService.getProvider();
     const normalizedAmount = Number(amountRub.toFixed(2));

@@ -66,12 +66,12 @@ export default function RootLayout({
           iOS/Safari: фиксированные баннеры легко перекрывают мобильную шапку и "крадут" тапы/скролл.
           Держим дисклеймер ниже мобильной шапки (<lg) и увеличиваем top padding основного контента.
         */}
-        <div className="fixed left-0 right-0 top-14 lg:top-0 z-40 pointer-events-none bg-amber-50 border-b border-amber-100 py-1 px-4 text-[10px] sm:text-xs text-amber-800 text-center leading-tight">
+        <div className="fixed left-0 right-0 top-14 lg:top-0 z-40 pointer-events-none bg-amber-100 border-b-2 border-amber-300 py-2.5 px-4 text-sm sm:text-base lg:text-lg font-bold text-amber-950 text-center leading-snug shadow-sm">
           <span className="sm:hidden">
-            ⚠️ Не мед. организация. Требуется верификация врачом.
+            Сервис закрыт. Doctor Opus — приватное рабочее пространство и не предназначен для постановки диагноза, назначения лечения или замены решения врача.
           </span>
           <span className="hidden sm:inline">
-            ⚠️ <strong>doctor-opus.ru</strong> — программный инструмент для медицинских специалистов. Не является медицинской организацией, не оказывает медицинских услуг и не заменяет консультацию.
+            Сервис закрыт. Doctor Opus — приватное рабочее пространство для структурирования информации, подготовки черновиков и автоматизации внутренних процессов. Сервис не предназначен для постановки диагноза, назначения лечения или замены решения врача.
           </span>
         </div>
         <Providers>
