@@ -25,8 +25,9 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED 1
 # Увеличиваем лимит памяти для сборки (vtk.js, cornerstone — тяжёлые)
 ENV NODE_OPTIONS="--max-old-space-size=4096"
-# Флаги стабильной прод-сборки для VPS (Timeweb): отключаем PWA этап и строгую TS-валидацию на этапе build
-ENV NEXT_DISABLE_PWA=true
+# Флаги стабильной прод-сборки для VPS (Timeweb)
+# PWA включён, TS-валидация временно ослаблена для legacy-долгов.
+ENV NEXT_DISABLE_PWA=false
 ENV NEXT_IGNORE_TS_ERRORS=true
 RUN npm run build
 

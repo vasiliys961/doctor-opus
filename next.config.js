@@ -3,12 +3,15 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   cacheOnFrontEndNav: false,
   aggressiveFrontEndNavCaching: false,
   reloadOnOnline: true,
-  swcMinify: true,
-  // Temporary hotfix: disable PWA generation because it intermittently crashes
-  // production builds with terser "Unexpected early exit (renderChunk)".
-  disable: true,
+  register: true,
+  skipWaiting: true,
+  // Keep PWA enabled in production; allow emergency disable via env.
+  disable: process.env.NODE_ENV === 'development' || process.env.NEXT_DISABLE_PWA === 'true',
   workboxOptions: {
     disableDevLogs: true,
+    // Stabilize SW build: avoid terser/sourcemap edge-cases in plugin pipeline.
+    mode: 'development',
+    sourcemap: false,
     runtimeCaching: [
       {
         urlPattern: /\/api\/auth\/.*/i,
@@ -29,6 +32,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  swcMinify: true,
   typescript: {
     // Оставшиеся некритичные ошибки (12):
     // - webkitdirectory: нестандартный HTML-атрибут (работает в браузерах)
