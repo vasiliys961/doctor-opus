@@ -16,6 +16,7 @@ interface ImageUploadProps {
   accept?: string
   maxSize?: number // в MB
   bridgePullTarget?: string
+  anonymizationMode?: 'strict' | 'soft'
 }
 
 export default function ImageUpload({
@@ -23,6 +24,7 @@ export default function ImageUpload({
   accept = 'image/*,.dcm,.dicom',
   maxSize = 500,
   bridgePullTarget = '',
+  anonymizationMode = 'strict',
 }: ImageUploadProps) {
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -39,7 +41,7 @@ export default function ImageUpload({
     if (!currentFile) return;
     setIsCompressing(true);
     try {
-      const anonymized = await anonymizeMedicalImage(currentFile);
+      const anonymized = await anonymizeMedicalImage(currentFile, anonymizationMode);
       setCurrentFile(anonymized);
       const reader = new FileReader();
       reader.onloadend = () => setPreview(reader.result as string);
@@ -177,7 +179,7 @@ export default function ImageUpload({
         setIsCompressing(true);
         try {
           const { extractAndAnonymizeFrames } = await import('@/lib/video-frame-extractor');
-          const frames = await extractAndAnonymizeFrames(videoFiles[0]);
+          const frames = await extractAndAnonymizeFrames(videoFiles[0], undefined, anonymizationMode);
           const frameFiles = frames.map(f => f.file);
           if (frameFiles.length > 0) {
             const additionalFrames = frameFiles.slice(1);
@@ -304,7 +306,7 @@ export default function ImageUpload({
       setIsCompressing(true);
       try {
         const { extractAndAnonymizeFrames } = await import('@/lib/video-frame-extractor');
-        const frames = await extractAndAnonymizeFrames(file);
+        const frames = await extractAndAnonymizeFrames(file, undefined, anonymizationMode);
         const frameFiles = frames.map(f => f.file);
         if (frameFiles.length > 0) {
           const additionalFrames = frameFiles.slice(1);

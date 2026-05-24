@@ -11,6 +11,7 @@ interface FileUploadProps {
   maxSize?: number // в MB
   multiple?: boolean
   bridgePullTarget?: string
+  anonymizationMode?: 'strict' | 'soft'
 }
 
 export default function FileUpload({ 
@@ -19,6 +20,7 @@ export default function FileUpload({
   maxSize = 50,
   multiple = true,
   bridgePullTarget = '',
+  anonymizationMode = 'strict',
 }: FileUploadProps) {
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -145,7 +147,7 @@ export default function FileUpload({
             return item;
           }
 
-          const anonymized = await anonymizeMedicalImage(item.file);
+          const anonymized = await anonymizeMedicalImage(item.file, anonymizationMode);
           
           // Обновляем превью
           return new Promise<{ file: File; preview?: string }>((resolve) => {

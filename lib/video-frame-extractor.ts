@@ -11,6 +11,8 @@ export interface ExtractedFrame {
   preview: string; // data URL для preview
 }
 
+export type FrameAnonymizationMode = 'strict' | 'soft';
+
 /**
  * Определяет оптимальное количество кадров на основе длительности видео
  */
@@ -104,23 +106,30 @@ async function extractFrameAtTime(
 /**
  * Применяет анонимизацию к canvas (черные полосы по краям)
  */
-function anonymizeCanvas(canvas: HTMLCanvasElement): void {
+function anonymizeCanvas(canvas: HTMLCanvasElement, mode: FrameAnonymizationMode = 'strict'): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   
   const { width, height } = canvas;
-  
-  // Зоны анонимизации (такие же, как для изображений)
+
+  ctx.fillStyle = 'black';
+
+  if (mode === 'soft') {
+    // Щадящий режим: скрываем только верхнюю сервисную строку.
+    const topHeight = Math.floor(height * 0.08);
+    ctx.fillRect(0, 0, width, topHeight);
+    return;
+  }
+
+  // Строгий режим (текущая legacy-логика)
   const TOP_PERCENT = 0.10;    // 10% сверху
   const BOTTOM_PERCENT = 0.08; // 8% снизу
   const SIDE_PERCENT = 0.12;   // 12% с боков
-  
+
   const topHeight = Math.floor(height * TOP_PERCENT);
   const bottomHeight = Math.floor(height * BOTTOM_PERCENT);
   const sideWidth = Math.floor(width * SIDE_PERCENT);
-  
-  ctx.fillStyle = 'black';
-  
+
   // Закрашиваем 4 стороны
   ctx.fillRect(0, 0, width, topHeight);                        // Верх
   ctx.fillRect(0, height - bottomHeight, width, bottomHeight); // Низ
@@ -157,7 +166,8 @@ async function canvasToFile(
  */
 export async function extractAndAnonymizeFrames(
   videoFile: File,
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  anonymizationMode: FrameAnonymizationMode = 'strict'
 ): Promise<ExtractedFrame[]> {
   console.log('🎬 [Frame Extractor] Начало извлечения кадров из:', videoFile.name);
   
@@ -197,7 +207,7 @@ export async function extractAndAnonymizeFrames(
       const canvas = await extractFrameAtTime(video, timeSeconds);
       
       // Анонимизируем
-      anonymizeCanvas(canvas);
+      anonymizeCanvas(canvas, anonymizationMode);
       console.log(`🛡️ [Frame Extractor] Кадр ${i + 1} анонимизирован`);
       
       // Конвертируем в File

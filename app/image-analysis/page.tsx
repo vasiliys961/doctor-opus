@@ -60,6 +60,10 @@ export default function ImageAnalysisPage() {
   const [useLibrary, setUseLibrary] = useState(false)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
+  const imageAnonymizationMode: 'strict' | 'soft' =
+    imageType === 'ct' || imageType === 'mri' || imageType === 'xray' || imageType === 'ultrasound'
+      ? 'soft'
+      : 'strict';
 
   useEffect(() => {
     try {
@@ -436,7 +440,13 @@ export default function ImageAnalysisPage() {
         </p>
         
         <div data-tour="image-upload-zone">
-          <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} bridgePullTarget="image_analysis" />
+          <ImageUpload
+            onUpload={handleUpload}
+            accept="image/*,.dcm,.dicom"
+            maxSize={500}
+            bridgePullTarget="image_analysis"
+            anonymizationMode={imageAnonymizationMode}
+          />
         </div>
 
         {validation && validation.warnings.length > 0 && (

@@ -223,7 +223,13 @@ export default function ComparativeAnalysisPage() {
           <h2 className="text-lg sm:text-xl font-semibold mb-3">
             📷 Изображения для сравнения <span className="text-red-500">*</span>
           </h2>
-          <ImageUpload onUpload={handleImageUpload} accept="image/*" maxSize={50} bridgePullTarget="image_analysis" />
+          <ImageUpload
+            onUpload={handleImageUpload}
+            accept="image/*"
+            maxSize={50}
+            bridgePullTarget="image_analysis"
+            anonymizationMode="soft"
+          />
         </div>
 
         {images.length > 0 && (

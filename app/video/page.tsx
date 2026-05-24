@@ -239,10 +239,10 @@ export default function VideoPage() {
   }
 
   // Извлечение и анонимизация кадров из ВСЕХ видео в плейлисте (по порядку)
-  const handleExtractFrames = async () => {
+  const handleExtractFrames = async (): Promise<ExtractedFrame[] | null> => {
     if (playlist.length === 0 && !file) {
       setError('Пожалуйста, выберите видео файл или папку')
-      return
+      return null
     }
 
     setExtracting(true)
@@ -268,7 +268,8 @@ export default function VideoPage() {
               current: (i * total) + current, 
               total: filesToProcess.length * total 
             })
-          }
+          },
+          'soft'
         )
         
         // Добавляем информацию о том, из какого видео кадр
@@ -286,10 +287,11 @@ export default function VideoPage() {
       
       setExtractedFrames(finalFrames)
       console.log(`✅ [VIDEO] Успешно извлечено ${finalFrames.length} кадров из всех ракурсов`)
-      
+      return finalFrames
     } catch (err: any) {
       console.error('❌ [VIDEO] Ошибка извлечения кадров:', err)
       setError(err.message || 'Ошибка при извлечении кадров')
+      return null
     } finally {
       setExtracting(false)
     }
@@ -404,8 +406,9 @@ export default function VideoPage() {
   }
 
   // Анализ извлеченных кадров
-  const handleAnalyzeFrames = async () => {
-    if (extractedFrames.length === 0) {
+  const handleAnalyzeFrames = async (framesOverride?: ExtractedFrame[]) => {
+    const framesToAnalyze = framesOverride && framesOverride.length > 0 ? framesOverride : extractedFrames
+    if (framesToAnalyze.length === 0) {
       setError('Сначала извлеките кадры из видео')
       return
     }
@@ -422,11 +425,11 @@ export default function VideoPage() {
       const formData = new FormData()
       
       // Добавляем кадры в правильном формате для API
-      if (extractedFrames.length > 0) {
-        formData.append('file', extractedFrames[0].file) // Первый кадр как основной
+      if (framesToAnalyze.length > 0) {
+        formData.append('file', framesToAnalyze[0].file) // Первый кадр как основной
         // Остальные кадры как дополнительные
-        for (let i = 1; i < extractedFrames.length; i++) {
-          formData.append(`additionalImage_${i - 1}`, extractedFrames[i].file)
+        for (let i = 1; i < framesToAnalyze.length; i++) {
+          formData.append(`additionalImage_${i - 1}`, framesToAnalyze[i].file)
         }
       }
       
@@ -445,7 +448,7 @@ export default function VideoPage() {
       formData.append('imageType', imageType)
       formData.append('isTwoStage', 'true') // Включаем режим радиологического протокола
 
-      console.log(`🎬 [VIDEO] Отправка ${extractedFrames.length} кадров на анализ...`)
+      console.log(`🎬 [VIDEO] Отправка ${framesToAnalyze.length} кадров на анализ...`)
       
       const response = await fetch('/api/analyze/image', {
         method: 'POST',
@@ -554,8 +557,13 @@ export default function VideoPage() {
   }
 
   // Универсальный обработчик анализа
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     if (analysisMode === 'frames') {
+      if (extractedFrames.length === 0) {
+        const newFrames = await handleExtractFrames()
+        if (!newFrames || newFrames.length === 0) return
+        return handleAnalyzeFrames(newFrames)
+      }
       return handleAnalyzeFrames()
     } else {
       return handleAnalyzeFullVideo()
@@ -957,7 +965,7 @@ export default function VideoPage() {
             disabled={
               loading || 
               extracting || 
-              (analysisMode === 'frames' && extractedFrames.length === 0) ||
+              (analysisMode === 'frames' && extractedFrames.length === 0 && !file && playlist.length === 0) ||
               (analysisMode === 'full-video' && !confirmNoPersonalData)
             }
             className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
@@ -967,7 +975,7 @@ export default function VideoPage() {
               : analysisMode === 'frames'
                 ? (extractedFrames.length > 0
                     ? `📤 Отправить ${extractedFrames.length} кадров на анализ`
-                    : '🎬 Сначала извлеките кадры'
+                    : '🎬 Извлечь кадры и запустить анализ'
                   )
                 : (confirmNoPersonalData
                     ? '⚡ Отправить полное видео на анализ'

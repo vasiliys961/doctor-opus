@@ -203,7 +203,7 @@ export default function VideoComparisonPage() {
         for (let i = 0; i < files.length; i++) {
           const frames = await extractAndAnonymizeFrames(files[i], (curr, tot) => {
             // Упрощенный прогресс
-          });
+          }, 'soft');
           results.push(...frames.map(f => ({
             ...f,
             file: new File([f.file], `slot${slotIndex}_v${i+1}_${f.file.name}`, { type: f.file.type })
