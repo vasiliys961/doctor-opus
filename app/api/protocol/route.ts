@@ -274,9 +274,11 @@ ${evidencePriorityDirective}
 
 Стиль: строго профессиональный, клинически и технически точный. Язык: русский.`;
 
-    const MODEL = model === 'opus' ? MODELS.OPUS : 
-                 model === 'gpt52' ? MODELS.GPT_5_2 : 
-                 (model === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
+    const allowGpt52Protocol = process.env.ALLOW_GPT52_PROTOCOL === 'true';
+    const effectiveModel = model === 'gpt52' && !allowGpt52Protocol ? 'sonnet' : model;
+    const MODEL = effectiveModel === 'opus' ? MODELS.OPUS : 
+                 effectiveModel === 'gpt52' ? MODELS.GPT_5_2 : 
+                 (effectiveModel === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
     
     if (useStreaming) {
       const stream = await sendTextRequestStreaming(prompt, [], MODEL);
@@ -290,14 +292,14 @@ ${evidencePriorityDirective}
       });
     }
 
-    let result = await sendTextRequest(prompt, []);
+    let result = await sendTextRequest(prompt, [], MODEL);
     if (!isEcgFunctionalConclusion && isStrictTemplateMode) {
       const correctionPrompt = buildProtocolCorrectionPrompt({
         rawText,
         template: safeTemplate,
         draft: result,
       });
-      result = await sendTextRequest(correctionPrompt, []);
+      result = await sendTextRequest(correctionPrompt, [], MODEL);
     }
     result = anonymizeText(result);
     return NextResponse.json({ success: true, protocol: result });

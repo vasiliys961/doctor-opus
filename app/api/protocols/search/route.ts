@@ -9,6 +9,18 @@ import { getRateLimitKey } from '@/lib/rate-limiter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+function shouldFallbackFromGpt54(status: number, errorText: string): boolean {
+  const normalized = (errorText || '').toLowerCase();
+  return (
+    status === 401 ||
+    status === 403 ||
+    (isGeoRestrictionStatus(status) && isOpenAIGeoRestrictionError(errorText)) ||
+    normalized.includes('permission_denied') ||
+    normalized.includes('provider returned error') ||
+    normalized.includes('azure')
+  );
+}
+
 function estimateProtocolsSearchCost(queryLength: number, modelMode: string): number {
   const modelBase = modelMode === 'detailed' ? 3.8 : modelMode === 'online' ? 2.8 : 2.1;
   const sizeFactor = Math.min(1.8, queryLength / 2000);
@@ -119,7 +131,8 @@ ${specialty ? `Специальность: ${specialty}` : ''}
       MODEL = 'perplexity/sonar';
       MAX_TOKENS = 4000;
     } else if (modelMode === 'detailed') {
-      MODEL = MODELS.GPT_5_2; 
+      const allowGpt52ProtocolsSearch = process.env.ALLOW_GPT52_PROTOCOLS_SEARCH === 'true';
+      MODEL = allowGpt52ProtocolsSearch ? MODELS.GPT_5_2 : MODELS.SONNET;
       MAX_TOKENS = 12000; // Оптимизировано: детальный режим
     }
     
@@ -188,8 +201,7 @@ ${specialty ? `Специальность: ${specialty}` : ''}
       // Fallback: GPT недоступен по региону → переключаемся на Sonnet
       const shouldFallbackToSonnet =
         MODEL === MODELS.GPT_5_2 &&
-        isGeoRestrictionStatus(response.status) &&
-        isOpenAIGeoRestrictionError(errorText);
+        shouldFallbackFromGpt54(response.status, errorText);
 
       if (shouldFallbackToSonnet) {
         console.warn(`⚠️ [CLINICAL RECS] GPT fallback: status=${response.status}, switching to Sonnet`);
@@ -352,9 +364,7 @@ ${specialty ? `Специальность: ${specialty}` : ''}
       success: true,
       content: content,
       tokensUsed: tokensUsed,
-      model: modelMode === 'online' ? 'Perplexity Sonar (Online Search)' : 
-             modelMode === 'detailed' ? 'GPT-5.4 (Detailed)' : 
-             'Gemini 3.0 Flash (Standard)'
+      model: MODEL
     });
 
   } catch (error: any) {

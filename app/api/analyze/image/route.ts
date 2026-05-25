@@ -338,9 +338,12 @@ export async function POST(request: NextRequest) {
     }
 
     const finalClinicalContext = [clinicalContext, dicomContext].filter(Boolean).join('\n\n');
+    const allowGpt52Analyze = process.env.ALLOW_GPT52_ANALYZE === 'true';
     const normalizedCustomModel = (() => {
       if (!customModel) return null;
-      if (customModel === 'gpt52' || customModel === MODELS.GPT_5_2) return MODELS.GPT_5_2;
+      if (customModel === 'gpt52' || customModel === MODELS.GPT_5_2) {
+        return allowGpt52Analyze ? MODELS.GPT_5_2 : MODELS.SONNET;
+      }
       if (customModel === 'sonnet' || customModel === MODELS.SONNET) return MODELS.SONNET;
       if (customModel === 'opus' || customModel === MODELS.OPUS) return MODELS.OPUS;
       if (customModel === 'gemini' || customModel === MODELS.GEMINI_3_FLASH) return MODELS.GEMINI_3_FLASH;
@@ -351,7 +354,7 @@ export async function POST(request: NextRequest) {
         ? MODELS.GEMINI_3_FLASH
         : mode === 'validated'
           ? MODELS.OPUS_VALIDATED
-          : MODELS.GPT_5_2; // optimized по умолчанию всегда GPT-5.4
+          : (allowGpt52Analyze ? MODELS.GPT_5_2 : MODELS.SONNET);
     let modelToUse = normalizedCustomModel || defaultModelByMode;
     const allowedModels = new Set([
       MODELS.GEMINI_3_FLASH,
