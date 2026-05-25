@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
+const BLOCKED_EMAILS = new Set(['demo.rzn@doctor-opus.ru']);
+
+function isBlockedEmail(email?: string | null): boolean {
+  if (!email) return false;
+  return BLOCKED_EMAILS.has(String(email).toLowerCase());
+}
+
 /**
  * Doctor Opus v3.40.0 - Middleware с защитой API
  * 
@@ -76,6 +83,21 @@ export async function middleware(request: NextRequest) {
     }
     const loginUrl = new URL('/auth/signin', request.url);
     loginUrl.searchParams.set('callbackUrl', path);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Принудительная блокировка конкретного аккаунта (включая активные JWT-сессии)
+  const tokenEmail = String((token as any)?.email || '').toLowerCase();
+  const tokenBlocked = Boolean((token as any)?.blocked) || isBlockedEmail(tokenEmail);
+  if (tokenBlocked) {
+    if (path.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'Account blocked', code: 'ACCOUNT_BLOCKED' },
+        { status: 403 }
+      );
+    }
+    const loginUrl = new URL('/auth/signin', request.url);
+    loginUrl.searchParams.set('error', 'AccountBlocked');
     return NextResponse.redirect(loginUrl);
   }
 

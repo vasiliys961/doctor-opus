@@ -29,6 +29,21 @@ export function isAdminEmail(email?: string | null): boolean {
   return getAdminEmails().includes(email.toLowerCase());
 }
 
+// Явно заблокированные email (через запятую)
+function getBlockedEmails(): string[] {
+  const hardBlocked = ['demo.rzn@doctor-opus.ru'];
+  const envEmails = process.env.BLOCKED_EMAILS;
+  const envList = envEmails
+    ? envEmails.split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+    : [];
+  return Array.from(new Set([...hardBlocked, ...envList]));
+}
+
+export function isBlockedEmail(email?: string | null): boolean {
+  if (!email) return false;
+  return getBlockedEmails().includes(email.toLowerCase());
+}
+
 // Список VIP email — из серверного env (единый источник истины)
 function getVipEmails(): string[] {
   const envVip = process.env.VIP_EMAILS;
@@ -61,6 +76,11 @@ export const authOptions: NextAuthOptions = {
 
         const email = credentials.email.trim().toLowerCase();
         const password = credentials.password;
+
+        // Жесткая блокировка на уровне авторизации
+        if (isBlockedEmail(email)) {
+          return null;
+        }
 
         // 1. Попытка проверки через БД
         let dbAvailable = false;
@@ -111,8 +131,10 @@ export const authOptions: NextAuthOptions = {
         // - БД недоступна
         // - Таблица users не существует (до миграции)
         // - Пользователь не зарегистрирован (для первичного входа)
+        // Ограничение безопасности:
+        // - fallback разрешен только для email из ADMIN_EMAILS
         const adminPassword = process.env.ADMIN_PASSWORD;
-        if (adminPassword && password === adminPassword) {
+        if (adminPassword && password === adminPassword && isAdminEmail(email)) {
           return {
             id: "1",
             name: "Администратор",
@@ -131,12 +153,24 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token }) {
       if (token.email) {
+        const blocked = isBlockedEmail(token.email);
+        (token as any).blocked = blocked;
+        if (blocked) {
+          return token;
+        }
         (token as any).isAdmin = isAdminEmail(token.email);
         (token as any).isVip = isVipEmail(token.email);
       }
       return token;
     },
     async session({ session, token }) {
+      if ((token as any).blocked) {
+        // Аннулируем сессию для UI и API-клиентов
+        return {
+          ...session,
+          user: undefined as any,
+        };
+      }
       if (session.user) {
         (session.user as any).id = token.sub;
         (session.user as any).isAdmin = (token as any).isAdmin || false;
