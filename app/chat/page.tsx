@@ -98,7 +98,7 @@ export default function ChatPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
   const [useLibrary, setUseLibrary] = useState(false)
-  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('gpt52')
+  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('sonnet')
   const [responseStyle, setResponseStyle] = useState<ResponseStyle>('brief')
   const [specialty, setSpecialty] = useState<Specialty>('universal')
   const [isCutOff, setIsCutOff] = useState(false)

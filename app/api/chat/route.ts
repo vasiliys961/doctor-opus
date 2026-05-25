@@ -147,8 +147,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // GPT-ветка у провайдера периодически возвращает "Provider returned error" в streaming.
+    // По умолчанию маршрутизируем gpt52 на стабильный Sonnet; реальный GPT можно вернуть через env.
+    const allowGpt52Chat = process.env.ALLOW_GPT52_CHAT === 'true';
     const selectedModel = (model === 'gpt52' || model === MODELS.GPT_5_2)
-      ? MODELS.GPT_5_2
+      ? (allowGpt52Chat ? MODELS.GPT_5_2 : MODELS.SONNET)
       : (model === 'sonnet' || model === MODELS.SONNET) 
         ? MODELS.SONNET 
         : (model && (model === 'gemini' || model.includes('gemini')))
