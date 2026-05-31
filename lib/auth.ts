@@ -29,6 +29,23 @@ export function isAdminEmail(email?: string | null): boolean {
   return getAdminEmails().includes(email.toLowerCase());
 }
 
+function normalizeEmail(value?: string | null): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getTemporaryAccessConfig(): { email: string; password: string } | null {
+  const email = normalizeEmail(process.env.TEMP_ACCESS_EMAIL);
+  const password = String(process.env.TEMP_ACCESS_PASSWORD || '');
+  if (!email || !password) return null;
+  return { email, password };
+}
+
+function isTemporaryAccessMatch(email?: string | null, password?: string | null): boolean {
+  const cfg = getTemporaryAccessConfig();
+  if (!cfg) return false;
+  return normalizeEmail(email) === cfg.email && String(password || '') === cfg.password;
+}
+
 // Явно заблокированные email (через запятую)
 function getBlockedEmails(): string[] {
   const hardBlocked = ['demo.rzn@doctor-opus.ru'];
@@ -74,7 +91,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const email = credentials.email.trim().toLowerCase();
+        const email = normalizeEmail(credentials.email);
         const password = credentials.password;
 
         // Жесткая блокировка на уровне авторизации
@@ -113,6 +130,14 @@ export const authOptions: NextAuthOptions = {
                   return {
                     id: user.id.toString(),
                     name: user.name || 'Врач',
+                    email: user.email,
+                  };
+                }
+                // Временный доступ по паре email+пароль из env (для контролируемых приглашений)
+                if (isTemporaryAccessMatch(email, password)) {
+                  return {
+                    id: user.id.toString(),
+                    name: user.name || 'Приглашенный пользователь',
                     email: user.email,
                   };
                 }
