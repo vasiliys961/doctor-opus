@@ -1,5 +1,6 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { randomUUID } from 'crypto';
 
 /**
  * Doctor Opus v3.42.0 — Безопасная авторизация
@@ -33,6 +34,47 @@ function normalizeEmail(value?: string | null): string {
   return String(value || '').trim().toLowerCase();
 }
 
+type InviteTier = { amountRub: number; units: number; operation: string } | null;
+
+function isInviteModeEnabled(): boolean {
+  return process.env.INVITE_MODE_ENABLED === 'true';
+}
+
+function toPositiveNumber(value: string | undefined, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function resolveInviteTier(password?: string | null): InviteTier {
+  if (!isInviteModeEnabled()) return null;
+  const candidate = String(password || '');
+  if (!candidate) return null;
+
+  const password500 = String(process.env.INVITE_PASSWORD_500 || '');
+  const password1000 = String(process.env.INVITE_PASSWORD_1000 || '');
+  const creditPriceRub = toPositiveNumber(process.env.CREDIT_PRICE_RUB, 2.5);
+
+  if (password500 && candidate === password500) {
+    const amountRub = 500;
+    return {
+      amountRub,
+      units: Math.floor(amountRub / creditPriceRub),
+      operation: 'Invite access 500 RUB',
+    };
+  }
+
+  if (password1000 && candidate === password1000) {
+    const amountRub = 1000;
+    return {
+      amountRub,
+      units: Math.floor(amountRub / creditPriceRub),
+      operation: 'Invite access 1000 RUB',
+    };
+  }
+
+  return null;
+}
+
 function getTemporaryAccessConfig(): { email: string; password: string } | null {
   const email = normalizeEmail(process.env.TEMP_ACCESS_EMAIL);
   const password = String(process.env.TEMP_ACCESS_PASSWORD || '');
@@ -44,6 +86,41 @@ function isTemporaryAccessMatch(email?: string | null, password?: string | null)
   const cfg = getTemporaryAccessConfig();
   if (!cfg) return false;
   return normalizeEmail(email) === cfg.email && String(password || '') === cfg.password;
+}
+
+async function applyInviteCreditOnce(sql: any, email: string, tier: Exclude<InviteTier, null>): Promise<void> {
+  if (tier.units <= 0) return;
+
+  const { rows: existingTx } = await sql`
+    SELECT id
+    FROM credit_transactions
+    WHERE email = ${email}
+      AND operation = ${tier.operation}
+    LIMIT 1
+  `;
+  if (existingTx.length > 0) return;
+
+  const { rows: balanceRows } = await sql`
+    INSERT INTO user_balances (email, balance, total_spent, is_test_account)
+    VALUES (${email}, ${tier.units}, 0, false)
+    ON CONFLICT (email)
+    DO UPDATE SET
+      balance = user_balances.balance + ${tier.units},
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING balance
+  `;
+
+  const balanceAfter = Number(balanceRows[0]?.balance || 0);
+  await sql`
+    INSERT INTO credit_transactions (email, amount, operation, metadata, balance_after)
+    VALUES (
+      ${email},
+      ${tier.units},
+      ${tier.operation},
+      ${JSON.stringify({ source: 'invite_password', amountRub: tier.amountRub, units: tier.units })}::jsonb,
+      ${balanceAfter}
+    )
+  `;
 }
 
 // Явно заблокированные email (через запятую)
@@ -93,6 +170,7 @@ export const authOptions: NextAuthOptions = {
 
         const email = normalizeEmail(credentials.email);
         const password = credentials.password;
+        const inviteTier = resolveInviteTier(password);
 
         // Жесткая блокировка на уровне авторизации
         if (isBlockedEmail(email)) {
@@ -133,6 +211,16 @@ export const authOptions: NextAuthOptions = {
                     email: user.email,
                   };
                 }
+                if (inviteTier) {
+                  try {
+                    await applyInviteCreditOnce(sql, email, inviteTier);
+                  } catch {}
+                  return {
+                    id: user.id.toString(),
+                    name: user.name || 'Приглашенный пользователь',
+                    email: user.email,
+                  };
+                }
                 // Временный доступ по паре email+пароль из env (для контролируемых приглашений)
                 if (isTemporaryAccessMatch(email, password)) {
                   return {
@@ -143,6 +231,24 @@ export const authOptions: NextAuthOptions = {
                 }
                 // Неверный пароль — НЕ пробуем ADMIN_PASSWORD для существующих пользователей
                 return null;
+              }
+              if (inviteTier) {
+                const bcrypt = await import('bcryptjs');
+                const seedPassword = randomUUID();
+                const passwordHash = await bcrypt.hash(seedPassword, 12);
+                const { rows: createdRows } = await sql`
+                  INSERT INTO users (email, password_hash, name)
+                  VALUES (${email}, ${passwordHash}, 'Приглашенный пользователь')
+                  RETURNING id, email, name
+                `;
+                try {
+                  await applyInviteCreditOnce(sql, email, inviteTier);
+                } catch {}
+                return {
+                  id: createdRows[0].id.toString(),
+                  name: createdRows[0].name || 'Приглашенный пользователь',
+                  email: createdRows[0].email,
+                };
               }
               // Пользователь не найден в БД — попробуем fallback ниже
             }
