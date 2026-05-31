@@ -1,6 +1,7 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { randomUUID } from 'crypto';
+import { resolveInviteTierFromPassword } from '@/lib/invite-passwords';
 
 /**
  * Doctor Opus v3.42.0 — Безопасная авторизация
@@ -47,14 +48,11 @@ function toPositiveNumber(value: string | undefined, fallback: number): number {
 
 function resolveInviteTier(password?: string | null): InviteTier {
   if (!isInviteModeEnabled()) return null;
-  const candidate = String(password || '');
-  if (!candidate) return null;
-
-  const password500 = String(process.env.INVITE_PASSWORD_500 || '');
-  const password1000 = String(process.env.INVITE_PASSWORD_1000 || '');
+  const resolvedTier = resolveInviteTierFromPassword(password);
+  if (!resolvedTier) return null;
   const creditPriceRub = toPositiveNumber(process.env.CREDIT_PRICE_RUB, 2.5);
 
-  if (password500 && candidate === password500) {
+  if (resolvedTier === 500) {
     const amountRub = 500;
     return {
       amountRub,
@@ -63,7 +61,7 @@ function resolveInviteTier(password?: string | null): InviteTier {
     };
   }
 
-  if (password1000 && candidate === password1000) {
+  if (resolvedTier === 1000) {
     const amountRub = 1000;
     return {
       amountRub,

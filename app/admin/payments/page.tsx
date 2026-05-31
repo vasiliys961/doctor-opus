@@ -43,6 +43,15 @@ interface DbInfo {
   source: string
 }
 
+interface InvitePasswordsState {
+  inviteModeEnabled: boolean
+  hasRotatingSecret: boolean
+  acceptedNow?: {
+    password500?: string[]
+    password1000?: string[]
+  }
+}
+
 export default function AdminPaymentsPage() {
   const { data: session } = useSession()
   const [payments, setPayments] = useState<Payment[]>([])
@@ -55,6 +64,10 @@ export default function AdminPaymentsPage() {
   const [refunding, setRefunding] = useState<number | null>(null)
   const [reconcilingYagodaPaymentId, setReconcilingYagodaPaymentId] = useState<number | null>(null)
   const [period, setPeriod] = useState<'all' | 'today' | '7d' | '30d'>('all')
+  const [invitePasswords, setInvitePasswords] = useState<InvitePasswordsState | null>(null)
+  const [invitePasswordsError, setInvitePasswordsError] = useState('')
+  const [copiedPassword, setCopiedPassword] = useState('')
+  const [manualTopupKey, setManualTopupKey] = useState('')
 
   const isAdmin = (session?.user as any)?.isAdmin
 
@@ -66,16 +79,34 @@ export default function AdminPaymentsPage() {
     try {
       setLoading(true)
       setError('')
-      const res = await fetch(`/api/admin/payments?period=${period}`)
-      const data = await res.json()
-      if (data.success) {
-        setPayments(data.payments || [])
-        setSummary(data.summary || null)
-        setPaidUsersList(data.paidUsersList || [])
-        setDbInfo(data.dbInfo || null)
-        if (data.notice) setNotice(data.notice)
+      setInvitePasswordsError('')
+
+      const [paymentsRes, inviteRes] = await Promise.all([
+        fetch(`/api/admin/payments?period=${period}`),
+        fetch('/api/admin/invite-passwords'),
+      ])
+
+      const paymentsData = await paymentsRes.json()
+      if (paymentsData.success) {
+        setPayments(paymentsData.payments || [])
+        setSummary(paymentsData.summary || null)
+        setPaidUsersList(paymentsData.paidUsersList || [])
+        setDbInfo(paymentsData.dbInfo || null)
+        if (paymentsData.notice) setNotice(paymentsData.notice)
       } else {
-        setError(data.error || 'Ошибка загрузки')
+        setError(paymentsData.error || 'Ошибка загрузки')
+      }
+
+      const inviteData = await inviteRes.json()
+      if (inviteRes.ok && inviteData?.success) {
+        setInvitePasswords({
+          inviteModeEnabled: Boolean(inviteData.inviteModeEnabled),
+          hasRotatingSecret: Boolean(inviteData.hasRotatingSecret),
+          acceptedNow: inviteData.snapshot?.acceptedNow || {},
+        })
+      } else {
+        setInvitePasswords(null)
+        setInvitePasswordsError(inviteData?.error || 'Не удалось загрузить invite-пароли')
       }
     } catch (err: any) {
       setError(err.message)
@@ -150,6 +181,51 @@ export default function AdminPaymentsPage() {
     }
   }
 
+  const copyPassword = async (password: string) => {
+    try {
+      await navigator.clipboard.writeText(password)
+      setCopiedPassword(password)
+      window.setTimeout(() => {
+        setCopiedPassword((prev) => (prev === password ? '' : prev))
+      }, 1500)
+    } catch {
+      setNotice('Не удалось скопировать пароль. Скопируйте вручную.')
+    }
+  }
+
+  const applyManualInviteTopup = async (email: string, tierRub: 500 | 1000) => {
+    const ok = confirm(
+      `Доначислить ${tierRub} ₽ пользователю ${email}?\n\n` +
+      'Будет зачислен новый пакет единиц, даже если invite-пароль уже использовался.'
+    )
+    if (!ok) return
+
+    const key = `${email}:${tierRub}`
+    setManualTopupKey(key)
+    setError('')
+    setNotice('')
+
+    try {
+      const res = await fetch('/api/admin/invite-passwords/topup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, tierRub }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.success) {
+        setError(data?.error || 'Не удалось доначислить пакет')
+        return
+      }
+
+      setNotice(`Доначислено ${data.units} ед. (${tierRub} ₽) для ${email}. Новый баланс: ${Number(data.balanceAfter || 0).toFixed(1)} ед.`)
+      await loadPayments()
+    } catch (err: any) {
+      setError(err?.message || 'Ошибка доначисления')
+    } finally {
+      setManualTopupKey('')
+    }
+  }
+
   if (!isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -199,6 +275,8 @@ export default function AdminPaymentsPage() {
   const failedYagodaPayments = payments.filter(
     (p) => p.package_id === 'yagoda_topup' && (p.status === 'failed' || p.status === 'pending')
   )
+  const invite500List = invitePasswords?.acceptedNow?.password500 || []
+  const invite1000List = invitePasswords?.acceptedNow?.password1000 || []
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 p-4 sm:p-6">
@@ -335,6 +413,73 @@ export default function AdminPaymentsPage() {
           <div className="px-4 py-3 border-b bg-slate-50">
             <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Кто оплатил</h2>
           </div>
+          <div className="px-4 py-4 border-b bg-indigo-50/40">
+            <div className="flex flex-col gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-slate-800">Invite-режим:</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${invitePasswords?.inviteModeEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                  {invitePasswords?.inviteModeEnabled ? 'включен' : 'выключен'}
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${invitePasswords?.hasRotatingSecret ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {invitePasswords?.hasRotatingSecret ? 'ротация активна' : 'без ротации'}
+                </span>
+              </div>
+
+              {invitePasswordsError ? (
+                <div className="text-rose-700 text-xs">{invitePasswordsError}</div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <div className="bg-white rounded-lg border border-indigo-100 p-3">
+                    <div className="text-xs uppercase tracking-wider text-indigo-500 font-bold mb-2">Пароль 500 ₽</div>
+                    {invite500List.length === 0 ? (
+                      <div className="text-xs text-slate-500">Не задан</div>
+                    ) : (
+                      <div className="space-y-1">
+                        {invite500List.map((pwd) => (
+                          <div key={`500-${pwd}`} className="flex items-start gap-2">
+                            <code className="flex-1 text-xs bg-slate-100 text-slate-800 rounded px-2 py-1 break-all">
+                              {pwd}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={() => void copyPassword(pwd)}
+                              className="shrink-0 px-2 py-1 text-[11px] rounded border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700 font-semibold"
+                            >
+                              {copiedPassword === pwd ? 'Скопировано' : 'Скопировать'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-indigo-100 p-3">
+                    <div className="text-xs uppercase tracking-wider text-indigo-500 font-bold mb-2">Пароль 1000 ₽</div>
+                    {invite1000List.length === 0 ? (
+                      <div className="text-xs text-slate-500">Не задан</div>
+                    ) : (
+                      <div className="space-y-1">
+                        {invite1000List.map((pwd) => (
+                          <div key={`1000-${pwd}`} className="flex items-start gap-2">
+                            <code className="flex-1 text-xs bg-slate-100 text-slate-800 rounded px-2 py-1 break-all">
+                              {pwd}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={() => void copyPassword(pwd)}
+                              className="shrink-0 px-2 py-1 text-[11px] rounded border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700 font-semibold"
+                            >
+                              {copiedPassword === pwd ? 'Скопировано' : 'Скопировать'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
           {paidUsersList.length === 0 ? (
             <div className="p-6 text-sm text-slate-500">Пока нет подтвержденных оплат (status=completed).</div>
           ) : (
@@ -346,6 +491,7 @@ export default function AdminPaymentsPage() {
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Оплат</th>
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Сумма единиц</th>
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Последняя оплата</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Доначислить</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -355,6 +501,26 @@ export default function AdminPaymentsPage() {
                       <td className="px-4 py-3 text-sm text-slate-700">{u.paid_count}</td>
                       <td className="px-4 py-3 text-sm text-slate-700">{parseFloat(u.total_units).toFixed(0)} ед.</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(u.last_paid_at)}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void applyManualInviteTopup(u.email, 500)}
+                            disabled={manualTopupKey === `${u.email}:500` || manualTopupKey === `${u.email}:1000`}
+                            className="px-2 py-1 rounded border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold disabled:opacity-50"
+                          >
+                            {manualTopupKey === `${u.email}:500` ? '⏳' : '+500'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void applyManualInviteTopup(u.email, 1000)}
+                            disabled={manualTopupKey === `${u.email}:500` || manualTopupKey === `${u.email}:1000`}
+                            className="px-2 py-1 rounded border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold disabled:opacity-50"
+                          >
+                            {manualTopupKey === `${u.email}:1000` ? '⏳' : '+1000'}
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
