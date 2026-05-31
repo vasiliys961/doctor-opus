@@ -4,6 +4,14 @@ export type InviteTierRub = 500 | 1000;
 
 const INVITE_TIERS: InviteTierRub[] = [500, 1000];
 const INVITE_PASSWORD_CONTEXT = 'doctor-opus-invite';
+const INVALID_ENV_SENTINELS = new Set(['undefined', 'null']);
+
+function normalizeEnvSecret(value: unknown): string {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return '';
+  if (INVALID_ENV_SENTINELS.has(normalized.toLowerCase())) return '';
+  return normalized;
+}
 
 function monthKey(date: Date): string {
   const year = date.getUTCFullYear();
@@ -18,13 +26,13 @@ function addUtcMonths(date: Date, delta: number): Date {
 }
 
 function getRotatingSecret(): string {
-  return String(process.env.INVITE_ROTATING_SECRET || '').trim();
+  return normalizeEnvSecret(process.env.INVITE_ROTATING_SECRET);
 }
 
 function getStaticPasswordForTier(tierRub: InviteTierRub): string {
-  return String(
+  return normalizeEnvSecret(
     tierRub === 500 ? process.env.INVITE_PASSWORD_500 : process.env.INVITE_PASSWORD_1000
-  ).trim();
+  );
 }
 
 export function buildDynamicInvitePassword(tierRub: InviteTierRub, date: Date = new Date()): string {
