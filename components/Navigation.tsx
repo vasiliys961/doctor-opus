@@ -20,6 +20,7 @@ export default function Navigation() {
     { name: '📝 Протокол приёма', href: '/protocol' },
     { name: '🧮 Мед. калькуляторы', href: '/calculators' },
     { name: '📚 Клинические рекомендации', href: '/protocols' },
+    { name: '🔌 Подключение приборов', href: '/devices' },
     { name: '📈 Оценка ЭКГ', href: '/ecg' },
     { name: '🔍 Медицинские изображения', href: '/image-analysis' },
     { name: '🔬 Клинический разбор', href: '/advanced' },
