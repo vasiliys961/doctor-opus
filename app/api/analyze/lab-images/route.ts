@@ -71,11 +71,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Определение модели на основе режима или прямого указания
+    // Определение модели на основе режима или прямого указания.
+    // Для validated-режима legacy-модель Opus 4.6 принудительно маппим на validated-модель.
     let modelToUse = model || MODELS.GEMINI_3_FLASH;
     if (!model) {
       if (mode === 'optimized') modelToUse = MODELS.SONNET;
       else if (mode === 'validated') modelToUse = MODELS.OPUS_VALIDATED;
+    } else if (mode === 'validated' && (model === MODELS.OPUS || model === 'opus')) {
+      modelToUse = MODELS.OPUS_VALIDATED;
     }
 
     console.log(`🔬 [LAB IMAGES] Получено ${images.length} изображений для анализа, режим: ${mode}, модель: ${modelToUse}, streaming: ${useStreaming}`);

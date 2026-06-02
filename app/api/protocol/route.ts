@@ -276,7 +276,7 @@ ${evidencePriorityDirective}
 
     const allowGpt52Protocol = process.env.ALLOW_GPT52_PROTOCOL === 'true';
     const effectiveModel = model === 'gpt52' && !allowGpt52Protocol ? 'sonnet' : model;
-    const MODEL = effectiveModel === 'opus' ? MODELS.OPUS : 
+    const MODEL = effectiveModel === 'opus' ? MODELS.OPUS_VALIDATED : 
                  effectiveModel === 'gpt52' ? MODELS.GPT_5_2 : 
                  (effectiveModel === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
     

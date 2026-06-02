@@ -168,7 +168,7 @@ export default function ClinicalProtocolsPage() {
         📚 Клинические рекомендации
       </h1>
       <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">
-        Поиск актуальных международных и российских клинических рекомендаций через Opus 4.6 и Gemini 3.1
+        Поиск актуальных международных и российских клинических рекомендаций через Opus 4.8 и Gemini 3.1
       </p>
 
       {/* Форма поиска */}

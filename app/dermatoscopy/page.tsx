@@ -23,7 +23,7 @@ const STUDY_TYPES: { id: StudyType; icon: string; label: string; prompt: string;
     placeholder: 'Пример: Пациент 45 лет, образование на спине, заметил рост и изменение цвета в последние 3 месяца.',
     tipFast: 'двухэтапный скрининг — структурированное описание структуры и цвета, затем оценка риска.',
     tipOpt: 'рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и качества для дерматоскопии.',
-    tipVal: 'самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для атипичных и сложных образований.',
+    tipVal: 'самый точный экспертный анализ (Gemini JSON + Opus 4.8) — рекомендуется для атипичных и сложных образований.',
   },
   {
     id: 'wound',
@@ -99,7 +99,7 @@ export default function DermatoscopyPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-4.6');
+        formData.append('model', 'anthropic/claude-opus-4.8');
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3-flash-preview');
       }
@@ -122,7 +122,7 @@ export default function DermatoscopyPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
         
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.6';
+                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.8';
 
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
@@ -164,7 +164,7 @@ export default function DermatoscopyPage() {
         if (data.success) {
           setResult(data.result)
           
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.6');
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.8');
           const inputTokens = 2000;
           const outputTokens = Math.ceil(data.result.length / 4);
           const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);

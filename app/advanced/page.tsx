@@ -82,7 +82,7 @@ export default function AdvancedAnalysisPage() {
         ? 'google/gemini-3-flash-preview' 
         : mode === 'optimized' 
           ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4')
-          : 'anthropic/claude-opus-4.6'
+          : 'anthropic/claude-opus-4.8'
       
       const formData = new FormData()
       formData.append('file', mainImage)
@@ -144,7 +144,7 @@ export default function AdvancedAnalysisPage() {
         content={{
           fast: "базовый скрининг основного изображения с учетом контекста.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — лучший выбор для анализа снимков с описанием.",
-          validated: "двухэтапный экспертный анализ (Gemini JSON + Opus 4.6) — объединяет точность зрения Gemini и клинический интеллект Opus.",
+          validated: "двухэтапный экспертный анализ (Gemini JSON + Opus 4.8) — объединяет точность зрения Gemini и клинический интеллект Opus.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini JSON + Sonnet) — лучший выбор для анализа снимков с описанием.",
             "📎 Вы можете приложить дополнительные PDF, DOCX или фото для анализа в контексте.",

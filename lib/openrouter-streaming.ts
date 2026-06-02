@@ -6,13 +6,14 @@
 import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
 import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, prepareVisionDataForTextPrompt, resolvePromptRuntimeVars } from './prompts';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
+import { getValidatedOpusModel } from './validated-opus-model';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Актуальные модели (последние флагманы 2025-2026)
 const MODELS = {
   OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6 (default)
-  OPUS_VALIDATED: 'anthropic/claude-opus-4.7',             // Claude Opus 4.7 — только validated-режим
+  OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 4.8, rollback: VALIDATED_OPUS_MODEL=4.7
   SONNET: 'anthropic/claude-sonnet-4.6',                 // Claude Sonnet 4.6
   GPT_5_2: 'openai/gpt-5.4',                        // GPT-5.4 Chat (legacy key name kept for compatibility)
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
@@ -439,7 +440,7 @@ export async function analyzeImageOpusTwoStageStreaming(
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
       // Обновляем статус перед запуском второй модели
-      const stage2Header = `\n> *Stage 2: Clinical analysis via ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
+      const stage2Header = `\n> *Stage 2: Clinical analysis via ${model.includes('opus') ? 'Opus' : 'Sonnet 4.6'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
@@ -672,8 +673,8 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
       const stage2Header = isComparative
-        ? `\n> *Stage 2: Detailed clinical comparison via ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`
-        : `\n> *Stage 2: Detailed series analysis via ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
+        ? `\n> *Stage 2: Detailed clinical comparison via ${model.includes('opus') ? 'Opus' : 'Sonnet 4.6'}...*\n\n---\n\n`
+        : `\n> *Stage 2: Detailed series analysis via ${model.includes('opus') ? 'Opus' : 'Sonnet 4.6'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
@@ -899,7 +900,7 @@ export async function analyzeMultipleImagesWithJSONStreaming(
       const summaryLine = `\n\n✅ **Data verified:** ${findingsCount} findings, ${metricsCount} metrics from ${imagesBase64.length} images\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
-      const stage2Header = `\n> *Stage 2: Expert analysis via Opus 4.6 (maximum precision)...*\n\n---\n\n`;
+      const stage2Header = `\n> *Stage 2: Expert analysis via Opus (maximum precision)...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt } = await import('./prompts');

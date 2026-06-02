@@ -25,7 +25,7 @@ function estimateChatCost(params: {
   totalFileBytes: number;
 }): number {
   const modelBase =
-    params.selectedModel === MODELS.OPUS ? 2.2 :
+    (params.selectedModel === MODELS.OPUS || params.selectedModel === MODELS.OPUS_VALIDATED) ? 2.2 :
     params.selectedModel === MODELS.SONNET ? 1.3 :
     params.selectedModel === MODELS.GPT_5_2 ? 1.4 : 0.9;
   const textFactor = Math.min(1.4, params.messageLength / 3000);
@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
         ? MODELS.SONNET 
         : (model && (model === 'gemini' || model.includes('gemini')))
           ? MODELS.GEMINI_3_FLASH
-          : MODELS.OPUS;
+      : MODELS.OPUS_VALIDATED;
 
     const totalFileBytes = files.reduce((sum, file) => sum + file.size, 0);
     const estimatedCost = estimateChatCost({
@@ -186,7 +186,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isClaudeAssistantModel = selectedModel === MODELS.SONNET || selectedModel === MODELS.OPUS;
+    const isClaudeAssistantModel =
+      selectedModel === MODELS.SONNET ||
+      selectedModel === MODELS.OPUS ||
+      selectedModel === MODELS.OPUS_VALIDATED;
     const assistantFormattingInstruction = `
 ФОРМАТ ОТВЕТА:
 - Пиши в чистом Markdown, структурно и читаемо.

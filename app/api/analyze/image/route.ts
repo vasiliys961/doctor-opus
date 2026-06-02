@@ -341,12 +341,18 @@ export async function POST(request: NextRequest) {
     const allowGpt52Analyze = process.env.ALLOW_GPT52_ANALYZE === 'true';
     const normalizedCustomModel = (() => {
       if (!customModel) return null;
+      const isValidatedMode = mode === 'validated';
       if (customModel === 'gpt52' || customModel === MODELS.GPT_5_2) {
         return allowGpt52Analyze ? MODELS.GPT_5_2 : MODELS.SONNET;
       }
       if (customModel === 'sonnet' || customModel === MODELS.SONNET) return MODELS.SONNET;
-      if (customModel === 'opus' || customModel === MODELS.OPUS) return MODELS.OPUS;
+      if (customModel === 'opus' || customModel === MODELS.OPUS) {
+        // Legacy UI может присылать Opus 4.6 даже для validated-режима.
+        // В таком случае принудительно маршрутизируем на validated-модель.
+        return isValidatedMode ? MODELS.OPUS_VALIDATED : MODELS.OPUS;
+      }
       if (customModel === 'gemini' || customModel === MODELS.GEMINI_3_FLASH) return MODELS.GEMINI_3_FLASH;
+      if (customModel === MODELS.OPUS_VALIDATED) return MODELS.OPUS_VALIDATED;
       return customModel;
     })();
     const defaultModelByMode =

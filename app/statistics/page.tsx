@@ -8,6 +8,7 @@ import Link from 'next/link'
 // Цены моделей (для расчета условных единиц за 1M токенов)
 const MODEL_PRICING = {
   'anthropic/claude-opus-4.6': { input: 5.0, output: 25.0 },
+  'anthropic/claude-opus-4.8': { input: 5.0, output: 25.0 },
   'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
   'anthropic/claude-sonnet-4.6': { input: 3.0, output: 15.0 },
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },

@@ -192,7 +192,7 @@ export default function ImageAnalysisPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo({ 
-            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6', 
+            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.8', 
             mode: analysisMode + ' (из кэша)' 
           });
           return;
@@ -258,7 +258,7 @@ export default function ImageAnalysisPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-4.6');
+        // Не фиксируем версию на клиенте: backend сам выберет validated-модель (4.8/4.7 по env).
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3-flash-preview');
       }
@@ -284,7 +284,7 @@ export default function ImageAnalysisPage() {
           if (analysisMode === 'fast') modelUsed = 'google/gemini-3-flash-preview'
           else if (analysisMode === 'optimized') {
             modelUsed = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4'
-          } else modelUsed = 'anthropic/claude-opus-4.6'
+          } else modelUsed = 'anthropic/claude-opus-4.8'
           
           await handleSSEStream(response, {
             onChunk: (content, accumulatedText) => {
@@ -302,7 +302,7 @@ export default function ImageAnalysisPage() {
                     ? 'google/gemini-3-flash-preview'
                     : analysisMode === 'optimized'
                       ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4')
-                      : 'anthropic/claude-opus-4.6'
+                      : 'anthropic/claude-opus-4.8'
                 )
                 
                 setModelInfo({ model: modelUsed, mode: analysisMode })
@@ -353,7 +353,7 @@ export default function ImageAnalysisPage() {
 
           logUsage({
             section: imageType !== 'universal' ? imageType : 'image-analysis',
-            model: data.model || 'anthropic/claude-opus-4.6',
+            model: data.model || 'anthropic/claude-opus-4.8',
             inputTokens: 2000,
             outputTokens: 1500,
           })
@@ -422,7 +422,7 @@ export default function ImageAnalysisPage() {
         content={{
           fast: "двухэтапный скрининг (сначала краткое структурированное описание исследования, затем текстовый разбор), даёт компактное заключение и общий сигнал риска, удобен для первичного просмотра и триажа.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и цены для большинства медицинских исследований.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.6) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.8) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для большинства медицинских изображений.",
             "💡 Система автоматически определяет тип изображения: ЭКГ, Рентген, КТ, МРТ, УЗИ, Дерматоскопия, Гистология, Офтальмология, Маммография. Поддерживается формат DICOM.",

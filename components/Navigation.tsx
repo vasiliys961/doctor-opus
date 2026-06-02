@@ -205,7 +205,7 @@ export default function Navigation() {
             <p className="font-semibold mb-1">Клинический Ассистент v3.50</p>
             <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Клиническая версия</p>
             <ul className="space-y-1 text-xs opacity-70">
-              <li>• Opus 4.6 + Gemini 3.1</li>
+              <li>• Opus 4.8 + Gemini 3.1</li>
               <li>• Просмотр DICOM + измерения</li>
               <li>• Мультимодальный анализ (изображения + документы)</li>
               <li>• Анализ динамики и RAG</li>

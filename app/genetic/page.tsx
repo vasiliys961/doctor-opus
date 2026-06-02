@@ -388,7 +388,7 @@ export default function GeneticPage() {
             setResult(accumulatedText)
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.4' : 'anthropic/claude-opus-4.6');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.4' : 'anthropic/claude-opus-4.8');
             logUsage({
               section: 'genetic',
               model: model,
@@ -451,7 +451,7 @@ export default function GeneticPage() {
         // Логирование использования (этап консультации)
         logUsage({
           section: 'genetic',
-          model: 'anthropic/claude-opus-4.6',
+          model: 'anthropic/claude-opus-4.8',
           inputTokens: 4000, // примерное значение для консультации
           outputTokens: 3000,
         })
@@ -539,7 +539,7 @@ export default function GeneticPage() {
             })
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.4' : 'anthropic/claude-opus-4.6');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.4' : 'anthropic/claude-opus-4.8');
             logUsage({
               section: 'chat',
               model: model,
@@ -613,9 +613,9 @@ export default function GeneticPage() {
         title="Как работает генетический анализ"
         content={{
           fast: "первый этап: извлечение данных из сложных отчетов и VCF‑файлов. Мы используем специализированные алгоритмы для корректного чтения rsID и генотипов.",
-          validated: "второй этап: экспертное мнение «Ассистента-генетика» (Claude Opus 4.6) — самый точный клинический разбор рисков; экспертный режим.",
+          validated: "второй этап: экспертное мнение «Ассистента-генетика» (Claude Opus 4.8) — самый точный клинический разбор рисков; экспертный режим.",
           extra: [
-            "⭐ Рекомендуемый режим: «Экспертный» (Opus 4.6) — максимально глубокий анализ генетических данных.",
+            "⭐ Рекомендуемый режим: «Экспертный» (Opus 4.8) — максимально глубокий анализ генетических данных.",
             "🚀 Альтернатива: «GPT-5.4» — отличный баланс скорости, мощности и стоимости.",
             "👤 Рекомендуется добавить клинический контекст для более точной интерпретации результатов.",
             "💬 После получения заключения вы можете продолжить диалог с генетиком для уточнения деталей.",
@@ -938,7 +938,7 @@ export default function GeneticPage() {
                 }`}
               >
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-base">🧠 Opus 4.6</span>
+                  <span className="text-base">🧠 Opus 4.8</span>
                   <span className="text-[10px] uppercase opacity-60 font-bold">Экспертный (Макс. качество)</span>
                 </div>
               </button>
@@ -958,7 +958,7 @@ export default function GeneticPage() {
       <AnalysisResult 
         result={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
         loading={loading} 
-        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.4' : 'anthropic/claude-opus-4.6')}
+        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.4' : 'anthropic/claude-opus-4.8')}
         mode="genetic"
         cost={totalCost}
         images={file?.type.startsWith('image/') ? [URL.createObjectURL(file)] : []}

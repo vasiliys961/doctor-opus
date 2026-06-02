@@ -204,7 +204,7 @@ export default function LabPage() {
           body: JSON.stringify({
             images: processedImages,
             mode: mode,
-            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6'),
+            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.8'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
             prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
@@ -223,7 +223,7 @@ export default function LabPage() {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
-              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6')
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.8')
               setModelInfo({ model: usedModel, mode: mode })
               
               logUsage({
@@ -245,7 +245,7 @@ export default function LabPage() {
           const data = await response.json()
           if (data.success) {
             setResult(data.result)
-            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6');
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.8');
             setCurrentCost(data.cost || 1.0);
             setModelInfo({ model: usedModel, mode: mode });
 
@@ -285,7 +285,7 @@ export default function LabPage() {
           body: JSON.stringify({
             images: pdfImages,
             mode: mode,
-            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6'),
+            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.8'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
             prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
@@ -304,7 +304,7 @@ export default function LabPage() {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
-              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6')
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.8')
               setModelInfo({ model: usedModel, mode: mode })
               
               logUsage({
@@ -326,7 +326,7 @@ export default function LabPage() {
           const data = await response.json()
           if (data.success) {
             setResult(data.result)
-            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6');
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.8');
             setCurrentCost(data.cost || 1.0);
             setModelInfo({ model: usedModel, mode: mode });
 
@@ -345,7 +345,7 @@ export default function LabPage() {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('mode', mode)
-        const targetModelId = mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6');
+        const targetModelId = mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.8');
         formData.append('model', targetModelId)
         formData.append('useStreaming', useStreaming.toString())
         formData.append('isAnonymous', isAnonymous.toString())
@@ -368,7 +368,7 @@ export default function LabPage() {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
-              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6')
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.8')
               setModelInfo({ model: usedModel, mode: mode })
               
               logUsage({
@@ -390,7 +390,7 @@ export default function LabPage() {
           const data = await response.json()
           if (data.success) {
             setResult(data.result)
-            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6');
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.8');
             setCurrentCost(data.cost || 1.0);
             setModelInfo({ model: usedModel, mode: mode });
 
@@ -429,7 +429,7 @@ export default function LabPage() {
           content={{
             fast: "быстрый анализ через Gemini 3.1 Flash — идеально подходит для мгновенного извлечения данных из лабораторных бланков.",
             optimized: "сбалансированный режим (Gemini JSON + Sonnet 4.6) — глубокий клинический разбор на основе извлеченных данных.",
-            validated: "экспертный анализ (Gemini JSON + Opus 4.6) — максимально детальная оценка отклонений от нормы.",
+            validated: "экспертный анализ (Gemini JSON + Opus 4.8) — максимально детальная оценка отклонений от нормы.",
             extra: [
               "🚀 Рекомендуемый выбор: Gemini 3.1 Flash (режим «Быстрый») — самая высокая точность распознавания таблиц и показателей.",
               "📄 Вы можете загрузить PDF, Excel (XLSX/XLS), CSV или просто фото бланка.",

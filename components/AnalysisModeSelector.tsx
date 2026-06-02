@@ -40,7 +40,7 @@ export default function AnalysisModeSelector({
     {
       value: 'validated',
       label: '🧠 С валидацией',
-      description: 'Gemini JSON + Opus 4.6 — экспертный разбор сложных случаев',
+      description: 'Gemini JSON + Opus 4.8 — экспертный разбор сложных случаев',
       icon: '🧠'
     }
   ]
