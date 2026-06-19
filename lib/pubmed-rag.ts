@@ -26,6 +26,18 @@ function normalizeQuery(query: string): string {
   return query.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+function compactQueryForPubMed(query: string): string {
+  const cleaned = query
+    .replace(/#+\s*/g, ' ')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  const words = cleaned.split(' ').filter(Boolean);
+  const limitedWords = words.slice(0, 36).join(' ');
+  return limitedWords.slice(0, 260).trim();
+}
+
 async function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -54,7 +66,8 @@ export async function searchPubMedEvidence(
   rawQuery: string,
   options: SearchOptions = {}
 ): Promise<PubMedArticle[]> {
-  const query = normalizeQuery(rawQuery);
+  const compact = compactQueryForPubMed(rawQuery);
+  const query = normalizeQuery(compact);
   if (!query) return [];
 
   const maxResults = Math.min(Math.max(options.maxResults ?? 5, 1), 10);

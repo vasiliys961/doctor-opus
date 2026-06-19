@@ -68,12 +68,14 @@ export default function Advanced3DPage() {
               </div>
             </div>
 
-            <FileUpload 
-              onUpload={handleUpload}
-              accept=".dcm,.dicom,application/dicom"
-              multiple={true}
-              bridgePullTarget="image_analysis"
-            />
+            <div data-tour="dicom-folder-upload">
+              <FileUpload 
+                onUpload={handleUpload}
+                accept=".dcm,.dicom,application/dicom"
+                multiple={true}
+                bridgePullTarget="image_analysis"
+              />
+            </div>
           </div>
         </div>
 

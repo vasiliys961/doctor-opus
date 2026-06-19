@@ -8,6 +8,7 @@ import LegalFooter from '@/components/LegalFooter'
 import CookieBanner from '@/components/CookieBanner'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import OnboardingTour from '@/components/OnboardingTour'
+import AgentNavigator from '@/components/AgentNavigator'
 
 // Next.js скачивает шрифт при сборке и раздает с сервера — без запросов к Google в runtime
 const inter = Inter({
@@ -76,6 +77,7 @@ export default function RootLayout({
         </div>
         <Providers>
           <OnboardingTour />
+          <AgentNavigator />
           <div className="flex min-h-screen">
             {/* Навигация - адаптивная для всех устройств */}
             <Navigation />

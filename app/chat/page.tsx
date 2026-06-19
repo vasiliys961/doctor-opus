@@ -405,7 +405,8 @@ export default function ChatPage() {
     setIsCutOff(false)
     setLoading(true)
 
-    let userMessage = message || (selectedFiles.length > 0 ? 'Проанализируйте прикрепленные файлы' : '')
+    const userMessageVisible = message || (selectedFiles.length > 0 ? 'Проанализируйте прикрепленные файлы' : '')
+    let userMessageForModel = userMessageVisible
     let ragRequested = false
     let ragUsed = false
     let ragSources: string[] = []
@@ -423,7 +424,8 @@ export default function ChatPage() {
             const pagePart = Number.isFinite(Number(hit.pageId)) ? `стр. ${hit.pageId}` : 'стр. ?'
             return `${name} (${pagePart})`
           })
-          userMessage += `\n\n### КОНТЕКСТ ИЗ БИБЛИОТЕКИ:\n${results.join('\n---\n')}`
+          // Контекст нужен модели, но не должен визуализироваться в пользовательском сообщении.
+          userMessageForModel += `\n\n### КОНТЕКСТ ИЗ БИБЛИОТЕКИ:\n${results.join('\n---\n')}`
           ragUsed = true
         }
       } catch (err) {
@@ -474,7 +476,7 @@ export default function ChatPage() {
 
     setMessages(prev => [...prev, { 
       role: 'user', 
-      content: userMessage,
+      content: userMessageVisible,
       files: filesInfo.length > 0 ? filesInfo : undefined,
       ragRequested: ragRequested || undefined,
       ragUsed: ragRequested ? ragUsed : undefined,
@@ -510,7 +512,7 @@ export default function ChatPage() {
 
           for (let batchIndex = 0; batchIndex < fileBatches.length; batchIndex++) {
             const batch = fileBatches[batchIndex];
-            const batchPrompt = `${userMessage}\n\n[Пакет вложений ${batchIndex + 1}/${fileBatches.length}] Проанализируйте файлы этого пакета и дайте выводы.`;
+            const batchPrompt = `${userMessageForModel}\n\n[Пакет вложений ${batchIndex + 1}/${fileBatches.length}] Проанализируйте файлы этого пакета и дайте выводы.`;
             const batchFormData = new FormData();
             batchFormData.append('message', batchPrompt);
             batchFormData.append('history', JSON.stringify(messages));
@@ -563,7 +565,7 @@ export default function ChatPage() {
         }
 
         const formData = new FormData()
-        formData.append('message', userMessage)
+        formData.append('message', userMessageForModel)
         formData.append('history', JSON.stringify(messages))
         formData.append('useStreaming', useStreaming.toString())
         formData.append('model', modelName)
@@ -730,7 +732,7 @@ export default function ChatPage() {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              message: userMessage,
+              message: userMessageForModel,
               history: messages,
               useStreaming: true,
               model: modelName,
@@ -867,7 +869,7 @@ export default function ChatPage() {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              message: userMessage,
+              message: userMessageForModel,
               history: messages,
               useStreaming: false,
               model: modelName,
@@ -1272,7 +1274,7 @@ export default function ChatPage() {
             <span className="text-xs sm:text-sm">Streaming</span>
           </label>
 
-          <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
+          <label data-tour="chat-rag-toggle" className="flex items-center gap-2 cursor-pointer touch-manipulation">
             <input
               type="checkbox"
               checked={useLibrary}

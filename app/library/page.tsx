@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   getAllDocuments, 
   saveDocument, 
@@ -12,6 +12,7 @@ import {
 const BRIDGE_LIBRARY_KEY = 'mobile_bridge_library_draft';
 
 export default function LibraryPage() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [documents, setDocuments] = useState<LibraryDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -331,6 +332,7 @@ export default function LibraryPage() {
             </div>
             {!uploading && (
               <input 
+                ref={fileInputRef}
                 type="file" 
                 className="hidden" 
                 accept=".pdf" 
@@ -338,6 +340,16 @@ export default function LibraryPage() {
               />
             )}
           </label>
+        </div>
+        <div className="mt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            📄 Загрузить PDF
+          </button>
         </div>
       </div>
 

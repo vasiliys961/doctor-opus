@@ -286,7 +286,9 @@ export default function ECGPage() {
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Загрузите изображение ЭКГ</h2>
         
-        <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} bridgePullTarget="ecg_analysis" />
+        <div data-tour="ecg-upload-zone">
+          <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} bridgePullTarget="ecg_analysis" />
+        </div>
         
         {file && imagePreview && (
           <div className="mt-6">
@@ -327,7 +329,7 @@ export default function ECGPage() {
                   ⚠️ Похоже, вы ввели ФИО. Пожалуйста, удалите персональные данные для защиты приватности.
                 </p>
               )}
-              <div className="mb-4">
+              <div className="mb-4" data-tour="ecg-anonymous">
                 <label className="flex items-center space-x-2 cursor-pointer p-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-900">
                   <input
                     type="checkbox"
@@ -377,6 +379,7 @@ export default function ECGPage() {
               <button
                 onClick={() => analyzeImage('fast', useStreaming)}
                 disabled={loading}
+                data-tour="ecg-analyze-fast"
                 className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 ⚡ Быстрый {useStreaming ? '(стриминг)' : ''}
@@ -384,6 +387,7 @@ export default function ECGPage() {
               <button
                 onClick={() => analyzeImage('optimized', useStreaming)}
                 disabled={loading}
+                data-tour="ecg-analyze-optimized"
                 className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 ⭐ Оптимизированный {useStreaming ? '(стриминг)' : ''}
@@ -391,6 +395,7 @@ export default function ECGPage() {
               <button
                 onClick={() => analyzeImage('validated', useStreaming)}
                 disabled={loading}
+                data-tour="ecg-analyze-validated"
                 className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
               >
                 🧠 С валидацией {useStreaming ? '(стриминг)' : ''}

@@ -740,6 +740,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           {!loading && result && imageType === 'ecg' && (
             <button
               onClick={handleTransferToEcgProtocol}
+              data-tour="result-to-protocol"
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
               title="Оформить короткий аналитический разбор функционалиста по шаблону"
             >
@@ -749,6 +750,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           {!loading && result && imageType !== 'ecg' && (
             <button
               onClick={() => handleTransferToProtocol(false)}
+              data-tour="result-to-protocol"
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
               title="Передать очищенный аналитический разбор в раздел Протокол"
             >
@@ -777,6 +779,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           {!loading && result && (
             <button
               onClick={handleTransferToConsultant}
+              data-tour="result-to-consultant"
               className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
             >
               🩺 Обсудить тактику

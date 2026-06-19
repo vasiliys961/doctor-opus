@@ -36,6 +36,7 @@ export default function DevicesPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
+            data-tour={`device-tab-${tab.id}`}
             className={`flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm transition-all border-2 ${
               activeTab === tab.id
                 ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg'
