@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, RATE_LIMIT_AUTH, getRateLimitKey } from '@/lib/rate-limiter';
 import { safeErrorMessage } from '@/lib/safe-error';
 import { BILLING_CONFIG } from '@/lib/config';
+import { isAuthEmailForbidden } from '@/lib/auth';
 
 /**
  * POST /api/auth/register
@@ -42,6 +43,13 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+
+    if (isAuthEmailForbidden(normalizedEmail)) {
+      return NextResponse.json(
+        { error: 'Регистрация с домена gmail.com запрещена. Используйте рабочий email.' },
+        { status: 403 }
+      );
+    }
 
     // Проверка БД
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
