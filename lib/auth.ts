@@ -35,16 +35,6 @@ function normalizeEmail(value?: string | null): string {
   return String(value || '').trim().toLowerCase();
 }
 
-const BLOCKED_EMAIL_DOMAINS = new Set(['gmail.com']);
-
-function isBlockedEmailDomain(email?: string | null): boolean {
-  const normalized = normalizeEmail(email);
-  const at = normalized.lastIndexOf('@');
-  if (at === -1) return false;
-  const domain = normalized.slice(at + 1);
-  return BLOCKED_EMAIL_DOMAINS.has(domain);
-}
-
 type InviteTier = { amountRub: number; units: number; operation: string } | null;
 
 function isInviteModeEnabled(): boolean {
@@ -146,10 +136,6 @@ export function isBlockedEmail(email?: string | null): boolean {
   return getBlockedEmails().includes(email.toLowerCase());
 }
 
-export function isAuthEmailForbidden(email?: string | null): boolean {
-  return isBlockedEmail(email) || isBlockedEmailDomain(email);
-}
-
 // Список VIP email — из серверного env (единый источник истины)
 function getVipEmails(): string[] {
   const envVip = process.env.VIP_EMAILS;
@@ -185,7 +171,7 @@ export const authOptions: NextAuthOptions = {
         const inviteTier = resolveInviteTier(password);
 
         // Жесткая блокировка на уровне авторизации
-        if (isAuthEmailForbidden(email)) {
+        if (isBlockedEmail(email)) {
           return null;
         }
 

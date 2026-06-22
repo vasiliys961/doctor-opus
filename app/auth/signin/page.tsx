@@ -15,16 +15,9 @@ export default function SignIn() {
   const [isRegister, setIsRegister] = useState(false);
   const router = useRouter();
 
-  const isForbiddenDomain = (value: string) => value.trim().toLowerCase().endsWith('@gmail.com');
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreed || !agreedCrossBorder) return;
-    if (isForbiddenDomain(email)) {
-      setStatus('error');
-      setErrorMessage('Вход с домена gmail.com запрещён. Используйте рабочий email.');
-      return;
-    }
     setStatus('loading');
     setErrorMessage('');
 
@@ -52,11 +45,6 @@ export default function SignIn() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreed || !agreedCrossBorder) return;
-    if (isForbiddenDomain(email)) {
-      setStatus('error');
-      setErrorMessage('Регистрация с домена gmail.com запрещена. Используйте рабочий email.');
-      return;
-    }
     setStatus('loading');
     setErrorMessage('');
 
