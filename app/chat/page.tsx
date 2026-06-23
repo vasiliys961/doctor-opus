@@ -1281,7 +1281,7 @@ export default function ChatPage() {
               onChange={(e) => setUseLibrary(e.target.checked)}
               className="w-5 h-5 sm:w-4 sm:h-4 text-teal-600"
             />
-            <span className="text-xs sm:text-sm font-medium text-teal-700">📚 Библиотека (RAG)</span>
+            <span className="text-xs sm:text-sm font-medium text-teal-700">📚 Искать по моей библиотеке</span>
           </label>
 
           <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
@@ -1359,7 +1359,7 @@ export default function ChatPage() {
                   ? 'bg-indigo-100 text-indigo-400' 
                   : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
             }`}
-            title={useLibrary ? "Автоматический поиск включен" : "Найти и вставить контекст из вашей библиотеки PDF вручную"}
+            title={useLibrary ? "Поиск по библиотеке уже включен для этого сообщения" : "Найти и вставить источники из вашей библиотеки вручную"}
           >
             {searchingLibrary ? '⏳' : '📚'}
           </button>

@@ -141,10 +141,10 @@ export default function AnalysisModeSelector({
           </div>
           <div>
             <div className="font-semibold text-gray-900">
-              📚 Использовать персональную библиотеку
+              📚 Подключить источники из библиотеки (по запросу)
             </div>
             <div className="text-xs text-gray-600">
-              RAG-поиск по вашим загруженным PDF-файлам для уточнения анализа
+              Источники из ваших PDF подключаются только по вашему запросу
             </div>
           </div>
         </div>

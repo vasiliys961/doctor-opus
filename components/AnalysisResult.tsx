@@ -718,7 +718,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             onClick={() => setShowLibrarySearch(!showLibrarySearch)}
             className={`px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2 font-bold ${showLibrarySearch ? 'bg-primary-100 text-primary-700' : 'bg-primary-50 text-primary-600 hover:bg-primary-100'}`}
           >
-            📚 {showLibrarySearch ? 'Скрыть библиотеку' : 'Найти в Библиотеке'}
+            📚 {showLibrarySearch ? 'Скрыть источники' : 'Найти источники в библиотеке'}
           </button>
           <button
             onClick={handleCopy}

@@ -12,6 +12,9 @@ const withPWA = require('@ducanh2912/next-pwa').default({
     // Stabilize SW build: avoid terser/sourcemap edge-cases in plugin pipeline.
     mode: 'development',
     sourcemap: false,
+    // Не прекэшировать тяжёлые локальные модели (~167 МБ) — они кэшируются
+    // в браузере при первом обращении, а не на установке service worker.
+    exclude: [/\.onnx$/, /ort-wasm.*\.wasm$/, /\/models\//],
     runtimeCaching: [
       {
         urlPattern: /\/api\/auth\/.*/i,
@@ -49,13 +52,38 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '200mb',
     },
+    // transformers.js используется только в браузере: не бандлим его на сервере,
+    // иначе webpack пытается разобрать нативные .node-бинарники onnxruntime-node.
+    serverComponentsExternalPackages: ['@xenova/transformers'],
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
       path: false,
       crypto: false,
+    };
+    // В браузере используется onnxruntime-web, нативный onnxruntime-node не нужен
+    // нигде в нашем коде — исключаем, чтобы не ломать сборку на .node-бинарниках.
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'onnxruntime-node$': false,
+    };
+    // sharp — это Node-зависимость transformers.js; в клиентском бандле она не нужна
+    // (на сервере sharp используется отдельно и остаётся доступной).
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        sharp$: false,
+      };
+    }
+    // Не следим за тяжёлыми/служебными папками: снижает число открытых файлов
+    // у file-watcher (иначе на macOS с лимитом kern.maxfilesperproc=10240 легко
+    // словить EMFILE) и ускоряет dev. RegExp вместо glob — путь проекта содержит
+    // пробел и кириллицу, на таких путях анкеренные glob'ы webpack не матчатся.
+    config.watchOptions = {
+      ...config.watchOptions,
+      ignored: /[\\/](?:node_modules|\.next|\.git)[\\/]|[\\/]public[\\/](?:models|ort)[\\/]/,
     };
     return config;
   },
@@ -77,7 +105,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com",
               "img-src 'self' data: blob:",
               "font-src 'self' data: https://fonts.gstatic.com",
-              "connect-src 'self' https://openrouter.ai https://api.assemblyai.com https://api.cloud.yandex.net https://cdn.tailwindcss.com",
+              "connect-src 'self' blob: data: https://openrouter.ai https://api.assemblyai.com https://api.cloud.yandex.net https://cdn.tailwindcss.com",
               "media-src 'self' blob:",
               "worker-src 'self' blob:",
               "frame-ancestors 'self'",

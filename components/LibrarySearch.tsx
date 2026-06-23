@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { searchLibraryLocal } from '@/lib/library-db'
+import { searchLibraryLocalWithMeta, type LibrarySearchHit } from '@/lib/library-db'
 
 interface LibrarySearchProps {
   query: string
@@ -9,7 +9,7 @@ interface LibrarySearchProps {
 }
 
 export default function LibrarySearch({ query, isActive = false }: LibrarySearchProps) {
-  const [results, setResults] = useState<string[]>([])
+  const [results, setResults] = useState<LibrarySearchHit[]>([])
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -25,7 +25,7 @@ export default function LibrarySearch({ query, isActive = false }: LibrarySearch
     try {
       // Извлекаем ключевые слова для поиска (первые 2 предложения или 200 символов)
       const searchTerms = query.split(/[.!?]/).slice(0, 2).join(' ').substring(0, 200)
-      const found = await searchLibraryLocal(searchTerms, 5)
+      const found = await searchLibraryLocalWithMeta(searchTerms, 5)
       setResults(found)
     } catch (err) {
       console.error('Library search error:', err)
@@ -41,7 +41,7 @@ export default function LibrarySearch({ query, isActive = false }: LibrarySearch
     <div className="mt-8 border-t border-gray-100 pt-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex items-center gap-2 mb-4">
         <span className="text-2xl">📚</span>
-        <h3 className="text-lg font-bold text-primary-900">Поиск похожих случаев в Библиотеке</h3>
+        <h3 className="text-lg font-bold text-primary-900">Источники из вашей библиотеки</h3>
       </div>
 
       {searching ? (
@@ -51,15 +51,19 @@ export default function LibrarySearch({ query, isActive = false }: LibrarySearch
         </div>
       ) : results.length > 0 ? (
         <div className="space-y-4">
-          <p className="text-xs text-green-600 font-semibold uppercase tracking-wider">Найдены релевантные выдержки из вашей литературы:</p>
+          <p className="text-xs text-green-600 font-semibold uppercase tracking-wider">Найдены релевантные источники из вашей литературы:</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {results.map((content, idx) => (
+            {results.map((hit, idx) => (
               <div key={idx} className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-sm text-indigo-900 relative group overflow-hidden max-h-60 overflow-y-auto">
                 <div className="absolute top-0 right-0 p-1 bg-indigo-200 text-indigo-700 text-[10px] font-bold uppercase rounded-bl-lg opacity-50">
-                  Выдержка #{idx + 1}
+                  Источник #{idx + 1}
+                </div>
+                <div className="mb-2 text-[11px] font-semibold text-indigo-700">
+                  {hit.documentName || 'Документ из библиотеки'}
+                  {Number.isFinite(Number(hit.pageId)) ? ` · стр. ${hit.pageId}` : ''}
                 </div>
                 <div className="whitespace-pre-wrap italic leading-relaxed">
-                  {content.length > 500 ? content.substring(0, 500) + '...' : content}
+                  {hit.content.length > 500 ? hit.content.substring(0, 500) + '...' : hit.content}
                 </div>
               </div>
             ))}
