@@ -1,0 +1,38 @@
+# Отдельный, самодостаточный compose для локального STT-сервиса (faster-whisper).
+# НЕ связан с основным docker-compose.yml: запускается и останавливается независимо.
+#
+# Запуск:   docker compose -f docker-compose.stt.yml up -d --build
+# Логи:     docker compose -f docker-compose.stt.yml logs -f
+# Стоп:     docker compose -f docker-compose.stt.yml down
+#
+# Тест после старта: открыть http://SERVER_IP:8000/  (мини тест-страница)
+
+services:
+  stt:
+    build:
+      context: ./stt-service
+      dockerfile: Dockerfile
+    container_name: doctor-opus-stt
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # --- Скорость/качество (подобрано под слабый CPU) ---
+      # Модель: tiny (быстро/слабее) < base < small (баланс) < medium (точно/медленно)
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-int8}
+      - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
+      - WHISPER_LANGUAGE=${WHISPER_LANGUAGE:-ru}
+      # beam_size=1 — жадный поиск, быстрее всего на 1 ядре
+      - WHISPER_BEAM_SIZE=${WHISPER_BEAM_SIZE:-1}
+      - WHISPER_VAD_FILTER=${WHISPER_VAD_FILTER:-true}
+      - WHISPER_CPU_THREADS=${WHISPER_CPU_THREADS:-0}
+      - STT_MAX_UPLOAD_MB=${STT_MAX_UPLOAD_MB:-200}
+    volumes:
+      # Кэш скачанной модели, чтобы не качать при каждом рестарте.
+      - ./stt-service/models:/models
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

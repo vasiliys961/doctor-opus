@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import AudioUpload from '@/components/AudioUpload'
 import VoiceInput from '@/components/VoiceInput'
+import SecureProtocolRecorder from '@/components/SecureProtocolRecorder'
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -27,6 +28,8 @@ declare global {
 }
 
 const PROTOCOL_DRAFT_KEY = 'protocol_draft'
+const PROTOCOL_DRAFT_URL_PARAM = 'draftText'
+const PROTOCOL_DRAFT_WINDOW_NAME_PREFIX = 'secure_protocol_draft:'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
 const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
 
@@ -64,6 +67,7 @@ function chunkTemplateForRag(content: string, maxChunkLength: number = 1200): st
 export default function ProtocolPage() {
   const [rawText, setRawText] = useState('')
   const [showAudioUpload, setShowAudioUpload] = useState(false)
+  const [showSecureRecorder, setShowSecureRecorder] = useState(false)
   const [protocol, setProtocol] = useState('')
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
@@ -145,6 +149,38 @@ export default function ProtocolPage() {
       // ignore
     } finally {
       localStorage.removeItem(PROTOCOL_DRAFT_KEY)
+    }
+  }, [])
+
+  // Импорт черновика из URL (например, переход из stt-service localhost:8000 -> localhost:3000/protocol?draftText=...)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    // Приоритет 1: перенос через window.name (работает между localhost:8000 и localhost:3000).
+    const draftFromWindowName = window.name?.startsWith(PROTOCOL_DRAFT_WINDOW_NAME_PREFIX)
+      ? window.name.slice(PROTOCOL_DRAFT_WINDOW_NAME_PREFIX.length)
+      : ''
+    if (draftFromWindowName.trim()) {
+      setRawText(draftFromWindowName)
+      window.name = ''
+      return
+    }
+
+    // Приоритет 2: fallback через query param.
+    const url = new URL(window.location.href)
+    const encoded = url.searchParams.get(PROTOCOL_DRAFT_URL_PARAM)
+    if (!encoded) return
+
+    try {
+      if (encoded.trim()) {
+        setRawText(encoded)
+      }
+    } catch {
+      // ignore malformed query
+    } finally {
+      // Чистим URL, чтобы текст не вставлялся повторно при refresh и не светился в адресной строке.
+      url.searchParams.delete(PROTOCOL_DRAFT_URL_PARAM)
+      window.history.replaceState({}, '', url.toString())
     }
   }, [])
 
@@ -694,14 +730,50 @@ export default function ProtocolPage() {
           </div>
           
           <div className="mb-4">
+            <div className="flex items-center gap-3 flex-wrap mb-2">
+              <button
+                onClick={() => setShowSecureRecorder(!showSecureRecorder)}
+                className={`px-4 py-2 rounded-lg transition-colors text-sm text-white ${showSecureRecorder ? 'bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                disabled={loading}
+              >
+                🎙️ Запись беседы с пациентом
+              </button>
+              <span className="text-[11px] text-gray-500">
+                Запись и ввод объективных данных можно вести одновременно
+              </span>
+            </div>
+            {showSecureRecorder && (
+              <div className="p-4 bg-indigo-50/40 border border-indigo-200 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-sm text-indigo-900">🎙️ Запись беседы с пациентом</h3>
+                  <button onClick={() => setShowSecureRecorder(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+                <p className="text-[11px] text-gray-500 mb-3">
+                  Запись → локальное распознавание (Whisper) → проверка текста врачом → черновик жалоб/анамнеза.
+                  Пока идёт запись, объективные данные можно сразу вносить в поле ниже. Аудио на диск не сохраняется.
+                </p>
+                <SecureProtocolRecorder
+                  disabled={loading}
+                  onInsert={(text) => {
+                    setRawText(prev => prev ? prev + '\n\n' + text : text)
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700">Текст для обработки:</label>
-              <VoiceInput 
-                onTranscript={(text) => setRawText(prev => prev ? prev + ' ' + text : text)}
-                disabled={loading}
-                className="!bg-indigo-600 !text-white hover:!bg-indigo-700"
-                placeholder="Диктовать"
-              />
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500">Голосовой ввод данных врачом</span>
+                <VoiceInput 
+                  onTranscript={(text) => setRawText(prev => prev ? prev + ' ' + text : text)}
+                  disabled={loading}
+                  className="!bg-indigo-600 !text-white hover:!bg-indigo-700"
+                  placeholder="Голосовой ввод данных врачом"
+                />
+              </div>
             </div>
             <textarea
               value={rawText}
@@ -713,7 +785,7 @@ export default function ProtocolPage() {
             />
           </div>
 
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-4 flex-wrap">
             <button onClick={() => setShowAudioUpload(!showAudioUpload)} className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors text-sm" disabled={loading}>
               📁 Аудио файл
             </button>

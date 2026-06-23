@@ -56,6 +56,7 @@ export async function middleware(request: NextRequest) {
     '/api/protocol',          // Генерация протокола для гостя
     '/api/protocols/search',  // Поиск протоколов для гостя
     '/api/mobile-bridge',     // Публичный мост смартфон -> накопитель (доступ по одноразовому токену сессии)
+    '/api/secure-protocol',   // Параллельный secure-протокол (Whisper + черновик)
   ];
 
   const isPublicPath = publicPaths.some(p =>

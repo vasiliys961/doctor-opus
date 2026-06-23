@@ -94,7 +94,14 @@ cp .env.example .env
 ```bash
 npm run dev
 ```
-Откройте [http://localhost:3000](http://localhost:3000)
+Команда поднимает сразу:
+- основной интерфейс: [http://localhost:3000](http://localhost:3000)
+- локальный Whisper STT: [http://localhost:8000](http://localhost:8000)
+
+Если нужен только Next.js без STT, используйте:
+```bash
+npm run dev:web
+```
 
 ---
 
