@@ -236,27 +236,43 @@ export default function LibraryPage() {
     const targets = chunks.filter((c) => c.content && c.content.trim().length > 0);
     if (targets.length === 0) return false;
 
-    try {
-      for (let start = 0; start < targets.length; start += EMBED_BATCH) {
-        const batch = targets.slice(start, start + EMBED_BATCH);
-        onProgress(
-          `Векторизация фрагментов: ${Math.min(start + EMBED_BATCH, targets.length)}/${targets.length}...`
-        );
+    let embeddedAny = false;
+    let skipped = 0;
+    for (let start = 0; start < targets.length; start += EMBED_BATCH) {
+      const batch = targets.slice(start, start + EMBED_BATCH);
+      onProgress(
+        `Векторизация фрагментов: ${Math.min(start + EMBED_BATCH, targets.length)}/${targets.length}...`
+      );
+      try {
         const vectors = await embedTexts(
           batch.map((c) => c.content),
           'passage'
         );
         batch.forEach((chunk, k) => {
           chunk.embedding = quantizeInt8(vectors[k]);
+          embeddedAny = true;
         });
-        // Уступаем поток интерфейсу, чтобы прогресс обновлялся и вкладка не "висла".
-        await new Promise((resolve) => setTimeout(resolve, 0));
+      } catch (batchErr) {
+        console.warn('Пакет векторизации не удался, пробуем по одному фрагменту:', batchErr);
+        for (const chunk of batch) {
+          try {
+            const [vector] = await embedTexts([chunk.content], 'passage');
+            chunk.embedding = quantizeInt8(vector);
+            embeddedAny = true;
+          } catch (singleErr) {
+            skipped += 1;
+            console.warn('Фрагмент пропущен при векторизации:', singleErr);
+          }
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
       }
-      return true;
-    } catch (err) {
-      console.warn('Векторизация не удалась, останется поиск по ключевым словам:', err);
-      return false;
+      // Уступаем поток интерфейсу, чтобы прогресс обновлялся и вкладка не "висла".
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
+    if (skipped > 0) {
+      setImageNote(`Векторизация завершена с пропусками: ${skipped} фрагм. не удалось обработать.`);
+    }
+    return embeddedAny;
   };
 
   const handleReindex = async (doc: LibraryDocument) => {
@@ -275,6 +291,7 @@ export default function LibraryPage() {
       const embeddingsById = new Map<string, Int8Array>();
       // Более мелкий шаг = заметно более отзывчивая кнопка "Остановить".
       const REINDEX_BATCH = 4;
+      let skipped = 0;
 
       for (let start = 0; start < targets.length; start += REINDEX_BATCH) {
         if (reindexCancelRequestedRef.current) {
@@ -284,14 +301,35 @@ export default function LibraryPage() {
         setReindexProgress(
           `Векторизация: ${Math.min(start + REINDEX_BATCH, targets.length)}/${targets.length}...`
         );
-        const vectors = await embedTexts(
-          batch.map((r) => r.content),
-          'passage'
-        );
+        let vectors: Float32Array[] | null = null;
+        try {
+          vectors = await embedTexts(
+            batch.map((r) => r.content),
+            'passage'
+          );
+        } catch (batchErr) {
+          console.warn('Пакет реиндексации не удался, пробуем по одному фрагменту:', batchErr);
+        }
         if (reindexCancelRequestedRef.current) {
           throw new Error('REINDEX_CANCELLED');
         }
-        batch.forEach((record, k) => embeddingsById.set(record.id, quantizeInt8(vectors[k])));
+        if (vectors) {
+          batch.forEach((record, k) => embeddingsById.set(record.id, quantizeInt8(vectors[k])));
+        } else {
+          for (const record of batch) {
+            try {
+              const [singleVector] = await embedTexts([record.content], 'passage');
+              embeddingsById.set(record.id, quantizeInt8(singleVector));
+            } catch (singleErr) {
+              skipped += 1;
+              console.warn('Фрагмент пропущен при реиндексации:', singleErr);
+            }
+            if (reindexCancelRequestedRef.current) {
+              throw new Error('REINDEX_CANCELLED');
+            }
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+        }
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
 
@@ -301,6 +339,9 @@ export default function LibraryPage() {
 
       await saveChunkEmbeddings(doc.id, embeddingsById);
       await fetchDocuments();
+      if (skipped > 0) {
+        setImageNote(`Реиндексация завершена с пропусками: ${skipped} фрагм. не удалось обработать.`);
+      }
     } catch (err: any) {
       if (err?.message === 'REINDEX_CANCELLED') {
         setImageNote('Векторизация остановлена. Документ сохранён, можно запустить снова в удобный момент.');
