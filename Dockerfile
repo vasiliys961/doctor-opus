@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
     g++ \
+    libvips-dev \
     libcairo2-dev \
     libpango1.0-dev \
     libjpeg-dev \
@@ -18,7 +19,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Копируем конфиги и устанавливаем зависимости
 COPY package.json package-lock.json* ./
-RUN npm install --frozen-lockfile
+RUN npm config set fetch-retries 5 \
+    && npm config set fetch-retry-factor 2 \
+    && npm config set fetch-retry-mintimeout 20000 \
+    && npm config set fetch-retry-maxtimeout 120000 \
+    && npm config set fetch-timeout 300000 \
+    && for i in 1 2 3; do \
+         npm install --frozen-lockfile && break; \
+         if [ "$i" -eq 3 ]; then exit 1; fi; \
+         echo "npm install failed, retry $i/3..."; \
+         sleep $((i * 15)); \
+       done
 
 # Копируем исходники и собираем проект
 COPY . .

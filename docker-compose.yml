@@ -31,6 +31,36 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  stt:
+    build:
+      context: ./stt-service
+      dockerfile: Dockerfile
+    container_name: doctor-opus-stt-en
+    restart: always
+    environment:
+      - HF_HOME=/models
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-int8}
+      - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
+      - WHISPER_LANGUAGE=${WHISPER_LANGUAGE:-ru}
+      - WHISPER_BEAM_SIZE=${WHISPER_BEAM_SIZE:-1}
+      - WHISPER_VAD_FILTER=${WHISPER_VAD_FILTER:-true}
+      - WHISPER_CPU_THREADS=${WHISPER_CPU_THREADS:-0}
+      - STT_MAX_UPLOAD_MB=${STT_MAX_UPLOAD_MB:-200}
+      # Нужен для fallback-сборки черновика в stt-service (/draft).
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - DRAFT_MODEL=${DRAFT_MODEL:-google/gemini-3-flash-preview}
+    volumes:
+      - stt-models-en:/models
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - doctor-opus-en
+
   medical-assistant-en:
     build:
       context: .
@@ -59,6 +89,9 @@ services:
       - SPEECH_PROVIDER=${SPEECH_PROVIDER:-assemblyai}
       - YANDEX_SPEECHKIT_API_KEY=${YANDEX_SPEECHKIT_API_KEY:-}
       - YANDEX_SPEECHKIT_FOLDER_ID=${YANDEX_SPEECHKIT_FOLDER_ID:-}
+      # Локальный Whisper STT внутри docker-сети.
+      - STT_SERVICE_URL=${STT_SERVICE_URL:-http://stt:8000}
+      - STT_TIMEOUT_MS=${STT_TIMEOUT_MS:-280000}
       
       # === EMAIL ===
       - EMAIL_PROVIDER=${EMAIL_PROVIDER:-smtp}
@@ -93,7 +126,10 @@ services:
       - NODE_ENV=production
     restart: always
     depends_on:
-      - db-en
+      db-en:
+        condition: service_started
+      stt:
+        condition: service_healthy
     logging:
       driver: "json-file"
       options:
@@ -104,6 +140,9 @@ services:
       - ./exports:/app/exports
     networks:
       - doctor-opus-en
+
+volumes:
+  stt-models-en:
 
 networks:
   doctor-opus-en:

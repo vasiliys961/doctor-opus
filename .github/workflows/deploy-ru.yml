@@ -24,9 +24,13 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
+            PREV_APP_IMAGE=$(docker inspect -f '{{.Config.Image}}' doctor-opus-app-main95 2>/dev/null || true)
+            PREV_STT_IMAGE=$(docker inspect -f '{{.Config.Image}}' doctor-opus-stt-ru 2>/dev/null || true)
+
             echo "=== Docker build RU ==="
             docker network inspect doctor-opus_default >/dev/null 2>&1 || docker network create doctor-opus_default
             docker build -t doctor-opus-app-ru .
+            docker build -t doctor-opus-stt-ru ./stt-service
 
             echo "=== Ensure dedicated RU database container ==="
             POSTGRES_USER_VALUE=$(grep -E '^POSTGRES_USER=' /home/doctor-opus/.env 2>/dev/null | cut -d= -f2- || true)
@@ -51,6 +55,40 @@ jobs:
             fi
             docker start doctor-opus-db-ru >/dev/null 2>&1 || true
 
+            echo "=== Restart RU STT container ==="
+            docker volume inspect doctor-opus-stt-models-ru >/dev/null 2>&1 || docker volume create doctor-opus-stt-models-ru
+            docker stop doctor-opus-stt-ru || true
+            docker rm doctor-opus-stt-ru || true
+            docker run -d \
+              --name doctor-opus-stt-ru \
+              --restart always \
+              --network doctor-opus_default \
+              -v doctor-opus-stt-models-ru:/models \
+              -e HF_HOME=/models \
+              --env-file /home/doctor-opus/.env \
+              --health-cmd="curl -fsS http://localhost:8000/health || exit 1" \
+              --health-interval=20s \
+              --health-timeout=5s \
+              --health-retries=10 \
+              --health-start-period=40s \
+              doctor-opus-stt-ru
+
+            echo "=== Wait RU STT health ==="
+            for i in $(seq 1 30); do
+              STT_HEALTH=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' doctor-opus-stt-ru 2>/dev/null || echo "unknown")
+              echo "stt_health=$STT_HEALTH attempt=$i/30"
+              if [ "$STT_HEALTH" = "healthy" ]; then
+                break
+              fi
+              sleep 5
+            done
+            STT_HEALTH_FINAL=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' doctor-opus-stt-ru 2>/dev/null || echo "unknown")
+            if [ "$STT_HEALTH_FINAL" != "healthy" ]; then
+              echo "❌ STT container is not healthy"
+              docker logs --tail 120 doctor-opus-stt-ru || true
+              exit 1
+            fi
+
             echo "=== Restart RU container ==="
             docker stop doctor-opus-app-main95 || true
             docker rm doctor-opus-app-main95 || true
@@ -62,6 +100,7 @@ jobs:
               -v /home/doctor-opus/uploads:/app/uploads \
               -v /home/doctor-opus/exports:/app/exports \
               -e POSTGRES_URL="postgres://$POSTGRES_USER_VALUE:$POSTGRES_PASSWORD_VALUE@doctor-opus-db-ru:5432/$POSTGRES_DATABASE_VALUE" \
+              -e STT_SERVICE_URL="http://doctor-opus-stt-ru:8000" \
               --env-file /home/doctor-opus/.env \
               doctor-opus-app-ru
 
@@ -78,5 +117,62 @@ jobs:
             echo "=== Cleanup ==="
             docker image prune -f || true
 
+            echo "=== Prepare rollback command ==="
+            cat >/home/doctor-opus/rollback-last.sh <<EOF
+            #!/usr/bin/env bash
+            set -e
+
+            PREV_APP_IMAGE="${PREV_APP_IMAGE}"
+            PREV_STT_IMAGE="${PREV_STT_IMAGE}"
+            POSTGRES_USER_VALUE="${POSTGRES_USER_VALUE}"
+            POSTGRES_PASSWORD_VALUE="${POSTGRES_PASSWORD_VALUE}"
+            POSTGRES_DATABASE_VALUE="${POSTGRES_DATABASE_VALUE}"
+
+            docker network inspect doctor-opus_default >/dev/null 2>&1 || docker network create doctor-opus_default
+            docker start doctor-opus-db-ru >/dev/null 2>&1 || true
+            docker volume inspect doctor-opus-stt-models-ru >/dev/null 2>&1 || docker volume create doctor-opus-stt-models-ru
+
+            if [ -n "\$PREV_STT_IMAGE" ]; then
+              docker stop doctor-opus-stt-ru || true
+              docker rm doctor-opus-stt-ru || true
+              docker run -d \
+                --name doctor-opus-stt-ru \
+                --restart always \
+                --network doctor-opus_default \
+                -v doctor-opus-stt-models-ru:/models \
+                -e HF_HOME=/models \
+                --env-file /home/doctor-opus/.env \
+                --health-cmd="curl -fsS http://localhost:8000/health || exit 1" \
+                --health-interval=20s \
+                --health-timeout=5s \
+                --health-retries=10 \
+                --health-start-period=40s \
+                "\$PREV_STT_IMAGE"
+            fi
+
+            if [ -n "\$PREV_APP_IMAGE" ]; then
+              docker stop doctor-opus-app-main95 || true
+              docker rm doctor-opus-app-main95 || true
+              docker run -d \
+                --name doctor-opus-app-main95 \
+                --restart always \
+                --network doctor-opus_default \
+                -p 3002:3000 \
+                -v /home/doctor-opus/uploads:/app/uploads \
+                -v /home/doctor-opus/exports:/app/exports \
+                -e POSTGRES_URL="postgres://\$POSTGRES_USER_VALUE:\$POSTGRES_PASSWORD_VALUE@doctor-opus-db-ru:5432/\$POSTGRES_DATABASE_VALUE" \
+                -e STT_SERVICE_URL="http://doctor-opus-stt-ru:8000" \
+                --env-file /home/doctor-opus/.env \
+                "\$PREV_APP_IMAGE"
+            fi
+
+            echo "Rollback complete."
+            docker ps --filter name=doctor-opus-stt-ru --format "{{.Names}} {{.Status}}"
+            docker ps --filter name=doctor-opus-app-main95 --format "{{.Names}} {{.Status}}"
+            EOF
+            chmod +x /home/doctor-opus/rollback-last.sh
+
             echo "=== Done ==="
+            echo "Rollback command: /home/doctor-opus/rollback-last.sh"
+            docker ps --filter name=doctor-opus-stt-ru --format "{{.Names}} {{.Status}}"
             docker ps --filter name=doctor-opus-app-main95 --format "{{.Names}} {{.Status}}"
