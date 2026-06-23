@@ -1,5 +1,5 @@
 # Этап 1: Сборка Next.js фронтенда
-FROM node:18-bullseye AS node-builder
+FROM node:20-bookworm AS node-builder
 
 WORKDIR /app
 
@@ -62,7 +62,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgif7 \
     librsvg2-2 \
     ca-certificates \
-    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
