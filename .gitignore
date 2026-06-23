@@ -60,11 +60,6 @@ public/sw.js
 public/workbox-*.js
 public/swe-worker-*.js
 
-# Локальные модели/бинарники (генерируются скриптом setup:models).
-public/ort/
-public/models/
-stt-service/models/
-
 # OS
 .DS_Store
 Thumbs.db
