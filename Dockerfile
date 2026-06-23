@@ -40,7 +40,8 @@ ENV NODE_OPTIONS="--max-old-space-size=4096"
 # PWA включён, TS-валидация временно ослаблена для legacy-долгов.
 ENV NEXT_DISABLE_PWA=false
 ENV NEXT_IGNORE_TS_ERRORS=true
-RUN npm run build
+RUN npm run setup:models \
+    && npm run build
 
 # Этап 2: Финальный образ с Python и Node.js
 FROM python:3.10-slim

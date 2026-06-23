@@ -60,6 +60,11 @@ public/sw.js
 public/workbox-*.js
 public/swe-worker-*.js
 
+# Generated local model assets (downloaded by `npm run setup:models`)
+public/models/
+public/ort/
+stt-service/models/
+
 # OS
 .DS_Store
 Thumbs.db
