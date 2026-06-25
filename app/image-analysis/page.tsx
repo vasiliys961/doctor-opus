@@ -370,9 +370,23 @@ export default function ImageAnalysisPage() {
           })
 
           if (!response.ok) {
-            const errorText = await response.text()
-            console.error('❌ [CLIENT] Streaming ошибка:', response.status, errorText)
-            throw new Error(`HTTP error! status: ${response.status}`)
+            const contentType = response.headers.get('content-type') || ''
+            let serverError = `HTTP error ${response.status}`
+            try {
+              if (contentType.includes('application/json')) {
+                const payload = await response.json()
+                serverError = payload?.error || payload?.message || serverError
+              } else {
+                const errorText = await response.text()
+                if (errorText?.trim()) {
+                  serverError = errorText.slice(0, 400)
+                }
+              }
+            } catch {
+              // Если не удалось распарсить тело, оставляем статус.
+            }
+            console.error('❌ [CLIENT] Streaming ошибка:', response.status, serverError)
+            throw new Error(serverError)
           }
           
           const { handleSSEStream } = await import('@/lib/streaming-utils')

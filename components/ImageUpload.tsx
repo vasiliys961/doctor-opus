@@ -36,6 +36,68 @@ export default function ImageUpload({
   const additionalFilesRef = useRef<File[]>([]) // Ref для немедленного доступа
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  const acceptedRules = accept
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+  const acceptsDicom = acceptedRules.some(
+    (rule) => rule === '.dcm' || rule === '.dicom' || rule === 'application/dicom'
+  )
+
+  const isLikelyDicomFile = async (file: File): Promise<boolean> => {
+    const fileName = (file.name || '').toLowerCase()
+    const fileType = (file.type || '').toLowerCase()
+    if (fileName.endsWith('.dcm') || fileName.endsWith('.dicom')) return true
+    if (fileType === 'application/dicom') return true
+
+    try {
+      const header = new Uint8Array(await file.slice(0, 512).arrayBuffer())
+      if (header.length >= 132) {
+        const signature = String.fromCharCode(...Array.from(header.slice(128, 132)))
+        if (signature === 'DICM') return true
+      }
+
+      // У части DICOM-файлов нет "DICM" (raw stream),
+      // тогда в начале часто лежат теги групп 0002/0008.
+      if (header.length >= 2) {
+        const littleEndianGroup = header[0] | (header[1] << 8)
+        const bigEndianGroup = (header[0] << 8) | header[1]
+        if (
+          littleEndianGroup === 0x0002 ||
+          littleEndianGroup === 0x0008 ||
+          bigEndianGroup === 0x0002 ||
+          bigEndianGroup === 0x0008
+        ) {
+          return true
+        }
+      }
+    } catch (e) {
+      console.warn('Не удалось проверить сигнатуру DICOM:', e)
+    }
+
+    return false
+  }
+
+  const isFileAccepted = async (file: File, dicomLike?: boolean): Promise<boolean> => {
+    if (acceptedRules.length === 0) return true
+    const fileName = (file.name || '').toLowerCase()
+    const fileType = (file.type || '').toLowerCase()
+    const matchedByRule = acceptedRules.some((rule) => {
+      if (rule === '*/*') return true
+      if (rule.startsWith('.')) return fileName.endsWith(rule)
+      if (rule.endsWith('/*')) return fileType.startsWith(rule.slice(0, -1))
+      return fileType === rule
+    })
+    if (matchedByRule) return true
+    if (!acceptsDicom) return false
+    if (typeof dicomLike === 'boolean') return dicomLike
+    return await isLikelyDicomFile(file)
+  }
+
+  const showUnsupportedFormatError = () => {
+    const readableFormats = acceptedRules.join(', ') || 'image/*'
+    setError(`Этот файл не поддерживается в данном разделе. Разрешено: ${readableFormats}`)
+  }
 
   const handleAnonymize = async () => {
     if (!currentFile) return;
@@ -139,11 +201,19 @@ export default function ImageUpload({
     // 1. Обработка группы файлов (FileList или массив) - например, при загрузке папки
     if (input instanceof FileList || Array.isArray(input)) {
       const files = Array.from(input);
-      const dicomFiles = files.filter(f => 
-        f.name.toLowerCase().endsWith('.dcm') || 
-        f.name.toLowerCase().endsWith('.dicom') || 
-        f.type === 'application/dicom'
-      );
+      const inspected = await Promise.all(
+        files.map(async (file) => {
+          const dicomLike = acceptsDicom ? await isLikelyDicomFile(file) : false
+          const accepted = await isFileAccepted(file, dicomLike)
+          return { file, accepted, dicomLike }
+        })
+      )
+      const allowedFiles = inspected.filter((entry) => entry.accepted).map((entry) => entry.file)
+      if (allowedFiles.length === 0) {
+        showUnsupportedFormatError();
+        return;
+      }
+      const dicomFiles = inspected.filter((entry) => entry.dicomLike && entry.accepted).map((entry) => entry.file);
 
       if (dicomFiles.length > 0) {
         setIsCompressing(true);
@@ -174,7 +244,7 @@ export default function ImageUpload({
       }
 
       // Проверка на видео-файлы
-      const videoFiles = files.filter(f => f.type.startsWith('video/'));
+      const videoFiles = allowedFiles.filter(f => f.type.startsWith('video/'));
       if (videoFiles.length > 0) {
         setIsCompressing(true);
         try {
@@ -199,9 +269,9 @@ export default function ImageUpload({
         return;
       }
 
-      if (files.length > 1) {
+      if (allowedFiles.length > 1) {
         // Если это несколько изображений
-        const imageFiles = files.filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name));
+        const imageFiles = allowedFiles.filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name));
         if (imageFiles.length > 0) {
           const additionalImages = imageFiles.slice(1);
           setAdditionalFiles(additionalImages); // Сохраняем остальные изображения
@@ -213,8 +283,8 @@ export default function ImageUpload({
           onUpload(imageFiles[0], [], imageFiles);
           return;
         }
-      } else if (files.length > 0) {
-        return handleFile(files[0]);
+      } else if (allowedFiles.length > 0) {
+        return handleFile(allowedFiles[0]);
       }
       return;
     }
@@ -222,6 +292,11 @@ export default function ImageUpload({
     // 2. Обработка одиночного файла
     const file = input as File;
     if (!file || !file.name) return;
+    const dicomLike = acceptsDicom ? await isLikelyDicomFile(file) : false
+    if (!(await isFileAccepted(file, dicomLike))) {
+      showUnsupportedFormatError();
+      return;
+    }
 
     if (file.size > maxSize * 1024 * 1024) {
       setError(`Файл слишком большой. Максимальный размер: ${maxSize}MB`)
@@ -230,7 +305,7 @@ export default function ImageUpload({
 
     const fileName = file.name.toLowerCase();
     const isZip = fileName.endsWith('.zip');
-    const isDicom = fileName.endsWith('.dcm') || fileName.endsWith('.dicom') || file.type === 'application/dicom';
+    const isDicom = dicomLike || fileName.endsWith('.dcm') || fileName.endsWith('.dicom') || file.type === 'application/dicom';
     const isVideo = file.type.startsWith('video/');
     const isImage = file.type.startsWith('image/');
 
@@ -471,7 +546,7 @@ export default function ImageUpload({
             </>
           )}
           <p className="text-sm text-gray-500">
-            Поддерживаются: DICOM (серии), JPG, PNG, PDF
+            Поддерживаются: {acceptedRules.join(', ') || 'image/*'}
             <br />
             Макс. размер файла: {maxSize}MB
           </p>
