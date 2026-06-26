@@ -30,6 +30,7 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
   const [activePreset, setActivePreset] = useState<'default' | 'bone' | 'brain' | 'mip' | 'glow' | 'xray_light' | 'vessels' | 'organ_lesion'>('default')
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false)
   const [isVolumeOnly, setIsVolumeOnly] = useState(false)
+  const [volumeUnavailableMessage, setVolumeUnavailableMessage] = useState<string | null>(null)
 
   // Хранилище для функций передачи (чтобы менять их на лету)
   const volumePropertyRef = useRef<any>(null)
@@ -48,6 +49,40 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
     const clampedHigh = Math.max(min, Math.min(max, huHigh));
     return { low: clampedLow, high: clampedHigh };
   };
+
+  const isLikelyDicomFile = async (file: File): Promise<boolean> => {
+    const fileName = file.name.toLowerCase()
+    const fileType = (file.type || '').toLowerCase()
+
+    if (fileName.endsWith('.dcm') || fileName.endsWith('.dicom')) return true
+    if (fileType === 'application/dicom') return true
+
+    try {
+      const header = new Uint8Array(await file.slice(0, 512).arrayBuffer())
+      if (header.length >= 132) {
+        const signature = String.fromCharCode(...Array.from(header.slice(128, 132)))
+        if (signature === 'DICM') return true
+      }
+
+      // Некоторые DICOM идут без "DICM" префикса (raw stream).
+      if (header.length >= 2) {
+        const littleEndianGroup = header[0] | (header[1] << 8)
+        const bigEndianGroup = (header[0] << 8) | header[1]
+        if (
+          littleEndianGroup === 0x0002 ||
+          littleEndianGroup === 0x0008 ||
+          bigEndianGroup === 0x0002 ||
+          bigEndianGroup === 0x0008
+        ) {
+          return true
+        }
+      }
+    } catch (error) {
+      console.warn('Не удалось проверить сигнатуру DICOM:', error)
+    }
+
+    return false
+  }
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.vtk) {
@@ -111,6 +146,15 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
     }
   }, [loading, error])
 
+  useEffect(() => {
+    if (!loading || error) return
+    const timeoutId = window.setTimeout(() => {
+      setError('Таймаут инициализации MPR. Попробуйте уменьшить серию (первые 80-100 срезов) или перезагрузить страницу.')
+      setLoading(false)
+    }, 25000)
+    return () => window.clearTimeout(timeoutId)
+  }, [loading, error])
+
   const toggleBrowserFullscreen = async () => {
     try {
       if (typeof document === 'undefined') return
@@ -135,6 +179,7 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
 
     try {
       console.log(`🏗️ [MPR] Starting MPR build with ${files.length} files...`)
+      setVolumeUnavailableMessage(null)
       
       const vtk = window.vtk
       const cornerstone = await import('cornerstone-core');
@@ -156,12 +201,16 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
 
       // 1. Предварительная загрузка метаданных для сортировки
       console.log('Sorting files by instance/position...');
-      const fileDataList: { file: File, instance: number, position: number }[] = [];
+      const inspected = await Promise.all(
+        filesToProcess.map(async (file) => ({
+          file,
+          isDicom: await isLikelyDicomFile(file),
+        }))
+      )
+
+      const fileDataList: { file: File, instance: number, position: number, isDicom: boolean }[] = [];
       
-      for (const file of filesToProcess) {
-        const isDicom = file.name.toLowerCase().endsWith('.dcm') || 
-                        file.name.toLowerCase().endsWith('.dicom') || 
-                        file.type === 'application/dicom';
+      for (const { file, isDicom } of inspected) {
         
         if (isDicom) {
           const imageId = cornerstoneWADOImageLoader.wadouri.fileManager.add(file);
@@ -174,9 +223,9 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
             const parts = posString.split('\\');
             zPos = parseFloat(parts[2]) || 0;
           }
-          fileDataList.push({ file, instance, position: zPos });
+          fileDataList.push({ file, instance, position: zPos, isDicom: true });
         } else {
-          fileDataList.push({ file, instance: 0, position: 0 });
+          fileDataList.push({ file, instance: 0, position: 0, isDicom: false });
         }
       }
 
@@ -187,19 +236,17 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
         return a.file.name.localeCompare(b.file.name);
       });
 
-      const sortedFiles = fileDataList.map(d => d.file);
+      const sortedEntries = fileDataList;
       
-      for (let i = 0; i < sortedFiles.length; i++) {
-        const file = sortedFiles[i];
-        const isDicom = file.name.toLowerCase().endsWith('.dcm') || 
-                        file.name.toLowerCase().endsWith('.dicom') || 
-                        file.type === 'application/dicom';
+      for (let i = 0; i < sortedEntries.length; i++) {
+        const { file, isDicom } = sortedEntries[i];
         
         try {
           if (isDicom) {
             const imageId = cornerstoneWADOImageLoader.wadouri.fileManager.add(file);
             const image = await cornerstone.loadImage(imageId);
-            if (i === 0) {
+            if (width === 0 && height === 0) {
+              // Первый успешный срез задаёт эталонный размер
               width = image.width;
               height = image.height;
               try {
@@ -213,7 +260,13 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
                 if (sliceThickness) spacing[2] = sliceThickness;
               } catch (e) {}
             }
-            pixelDataArrays.push(image.getPixelData());
+            const pixelData = image.getPixelData();
+            // Пропускаем срезы с размером, отличным от эталона (иначе RangeError при set)
+            if (pixelData.length !== width * height) {
+              console.warn(`[MPR] Skip slice ${i}: size mismatch (${pixelData.length} vs ${width * height})`);
+            } else {
+              pixelDataArrays.push(pixelData);
+            }
           } else {
             const bitmap = await createImageBitmap(file);
             const canvas = document.createElement('canvas');
@@ -227,12 +280,16 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
               for (let j = 0; j < imgData.data.length; j += 4) {
                 grayscale[j / 4] = Math.round(0.299 * imgData.data[j] + 0.587 * imgData.data[j+1] + 0.114 * imgData.data[j+2]);
               }
-              if (i === 0) {
+              if (width === 0 && height === 0) {
                 width = bitmap.width;
                 height = bitmap.height;
                 spacing = [1, 1, 3];
               }
-              pixelDataArrays.push(grayscale);
+              if (grayscale.length === width * height) {
+                pixelDataArrays.push(grayscale);
+              } else {
+                console.warn(`[MPR] Skip non-DICOM slice ${i}: size mismatch`);
+              }
             }
           }
           setDecodeProgress(prev => ({ ...prev, current: i + 1 }));
@@ -267,7 +324,13 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
       else voxels = new Float32Array(numVoxels);
       
       for (let i = 0; i < pixelDataArrays.length; i++) {
-        voxels.set(pixelDataArrays[i], i * width * height);
+        const sliceData = pixelDataArrays[i];
+        const offset = i * width * height;
+        if (offset + sliceData.length <= voxels.length) {
+          voxels.set(sliceData, offset);
+        } else {
+          console.warn(`[MPR] voxels.set out of bounds at slice ${i}, skipping`);
+        }
       }
 
       const scalarArray = vtk.Common.Core.vtkDataArray.newInstance({
@@ -429,12 +492,30 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
         return { kind: 'mpr' as const, renderWindow, renderer, openGLRenderWindow, imageResliceMapper, interactor, axis, plane };
       };
 
-      const views = [
+      const mprViews = [
         setupViewport(axialRef.current!, 0),
         setupViewport(coronalRef.current!, 1),
         setupViewport(sagittalRef.current!, 2),
-        setupVolumeRendering(volumeRef.current!),
       ];
+
+      // В Safari/старых GPU volume-рендер может падать, но MPR должен продолжать работать.
+      let volumeView: ReturnType<typeof setupVolumeRendering> | null = null;
+      if (volumeRef.current) {
+        try {
+          volumeView = setupVolumeRendering(volumeRef.current);
+        } catch (volumeErr: any) {
+          console.error('⚠️ [MPR] Volume rendering unavailable, fallback to MPR only:', volumeErr);
+          setVolumeUnavailableMessage(
+            volumeErr?.message
+              ? `3D объем временно недоступен: ${volumeErr.message}`
+              : '3D объем временно недоступен в этом браузере. MPR-срезы работают.'
+          );
+        }
+      } else {
+        setVolumeUnavailableMessage('Контейнер 3D-вида не найден. MPR-срезы работают.');
+      }
+
+      const views = volumeView ? [...mprViews, volumeView] : mprViews;
 
       // === Новый applyPreset ===
       const applyPreset = (
@@ -759,7 +840,8 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
         });
       };
     } catch (err: any) {
-      setError(err.message);
+      console.error('❌ [MPR] initVtk failed:', err);
+      setError(err?.message || 'Ошибка инициализации MPR');
       setLoading(false);
     }
   }
@@ -915,6 +997,17 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
                   </div>
 
                   <div ref={volumeRef} className="flex-1 touch-none" />
+                  {volumeUnavailableMessage && !loading && !error && (
+                    <div className="absolute inset-0 z-20 flex items-center justify-center p-4 bg-black/70">
+                      <div className="max-w-md text-center">
+                        <p className="text-amber-300 text-sm font-semibold mb-2">⚠️ 3D объемный рендер недоступен</p>
+                        <p className="text-xs text-gray-300">{volumeUnavailableMessage}</p>
+                        <p className="text-[10px] text-gray-400 mt-2">
+                          Axial / Coronal / Sagittal продолжают работать в обычном режиме.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             )}

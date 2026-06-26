@@ -8,14 +8,50 @@ export default function Advanced3DPage() {
   const [files, setFiles] = useState<File[]>([])
   const [showViewer, setShowViewer] = useState(false)
 
-  const handleUpload = (uploadedFiles: File[]) => {
-    // Фильтруем только DICOM или изображения (для упрощения)
-    const dicomFiles = uploadedFiles.filter(f => 
-      f.name.toLowerCase().endsWith('.dcm') || 
-      f.name.toLowerCase().endsWith('.dicom') ||
-      f.type === 'application/dicom'
+  const isLikelyDicomFile = async (file: File): Promise<boolean> => {
+    const fileName = file.name.toLowerCase()
+    const fileType = (file.type || '').toLowerCase()
+
+    if (fileName.endsWith('.dcm') || fileName.endsWith('.dicom')) return true
+    if (fileType === 'application/dicom') return true
+
+    try {
+      const header = new Uint8Array(await file.slice(0, 512).arrayBuffer())
+      if (header.length >= 132) {
+        const signature = String.fromCharCode(...Array.from(header.slice(128, 132)))
+        if (signature === 'DICM') return true
+      }
+
+      // Часть DICOM-серий не содержит "DICM" и начинается сразу с tag-группы 0002/0008.
+      if (header.length >= 2) {
+        const littleEndianGroup = header[0] | (header[1] << 8)
+        const bigEndianGroup = (header[0] << 8) | header[1]
+        if (
+          littleEndianGroup === 0x0002 ||
+          littleEndianGroup === 0x0008 ||
+          bigEndianGroup === 0x0002 ||
+          bigEndianGroup === 0x0008
+        ) {
+          return true
+        }
+      }
+    } catch (error) {
+      console.warn('Не удалось проверить сигнатуру файла как DICOM:', error)
+    }
+
+    return false
+  }
+
+  const handleUpload = async (uploadedFiles: File[]) => {
+    const inspected = await Promise.all(
+      uploadedFiles.map(async (file) => ({
+        file,
+        isDicom: await isLikelyDicomFile(file),
+      }))
     )
-    
+
+    const dicomFiles = inspected.filter((entry) => entry.isDicom).map((entry) => entry.file)
+
     if (dicomFiles.length > 0) {
       setFiles(dicomFiles)
       setShowViewer(true)

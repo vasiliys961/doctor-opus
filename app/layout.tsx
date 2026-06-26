@@ -32,10 +32,10 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: 'https://vrachirf.ru/favicon.png', type: 'image/png', sizes: '32x32' },
+      { url: '/vrachirf-icon.png', type: 'image/png', sizes: '32x32' },
     ],
-    shortcut: 'https://vrachirf.ru/favicon.png',
-    apple: 'https://vrachirf.ru/apple-touch-icon.png',
+    shortcut: '/vrachirf-icon.png',
+    apple: '/vrachirf-logo.png',
   },
   appleWebApp: {
     capable: true,
