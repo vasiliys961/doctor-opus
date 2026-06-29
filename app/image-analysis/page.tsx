@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import dynamic from 'next/dynamic'
 import ImageUpload from '@/components/ImageUpload'
@@ -27,6 +27,8 @@ import {
   type ImageSearchHit,
 } from '@/lib/library-db'
 import { embedImage, embedTextForImage, isEmbeddingSupported } from '@/lib/embeddings'
+import { getRelevanceBundle } from '@/lib/image-relevance-links'
+import { buildDiagnosticQueryText } from '@/lib/diagnostic-query'
 
 export default function ImageAnalysisPage() {
   const BRIDGE_IMAGE_ANALYSIS_KEY = 'mobile_bridge_image_analysis_draft'
@@ -73,6 +75,8 @@ export default function ImageAnalysisPage() {
   const [visualSearching, setVisualSearching] = useState(false)
   const [visualError, setVisualError] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<ImageSearchHit | null>(null)
+  const [diagnosticSourceText, setDiagnosticSourceText] = useState('')
+  const lastDiagnosticLenRef = useRef(0)
   const imageAnonymizationMode: 'strict' | 'soft' =
     imageType === 'ct' || imageType === 'mri' || imageType === 'xray' || imageType === 'ultrasound'
       ? 'soft'
@@ -524,6 +528,36 @@ export default function ImageAnalysisPage() {
     window.dispatchEvent(new Event('onboardingCompleted'))
   }, [loading, result])
 
+  useEffect(() => {
+    const fallbackContext = [clinicalContext, visualQuery].filter(Boolean).join('\n')
+    if (!result.trim()) {
+      setDiagnosticSourceText(fallbackContext)
+      lastDiagnosticLenRef.current = 0
+      return
+    }
+
+    const candidate = buildDiagnosticQueryText(result, fallbackContext)
+
+    // Во время стриминга обновляем только после порога длины,
+    // чтобы не прыгать по шумным промежуточным кускам.
+    if (loading) {
+      if (result.length < 1200) return
+      const currentLen = candidate.length
+      if (Math.abs(currentLen - lastDiagnosticLenRef.current) < 200) return
+      lastDiagnosticLenRef.current = currentLen
+      setDiagnosticSourceText(candidate)
+      return
+    }
+
+    // После завершения анализа всегда фиксируем финальный клинический фокус.
+    setDiagnosticSourceText(candidate)
+    lastDiagnosticLenRef.current = candidate.length
+  }, [result, loading, clinicalContext, visualQuery])
+
+  const relevanceBundle = useMemo(() => {
+    return getRelevanceBundle(imageType, diagnosticSourceText)
+  }, [imageType, diagnosticSourceText])
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="mb-6 flex items-center justify-between">
@@ -905,6 +939,49 @@ export default function ImageAnalysisPage() {
           </div>
         </div>
       )}
+
+      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
+        <h3 className="text-lg font-bold text-primary-900 mb-2">🔗 {relevanceBundle.title}</h3>
+        <p className="text-xs text-gray-600 mb-4">
+          {relevanceBundle.hint}
+        </p>
+
+        {relevanceBundle.links.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {relevanceBundle.links.map((link) => (
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-gray-200 px-3 py-2 hover:border-primary-400 hover:bg-primary-50 transition-colors"
+              >
+                <div className="text-sm font-semibold text-gray-900">{link.title}</div>
+                {link.titleEn && <div className="text-[11px] text-gray-500">{link.titleEn}</div>}
+                <div className="text-[11px] text-gray-500">{link.source}</div>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-600 mb-3">
+            Пока нет совпадений. Загрузите снимок и запустите анализ — после этого появятся более точные карточки по находкам.
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          {relevanceBundle.generalLinks.map((link) => (
+            <a
+              key={link.id}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex rounded-lg bg-indigo-600 text-white text-sm font-semibold px-4 py-2 hover:bg-indigo-700 transition-colors"
+            >
+              Открыть {link.source}
+            </a>
+          ))}
+        </div>
+      </div>
 
       <AnalysisResult 
         result={result} 

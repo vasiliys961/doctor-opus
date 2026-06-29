@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -14,6 +14,7 @@ import { calculateCost } from '@/lib/cost-calculator'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { type ExtractedFrame, extractAndAnonymizeFrames, formatTimestamp } from '@/lib/video-frame-extractor'
 import ImageEditor from '@/components/ImageEditor'
+import { buildUltrasoundGeneralLinks, suggestUltrasoundReferenceLinks } from '@/lib/ultrasound-reference-links'
 
 export default function UltrasoundPage() {
   const BRIDGE_ULTRASOUND_ANALYSIS_KEY = 'mobile_bridge_ultrasound_analysis_draft'
@@ -242,6 +243,16 @@ export default function UltrasoundPage() {
     }
   }
 
+  const ultrasoundReferenceLinks = useMemo(() => {
+    const source = [result, clinicalContext].filter(Boolean).join('\n')
+    return suggestUltrasoundReferenceLinks(source, 8)
+  }, [result, clinicalContext])
+
+  const ultrasoundGeneralLinks = useMemo(() => {
+    const topEnglishTerm = ultrasoundReferenceLinks[0]?.titleEn || 'ultrasound interpretation'
+    return buildUltrasoundGeneralLinks(topEnglishTerm)
+  }, [ultrasoundReferenceLinks])
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="mb-6 flex items-center justify-between">
@@ -419,6 +430,49 @@ export default function UltrasoundPage() {
       )}
 
       {error && <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 font-bold shadow-sm">❌ {error}</div>}
+
+      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
+        <h3 className="text-lg font-bold text-primary-900 mb-2">🔗 Релевантные референсы по УЗИ</h3>
+        <p className="text-xs text-gray-600 mb-4">
+          Подборка по результату и клиническому контексту: брюшная полость, сосуды, щитовидка, эхо, акушерство и другие направления.
+        </p>
+
+        {ultrasoundReferenceLinks.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+            {ultrasoundReferenceLinks.map((link) => (
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-gray-200 px-3 py-2 hover:border-primary-400 hover:bg-primary-50 transition-colors"
+              >
+                <div className="text-sm font-semibold text-gray-900">{link.title}</div>
+                <div className="text-[11px] text-gray-500">{link.titleEn}</div>
+                <div className="text-[11px] text-gray-500">{link.source}</div>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-600 mb-3">
+            Пока нет точных совпадений. После анализа УЗИ здесь появятся более релевантные темы.
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {ultrasoundGeneralLinks.map((link) => (
+            <a
+              key={link.id}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex rounded-lg bg-indigo-600 text-white text-sm font-semibold px-4 py-2 hover:bg-indigo-700 transition-colors"
+            >
+              Открыть {link.source}
+            </a>
+          ))}
+        </div>
+      </div>
 
       <AnalysisResult 
         result={result} 

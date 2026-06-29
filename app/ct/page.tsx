@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
@@ -14,6 +14,7 @@ import FeedbackForm from '@/components/FeedbackForm'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
+import { buildRadiologyGeneralLinks, suggestRadiologyReferenceLinks } from '@/lib/radiology-reference-links'
 
 const Dicom3DViewer = dynamic(() => import('@/components/Dicom3DViewer'), { ssr: false })
 
@@ -287,6 +288,16 @@ export default function CTPage() {
     setError(null)
   }
 
+  const ctReferenceLinks = useMemo(() => {
+    const source = [result, clinicalContext].filter(Boolean).join('\n')
+    return suggestRadiologyReferenceLinks(source, 'ct', 8)
+  }, [result, clinicalContext])
+
+  const ctGeneralLinks = useMemo(() => {
+    const topEnglishTerm = ctReferenceLinks[0]?.titleEn || 'computed tomography interpretation'
+    return buildRadiologyGeneralLinks('ct', topEnglishTerm)
+  }, [ctReferenceLinks])
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="mb-6 flex items-center justify-between">
@@ -460,6 +471,49 @@ export default function CTPage() {
           {error}
         </div>
       )}
+
+      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
+        <h3 className="text-lg font-bold text-primary-900 mb-2">🔗 Релевантные референсы по КТ</h3>
+        <p className="text-xs text-gray-600 mb-4">
+          Ссылки подбираются по тексту анализа и контексту, чтобы быстро сверить находки с профильными радиологическими источниками.
+        </p>
+
+        {ctReferenceLinks.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+            {ctReferenceLinks.map((link) => (
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-gray-200 px-3 py-2 hover:border-primary-400 hover:bg-primary-50 transition-colors"
+              >
+                <div className="text-sm font-semibold text-gray-900">{link.title}</div>
+                <div className="text-[11px] text-gray-500">{link.titleEn}</div>
+                <div className="text-[11px] text-gray-500">{link.source}</div>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-600 mb-3">
+            Пока нет точных совпадений. После анализа КТ здесь появятся более релевантные темы.
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {ctGeneralLinks.map((link) => (
+            <a
+              key={link.id}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex rounded-lg bg-indigo-600 text-white text-sm font-semibold px-4 py-2 hover:bg-indigo-700 transition-colors"
+            >
+              Открыть {link.source}
+            </a>
+          ))}
+        </div>
+      </div>
 
       <AnalysisResult 
         result={result} 

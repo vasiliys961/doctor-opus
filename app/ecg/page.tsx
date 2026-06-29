@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
@@ -15,6 +15,7 @@ import { calculateCost } from '@/lib/cost-calculator'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-cache'
 import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
+import { buildEcgGeneralLinks, suggestEcgReferenceLinks } from '@/lib/ecg-reference-links'
 
 export default function ECGPage() {
   const BRIDGE_ECG_ANALYSIS_KEY = 'mobile_bridge_ecg_analysis_draft'
@@ -262,6 +263,16 @@ export default function ECGPage() {
 
   const EcgCaliper = dynamic(() => import('@/components/EcgCaliper'), { ssr: false })
 
+  const ecgReferenceLinks = useMemo(() => {
+    const source = [result, clinicalContext].filter(Boolean).join('\n')
+    return suggestEcgReferenceLinks(source, 8)
+  }, [result, clinicalContext])
+
+  const ecgGeneralLinks = useMemo(() => {
+    const topEnglishTerm = ecgReferenceLinks[0]?.titleEn || 'electrocardiogram interpretation'
+    return buildEcgGeneralLinks(topEnglishTerm)
+  }, [ecgReferenceLinks])
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="mb-6 flex items-center justify-between">
@@ -455,6 +466,49 @@ export default function ECGPage() {
           {error}
         </div>
       )}
+
+      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
+        <h3 className="text-lg font-bold text-primary-900 mb-2">🔗 Релевантные референсы по ЭКГ</h3>
+        <p className="text-xs text-gray-600 mb-4">
+          Ссылки подбираются по тексту результата и клиническому контексту. Это справочные материалы для быстрой верификации, не автоматический диагноз.
+        </p>
+
+        {ecgReferenceLinks.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+            {ecgReferenceLinks.map((link) => (
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-gray-200 px-3 py-2 hover:border-primary-400 hover:bg-primary-50 transition-colors"
+              >
+                <div className="text-sm font-semibold text-gray-900">{link.title}</div>
+                <div className="text-[11px] text-gray-500">{link.titleEn}</div>
+                <div className="text-[11px] text-gray-500">{link.source}</div>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-600 mb-3">
+            Пока нет явных тематических совпадений. После анализа ЭКГ здесь появятся более точные ссылки.
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {ecgGeneralLinks.map((link) => (
+            <a
+              key={link.id}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex rounded-lg bg-indigo-600 text-white text-sm font-semibold px-4 py-2 hover:bg-indigo-700 transition-colors"
+            >
+              Открыть {link.source}
+            </a>
+          ))}
+        </div>
+      </div>
 
       <AnalysisResult 
         result={result} 

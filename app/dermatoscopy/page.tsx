@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
@@ -11,6 +11,14 @@ import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
+import {
+  getAllDocuments,
+  searchImagesByVector,
+  type LibraryDocument,
+  type ImageSearchHit,
+} from '@/lib/library-db'
+import { embedImage, embedTextForImage, isEmbeddingSupported } from '@/lib/embeddings'
+import { buildDermnetSearchUrl, suggestDermnetLinks } from '@/lib/dermnet-links'
 
 type StudyType = 'dermatoscopy' | 'wound' | 'skin'
 
@@ -62,14 +70,112 @@ export default function DermatoscopyPage() {
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
+  const [indexedAtlases, setIndexedAtlases] = useState<LibraryDocument[]>([])
+  const [visualQuery, setVisualQuery] = useState('')
+  const [visualResults, setVisualResults] = useState<ImageSearchHit[]>([])
+  const [visualSearching, setVisualSearching] = useState(false)
+  const [visualError, setVisualError] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<ImageSearchHit | null>(null)
 
   const current = STUDY_TYPES.find(s => s.id === studyType)!
+
+  useEffect(() => {
+    const loadIndexedAtlases = async () => {
+      try {
+        const docs = await getAllDocuments()
+        setIndexedAtlases((docs || []).filter((doc) => doc.imagesIndexed))
+      } catch (err) {
+        console.warn('Не удалось загрузить список атласов:', err)
+        setIndexedAtlases([])
+      }
+    }
+    void loadIndexedAtlases()
+  }, [])
 
   const switchType = (type: StudyType) => {
     setStudyType(type)
     setResult('')
     setError(null)
   }
+
+  const fileToDataUrl = (sourceFile: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result))
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(sourceFile)
+    })
+
+  const runVisualSearch = async (queryVector: Float32Array) => {
+    setVisualSearching(true)
+    setVisualError(null)
+    try {
+      const hits = await searchImagesByVector(queryVector, 8)
+      setVisualResults(hits)
+      if (hits.length === 0) {
+        setVisualError('Похожих изображений в библиотеке не найдено.')
+      }
+    } catch (err) {
+      console.error('Ошибка поиска похожих изображений:', err)
+      setVisualError('Не удалось выполнить поиск по библиотеке.')
+    } finally {
+      setVisualSearching(false)
+    }
+  }
+
+  const handleVisualTextSearch = async () => {
+    if (!visualQuery.trim()) return
+    if (!isEmbeddingSupported()) {
+      setVisualError('Поиск похожих изображений недоступен в этом браузере.')
+      return
+    }
+    const vector = await embedTextForImage(visualQuery.trim())
+    await runVisualSearch(vector)
+  }
+
+  const handleVisualPhotoSearch = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const photo = event.target.files?.[0]
+    event.target.value = ''
+    if (!photo) return
+    if (!isEmbeddingSupported()) {
+      setVisualError('Поиск похожих изображений недоступен в этом браузере.')
+      return
+    }
+    const dataUrl = await fileToDataUrl(photo)
+    const vector = await embedImage(dataUrl)
+    await runVisualSearch(vector)
+  }
+
+  const handleCurrentImageSearch = async () => {
+    if (!isEmbeddingSupported()) {
+      setVisualError('Поиск похожих изображений недоступен в этом браузере.')
+      return
+    }
+
+    if (!imagePreview && !file) {
+      setVisualError('Сначала загрузите снимок, затем запускайте поиск в библиотеке.')
+      return
+    }
+
+    const source = imagePreview || (file ? await fileToDataUrl(file) : null)
+    if (!source) {
+      setVisualError('Не удалось подготовить изображение для поиска.')
+      return
+    }
+
+    const vector = await embedImage(source)
+    await runVisualSearch(vector)
+  }
+
+  const dermnetLinks = useMemo(() => {
+    const source = [result, clinicalContext, visualQuery].filter(Boolean).join('\n')
+    return suggestDermnetLinks(source, 6)
+  }, [result, clinicalContext, visualQuery])
+
+  const dermnetSearchUrl = useMemo(() => {
+    const query = result || clinicalContext || visualQuery
+    return buildDermnetSearchUrl(query || '')
+  }, [result, clinicalContext, visualQuery])
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
@@ -361,6 +467,148 @@ export default function DermatoscopyPage() {
         </div>
       )}
 
+      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
+        <h3 className="text-base font-bold text-primary-900 mb-1">📚 Поиск похожих снимков в библиотеке</h3>
+        <p className="text-xs text-gray-600 mb-3">
+          Поиск запускается только по вашему запросу и работает по заранее подготовленным атласам.
+        </p>
+
+        {indexedAtlases.length > 0 ? (
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-gray-400">Ищем по:</span>
+            {indexedAtlases.map((d) => (
+              <span
+                key={d.id}
+                title={d.name}
+                className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5 max-w-[220px] truncate"
+              >
+                🖼 {d.name} ({d.imagesCount ?? 0} стр.)
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="mb-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <p>Атласов с индексом изображений пока нет. Сначала загрузите их в разделе «Персональная библиотека».</p>
+            <a
+              href="/library"
+              className="mt-2 inline-flex items-center rounded-md bg-amber-100 border border-amber-300 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-200"
+            >
+              📚 Открыть библиотеку и подготовить атлас
+            </a>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-2 mb-2">
+          <input
+            type="text"
+            value={visualQuery}
+            onChange={(e) => setVisualQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleVisualTextSearch() }}
+            placeholder="Опишите изображение: асимметрия, пигментная сеть, нерегулярные края..."
+            disabled={visualSearching || indexedAtlases.length === 0}
+            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:bg-gray-50"
+          />
+          <button
+            type="button"
+            onClick={() => void handleVisualTextSearch()}
+            disabled={visualSearching || !visualQuery.trim() || indexedAtlases.length === 0}
+            className="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            {visualSearching ? 'Поиск...' : '🔍 Найти по описанию'}
+          </button>
+          <label className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap text-center cursor-pointer">
+            📷 Поиск по моему фото
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => { void handleVisualPhotoSearch(e) }}
+              disabled={visualSearching || indexedAtlases.length === 0}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => void handleCurrentImageSearch()}
+            disabled={visualSearching || indexedAtlases.length === 0 || (!file && !imagePreview)}
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            🔬 По текущему снимку
+          </button>
+        </div>
+
+        {visualError && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+            {visualError}
+          </p>
+        )}
+      </div>
+
+      {visualResults.length > 0 && (
+        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
+          <h3 className="text-lg font-bold text-primary-900 mb-3">Найдено в атласах библиотеки</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {visualResults.map((hit, idx) => (
+              <button
+                type="button"
+                key={`${hit.documentId}_${hit.pageId}_${idx}`}
+                onClick={() => setLightbox(hit)}
+                className="text-left border border-gray-200 rounded-lg overflow-hidden bg-gray-50 hover:border-primary-400 hover:shadow-md transition-all"
+                title="Открыть крупно"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={hit.thumbnail} alt={`Страница ${hit.pageId}`} className="w-full h-40 object-contain bg-white" />
+                <div className="p-2">
+                  <div className="text-[11px] font-semibold text-gray-700 truncate" title={hit.documentName}>
+                    {hit.documentName || 'Документ'}
+                  </div>
+                  <div className="text-[10px] text-gray-500 flex items-center justify-between">
+                    <span>стр. {hit.pageId}</span>
+                    <span className="font-mono">{(hit.score * 100).toFixed(0)}% сходства</span>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
+        <h3 className="text-lg font-bold text-primary-900 mb-2">🔗 Релевантные ссылки DermNet</h3>
+        <p className="text-xs text-gray-600 mb-4">
+          Справочный блок: открывает релевантные темы DermNet для быстрой сверки. Изображения DermNet не используются в вашем ML-поиске.
+        </p>
+
+        {dermnetLinks.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {dermnetLinks.map((link) => (
+              <a
+                key={link.slug}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-gray-200 px-3 py-2 hover:border-primary-400 hover:bg-primary-50 transition-colors"
+              >
+                <div className="text-sm font-semibold text-gray-900">{link.title}</div>
+                <div className="text-[11px] text-gray-500 truncate">{link.url}</div>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-600 mb-3">
+            Пока нет совпадений. Загрузите снимок и запустите анализ — после этого появятся релевантные темы, либо используйте общий поиск ниже.
+          </p>
+        )}
+
+        <a
+          href={dermnetSearchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex mt-4 rounded-lg bg-indigo-600 text-white text-sm font-semibold px-4 py-2 hover:bg-indigo-700 transition-colors"
+        >
+          Открыть поиск на DermNet
+        </a>
+      </div>
+
       <AnalysisResult 
         result={result} 
         loading={loading} 
@@ -394,6 +642,43 @@ export default function DermatoscopyPage() {
           }}
           onCancel={() => setShowEditor(false)}
         />
+      )}
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <div
+            className="bg-white rounded-2xl overflow-hidden max-w-3xl w-full shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-gray-900 truncate" title={lightbox.documentName}>
+                  {lightbox.documentName || 'Документ'}
+                </div>
+                <div className="text-xs text-gray-500">
+                  стр. {lightbox.pageId} · {(lightbox.score * 100).toFixed(0)}% сходства
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLightbox(null)}
+                className="ml-3 text-gray-400 hover:text-gray-700 text-2xl leading-none"
+                aria-label="Закрыть"
+              >
+                ×
+              </button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lightbox.thumbnail}
+              alt={`Страница ${lightbox.pageId}`}
+              className="w-full max-h-[75vh] object-contain bg-white"
+            />
+          </div>
+        </div>
       )}
     </div>
   )

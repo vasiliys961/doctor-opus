@@ -718,6 +718,16 @@ export default function LibraryPage() {
           {' '}память браузера. Большие атласы (200–300+ МБ) индексируйте <strong>по диапазону страниц</strong>.
         </p>
 
+        <div className="mb-5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+          <p className="text-sm font-bold text-indigo-900 mb-2">✅ Чеклист перед загрузкой атласа (1 минута)</p>
+          <ul className="text-xs text-indigo-800 space-y-1 list-disc pl-4">
+            <li>Если в PDF можно выделить текст мышкой - загружайте сразу. Если это просто фото-скан, сначала распознайте текст в разделе «Сканирование документов».</li>
+            <li>Для поиска похожих изображений включайте галочку «Это атлас - индексировать изображения».</li>
+            <li>Для поиска нужных фрагментов в тексте книги просто загрузите документ - система подготовит его для умного поиска.</li>
+            <li>Очень большие атласы (200+ МБ) лучше загружать частями по страницам: 1-100, потом 101-200 и т.д.</li>
+          </ul>
+        </div>
+
         <div className="flex items-center justify-center w-full">
           <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-primary-300 rounded-xl transition-all ${uploading ? 'bg-gray-50 cursor-wait opacity-70' : 'bg-primary-50 hover:bg-primary-100 cursor-pointer'}`}>
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
