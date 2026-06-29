@@ -38,6 +38,7 @@ export default function CTPage() {
   const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
   const [history, setHistory] = useState<Array<{role: string, content: string}>>([])
   const [showEditor, setShowEditor] = useState(false)
+  const [pendingAutoAnalyze, setPendingAutoAnalyze] = useState(false)
 
   const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
     const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
@@ -53,7 +54,7 @@ export default function CTPage() {
     const raw = localStorage.getItem(BRIDGE_CT_ANALYSIS_KEY)
     if (!raw) return
     try {
-      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string }
+      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string; autoAnalyze?: boolean }
       if (payload.text?.trim()) {
         setClinicalContext((prev) => (prev ? `${prev}\n\n${payload.text}` : payload.text || ''))
       }
@@ -64,6 +65,9 @@ export default function CTPage() {
           `${payload.title || 'mobile_ct'}.${extension}`,
           payload.mimeType || 'image/jpeg'
         )
+        if (payload.autoAnalyze) {
+          setPendingAutoAnalyze(true)
+        }
         handleUpload(syncedFile)
       }
     } catch (error) {
@@ -72,6 +76,14 @@ export default function CTPage() {
       localStorage.removeItem(BRIDGE_CT_ANALYSIS_KEY)
     }
   }, [])
+
+  useEffect(() => {
+    if (!pendingAutoAnalyze || !file || loading) return
+    setPendingAutoAnalyze(false)
+    void analyzeImage('optimized', true)
+    // analyzeImage пересоздается на рендер, это ожидаемо для автозапуска bridge-события.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAutoAnalyze, file, loading])
 
   // Применение маски ко всем срезам/кадрам
   const applyMaskToAllSlices = async (drawingPaths: DrawingPath[], editedFirstFile: File) => {

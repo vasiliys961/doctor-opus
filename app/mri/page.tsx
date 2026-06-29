@@ -39,6 +39,7 @@ export default function MRIPage() {
   const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
   const [history, setHistory] = useState<Array<{role: string, content: string}>>([])
   const [showEditor, setShowEditor] = useState(false)
+  const [pendingAutoAnalyze, setPendingAutoAnalyze] = useState(false)
 
   const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
     const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
@@ -54,7 +55,7 @@ export default function MRIPage() {
     const raw = localStorage.getItem(BRIDGE_MRI_ANALYSIS_KEY)
     if (!raw) return
     try {
-      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string }
+      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string; autoAnalyze?: boolean }
       if (payload.text?.trim()) {
         setClinicalContext((prev) => (prev ? `${prev}\n\n${payload.text}` : payload.text || ''))
       }
@@ -65,6 +66,9 @@ export default function MRIPage() {
           `${payload.title || 'mobile_mri'}.${extension}`,
           payload.mimeType || 'image/jpeg'
         )
+        if (payload.autoAnalyze) {
+          setPendingAutoAnalyze(true)
+        }
         handleUpload(syncedFile)
       }
     } catch (error) {
@@ -73,6 +77,14 @@ export default function MRIPage() {
       localStorage.removeItem(BRIDGE_MRI_ANALYSIS_KEY)
     }
   }, [])
+
+  useEffect(() => {
+    if (!pendingAutoAnalyze || !file || loading) return
+    setPendingAutoAnalyze(false)
+    void analyzeImage('optimized', true)
+    // analyzeImage пересоздается на рендер, это ожидаемо для автозапуска bridge-события.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAutoAnalyze, file, loading])
 
   // Применение маски ко всем срезам/кадрам
   const applyMaskToAllSlices = async (drawingPaths: DrawingPath[], editedFirstFile: File) => {

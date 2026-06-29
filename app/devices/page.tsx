@@ -1,7 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
+import {
+  HotFolderDicomAdapter,
+  RADIOLOGY_DEVICE_CATALOG,
+  createBrowserDeviceHub,
+} from '@/lib/device-hub'
 
 const SerialDeviceManager = dynamic(() => import('@/components/SerialDeviceManager'), { ssr: false })
 const SpirometryDevice = dynamic(() => import('@/components/SpirometryDevice'), { ssr: false })
@@ -17,8 +22,142 @@ const TABS = [
 
 type TabId = typeof TABS[number]['id']
 
+const HOT_FOLDER_CURSOR_KEY = 'device_hub_hot_folder_cursor_v1'
+const BRIDGE_KEY_BY_MODALITY = {
+  xray: 'mobile_bridge_xray_analysis_draft',
+  ct: 'mobile_bridge_ct_analysis_draft',
+  mri: 'mobile_bridge_mri_analysis_draft',
+} as const
+
+interface HotFolderApiEvent {
+  id: number
+  createdAt: string
+  study: {
+    modality: 'xray' | 'ct' | 'mri'
+    payloadType: 'dicom' | 'image'
+    title: string
+    notes?: string
+    dataUrls: string[]
+    fileNames: string[]
+    seriesCount?: number
+  }
+}
+
 export default function DevicesPage() {
   const [activeTab, setActiveTab] = useState<TabId>('ecg')
+  const [lastMockStudyInfo, setLastMockStudyInfo] = useState<string>('')
+  const [lastServerStudyInfo, setLastServerStudyInfo] = useState<string>('')
+  const [lastServerRoute, setLastServerRoute] = useState<string>('')
+  const [autoOpenOnIngest, setAutoOpenOnIngest] = useState(true)
+  const deviceHub = useMemo(() => createBrowserDeviceHub(), [])
+  const hotFolderAdapters = useMemo(
+    () =>
+      RADIOLOGY_DEVICE_CATALOG.map((descriptor) => ({
+        descriptor,
+        adapter: deviceHub.getAdapter(descriptor.id),
+      })),
+    [deviceHub]
+  )
+
+  const simulateHotFolderIngest = async (adapterId: string) => {
+    const adapter = deviceHub.getAdapter(adapterId)
+    if (!(adapter instanceof HotFolderDicomAdapter)) return
+    const study = await adapter.triggerMockStudy()
+    setLastMockStudyInfo(
+      `${study.modality.toUpperCase()}: ${study.studyId} (${new Date(study.createdAt).toLocaleTimeString('ru-RU')})`
+    )
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    let isStopped = false
+    const savedCursor = Number.parseInt(localStorage.getItem(HOT_FOLDER_CURSOR_KEY) || '0', 10)
+    let cursor = Number.isFinite(savedCursor) && savedCursor >= 0 ? savedCursor : 0
+
+    const getModalityLabel = (modality: 'xray' | 'ct' | 'mri') => {
+      if (modality === 'xray') return 'Рентген'
+      if (modality === 'ct') return 'КТ'
+      return 'МРТ'
+    }
+    const getModalityRoute = (modality: 'xray' | 'ct' | 'mri') => {
+      if (modality === 'xray') return '/xray'
+      if (modality === 'ct') return '/ct'
+      return '/mri'
+    }
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/devices/hot-folder?since=${cursor}`)
+        if (!response.ok) return
+        const data = (await response.json()) as { success?: boolean; events?: HotFolderApiEvent[] }
+        if (!data.success || !Array.isArray(data.events) || data.events.length === 0) return
+
+        for (const event of data.events) {
+          const modality = event.study.modality
+          const descriptor = RADIOLOGY_DEVICE_CATALOG.find((item) => item.modality === modality)
+          const adapter = descriptor ? deviceHub.getAdapter(descriptor.id) : undefined
+
+          if (adapter instanceof HotFolderDicomAdapter) {
+            adapter.ingestStudy({
+              studyId: `hot-folder-${event.id}`,
+              deviceId: descriptor?.id || `hot-folder-${modality}`,
+              modality,
+              payloadType: event.study.payloadType,
+              createdAt: event.createdAt,
+              notes: event.study.notes,
+              measurements: {
+                seriesCount: event.study.seriesCount ?? 1,
+                filesCount: event.study.fileNames?.length ?? 0,
+              },
+            })
+          }
+
+          const bridgeKey = BRIDGE_KEY_BY_MODALITY[modality]
+          const firstDataUrl = event.study.dataUrls?.[0]
+          if (bridgeKey && firstDataUrl) {
+            localStorage.setItem(
+              bridgeKey,
+              JSON.stringify({
+                title: event.study.title || `${getModalityLabel(modality)} из hot folder`,
+                text: event.study.notes || '',
+                dataUrl: firstDataUrl,
+                mimeType: firstDataUrl.match(/^data:([^;]+);base64,/)?.[1] || 'application/dicom',
+                autoAnalyze: true,
+                createdAt: event.createdAt,
+              })
+            )
+          }
+
+          cursor = Math.max(cursor, event.id)
+          const targetRoute = getModalityRoute(modality)
+          setLastServerStudyInfo(
+            `${getModalityLabel(modality)}: #${event.id} (${new Date(event.createdAt).toLocaleTimeString('ru-RU')})`
+          )
+          setLastServerRoute(targetRoute)
+
+          if (autoOpenOnIngest && typeof window !== 'undefined') {
+            window.location.assign(`${targetRoute}?autostart=1`)
+            return
+          }
+        }
+
+        localStorage.setItem(HOT_FOLDER_CURSOR_KEY, String(cursor))
+      } catch {
+        // Игнорируем кратковременные ошибки сети в polling
+      }
+    }
+
+    void poll()
+    const interval = window.setInterval(() => {
+      if (!isStopped) void poll()
+    }, 5000)
+
+    return () => {
+      isStopped = true
+      window.clearInterval(interval)
+    }
+  }, [autoOpenOnIngest, deviceHub])
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
@@ -149,6 +288,82 @@ export default function DevicesPage() {
           </div>
         </div>
         <div className="absolute -right-8 -bottom-8 text-9xl opacity-5">🔌</div>
+      </div>
+
+      <div className="mt-8 rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+        <h3 className="text-sm font-bold text-indigo-900 mb-2">Автоприем исследований (рентген / КТ / МРТ)</h3>
+        <p className="text-xs text-indigo-900 leading-relaxed">
+          Сделали снимок на аппарате — снимок автоматически приходит в Doctor Opus и готов к анализу на компьютере.
+        </p>
+
+        <div className="mt-3 rounded-xl bg-white border border-indigo-200 p-3">
+          <p className="text-xs font-semibold text-indigo-900 mb-2">Простая последовательность действий</p>
+          <ol className="list-decimal pl-4 space-y-1 text-xs text-indigo-900">
+            <li>Подключите аппарат к компьютеру (USB или штатным кабелем).</li>
+            <li>Откройте сайт Doctor Opus и зайдите в раздел `Лаборатория`.</li>
+            <li>Выполните снимок на аппарате.</li>
+            <li>В разделе `Лаборатория`, в блоке `Автоприем исследований (рентген / КТ / МРТ)`, дождитесь статуса о поступлении снимка.</li>
+            <li>Нажмите `Открыть раздел` (или дождитесь авто-перехода) и запустите анализ в `Рентген`, `КТ` или `МРТ`.</li>
+          </ol>
+        </div>
+
+        <div className="mt-3 rounded-xl bg-white border border-indigo-200 p-3">
+          <p className="text-xs font-semibold text-indigo-900 mb-2">Что вы увидите в интерфейсе</p>
+          <ol className="list-decimal pl-4 space-y-1 text-xs text-indigo-900">
+            <li>В разделе `Лаборатория` (блок `Автоприем исследований`) появится строка `Последнее реальное поступление`.</li>
+            <li>Рядом с этой строкой появится кнопка `Открыть раздел`.</li>
+            <li>Кнопка откроет нужный модуль: `Рентген`, `КТ` или `МРТ` (по типу снимка).</li>
+            <li>Если включен авто-режим, переход в нужный раздел произойдет автоматически.</li>
+            <li>В открытом разделе снимок уже подставлен; далее нажмите кнопку анализа.</li>
+          </ol>
+        </div>
+
+        <div className="mt-3 rounded-xl bg-white border border-indigo-200 p-3">
+          <p className="text-xs font-semibold text-indigo-900 mb-2">Режим работы</p>
+          <label className="flex items-center gap-2 text-xs text-indigo-900">
+            <input
+              type="checkbox"
+              checked={autoOpenOnIngest}
+              onChange={(e) => setAutoOpenOnIngest(e.target.checked)}
+              className="h-4 w-4 rounded border-indigo-300 text-indigo-600"
+            />
+            Автоматически открывать нужный раздел при поступлении исследования
+          </label>
+        </div>
+
+        <p className="mt-3 text-xs font-semibold text-indigo-900 mb-2">Проверить, что прием работает</p>
+        <div className="flex flex-wrap gap-2">
+          {hotFolderAdapters.map(({ descriptor, adapter }) => (
+            <button
+              key={descriptor.id}
+              disabled={!adapter}
+              onClick={() => simulateHotFolderIngest(descriptor.id)}
+              className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Проверить: {descriptor.title}
+            </button>
+          ))}
+        </div>
+        {lastMockStudyInfo && (
+          <p className="mt-2 text-xs text-indigo-900">
+            <span className="font-semibold">Результат проверки:</span> {lastMockStudyInfo}
+          </p>
+        )}
+        {lastServerStudyInfo && (
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <p className="text-xs text-emerald-800">
+              <span className="font-semibold">Последнее реальное поступление:</span> {lastServerStudyInfo}
+            </p>
+            {lastServerRoute && (
+              <a
+                href={lastServerRoute}
+                className="inline-flex items-center rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition-colors"
+              >
+                Открыть раздел
+              </a>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

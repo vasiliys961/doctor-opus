@@ -36,6 +36,7 @@ export default function XRayPage() {
   const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
   const [showEditor, setShowEditor] = useState(false)
   const [editingImageType, setEditingImageType] = useState<'current' | 'archive'>('current')
+  const [pendingAutoAnalyze, setPendingAutoAnalyze] = useState(false)
 
   const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
     const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
@@ -51,7 +52,7 @@ export default function XRayPage() {
     const raw = localStorage.getItem(BRIDGE_XRAY_ANALYSIS_KEY)
     if (!raw) return
     try {
-      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string }
+      const payload = JSON.parse(raw) as { title?: string; text?: string; dataUrl?: string; mimeType?: string; autoAnalyze?: boolean }
       if (payload.text?.trim()) {
         setClinicalContext((prev) => (prev ? `${prev}\n\n${payload.text}` : payload.text || ''))
       }
@@ -62,6 +63,9 @@ export default function XRayPage() {
           `${payload.title || 'mobile_xray'}.${extension}`,
           payload.mimeType || 'image/jpeg'
         )
+        if (payload.autoAnalyze) {
+          setPendingAutoAnalyze(true)
+        }
         handleUpload(syncedFile)
       }
     } catch (error) {
@@ -70,6 +74,14 @@ export default function XRayPage() {
       localStorage.removeItem(BRIDGE_XRAY_ANALYSIS_KEY)
     }
   }, [])
+
+  useEffect(() => {
+    if (!pendingAutoAnalyze || !file || loading || isComparisonMode) return
+    setPendingAutoAnalyze(false)
+    void analyzeImage('optimized', true)
+    // analyzeImage пересоздается на рендер, это ожидаемо для автозапуска bridge-события.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAutoAnalyze, file, loading, isComparisonMode])
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
