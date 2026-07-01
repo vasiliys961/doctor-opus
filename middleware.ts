@@ -48,15 +48,6 @@ export async function middleware(request: NextRequest) {
     '/api/auth',              // NextAuth (login, session, providers) + /api/auth/register
     '/api/payment/ya',        // Webhook Yagoda (уведомление об оплате заказа)
     '/api/payment/config',    // Публичные параметры оплаты для UI (курс, минимум)
-    '/api/chat',              // Гостевой режим чата (ограничивается rate-limit/billing внутри роутов)
-    '/api/analyze',           // Гостевой анализ (контроль внутри роутов)
-    '/api/scan',              // Гостевое сканирование документов
-    '/api/transcribe',        // Гостевая транскрибация
-    '/api/extract',           // Гостевое извлечение данных
-    '/api/protocol',          // Генерация протокола для гостя
-    '/api/protocols/search',  // Поиск протоколов для гостя
-    '/api/mobile-bridge',     // Публичный мост смартфон -> накопитель (доступ по одноразовому токену сессии)
-    '/api/secure-protocol',   // Параллельный secure-протокол (Whisper + черновик)
   ];
 
   const isPublicPath = publicPaths.some(p =>
@@ -135,6 +126,25 @@ export const config = {
     
     // Защищенные страницы
     '/chat/:path*',
+    '/image-analysis/:path*',
+    '/xray/:path*',
+    '/mri/:path*',
+    '/ct/:path*',
+    '/ultrasound/:path*',
+    '/dermatoscopy/:path*',
+    '/video/:path*',
+    '/document/:path*',
+    '/genetic/:path*',
+    '/advanced/:path*',
+    '/advanced-3d/:path*',
+    '/comparative/:path*',
+    '/protocol/:path*',
+    '/protocols/:path*',
+    '/lab/:path*',
+    '/ecg/:path*',
+    '/devices/:path*',
+    '/library/:path*',
+    '/mobile-bridge/:path*',
     '/patients/:path*',
     '/statistics/:path*',
     '/balance/:path*',

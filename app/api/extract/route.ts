@@ -61,23 +61,6 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Для изображений - используем vision API
-    if (fileType === 'jpg' || fileType === 'jpeg' || fileType === 'png') {
-      const base64Image = buffer.toString('base64');
-      const result = await analyzeImage({
-        prompt: `${prompt}\n\nЭто изображение документа или медицинского бланка. Извлеки весь текст и структурируй данные.`,
-        imageBase64: base64Image,
-        mode: 'optimized',
-      });
-      
-      return NextResponse.json({
-        success: true,
-        result: result,
-        fileType,
-        fileName: file.name,
-      });
-    }
-
     // Для PDF - используем vision API (конвертируем первую страницу в изображение)
     // Или используем специальный endpoint для сканирования документов
     if (fileType === 'pdf') {
@@ -118,6 +101,23 @@ export async function POST(request: NextRequest) {
         { success: false, error: billing.error || 'Недостаточно единиц для извлечения данных' },
         { status: 402 }
       );
+    }
+
+    // Для изображений - используем vision API
+    if (fileType === 'jpg' || fileType === 'jpeg' || fileType === 'png') {
+      const base64Image = buffer.toString('base64');
+      const result = await analyzeImage({
+        prompt: `${prompt}\n\nЭто изображение документа или медицинского бланка. Извлеки весь текст и структурируй данные.`,
+        imageBase64: base64Image,
+        mode: 'optimized',
+      });
+      
+      return NextResponse.json({
+        success: true,
+        result: result,
+        fileType,
+        fileName: file.name,
+      });
     }
 
     // Для текстовых файлов (CSV, TXT, VCF) - читаем как текст

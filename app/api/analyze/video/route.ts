@@ -17,6 +17,14 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+
     // ... (код проверки API ключа и файла остается прежним)
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
