@@ -8,6 +8,7 @@ import FeedbackForm from '@/components/FeedbackForm'
 import PatientSelector from '@/components/PatientSelector'
 import ImageEditor, { type DrawingPath } from '@/components/ImageEditor'
 import { logUsage } from '@/lib/simple-logger'
+import { postAnalyzeImageWithModelConsent } from '@/lib/analyze-image-client'
 import { 
   extractAndAnonymizeFrames, 
   formatTimestamp, 
@@ -415,10 +416,7 @@ export default function VideoComparisonPage() {
 
       console.log(`🎬 [VIDEO COMPARISON] Отправка ${frames1.length + frames2.length} кадров на анализ...`)
       
-      const response = await fetch('/api/analyze/image', {
-        method: 'POST',
-        body: formData,
-      })
+      const response = await postAnalyzeImageWithModelConsent({ formData, mode: 'optimized' })
 
       const data = await response.json()
 

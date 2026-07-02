@@ -9,6 +9,7 @@ import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
+import { postAnalyzeImageWithModelConsent } from '@/lib/analyze-image-client'
 
 export default function AdvancedAnalysisPage() {
   const [mainImage, setMainImage] = useState<File | null>(null)
@@ -81,7 +82,7 @@ export default function AdvancedAnalysisPage() {
       const modelToUse = mode === 'fast' 
         ? 'google/gemini-3-flash-preview' 
         : mode === 'optimized' 
-          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4')
+          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4')
           : 'anthropic/claude-opus-4.8'
       
       const formData = new FormData()
@@ -98,10 +99,7 @@ export default function AdvancedAnalysisPage() {
       formData.append('isAnonymous', isAnonymous.toString())
       formData.append('clinicalContext', additionalContext.trim())
 
-      const response = await fetch('/api/analyze/image', {
-        method: 'POST',
-        body: formData,
-      })
+      const response = await postAnalyzeImageWithModelConsent({ formData, mode })
 
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 
@@ -143,7 +141,7 @@ export default function AdvancedAnalysisPage() {
       <AnalysisTips 
         content={{
           fast: "базовый скрининг основного изображения с учетом контекста.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — лучший выбор для анализа снимков с описанием.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5) — лучший выбор для анализа снимков с описанием.",
           validated: "двухэтапный экспертный анализ (Gemini JSON + Opus 4.8) — объединяет точность зрения Gemini и клинический интеллект Opus.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini JSON + Sonnet) — лучший выбор для анализа снимков с описанием.",

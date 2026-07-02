@@ -2,14 +2,16 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import BalanceWidget from './BalanceWidget'
 import { useSession, signOut } from 'next-auth/react'
 
 export default function Navigation() {
+  const VALIDATED_PREFERENCE_STORAGE_KEY = 'validated-model-preference'
   const pathname = usePathname()
   const { data: session, status } = useSession()
   const [isOpen, setIsOpen] = useState(false)
+  const [validatedPreference, setValidatedPreference] = useState<'auto' | 'opus' | 'fable'>('auto')
 
   const pages = [
     { name: '🏠 Главная', href: '/' },
@@ -42,6 +44,22 @@ export default function Navigation() {
 
   const toggleMenu = () => setIsOpen(!isOpen)
   const closeMenu = () => setIsOpen(false)
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(VALIDATED_PREFERENCE_STORAGE_KEY)
+      if (saved === 'auto' || saved === 'opus' || saved === 'fable') {
+        setValidatedPreference(saved)
+      }
+    } catch {}
+  }, [])
+
+  const handleValidatedPreferenceChange = (value: 'auto' | 'opus' | 'fable') => {
+    setValidatedPreference(value)
+    try {
+      localStorage.setItem(VALIDATED_PREFERENCE_STORAGE_KEY, value)
+    } catch {}
+  }
 
   return (
     <>
@@ -206,12 +224,25 @@ export default function Navigation() {
             <p className="font-semibold mb-1">Клинический Ассистент v3.50</p>
             <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Клиническая версия</p>
             <ul className="space-y-1 text-xs opacity-70">
-              <li>• Opus 4.8 + Gemini 3.1</li>
+              <li>• Opus 4.8 / Fable 5 + Gemini 3.1</li>
               <li>• Просмотр DICOM + измерения</li>
               <li>• Мультимодальный анализ (изображения + документы)</li>
               <li>• Анализ динамики и RAG</li>
+              <li className="text-amber-300 font-semibold">• Fable 5: до ~x2 к цене Opus</li>
               <li className="text-teal-400 font-bold mt-2">🛡️ Поддержка клинических решений</li>
             </ul>
+            <div className="mt-3 p-2 rounded border border-primary-600 bg-primary-900/40">
+              <p className="text-[10px] uppercase tracking-wide text-primary-300 mb-1 font-bold">Глобальный выбор validated</p>
+              <select
+                value={validatedPreference}
+                onChange={(e) => handleValidatedPreferenceChange(e.target.value as 'auto' | 'opus' | 'fable')}
+                className="w-full px-2 py-1.5 rounded bg-white text-gray-800 text-xs font-semibold"
+              >
+                <option value="auto">Auto (рекомендовать Fable при сложном кейсе)</option>
+                <option value="opus">Всегда Opus 4.8</option>
+                <option value="fable">Всегда Fable 5 (дороже)</option>
+              </select>
+            </div>
           </div>
         </div>
       </nav>

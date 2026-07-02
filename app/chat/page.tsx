@@ -38,10 +38,11 @@ const specialtyMap: Record<string, Specialty> = {
   'ИИ-Эксперт': 'ai_assistant',
 };
 
-const getDisplayModelName = (model: 'opus' | 'sonnet' | 'gpt52' | 'gemini') => {
+const getDisplayModelName = (model: 'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable') => {
   if (model === 'gpt52') return 'openai/gpt-5.4';
-  if (model === 'sonnet') return 'anthropic/claude-sonnet-4.6';
+  if (model === 'sonnet') return 'anthropic/claude-sonnet-5';
   if (model === 'opus') return 'anthropic/claude-opus-4.8';
+  if (model === 'fable') return 'anthropic/claude-fable-5';
   if (model === 'gemini') return 'google/gemini-3-flash-preview';
   return model;
 };
@@ -98,7 +99,7 @@ export default function ChatPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
   const [useLibrary, setUseLibrary] = useState(false)
-  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('sonnet')
+  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable'>('sonnet')
   const [responseStyle, setResponseStyle] = useState<ResponseStyle>('brief')
   const [specialty, setSpecialty] = useState<Specialty>('universal')
   const [isCutOff, setIsCutOff] = useState(false)
@@ -303,7 +304,7 @@ export default function ChatPage() {
     let accumulatedText = lastAssistantMessage.content;
 
     try {
-      // ВАЖНО: отправляем на сервер ключ модели (sonnet/gpt52/opus/gemini).
+      // ВАЖНО: отправляем на сервер ключ модели (sonnet/gpt52/opus/gemini/fable).
       // displayModelName используется только для UI — чтобы не показывать 'gpt52' пользователю.
       const modelName = model
       const displayModelName = getDisplayModelName(model)
@@ -489,8 +490,8 @@ export default function ChatPage() {
     }
 
     try {
-      // ВАЖНО: отправляем на сервер ключ модели (sonnet/gpt52/opus/gemini),
-      // а не строковый id провайдера. Сервер сам выберет актуальный id (например Sonnet 4.6).
+      // ВАЖНО: отправляем на сервер ключ модели (sonnet/gpt52/opus/gemini/fable),
+      // а не строковый id провайдера. Сервер сам выберет актуальный id (например Sonnet 5).
       const modelName = model
       const displayModelName = getDisplayModelName(model)
 
@@ -1304,7 +1305,8 @@ export default function ChatPage() {
             >
               <option value="gpt52">🚀 GPT-5.4</option>
               <option value="opus">🧠 Opus 4.8</option>
-              <option value="sonnet">🤖 Sonnet 4.6</option>
+              <option value="fable">🚀 Fable 5 (дороже)</option>
+              <option value="sonnet">🤖 Sonnet 5</option>
               <option value="gemini">⚡ Gemini 3.1</option>
             </select>
           </div>

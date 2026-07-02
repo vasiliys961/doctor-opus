@@ -30,10 +30,41 @@ export const dynamic = 'force-dynamic';
 
 // Лимит размера файла: 50MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const COMPLEX_MODALITIES = new Set(['ct', 'mri', 'xray', 'ultrasound']);
+const FABLE_MODEL = (process.env.VALIDATED_FABLE_MODEL || '').trim();
+const ENABLE_VALIDATED_FABLE = process.env.ENABLE_VALIDATED_FABLE === 'true' && Boolean(FABLE_MODEL);
+const FABLE_COST_MULTIPLIER = Math.max(1, Number(process.env.VALIDATED_FABLE_COST_MULTIPLIER || '2'));
+const MIN_COMPLEX_IMAGES = Math.max(2, Number(process.env.VALIDATED_COMPLEX_MIN_IMAGES || '3'));
+const MIN_COMPLEX_CONTEXT_CHARS = Math.max(200, Number(process.env.VALIDATED_COMPLEX_MIN_CONTEXT_CHARS || '500'));
+
+function shouldSuggestFableForValidatedCase(
+  imageType: string,
+  imageCount: number,
+  clinicalContext: string,
+  isComparative: boolean
+): boolean {
+  const normalizedType = String(imageType || '').toLowerCase();
+  const contextLength = String(clinicalContext || '').trim().length;
+
+  return (
+    isComparative ||
+    imageCount >= MIN_COMPLEX_IMAGES ||
+    contextLength >= MIN_COMPLEX_CONTEXT_CHARS ||
+    COMPLEX_MODALITIES.has(normalizedType)
+  );
+}
+
+function getEstimatedCostByModel(mode: string, imageCount: number, targetModel: string): number {
+  const base = getAnalysisCost(mode, imageCount);
+  if (mode === 'validated' && ENABLE_VALIDATED_FABLE && targetModel === FABLE_MODEL) {
+    return Number((base * FABLE_COST_MULTIPLIER).toFixed(2));
+  }
+  return base;
+}
 
 export async function POST(request: NextRequest) {
   const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  let billingContext: { email: string; estimatedCost: number } | null = null;
+  let billingContext: { email: string | null; guestKey: string | null; estimatedCost: number } | null = null;
   let billedAmount = 0;
   let billingEmail: string | null = null;
   let billingGuestKey: string | null = null;
@@ -41,7 +72,7 @@ export async function POST(request: NextRequest) {
   const handleStreamingResponse = async (stream: ReadableStream, modelName: string) => {
     const wrapStreamWithBillingReconcile = (
       source: ReadableStream,
-      context: { email: string; estimatedCost: number }
+      context: { email: string | null; guestKey: string | null; estimatedCost: number }
     ) => {
       const reader = source.getReader();
       const encoder = new TextEncoder();
@@ -61,31 +92,29 @@ export async function POST(request: NextRequest) {
             return;
           }
 
-          // Политика доверия: никогда не доначисляем сверх резерва.
-          // Если фактическая стоимость ниже — автоматически возвращаем разницу.
-          const charged = Math.min(estimated, actual);
-          const refund = estimated - charged;
+          const delta = Number((actual - estimated).toFixed(2));
+          if (Math.abs(delta) > 0.01) {
+            const operation =
+              delta > 0 ? 'Analysis cost adjustment (extra charge)' : 'Analysis cost adjustment (refund)';
+            const metadata = {
+              analysisId,
+              estimatedCost: estimated,
+              actualCost: actual,
+              adjustment: delta,
+            };
 
-          if (refund > 0.01) {
-            await checkAndDeductBalance(
-              context.email,
-              -refund,
-              'Analysis cost adjustment (refund)',
-              {
-                analysisId,
-                estimatedCost: estimated,
-                actualCost: actual,
-                chargedCost: charged,
-                refund,
-              }
-            );
+            if (context.email) {
+              await checkAndDeductBalance(context.email, delta, operation, metadata);
+            } else if (context.guestKey) {
+              await checkAndDeductGuestBalance(context.guestKey, delta, operation, metadata);
+            }
 
             const refundEvent = {
               billing: {
                 estimated_cost: estimated,
                 actual_cost: actual,
-                charged_cost: charged,
-                refund,
+                adjustment: delta,
+                charged_cost: actual,
               },
             };
             // Отправляем прозрачную информацию в поток для UI (игнорируется, если клиент не обрабатывает).
@@ -185,6 +214,12 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const mode = (formData.get('mode') as string) || 'optimized';
+    const imageType = (formData.get('imageType') as string) || 'universal';
+    const clinicalContext = anonymizeText(formData.get('clinicalContext') as string || '');
+    const isComparative = formData.get('isComparative') === 'true';
+    const validatedModelChoice = ((formData.get('validatedModelChoice') as string) || '').toLowerCase();
+    const allowValidatedOffer = formData.get('allowValidatedOffer') === 'true';
+    const customModel = formData.get('model') as string | null;
 
     // Серверное списание юнитов (до выполнения анализа)
     const userEmail = session?.user?.email || null;
@@ -196,13 +231,48 @@ export async function POST(request: NextRequest) {
     let fi = 0;
     while (formData.get(`additionalImage_${fi}`)) { imgCount++; fi++; }
     
-    const estimatedCost = getAnalysisCost(mode, imgCount);
+    const suggestFable = mode === 'validated'
+      && ENABLE_VALIDATED_FABLE
+      && shouldSuggestFableForValidatedCase(imageType, imgCount, clinicalContext, isComparative);
+
+    if (
+      mode === 'validated' &&
+      allowValidatedOffer &&
+      suggestFable &&
+      validatedModelChoice !== 'fable' &&
+      validatedModelChoice !== 'opus'
+    ) {
+      const opusEstimate = getEstimatedCostByModel(mode, imgCount, MODELS.OPUS_VALIDATED);
+      const fableEstimate = getEstimatedCostByModel(mode, imgCount, FABLE_MODEL);
+      return NextResponse.json(
+        {
+          success: false,
+          requiresModelSelection: true,
+          modelOffer: {
+            recommendedModel: 'fable',
+            defaultModel: 'opus',
+            opusModel: MODELS.OPUS_VALIDATED,
+            fableModel: FABLE_MODEL,
+            estimatedCostOpus: opusEstimate,
+            estimatedCostFable: fableEstimate,
+            estimatedDifference: Number((fableEstimate - opusEstimate).toFixed(2)),
+            reason: 'complex_case',
+          },
+        },
+        { status: 409 }
+      );
+    }
+
+    const selectedValidatedModel =
+      mode === 'validated' && ENABLE_VALIDATED_FABLE && validatedModelChoice === 'fable'
+        ? FABLE_MODEL
+        : MODELS.OPUS_VALIDATED;
+
+    const estimatedCost = getEstimatedCostByModel(mode, imgCount, selectedValidatedModel);
     const billing = userEmail
       ? await checkAndDeductBalance(userEmail, estimatedCost, 'Анализ изображения', { mode, imageCount: imgCount })
       : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: image analysis', { mode, imageCount: imgCount });
-    if (userEmail) {
-      billingContext = { email: userEmail, estimatedCost };
-    }
+    billingContext = { email: userEmail, guestKey, estimatedCost };
     billedAmount = estimatedCost;
     
     if (!billing.allowed) {
@@ -222,15 +292,11 @@ export async function POST(request: NextRequest) {
       );
     }
     const prompt = anonymizeText(formData.get('prompt') as string || 'Analyze the medical image.');
-    const clinicalContext = anonymizeText(formData.get('clinicalContext') as string || '');
     const stage = ((formData.get('stage') as string) || 'all').toLowerCase();
     const descriptionFromStep1 = anonymizeText(formData.get('description') as string || '');
-    const imageType = (formData.get('imageType') as string) || 'universal';
-    const customModel = formData.get('model') as string | null;
     const useStreaming = formData.get('useStreaming') === 'true';
     const isTwoStage = formData.get('isTwoStage') === 'true';
     const isAnonymous = formData.get('isAnonymous') === 'true';
-    const isComparative = formData.get('isComparative') === 'true';
     
     // Специальности удалены для стабильности
     const specialty = undefined;
@@ -353,13 +419,14 @@ export async function POST(request: NextRequest) {
       }
       if (customModel === 'gemini' || customModel === MODELS.GEMINI_3_FLASH) return MODELS.GEMINI_3_FLASH;
       if (customModel === MODELS.OPUS_VALIDATED) return MODELS.OPUS_VALIDATED;
+      if (ENABLE_VALIDATED_FABLE && customModel === FABLE_MODEL) return FABLE_MODEL;
       return customModel;
     })();
     const defaultModelByMode =
       mode === 'fast'
         ? MODELS.GEMINI_3_FLASH
         : mode === 'validated'
-          ? MODELS.OPUS_VALIDATED
+          ? selectedValidatedModel
           : (allowGpt52Analyze ? MODELS.GPT_5_2 : MODELS.SONNET);
     let modelToUse = normalizedCustomModel || defaultModelByMode;
     const allowedModels = new Set([
@@ -369,6 +436,9 @@ export async function POST(request: NextRequest) {
       MODELS.OPUS,
       MODELS.OPUS_VALIDATED,
     ]);
+    if (ENABLE_VALIDATED_FABLE) {
+      allowedModels.add(FABLE_MODEL);
+    }
     if (!allowedModels.has(modelToUse)) {
       modelToUse = defaultModelByMode;
     }

@@ -19,6 +19,7 @@ const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false
 const Dicom3DViewer = dynamic(() => import('@/components/Dicom3DViewer'), { ssr: false })
 
 import { logUsage } from '@/lib/simple-logger'
+import { postAnalyzeImageWithModelConsent } from '@/lib/analyze-image-client'
 
 export default function VideoPage() {
   const BRIDGE_VIDEO_ANALYSIS_KEY = 'mobile_bridge_video_analysis_draft'
@@ -450,10 +451,7 @@ export default function VideoPage() {
 
       console.log(`🎬 [VIDEO] Отправка ${framesToAnalyze.length} кадров на анализ...`)
       
-      const response = await fetch('/api/analyze/image', {
-        method: 'POST',
-        body: formData,
-      })
+      const response = await postAnalyzeImageWithModelConsent({ formData, mode: 'optimized' })
 
       const data = await response.json()
 

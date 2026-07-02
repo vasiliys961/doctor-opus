@@ -19,6 +19,7 @@ import {
 } from '@/lib/library-db'
 import { embedImage, embedTextForImage, isEmbeddingSupported } from '@/lib/embeddings'
 import { buildDermnetSearchUrl, suggestDermnetLinks } from '@/lib/dermnet-links'
+import { postAnalyzeImageWithModelConsent } from '@/lib/analyze-image-client'
 
 type StudyType = 'dermatoscopy' | 'wound' | 'skin'
 
@@ -30,7 +31,7 @@ const STUDY_TYPES: { id: StudyType; icon: string; label: string; prompt: string;
     prompt: 'Проанализируйте дерматоскопическое изображение. Опишите структуру, цвета, границы, признаки меланомы по ABCDE критериям.',
     placeholder: 'Пример: Пациент 45 лет, образование на спине, заметил рост и изменение цвета в последние 3 месяца.',
     tipFast: 'двухэтапный скрининг — структурированное описание структуры и цвета, затем оценка риска.',
-    tipOpt: 'рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и качества для дерматоскопии.',
+    tipOpt: 'рекомендуемый режим (Gemini JSON + Sonnet 5) — идеальный баланс точности и качества для дерматоскопии.',
     tipVal: 'самый точный экспертный анализ (Gemini JSON + Opus 4.8) — рекомендуется для атипичных и сложных образований.',
   },
   {
@@ -202,7 +203,7 @@ export default function DermatoscopyPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-4.8');
@@ -212,10 +213,7 @@ export default function DermatoscopyPage() {
 
       if (useStream && (analysisMode === 'validated' || analysisMode === 'optimized' || analysisMode === 'fast')) {
         // Streaming режим
-        const response = await fetch('/api/analyze/image', {
-          method: 'POST',
-          body: formData,
-        })
+        const response = await postAnalyzeImageWithModelConsent({ formData, mode: analysisMode })
 
         if (!response.ok) {
           const errorText = await response.text()
@@ -225,7 +223,7 @@ export default function DermatoscopyPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4';
         
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.8';
@@ -260,10 +258,7 @@ export default function DermatoscopyPage() {
         })
       } else {
         // Обычный режим без streaming
-        const response = await fetch('/api/analyze/image', {
-          method: 'POST',
-          body: formData,
-        })
+        const response = await postAnalyzeImageWithModelConsent({ formData, mode: analysisMode })
 
         const data = await response.json()
 

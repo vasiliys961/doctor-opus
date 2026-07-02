@@ -15,6 +15,7 @@ import { handleSSEStream } from '@/lib/streaming-utils'
 import { type ExtractedFrame, extractAndAnonymizeFrames, formatTimestamp } from '@/lib/video-frame-extractor'
 import ImageEditor from '@/components/ImageEditor'
 import { buildUltrasoundGeneralLinks, suggestUltrasoundReferenceLinks } from '@/lib/ultrasound-reference-links'
+import { postAnalyzeImageWithModelConsent } from '@/lib/analyze-image-client'
 
 export default function UltrasoundPage() {
   const BRIDGE_ULTRASOUND_ANALYSIS_KEY = 'mobile_bridge_ultrasound_analysis_draft'
@@ -116,14 +117,11 @@ export default function UltrasoundPage() {
 
       // Подбор модели
       const targetModelId = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                           analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') :
+                           analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4') :
                            'anthropic/claude-opus-4.8';
       formData.append('model', targetModelId);
 
-      const response = await fetch('/api/analyze/image', {
-        method: 'POST',
-        body: formData,
-      })
+      const response = await postAnalyzeImageWithModelConsent({ formData, mode: analysisMode })
 
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 

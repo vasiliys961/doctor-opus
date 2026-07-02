@@ -6,7 +6,7 @@ import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } fr
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const PRIMARY_MODEL = 'openai/gpt-5.4'
-const FALLBACK_MODEL = 'anthropic/claude-sonnet-4.6'
+const FALLBACK_MODEL = 'anthropic/claude-sonnet-5'
 
 function shouldFallbackFromGpt54(status: number, errorText: string): boolean {
   const normalized = (errorText || '').toLowerCase()

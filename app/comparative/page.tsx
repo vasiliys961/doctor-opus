@@ -10,6 +10,7 @@ import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
+import { postAnalyzeImageWithModelConsent } from '@/lib/analyze-image-client'
 
 interface ImageWithPreview {
   file: File
@@ -93,7 +94,7 @@ export default function ComparativeAnalysisPage() {
       const modelToUse = mode === 'fast' 
         ? 'google/gemini-3-flash-preview' 
         : mode === 'optimized' 
-          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4')
+          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4')
           : 'anthropic/claude-opus-4.8'
       
       const formData = new FormData()
@@ -114,10 +115,7 @@ export default function ComparativeAnalysisPage() {
         formData.append('description', accumulatedDescription)
       }
 
-      const response = await fetch('/api/analyze/image', {
-        method: 'POST',
-        body: formData,
-      })
+      const response = await postAnalyzeImageWithModelConsent({ formData, mode })
 
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 

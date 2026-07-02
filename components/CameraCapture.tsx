@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect, useCallback } from 'react'
+import { postAnalyzeImageWithModelConsent } from '@/lib/analyze-image-client'
 
 type AnalysisType = 'ultrasound' | 'endoscopy' | 'general'
 
@@ -161,9 +162,9 @@ export default function CameraCapture() {
       formData.append('imageType', analysisType)
       formData.append('useStreaming', 'true')
       formData.append('isTwoStage', 'true')
-      formData.append('model', 'anthropic/claude-sonnet-4.6')
+      formData.append('model', 'anthropic/claude-sonnet-5')
 
-      const response = await fetch('/api/analyze/image', { method: 'POST', body: formData })
+      const response = await postAnalyzeImageWithModelConsent({ formData, mode: 'optimized' })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const { handleSSEStream } = await import('@/lib/streaming-utils')
@@ -406,7 +407,7 @@ export default function CameraCapture() {
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
             🧠 Результат анализа
-            <span className="text-xs font-normal text-gray-400">Gemini + Claude Sonnet 4.6</span>
+            <span className="text-xs font-normal text-gray-400">Gemini + Claude Sonnet 5</span>
           </h3>
           <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap leading-relaxed">
             {result}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import AnalysisResult from './AnalysisResult'
+import { postAnalyzeImageWithModelConsent } from '@/lib/analyze-image-client'
 
 const LEAD_NAMES = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
 const LEAD_COLORS = [
@@ -432,7 +433,7 @@ export default function SerialDeviceManager() {
         `Проанализируйте ритм, ЧСС, электрическую ось, наличие блокад, ишемии, гипертрофий, аритмий. Дайте клиническое заключение.`
       )
 
-      const resp = await fetch('/api/analyze/image', { method: 'POST', body: formData })
+      const resp = await postAnalyzeImageWithModelConsent({ formData, mode: cfg.mode })
       const data = await resp.json()
       if (data.success) { setAnalysisResult(data.result); setStep('done') }
       else { setErrorMsg('Ошибка анализа: ' + data.error); setStep('captured') }

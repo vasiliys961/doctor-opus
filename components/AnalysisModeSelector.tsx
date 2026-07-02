@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useEffect } from 'react'
 
 export type AnalysisMode = 'fast' | 'optimized' | 'validated'
 export type OptimizedModel = 'sonnet' | 'gpt52'
@@ -24,6 +25,25 @@ export default function AnalysisModeSelector({
   useLibrary = false,
   onLibraryToggle
 }: AnalysisModeSelectorProps) {
+  const VALIDATED_PREFERENCE_STORAGE_KEY = 'validated-model-preference'
+  const [validatedPreference, setValidatedPreference] = useState<'auto' | 'opus' | 'fable'>('auto')
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(VALIDATED_PREFERENCE_STORAGE_KEY)
+      if (saved === 'auto' || saved === 'opus' || saved === 'fable') {
+        setValidatedPreference(saved)
+      }
+    } catch {}
+  }, [])
+
+  const handleValidatedPreferenceChange = (next: 'auto' | 'opus' | 'fable') => {
+    setValidatedPreference(next)
+    try {
+      localStorage.setItem(VALIDATED_PREFERENCE_STORAGE_KEY, next)
+    } catch {}
+  }
+
   const modes: Array<{ value: AnalysisMode; label: string; description: string; icon: string }> = [
     {
       value: 'fast',
@@ -40,7 +60,7 @@ export default function AnalysisModeSelector({
     {
       value: 'validated',
       label: '🧠 С валидацией',
-      description: 'Gemini JSON + Opus 4.8 — экспертный разбор сложных случаев',
+      description: 'Gemini JSON + Opus 4.8 (для сложных кейсов может быть предложен Fable 5)',
       icon: '🧠'
     }
   ]
@@ -99,7 +119,7 @@ export default function AnalysisModeSelector({
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
-                Claude Sonnet 4.6
+                Claude Sonnet 5
                 <div className="text-[9px] font-normal opacity-80">Стандарт (90 сек)</div>
               </button>
               <button
@@ -115,6 +135,50 @@ export default function AnalysisModeSelector({
                 <div className="text-[9px] font-normal opacity-80">Тест-драйв (15 сек)</div>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {value === 'validated' && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+          <p className="text-xs text-blue-900">
+            <strong>💡 Экспертный режим:</strong> по умолчанию используется Opus 4.8. Для сложных случаев система может
+            предложить перейти на Fable 5 с явным подтверждением и показом разницы в стоимости.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <button
+              disabled={disabled}
+              onClick={() => handleValidatedPreferenceChange('auto')}
+              className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${
+                validatedPreference === 'auto'
+                  ? 'bg-blue-600 text-white border-blue-700'
+                  : 'bg-white text-blue-900 border-blue-200 hover:bg-blue-100'
+              } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Auto (рекомендация)
+            </button>
+            <button
+              disabled={disabled}
+              onClick={() => handleValidatedPreferenceChange('opus')}
+              className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${
+                validatedPreference === 'opus'
+                  ? 'bg-blue-600 text-white border-blue-700'
+                  : 'bg-white text-blue-900 border-blue-200 hover:bg-blue-100'
+              } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Всегда Opus 4.8
+            </button>
+            <button
+              disabled={disabled}
+              onClick={() => handleValidatedPreferenceChange('fable')}
+              className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${
+                validatedPreference === 'fable'
+                  ? 'bg-blue-600 text-white border-blue-700'
+                  : 'bg-white text-blue-900 border-blue-200 hover:bg-blue-100'
+              } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Всегда Fable 5
+            </button>
           </div>
         </div>
       )}

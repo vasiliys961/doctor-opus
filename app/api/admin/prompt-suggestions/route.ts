@@ -110,7 +110,7 @@ ${casesText}
           'X-Title': 'Doctor Opus',
         },
         body: JSON.stringify({
-          model: 'anthropic/claude-sonnet-4.6',
+          model: 'anthropic/claude-sonnet-5',
           messages: [{ role: 'user', content: prompt }],
           max_tokens: 1000,
           temperature: 0.2,

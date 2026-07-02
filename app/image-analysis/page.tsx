@@ -29,6 +29,7 @@ import {
 import { embedImage, embedTextForImage, isEmbeddingSupported } from '@/lib/embeddings'
 import { getRelevanceBundle } from '@/lib/image-relevance-links'
 import { buildDiagnosticQueryText } from '@/lib/diagnostic-query'
+import { postAnalyzeImageWithModelConsent } from '@/lib/analyze-image-client'
 
 export default function ImageAnalysisPage() {
   const BRIDGE_IMAGE_ANALYSIS_KEY = 'mobile_bridge_image_analysis_draft'
@@ -294,7 +295,7 @@ export default function ImageAnalysisPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo({ 
-            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.8', 
+            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.8',
             mode: analysisMode + ' (из кэша)' 
           });
           return;
@@ -357,7 +358,7 @@ export default function ImageAnalysisPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         // Не фиксируем версию на клиенте: backend сам выберет validated-модель (4.8/4.7 по env).
@@ -368,10 +369,7 @@ export default function ImageAnalysisPage() {
       if (useStream) {
         console.log('📡 [CLIENT] Запуск streaming режима для режима:', analysisMode)
         try {
-          const response = await fetch('/api/analyze/image', {
-            method: 'POST',
-            body: formData,
-          })
+          const response = await postAnalyzeImageWithModelConsent({ formData, mode: analysisMode })
 
           if (!response.ok) {
             const contentType = response.headers.get('content-type') || ''
@@ -399,7 +397,7 @@ export default function ImageAnalysisPage() {
           let modelUsed = ''
           if (analysisMode === 'fast') modelUsed = 'google/gemini-3-flash-preview'
           else if (analysisMode === 'optimized') {
-            modelUsed = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4'
+            modelUsed = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4'
           } else modelUsed = 'anthropic/claude-opus-4.8'
           
           await handleSSEStream(response, {
@@ -417,7 +415,7 @@ export default function ImageAnalysisPage() {
                   analysisMode === 'fast'
                     ? 'google/gemini-3-flash-preview'
                     : analysisMode === 'optimized'
-                      ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4')
+                      ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4')
                       : 'anthropic/claude-opus-4.8'
                 )
                 
@@ -449,10 +447,7 @@ export default function ImageAnalysisPage() {
           setLoading(false)
         }
       } else {
-        const response = await fetch('/api/analyze/image', {
-          method: 'POST',
-          body: formData,
-        })
+        const response = await postAnalyzeImageWithModelConsent({ formData, mode: analysisMode })
 
         const data = await response.json()
 
@@ -567,7 +562,7 @@ export default function ImageAnalysisPage() {
       <AnalysisTips 
         content={{
           fast: "двухэтапный скрининг (сначала краткое структурированное описание исследования, затем текстовый разбор), даёт компактное заключение и общий сигнал риска, удобен для первичного просмотра и триажа.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и цены для большинства медицинских исследований.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5) — идеальный баланс точности и цены для большинства медицинских исследований.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.8) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для большинства медицинских изображений.",

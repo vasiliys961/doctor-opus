@@ -19,7 +19,7 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const MODELS = {
   OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6 (default)
   OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 4.8, rollback: VALIDATED_OPUS_MODEL=4.7
-  SONNET: 'anthropic/claude-sonnet-4.6',                 // Claude Sonnet 4.6
+  SONNET: 'anthropic/claude-sonnet-5',                   // Claude Sonnet 5
   GPT_5_2: 'openai/gpt-5.4',                        // GPT-5.4 Chat (legacy key name kept for compatibility)
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв

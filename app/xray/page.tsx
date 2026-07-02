@@ -14,6 +14,7 @@ import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
 import { buildXrayGeneralLinks, suggestXrayReferenceLinks } from '@/lib/xray-reference-links'
+import { postAnalyzeImageWithModelConsent } from '@/lib/analyze-image-client'
 
 export default function XRayPage() {
   const BRIDGE_XRAY_ANALYSIS_KEY = 'mobile_bridge_xray_analysis_draft'
@@ -127,7 +128,7 @@ export default function XRayPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-4.8');
@@ -139,10 +140,7 @@ export default function XRayPage() {
         // Streaming режим
         console.log('🚀 [XRAY] Запуск streaming анализа, режим:', analysisMode)
         
-        const response = await fetch('/api/analyze/image', {
-          method: 'POST',
-          body: formData,
-        })
+        const response = await postAnalyzeImageWithModelConsent({ formData, mode: analysisMode })
 
         console.log('📡 [XRAY] Ответ получен, status:', response.status, 'ok:', response.ok)
 
@@ -155,7 +153,7 @@ export default function XRayPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.8';
 
@@ -192,10 +190,7 @@ export default function XRayPage() {
         console.log('✅ [XRAY] Streaming обработка завершена')
       } else {
         // Обычный режим без streaming
-        const response = await fetch('/api/analyze/image', {
-          method: 'POST',
-          body: formData,
-        })
+        const response = await postAnalyzeImageWithModelConsent({ formData, mode: analysisMode })
 
         const data = await response.json()
 
@@ -284,11 +279,11 @@ export default function XRayPage() {
       <AnalysisTips 
         content={{
           fast: "двухэтапный скрининг рентгена (сначала структурированное описание снимка, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и качества для анализа рентгенограмм.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5) — идеальный баланс точности и качества для анализа рентгенограмм.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.8) — рекомендуется для критических и сложных случаев.",
           extra: [
             "✅ **GPT-5.4**: ЛУЧШИЙ выбор для 80% рентгена (общий анализ, МРТ).",
-            "🦴 **Claude Sonnet 4.6**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах (83% точности).",
+            "🦴 **Claude Sonnet 5**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах (83% точности).",
             "🧠 **Claude Opus 4.8**: экспертный режим для сложных и спорных случаев с максимальной глубиной разбора.",
             "📸 Вы можете загрузить файл рентгена, сделать фото с камеры или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",

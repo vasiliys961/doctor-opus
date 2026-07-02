@@ -15,6 +15,7 @@ import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
 import { buildRadiologyGeneralLinks, suggestRadiologyReferenceLinks } from '@/lib/radiology-reference-links'
+import { postAnalyzeImageWithModelConsent } from '@/lib/analyze-image-client'
 
 const Dicom3DViewer = dynamic(() => import('@/components/Dicom3DViewer'), { ssr: false })
 
@@ -179,7 +180,7 @@ export default function CTPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-4.8');
@@ -189,10 +190,7 @@ export default function CTPage() {
 
       if (useStream && (analysisMode === 'validated' || analysisMode === 'optimized' || analysisMode === 'fast')) {
         // Streaming режим
-        const response = await fetch('/api/analyze/image', {
-          method: 'POST',
-          body: formData,
-        })
+        const response = await postAnalyzeImageWithModelConsent({ formData, mode: analysisMode })
 
         if (!response.ok) {
           const errorText = await response.text()
@@ -202,7 +200,7 @@ export default function CTPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.8';
 
@@ -237,10 +235,7 @@ export default function CTPage() {
         })
       } else {
         // Обычный режим без streaming
-        const response = await fetch('/api/analyze/image', {
-          method: 'POST',
-          body: formData,
-        })
+        const response = await postAnalyzeImageWithModelConsent({ formData, mode: analysisMode })
 
         const data = await response.json()
 
@@ -319,11 +314,11 @@ export default function CTPage() {
       <AnalysisTips 
         content={{
           fast: "двухэтапный скрининг (сначала структурированное описание плотности HU и структур, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 4.6) — идеальный баланс точности и качества для КТ‑исследований.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5) — идеальный баланс точности и качества для КТ‑исследований.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.8) — рекомендуется для критических и сложных случаев.",
           extra: [
             "✅ **GPT-5.4**: ЛУЧШИЙ выбор для 80% исследований (общий анализ, КТ-анатомия).",
-            "🦴 **Claude Sonnet 4.6**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах и мелких структурах.",
+            "🦴 **Claude Sonnet 5**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах и мелких структурах.",
             "🧠 **Claude Opus 4.8**: экспертный режим для сложных и спорных случаев с максимальной глубиной разбора.",
             "📸 Вы можете загрузить снимки КТ, сделать фото или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",

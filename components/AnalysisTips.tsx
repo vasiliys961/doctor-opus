@@ -56,7 +56,7 @@ export default function AnalysisTips({
             <div className="flex gap-3">
               <span className="shrink-0 text-green-600">🧠</span>
               <div>
-                <strong>Итоговое мнение ИИ‑ассистента</strong> — {content.validated}
+                <strong>Экспертный режим (Opus 4.8 / Fable 5)</strong> — {content.validated}
               </div>
             </div>
           )}
