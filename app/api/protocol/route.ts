@@ -274,7 +274,7 @@ ${evidencePriorityDirective}
 
 Стиль: строго профессиональный, клинически и технически точный. Язык: русский.`;
 
-    const allowGpt52Protocol = process.env.ALLOW_GPT52_PROTOCOL === 'true';
+    const allowGpt52Protocol = process.env.ALLOW_GPT52_PROTOCOL !== 'false';
     const effectiveModel = model === 'gpt52' && !allowGpt52Protocol ? 'sonnet' : model;
     const MODEL = effectiveModel === 'opus' ? MODELS.OPUS_VALIDATED : 
                  effectiveModel === 'gpt52' ? MODELS.GPT_5_2 : 
@@ -288,6 +288,7 @@ ${evidencePriorityDirective}
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
+          'X-Resolved-Model': MODEL,
         },
       });
     }
@@ -302,7 +303,7 @@ ${evidencePriorityDirective}
       result = await sendTextRequest(correctionPrompt, [], MODEL);
     }
     result = anonymizeText(result);
-    return NextResponse.json({ success: true, protocol: result });
+    return NextResponse.json({ success: true, protocol: result, resolvedModel: MODEL });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: 'Ошибка генерации протокола' }, { status: 500 });
   }

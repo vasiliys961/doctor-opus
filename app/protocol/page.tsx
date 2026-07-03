@@ -71,8 +71,9 @@ export default function ProtocolPage() {
   const [protocol, setProtocol] = useState('')
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
-  const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini' | 'gpt52'>('sonnet')
+  const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini' | 'gpt52'>('gpt52')
   const [currentCost, setCurrentCost] = useState<number>(0)
+  const [resolvedModel, setResolvedModel] = useState<string | null>(null)
   
   // Состояния для специалистов и шаблонов
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATES[0].id)
@@ -424,10 +425,7 @@ export default function ProtocolPage() {
     setLoading(true)
     setProtocol('')
     setCurrentCost(0)
-
-    const modelUsed = model === 'opus' ? MODELS.OPUS_VALIDATED : 
-                    model === 'gpt52' ? MODELS.GPT_5_2 :
-                    model === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET;
+    setResolvedModel(null)
 
     const modelsMap: Record<string, string> = {
       'opus': MODELS.OPUS_VALIDATED,
@@ -470,6 +468,10 @@ export default function ProtocolPage() {
         })
 
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+        const streamResolvedModel = response.headers.get('x-resolved-model')
+        if (streamResolvedModel) {
+          setResolvedModel(streamResolvedModel)
+        }
 
         await handleSSEStream(response, {
           onChunk: (text) => {
@@ -478,10 +480,12 @@ export default function ProtocolPage() {
           onUsage: (usage) => {
             console.log('📊 [PROTOCOL STREAMING] Получена точная стоимость:', usage.total_cost)
             setCurrentCost(usage.total_cost)
+            const effectiveUsageModel = usage.model || streamResolvedModel || finalModel
+            setResolvedModel(effectiveUsageModel)
             
             logUsage({
               section: 'protocols',
-              model: usage.model || finalModel,
+              model: effectiveUsageModel,
               inputTokens: usage.prompt_tokens,
               outputTokens: usage.completion_tokens,
               specialty: specialistName // Передаем специальность для аудита
@@ -500,14 +504,16 @@ export default function ProtocolPage() {
         const data = await response.json()
         if (data.success) {
           setProtocol(data.protocol)
+          const effectiveResolvedModel = data.resolvedModel || finalModel
+          setResolvedModel(effectiveResolvedModel)
           const inputTokens = Math.ceil(rawText.length / 4) + 1000;
           const outputTokens = Math.ceil(data.protocol.length / 4);
-          const costInfo = calculateCost(inputTokens, outputTokens, finalModel);
+          const costInfo = calculateCost(inputTokens, outputTokens, effectiveResolvedModel);
           setCurrentCost(costInfo.totalCostUnits);
 
           logUsage({
             section: 'protocols',
-            model: finalModel,
+            model: effectiveResolvedModel,
             inputTokens,
             outputTokens,
             specialty: specialistName // Передаем специальность для аудита
@@ -800,8 +806,8 @@ export default function ProtocolPage() {
               <span className="text-sm">Streaming</span>
             </label>
             <select value={model} onChange={(e) => setModel(e.target.value as any)} className="px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
-              <option value="sonnet">🤖 Sonnet 5</option>
-              <option value="gpt52">🚀 GPT-5.4</option>
+              <option value="gpt52">🚀 GPT-5.4 (быстрее)</option>
+              <option value="sonnet">🤖 Sonnet 5 (детальнее, но медленнее)</option>
               <option value="opus">🧠 Opus 4.8</option>
               <option value="gemini">⚡ Gemini 3.1</option>
             </select>
@@ -819,6 +825,11 @@ export default function ProtocolPage() {
               {currentCost > 0 && (
                 <div className="mt-1 bg-teal-50 text-teal-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-teal-200 inline-block shadow-sm">
                   💰 Стоимость сервиса: {currentCost.toFixed(2)} ед.
+                </div>
+              )}
+              {resolvedModel && (
+                <div className="mt-1 ml-2 bg-blue-50 text-blue-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-blue-200 inline-block shadow-sm">
+                  🤖 Фактическая модель: {resolvedModel}
                 </div>
               )}
             </div>
