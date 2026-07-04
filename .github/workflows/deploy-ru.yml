@@ -90,6 +90,12 @@ jobs:
             fi
 
             echo "=== Restart RU container ==="
+            # Если в /home/doctor-opus/.env явно не задан ENABLE_MEDICAL_BROWSING,
+            # включаем PubMed/Unpaywall online-поиск по умолчанию, чтобы фича
+            # заработала сразу после деплоя без ручных правок .env на сервере.
+            ENABLE_MEDICAL_BROWSING_VALUE=$(grep -E '^ENABLE_MEDICAL_BROWSING=' /home/doctor-opus/.env 2>/dev/null | cut -d= -f2- || true)
+            ENABLE_MEDICAL_BROWSING_VALUE=${ENABLE_MEDICAL_BROWSING_VALUE:-true}
+
             docker stop doctor-opus-app-main95 || true
             docker rm doctor-opus-app-main95 || true
             docker run -d \
@@ -101,6 +107,7 @@ jobs:
               -v /home/doctor-opus/exports:/app/exports \
               -e POSTGRES_URL="postgres://$POSTGRES_USER_VALUE:$POSTGRES_PASSWORD_VALUE@doctor-opus-db-ru:5432/$POSTGRES_DATABASE_VALUE" \
               -e STT_SERVICE_URL="http://doctor-opus-stt-ru:8000" \
+              -e ENABLE_MEDICAL_BROWSING="$ENABLE_MEDICAL_BROWSING_VALUE" \
               --env-file /home/doctor-opus/.env \
               doctor-opus-app-ru
 
@@ -127,6 +134,7 @@ jobs:
             POSTGRES_USER_VALUE="${POSTGRES_USER_VALUE}"
             POSTGRES_PASSWORD_VALUE="${POSTGRES_PASSWORD_VALUE}"
             POSTGRES_DATABASE_VALUE="${POSTGRES_DATABASE_VALUE}"
+            ENABLE_MEDICAL_BROWSING_VALUE="${ENABLE_MEDICAL_BROWSING_VALUE}"
 
             docker network inspect doctor-opus_default >/dev/null 2>&1 || docker network create doctor-opus_default
             docker start doctor-opus-db-ru >/dev/null 2>&1 || true
@@ -162,6 +170,7 @@ jobs:
                 -v /home/doctor-opus/exports:/app/exports \
                 -e POSTGRES_URL="postgres://\$POSTGRES_USER_VALUE:\$POSTGRES_PASSWORD_VALUE@doctor-opus-db-ru:5432/\$POSTGRES_DATABASE_VALUE" \
                 -e STT_SERVICE_URL="http://doctor-opus-stt-ru:8000" \
+                -e ENABLE_MEDICAL_BROWSING="\$ENABLE_MEDICAL_BROWSING_VALUE" \
                 --env-file /home/doctor-opus/.env \
                 "\$PREV_APP_IMAGE"
             fi

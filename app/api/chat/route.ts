@@ -8,6 +8,7 @@ import { anonymizeText, anonymizeObject } from '@/lib/anonymization';
 import { checkRateLimit, RATE_LIMIT_CHAT, getRateLimitKey } from '@/lib/rate-limiter';
 import { checkAndDeductBalance } from '@/lib/server-billing';
 import { searchPubMedEvidence, buildPubMedContextBlock } from '@/lib/pubmed-rag';
+import { resolveOpenAccessLinks } from '@/lib/unpaywall';
 
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
@@ -247,8 +248,12 @@ export async function POST(request: NextRequest) {
       const timeoutMs = Number(process.env.PUBMED_TIMEOUT_MS || 3500);
       try {
         const articles = await searchPubMedEvidence(pubMedQuery, { maxResults, timeoutMs });
-        pubMedContext = buildPubMedContextBlock(articles);
-        console.log(`[PUBMED RAG] enabled=${enableMedicalBrowsing} academic=${isAcademicSearch} specialty=${specialty || 'n/a'} model=${model || 'n/a'} results=${articles.length}`);
+        // MVP open-access enrichment: по DOI из PubMed ищем легальную бесплатную
+        // полнотекстовую копию через Unpaywall API. Не блокирует основной поиск —
+        // при отсутствии UNPAYWALL_EMAIL или ошибке просто возвращает пустую карту.
+        const openAccessLinks = await resolveOpenAccessLinks(articles.map((a) => a.doi));
+        pubMedContext = buildPubMedContextBlock(articles, openAccessLinks);
+        console.log(`[PUBMED RAG] enabled=${enableMedicalBrowsing} academic=${isAcademicSearch} specialty=${specialty || 'n/a'} model=${model || 'n/a'} results=${articles.length} openAccessLinks=${openAccessLinks.size}`);
         pubMedRuntimeInstruction = articles.length > 0
           ? 'ONLINE-ПОИСК УЖЕ ВЫПОЛНЕН на сервере через PubMed. Не пиши, что у тебя нет live-доступа. Используй найденные источники и укажи PMID в разделе "Источники (PubMed)".'
           : 'ONLINE-ПОИСК PubMed уже выполнен на сервере, но релевантных источников не найдено по текущему запросу/фильтрам. Не пиши, что у тебя нет live-доступа; сообщи, что по текущему поиску источники не найдены и предложи уточнить запрос.';

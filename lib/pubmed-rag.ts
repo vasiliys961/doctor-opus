@@ -1,5 +1,9 @@
+import type { OpenAccessLink } from './unpaywall';
+import { translateToEnglishForPubMed } from './medical-query-translator';
+
 type PubMedArticle = {
   pmid: string;
+  doi: string | null;
   title: string;
   journal: string;
   year: string;
@@ -10,6 +14,7 @@ type PubMedArticle = {
 type SearchOptions = {
   maxResults?: number;
   timeoutMs?: number;
+  translationTimeoutMs?: number;
 };
 
 type CacheRecord = {
@@ -62,6 +67,11 @@ function toSnippet(title: string, journal: string, year: string): string {
   return `${title} — ${journal}${year !== 'n/a' ? ` (${year})` : ''}`;
 }
 
+function extractDoi(articleIds: Array<{ idtype?: string; value?: string }> | undefined): string | null {
+  const doiEntry = articleIds?.find((entry) => entry?.idtype === 'doi');
+  return doiEntry?.value ? String(doiEntry.value).trim() : null;
+}
+
 export async function searchPubMedEvidence(
   rawQuery: string,
   options: SearchOptions = {}
@@ -80,8 +90,14 @@ export async function searchPubMedEvidence(
     return cached.articles;
   }
 
+  // PubMed индексирует статьи на английском и молча игнорирует кириллицу
+  // в запросе (вместо ошибки — нерелевантная выдача по всему английскому
+  // корпусу), поэтому русскоязычные запросы сперва переводим в англоязычные
+  // медицинские термины. Латиница переводом не трогается (см. hasCyrillic внутри).
+  const englishQuery = await translateToEnglishForPubMed(compact, options.translationTimeoutMs);
+
   // Глобальный фокус: англоязычные международные публикации из PubMed.
-  const searchTerm = `${query} AND english[lang]`;
+  const searchTerm = `${englishQuery} AND english[lang]`;
   const esearchUrl = `${PUBMED_SEARCH_URL}?db=pubmed&retmode=json&sort=relevance&retmax=${maxResults}&term=${encodeURIComponent(searchTerm)}`;
   const searchData = await fetchJsonWithTimeout(esearchUrl, timeoutMs);
   const ids: string[] = searchData?.esearchresult?.idlist ?? [];
@@ -100,8 +116,10 @@ export async function searchPubMedEvidence(
       const title = String(item.title).replace(/\s+/g, ' ').trim();
       const journal = String(item.fulljournalname || item.source || 'Unknown journal').trim();
       const year = extractYear(item.pubdate);
+      const doi = extractDoi(item.articleids);
       return {
         pmid,
+        doi,
         title,
         journal,
         year,
@@ -115,16 +133,29 @@ export async function searchPubMedEvidence(
   return articles;
 }
 
-export function buildPubMedContextBlock(articles: PubMedArticle[]): string {
+export function buildPubMedContextBlock(
+  articles: PubMedArticle[],
+  openAccessLinks?: Map<string, OpenAccessLink>
+): string {
   if (!articles.length) return '';
 
+  let hasOpenAccessLinks = false;
   const lines = articles.map((article, index) => {
+    const oaLink = article.doi ? openAccessLinks?.get(article.doi) : undefined;
+    const oaLine = oaLink ? (() => {
+      hasOpenAccessLinks = true;
+      return `\nПолный текст (open access, легально, через Unpaywall): ${oaLink.url}`;
+    })() : '';
     return `${index + 1}. PMID: ${article.pmid}
 Название: ${article.title}
 Журнал: ${article.journal}
 Год: ${article.year}
-Ссылка: ${article.url}`;
+Ссылка: ${article.url}${oaLine}`;
   });
+
+  const openAccessInstruction = hasOpenAccessLinks
+    ? '\n- Если для источника указан "Полный текст (open access)", можешь упомянуть, что доступна легальная бесплатная полнотекстовая версия, и дать эту ссылку.'
+    : '';
 
   return `### КОНТЕКСТ ИЗ PUBMED (ONLINE, GLOBAL)
 Используй только эти источники как внешнюю доказательную опору. Не выдумывай PMID/DOI.
@@ -133,5 +164,5 @@ ${lines.join('\n\n')}
 
 Требование к ответу:
 - В конце добавь раздел "Источники (PubMed)".
-- Для каждого утверждения, опирающегося на литературу, укажи PMID.`;
+- Для каждого утверждения, опирающегося на литературу, укажи PMID.${openAccessInstruction}`;
 }

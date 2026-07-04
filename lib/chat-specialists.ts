@@ -5,6 +5,8 @@ export interface ChatSpecialist {
   label: string;
   icon: string;
   description: string;
+  /** Визуально выделить кнопку в селекторе (яркий акцент + бейдж). */
+  highlight?: boolean;
 }
 
 export const CHAT_SPECIALISTS: ChatSpecialist[] = [
@@ -90,7 +92,8 @@ export const CHAT_SPECIALISTS: ChatSpecialist[] = [
     id: 'openevidence',
     label: 'Академический поиск',
     icon: '🌐',
-    description: 'Поиск по медицинским базам данных и академической литературе.'
+    description: 'Живой поиск по PubMed с автопереводом запроса и легальными open-access ссылками на полный текст (через Unpaywall).',
+    highlight: true
   },
   {
     id: 'ai_consultant',
