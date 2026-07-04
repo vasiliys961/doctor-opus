@@ -314,6 +314,25 @@ export async function initDatabase() {
     await sql`CREATE INDEX IF NOT EXISTS idx_clinic_members_user ON clinic_members(user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_clinic_tx_clinic_date ON clinic_transactions(clinic_id, created_at DESC)`;
 
+    // Таблица audit trail консилиум-оркестратора (MAI-DxO-стиль мультиагентный разбор)
+    await sql`
+      CREATE TABLE IF NOT EXISTS diagnostic_audit_trail (
+        id SERIAL PRIMARY KEY,
+        patient_id VARCHAR(255),
+        case_id VARCHAR(100) NOT NULL,
+        doctor_id VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        rounds_completed INTEGER NOT NULL DEFAULT 0,
+        final_diagnosis JSONB,
+        full_state JSONB,
+        requires_human_review BOOLEAN NOT NULL DEFAULT FALSE,
+        review_reason TEXT,
+        total_tokens_used INTEGER NOT NULL DEFAULT 0,
+        total_cost_usd DECIMAL(10, 4) NOT NULL DEFAULT 0
+      );
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_diagnostic_audit_doctor ON diagnostic_audit_trail(doctor_id, created_at DESC)`;
+
     return true;
   } catch (error) {
     safeError('❌ [DATABASE] Ошибка инициализации:', error);

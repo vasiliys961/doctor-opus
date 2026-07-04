@@ -264,7 +264,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const finalMessage = `${preparedMessage}\n\n${styleInstruction}\n${dialogueInstruction}${pubMedRuntimeInstruction ? `\n${pubMedRuntimeInstruction}` : ''}${pubMedStatusInstruction ? `\n${pubMedStatusInstruction}` : ''}${pubMedContext ? `\n\n${pubMedContext}` : ''}`;
+    // Жёсткий RAG-гейт: если врачу отвечаем с опорой на источники (библиотека и/или
+    // PubMed), явно требуем помечать те части ответа, которые источники НЕ покрывают —
+    // иначе модель может незаметно подмешать общие знания под видом обоснованного ответа
+    // ("тихая" галлюцинация — самый опасный класс ошибок в клинических рекомендациях).
+    const hasLibraryContext = message.includes(LIBRARY_CONTEXT_MARKER);
+    const hasRagContext = hasLibraryContext || pubMedContext.length > 0;
+    const ragGateInstruction = hasRagContext
+      ? '\nЖЁСТКОЕ ПРАВИЛО ИСТОЧНИКОВ (RAG-гейт): тебе предоставлен внешний контекст (библиотека врача и/или PubMed). Опирайся на него везде, где он релевантен вопросу. Если для какой-то части ответа предоставленного контекста недостаточно и ты используешь только собственные общие знания модели — обязательно и явно помечай это прямо в тексте припиской "⚠️ не подтверждено предоставленными источниками" сразу после соответствующего утверждения. Не скрывай отсутствие подтверждения за уверенным тоном изложения.'
+      : '';
+
+    const finalMessage = `${preparedMessage}\n\n${styleInstruction}\n${dialogueInstruction}${ragGateInstruction}${pubMedRuntimeInstruction ? `\n${pubMedRuntimeInstruction}` : ''}${pubMedStatusInstruction ? `\n${pubMedStatusInstruction}` : ''}${pubMedContext ? `\n\n${pubMedContext}` : ''}`;
 
     // Обработка стриминга с логированием
     const handleStreaming = async (stream: ReadableStream) => {
@@ -341,7 +351,7 @@ export async function POST(request: NextRequest) {
 
     // Обычный режим - полный ответ
     console.log('🚀 [CHAT API] Начало запроса к OpenRouter...');
-    const result = await sendTextRequest(finalMessage, formattedHistory, selectedModel, specialty as any);
+    const result = await sendTextRequest(finalMessage, formattedHistory, selectedModel, specialty as any, systemPrompt);
     console.log('✅ [CHAT API] Ответ от OpenRouter получен успешно.');
     
     const { calculateCost } = await import('@/lib/cost-calculator');

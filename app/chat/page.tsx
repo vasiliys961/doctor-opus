@@ -10,12 +10,15 @@ import rehypeSanitize from 'rehype-sanitize'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { ChatSpecialistSelector } from '@/components/ChatSpecialistSelector'
-import { Specialty } from '@/lib/prompts'
+import { Specialty, SELF_CHECK_SYSTEM_PROMPT } from '@/lib/prompts'
 import { searchLibraryLocal, searchLibraryLocalWithMeta } from '@/lib/library-db'
 import ImageEditor from '@/components/ImageEditor'
 import { anonymizeMedicalImage } from '@/lib/image-compression'
 import { anonymizeText } from '@/lib/anonymization'
 import mammoth from 'mammoth'
+import ConsiliumProgress, { ConsiliumProgressItem, ConsiliumSpecialtyItem } from '@/components/advanced/ConsiliumProgress'
+import ConsiliumAuditView from '@/components/advanced/ConsiliumAuditView'
+import { ConsiliumProgressEvent, DiagnosticResult } from '@/lib/diagnostics/types'
 
 type ResponseStyle = 'brief' | 'detailed'
 const MAX_CHAT_FILES_PER_BATCH = 4;
@@ -92,6 +95,9 @@ export default function ChatPage() {
     ragRequested?: boolean;
     ragUsed?: boolean;
     ragSources?: string[];
+    selfCheck?: string;
+    selfCheckLoading?: boolean;
+    selfCheckError?: string;
   }>>([])
   const [loading, setLoading] = useState(false)
   const [showAudioUpload, setShowAudioUpload] = useState(false)
@@ -111,6 +117,21 @@ export default function ChatPage() {
   const [isProcessingFiles, setIsProcessingFiles] = useState(false)
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
   const [convertingPDF, setConvertingPDF] = useState(false)
+
+  // --- Режим "Консилиум" (мультиагентный MAI-DxO-стиль разбор, без привязки к школам) ---
+  const [consiliumMode, setConsiliumMode] = useState(false)
+  const [consiliumLoading, setConsiliumLoading] = useState(false)
+  const [consiliumEvents, setConsiliumEvents] = useState<ConsiliumProgressItem[]>([])
+  const [consiliumCurrentRound, setConsiliumCurrentRound] = useState(0)
+  const [consiliumStageMessage, setConsiliumStageMessage] = useState<string | null>(null)
+  const [consiliumResult, setConsiliumResult] = useState<DiagnosticResult | null>(null)
+  const [consiliumError, setConsiliumError] = useState<string | null>(null)
+  const [consiliumSpecialtyEvents, setConsiliumSpecialtyEvents] = useState<ConsiliumSpecialtyItem[]>([])
+  const [consiliumAmscDecision, setConsiliumAmscDecision] = useState<{ escalated: boolean; disagreementScore: number } | null>(null)
+
+  // --- Triage-подсказка сложности кейса (только совет врачу, ничего не решает автоматически) ---
+  const [triageSuggestion, setTriageSuggestion] = useState<{ complexity: 'complex'; reasoning: string } | null>(null)
+  const [triageDismissed, setTriageDismissed] = useState(false)
 
   // Загружаем PDF.js v3 из локальных файлов (public/pdfjs/)
   useEffect(() => {
@@ -132,6 +153,46 @@ export default function ChatPage() {
       setPdfJsLoaded(true)
     }
   }, [])
+
+  // Лёгкий triage сложности кейса: срабатывает только для первого сообщения диалога
+  // (описание нового кейса), на дешёвой модели (Sonnet) и с задержкой после набора текста,
+  // чтобы не мешать печатать и не тратить лишние вызовы. Ничего не решает сам — только
+  // предлагает врачу переключиться на модель с более глубоким клиническим рассуждением.
+  useEffect(() => {
+    if (consiliumMode || model !== 'sonnet' || messages.length > 0 || triageDismissed) {
+      return
+    }
+    const text = message.trim()
+    if (text.length < 60) {
+      setTriageSuggestion(null)
+      return
+    }
+
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/chat/triage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+          signal: controller.signal,
+        })
+        const data = await response.json().catch(() => null)
+        if (data?.success && data.complexity === 'complex') {
+          setTriageSuggestion({ complexity: 'complex', reasoning: data.reasoning || '' })
+        } else {
+          setTriageSuggestion(null)
+        }
+      } catch {
+        // Триаж — необязательная подсказка, при сбое просто не показываем баннер.
+      }
+    }, 1200)
+
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [message, model, consiliumMode, messages.length, triageDismissed])
 
   const convertPDFToImages = async (pdfFile: File): Promise<File[]> => {
     if (!window.pdfjsLib) {
@@ -405,6 +466,8 @@ export default function ChatPage() {
 
     setIsCutOff(false)
     setLoading(true)
+    setTriageSuggestion(null)
+    setTriageDismissed(false)
 
     const userMessageVisible = message || (selectedFiles.length > 0 ? 'Проанализируйте прикрепленные файлы' : '')
     let userMessageForModel = userMessageVisible
@@ -918,6 +981,95 @@ export default function ChatPage() {
     }
   }
 
+  const handleConsiliumSend = async () => {
+    if (!message.trim() && selectedFiles.length === 0) return
+
+    setConsiliumLoading(true)
+    setConsiliumEvents([])
+    setConsiliumSpecialtyEvents([])
+    setConsiliumAmscDecision(null)
+    setConsiliumResult(null)
+    setConsiliumError(null)
+    setConsiliumCurrentRound(0)
+    setConsiliumStageMessage('Подготовка кейса...')
+
+    const caseText = message
+    const caseFiles = [...selectedFiles]
+    setMessage('')
+    setSelectedFiles([])
+    setShowFileUpload(false)
+
+    try {
+      const formData = new FormData()
+      formData.append('message', caseText)
+      caseFiles.forEach((file) => formData.append('files', file))
+
+      const response = await fetch('/api/consilium', { method: 'POST', body: formData })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || `HTTP error! status: ${response.status}`)
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (reader) {
+        let buffer = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const chunks = buffer.split('\n\n')
+          buffer = chunks.pop() || ''
+
+          for (const chunk of chunks) {
+            if (!chunk.startsWith('data: ')) continue
+            try {
+              const event: ConsiliumProgressEvent = JSON.parse(chunk.slice(6))
+              if (event.type === 'stage') {
+                setConsiliumStageMessage(event.message || null)
+              } else if (event.type === 'specialty' && event.specialty && event.status) {
+                setConsiliumSpecialtyEvents((prev) => {
+                  const existingIndex = prev.findIndex((item) => item.specialty === event.specialty)
+                  const nextItem = { specialty: event.specialty!, status: event.status! }
+                  if (existingIndex === -1) return [...prev, nextItem]
+                  const next = [...prev]
+                  next[existingIndex] = nextItem
+                  return next
+                })
+              } else if (event.type === 'amsc-decision' && typeof event.escalated === 'boolean') {
+                setConsiliumAmscDecision({ escalated: event.escalated, disagreementScore: event.disagreementScore || 0 })
+                if (event.escalated) {
+                  // Гипотезы раунда 0 переиспользуются вместо повторного вызова Dr. Hypothesis —
+                  // отмечаем эту роль как готовую, чтобы UI цикла дебатов не "завис" в ожидании.
+                  setConsiliumEvents((prev) => [...prev, { round: 0, role: 'hypothesis', status: 'done' }])
+                }
+              } else if (event.type === 'round' && event.status === 'started' && typeof event.round === 'number') {
+                setConsiliumCurrentRound(event.round)
+                setConsiliumStageMessage(null)
+              } else if (event.type === 'role' && event.role && event.status && typeof event.round === 'number') {
+                setConsiliumEvents((prev) => [...prev, { round: event.round!, role: event.role!, status: event.status! }])
+              } else if (event.type === 'final' && event.result) {
+                setConsiliumResult(event.result)
+              } else if (event.type === 'error') {
+                setConsiliumError(event.message || 'Ошибка выполнения консилиума')
+              }
+            } catch (e) {
+              console.warn('⚠️ [CONSILIUM] Ошибка парсинга SSE:', e)
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      setConsiliumError(err.message || 'Произошла ошибка при запуске консилиума')
+    } finally {
+      setConsiliumLoading(false)
+      setConsiliumStageMessage(null)
+    }
+  }
+
   const handleLibrarySearch = async () => {
     if (!message.trim()) return
     
@@ -940,6 +1092,61 @@ export default function ChatPage() {
   const clearChat = () => {
     if (confirm('Вы уверены, что хотите очистить историю чата?')) {
       setMessages([])
+    }
+  }
+
+  /**
+   * Chain-of-Verification по требованию врача: отдельный лёгкий вызов дешёвой
+   * модели с ролью "адвоката дьявола" (см. SELF_CHECK_SYSTEM_PROMPT) поверх уже
+   * готового ответа. Опционально (кнопка под ответом), а не встроено в каждый
+   * запрос — так обычный чат не дорожает по умолчанию.
+   */
+  const handleSelfCheck = async (assistantIndex: number) => {
+    const assistantMsg = messages[assistantIndex]
+    if (!assistantMsg || assistantMsg.role !== 'assistant' || !assistantMsg.content.trim()) return
+
+    const questionMsg = [...messages.slice(0, assistantIndex)].reverse().find(m => m.role === 'user')
+    const question = questionMsg?.content || 'Вопрос врача не сохранён в истории.'
+
+    setMessages(prev => {
+      const next = [...prev]
+      next[assistantIndex] = { ...next[assistantIndex], selfCheckLoading: true, selfCheckError: undefined }
+      return next
+    })
+
+    try {
+      const formData = new FormData()
+      formData.append(
+        'message',
+        `### ВОПРОС ВРАЧА:\n${question}\n\n### ОТВЕТ АССИСТЕНТА (проверь его):\n${assistantMsg.content}`
+      )
+      formData.append('systemPrompt', SELF_CHECK_SYSTEM_PROMPT)
+      formData.append('useStreaming', 'false')
+      formData.append('model', 'sonnet')
+      formData.append('specialty', 'universal')
+      formData.append('responseStyle', 'brief')
+
+      const response = await fetch('/api/chat', { method: 'POST', body: formData })
+      const data = await response.json().catch(() => ({ success: false, error: `HTTP ${response.status}` }))
+      if (!response.ok || !data.success) {
+        throw new Error(data?.error || `HTTP ${response.status}`)
+      }
+
+      setMessages(prev => {
+        const next = [...prev]
+        next[assistantIndex] = { ...next[assistantIndex], selfCheck: data.result, selfCheckLoading: false }
+        return next
+      })
+    } catch (err: any) {
+      setMessages(prev => {
+        const next = [...prev]
+        next[assistantIndex] = {
+          ...next[assistantIndex],
+          selfCheckLoading: false,
+          selfCheckError: err?.message || 'Не удалось выполнить самопроверку',
+        }
+        return next
+      })
     }
   }
 
@@ -975,7 +1182,81 @@ export default function ChatPage() {
           </button>
         </div>
       </div>
-      
+
+      <div
+        className={`mb-4 sm:mb-6 rounded-2xl border-2 shadow-sm transition-colors ${
+          consiliumMode ? 'border-indigo-400 bg-gradient-to-br from-indigo-50 to-white' : 'border-indigo-200 bg-white hover:border-indigo-300'
+        }`}
+      >
+        <button
+          onClick={() => setConsiliumMode((prev) => !prev)}
+          disabled={loading || consiliumLoading}
+          className="w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 text-left disabled:opacity-50 touch-manipulation"
+        >
+          <span className="text-2xl sm:text-3xl shrink-0">🩺</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-sm sm:text-base text-slate-900">Консилиум</span>
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wide bg-indigo-600 text-white px-1.5 py-0.5 rounded">
+                Премиум
+              </span>
+              <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded">
+                🧠 Глубокий анализ
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Сначала независимые мнения нескольких специальностей, подобранных под ваш кейс (+ скептик по red flags).
+              Если мнения совпадают — сразу консенсус. Если расходятся — эскалация в полный цикл дебатов из 5 ролей
+              (генератор гипотез → советчик по обследованиям → критик → контроль избыточности → финальный чек-лист).
+            </p>
+          </div>
+          <span
+            aria-hidden
+            className={`relative inline-flex h-6 w-11 sm:h-7 sm:w-12 shrink-0 items-center rounded-full transition-colors ${
+              consiliumMode ? 'bg-indigo-600' : 'bg-slate-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 sm:h-5 sm:w-5 transform rounded-full bg-white shadow transition-transform ${
+                consiliumMode ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </span>
+        </button>
+
+        {consiliumMode && (
+          <div className="border-t border-indigo-200 px-4 sm:px-5 py-3 text-xs sm:text-sm text-indigo-900 bg-indigo-50/60 rounded-b-2xl">
+            Опишите кейс и/или приложите файлы (фото заключений, снимков, документы) как обычно. Простой кейс без
+            расхождений во мнениях занимает ~1 минуту и стоит ~19 у.е. Если специальности разошлись во мнении (или
+            скептик заметил red flag) — консилиум автоматически эскалируется в полный цикл дебатов на Fable 5
+            (углублённое клиническое рассуждение): ещё 3–6 минут и до ~154 у.е. суммарно. Это существенно дороже
+            обычного сообщения в чате.
+          </div>
+        )}
+      </div>
+
+      {consiliumMode ? (
+        <div className="mb-4 sm:mb-6">
+          {consiliumError && (
+            <div className="bg-red-100 text-red-700 px-4 py-3 rounded mb-4">❌ {consiliumError}</div>
+          )}
+          {(consiliumLoading || consiliumEvents.length > 0 || consiliumSpecialtyEvents.length > 0) && !consiliumResult && (
+            <ConsiliumProgress
+              stageMessage={consiliumStageMessage || undefined}
+              items={consiliumEvents}
+              currentRound={consiliumCurrentRound}
+              specialtyItems={consiliumSpecialtyEvents}
+              amscDecision={consiliumAmscDecision}
+            />
+          )}
+          {consiliumResult && <ConsiliumAuditView result={consiliumResult} />}
+          {!consiliumLoading && !consiliumResult && !consiliumError && consiliumEvents.length === 0 && consiliumSpecialtyEvents.length === 0 && (
+            <div className="bg-white rounded-lg shadow-lg p-6 text-center text-gray-500 text-sm">
+              Опишите кейс ниже и нажмите «Запустить консилиум».
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6 mb-4 sm:mb-6 h-[70vh] sm:h-[700px] overflow-y-auto">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-10 sm:mt-20 text-sm sm:text-base">
@@ -1016,6 +1297,7 @@ export default function ChatPage() {
                 {msg.role === 'user' && msg.ragRequested && (
                   <div className="mb-2">
                     <span
+                      title={msg.ragUsed ? 'Части ответа без опоры на эти источники модель обязана явно пометить "⚠️ не подтверждено предоставленными источниками"' : undefined}
                       className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold ${
                         msg.ragUsed
                           ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
@@ -1026,7 +1308,7 @@ export default function ChatPage() {
                     </span>
                     {msg.ragUsed && msg.ragSources && msg.ragSources.length > 0 && (
                       <div className="mt-1 text-[10px] text-slate-600">
-                        Источники: {msg.ragSources.join('; ')}
+                        Источники: {msg.ragSources.join('; ')}. Не подтверждённые ими утверждения модель помечает в тексте отдельно.
                       </div>
                     )}
                   </div>
@@ -1069,6 +1351,31 @@ export default function ChatPage() {
                     </ReactMarkdown>
                   )}
                 </div>
+                {msg.role === 'assistant' && msg.content.trim() && (
+                  <div className="mt-2 border-t border-gray-200 pt-2">
+                    {!msg.selfCheck && !msg.selfCheckLoading && (
+                      <button
+                        onClick={() => handleSelfCheck(idx)}
+                        title="Отдельный запрос к модели-скептику: ищет пропущенные альтернативы, red flags и необоснованные утверждения в этом ответе"
+                        className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-[11px] font-semibold text-purple-700 transition-colors hover:bg-purple-100"
+                      >
+                        🔍 Проверить ответ (Chain-of-Verification)
+                      </button>
+                    )}
+                    {msg.selfCheckLoading && (
+                      <div className="text-[11px] text-gray-500">⏳ Проверяю ответ на слабые места…</div>
+                    )}
+                    {msg.selfCheckError && (
+                      <div className="text-[11px] text-red-600">❌ {msg.selfCheckError}</div>
+                    )}
+                    {msg.selfCheck && (
+                      <div className="rounded-lg border border-purple-200 bg-purple-50 p-2.5">
+                        <div className="mb-1 text-[11px] font-bold text-purple-800">🔍 Самопроверка (независимая критика ответа)</div>
+                        <div className="whitespace-pre-wrap text-[12px] text-purple-900">{msg.selfCheck}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
             {loading && (
@@ -1089,6 +1396,7 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+      )}
 
       {showAudioUpload && (
         <div className="mb-3 sm:mb-4 bg-white rounded-lg shadow-lg p-3 sm:p-4">
@@ -1258,6 +1566,12 @@ export default function ChatPage() {
 
       <div className="bg-white rounded-lg shadow-lg p-3 sm:p-4 mb-3 sm:mb-4">
         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4 items-start sm:items-center">
+          {consiliumMode ? (
+            <div className="text-xs sm:text-sm text-slate-500">
+              🩺 В режиме «Консилиум» выбор специальности, модели и стиля ответа не используется — состав ролей и моделей фиксирован.
+            </div>
+          ) : (
+          <>
           <ChatSpecialistSelector 
             selectedSpecialty={specialty}
             onSelect={setSpecialty}
@@ -1328,9 +1642,35 @@ export default function ChatPage() {
               Влияет на все следующие ответы в этом диалоге.
             </p>
           </div>
+          </>
+          )}
         </div>
       </div>
 
+      {triageSuggestion && !consiliumMode && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs sm:text-sm">
+          <span className="font-semibold text-amber-800">💡 Похоже, случай непростой</span>
+          {triageSuggestion.reasoning && (
+            <span className="text-amber-700">— {triageSuggestion.reasoning}.</span>
+          )}
+          <span className="text-amber-700">Рекомендуем более глубокое рассуждение.</span>
+          <button
+            type="button"
+            onClick={() => { setModel('fable'); setTriageSuggestion(null) }}
+            className="ml-auto rounded-full bg-amber-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-amber-700"
+          >
+            Переключить на Fable 5
+          </button>
+          <button
+            type="button"
+            onClick={() => { setTriageSuggestion(null); setTriageDismissed(true) }}
+            className="rounded-full px-2 py-1 text-amber-500 hover:bg-amber-100"
+            title="Скрыть подсказку"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="flex gap-2">
           <button
@@ -1372,26 +1712,41 @@ export default function ChatPage() {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              handleSend();
+              consiliumMode ? handleConsiliumSend() : handleSend();
             }
           }}
-          placeholder="Введите ваш вопрос..."
+          placeholder={consiliumMode ? 'Опишите кейс для консилиума (жалобы, анамнез, вложенные заключения)...' : 'Введите ваш вопрос...'}
           data-tour="chat-question-input"
           className="flex-1 px-4 py-3 sm:py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base touch-manipulation min-h-[50px] max-h-[200px] resize-y"
-          disabled={loading}
+          disabled={loading || consiliumLoading}
           rows={1}
         />
         <button
-          onClick={handleSend}
+          onClick={consiliumMode ? handleConsiliumSend : handleSend}
           data-tour="chat-send-button"
-          disabled={loading || isProcessingFiles || (!message.trim() && selectedFiles.length === 0)}
-          className="px-6 py-3 sm:py-2 bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-medium touch-manipulation flex items-center justify-center gap-2"
+          disabled={
+            consiliumMode
+              ? consiliumLoading || isProcessingFiles || (!message.trim() && selectedFiles.length === 0)
+              : loading || isProcessingFiles || (!message.trim() && selectedFiles.length === 0)
+          }
+          className={`px-6 py-3 sm:py-2 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-medium touch-manipulation flex items-center justify-center gap-2 ${
+            consiliumMode
+              ? 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800'
+              : 'bg-primary-500 hover:bg-primary-600 active:bg-primary-700'
+          }`}
         >
           {isProcessingFiles ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
               <span>🛡️ Защита...</span>
             </>
+          ) : consiliumLoading ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              <span>Консилиум работает...</span>
+            </>
+          ) : consiliumMode ? (
+            '🩺 Запустить консилиум'
           ) : (
             'Отправить'
           )}

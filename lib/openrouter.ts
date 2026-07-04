@@ -24,7 +24,9 @@ export const MODELS = {
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
   GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
-  GEMINI_3_PRO: 'google/gemini-3.1-pro-preview'          // Gemini 3.1 Pro Preview
+  GEMINI_3_PRO: 'google/gemini-3.1-pro-preview',         // Gemini 3.1 Pro Preview
+  FABLE_5: 'anthropic/claude-fable-5',                   // Claude Fable 5 — глубина рассуждений (HealthBench Professional)
+  FUGU_ULTRA: 'sakana/fugu-ultra',                       // Sakana Fugu Ultra — резервная модель без прямых мед. бенчмарков
 };
 
 const MODELS_LIST = [
@@ -1066,7 +1068,8 @@ export async function sendTextRequest(
   prompt: string, 
   history: Array<{role: string, content: string}> = [],
   model: string = MODELS.OPUS,
-  specialty?: Specialty
+  specialty?: Specialty,
+  customSystemPrompt?: string
 ): Promise<string> {
   const rawKey = process.env.OPENROUTER_API_KEY;
   const apiKey = rawKey?.trim();
@@ -1081,9 +1084,9 @@ export async function sendTextRequest(
   
   // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
   const basePrompt = specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT;
-  let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
+  let systemPrompt = customSystemPrompt || (history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt);
   
-  if (specialty && TITAN_CONTEXTS[specialty]) {
+  if (!customSystemPrompt && specialty && TITAN_CONTEXTS[specialty]) {
     systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
   }
   

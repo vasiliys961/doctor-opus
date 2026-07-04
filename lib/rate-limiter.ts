@@ -95,6 +95,9 @@ export const RATE_LIMIT_UPLOAD: RateLimitConfig = { limit: 15, windowSec: 60 };
 /** Общий (по умолчанию): 60 запросов / 60 сек */
 export const RATE_LIMIT_DEFAULT: RateLimitConfig = { limit: 60, windowSec: 60 };
 
+/** Консилиум (5-агентный разбор): дорогая операция, 5 запусков / 300 сек */
+export const RATE_LIMIT_CONSILIUM: RateLimitConfig = { limit: 5, windowSec: 300 };
+
 function normalizeIp(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const ip = raw.trim();

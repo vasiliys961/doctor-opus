@@ -8,6 +8,7 @@ import rehypeSanitize from 'rehype-sanitize'
 import { saveAnalysisResult, getAllPatients, Patient } from '@/lib/patient-db'
 import LibrarySearch from './LibrarySearch'
 import { markdownToPlainText } from '@/lib/markdown-to-plain-text'
+import { SELF_CHECK_SYSTEM_PROMPT } from '@/lib/prompts'
 
 interface AnalysisResultProps {
   result: string
@@ -29,6 +30,9 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   const [saving, setSaving] = useState(false)
   const [sessionId, setSessionId] = useState('')
   const [showLibrarySearch, setShowLibrarySearch] = useState(false)
+  const [selfCheck, setSelfCheck] = useState<string | null>(null)
+  const [selfCheckLoading, setSelfCheckLoading] = useState(false)
+  const [selfCheckError, setSelfCheckError] = useState<string | null>(null)
 
   const PROTOCOL_DRAFT_KEY = 'protocol_draft'
   const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
@@ -44,6 +48,41 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       setSessionId(Math.random().toString(36).substring(7).toUpperCase())
     }
   }, [result])
+
+  // Новый анализ — сбрасываем самопроверку от предыдущего результата.
+  useEffect(() => {
+    setSelfCheck(null)
+    setSelfCheckError(null)
+  }, [result])
+
+  const handleSelfCheck = async () => {
+    if (!result.trim() || selfCheckLoading) return
+    setSelfCheckLoading(true)
+    setSelfCheckError(null)
+    try {
+      const formData = new FormData()
+      formData.append(
+        'message',
+        `### РЕЗУЛЬТАТ АНАЛИЗА (${imageType || 'медицинское исследование'}), проверь его:\n${result}`
+      )
+      formData.append('systemPrompt', SELF_CHECK_SYSTEM_PROMPT)
+      formData.append('useStreaming', 'false')
+      formData.append('model', 'sonnet')
+      formData.append('specialty', 'universal')
+      formData.append('responseStyle', 'brief')
+
+      const response = await fetch('/api/chat', { method: 'POST', body: formData })
+      const data = await response.json().catch(() => ({ success: false, error: `HTTP ${response.status}` }))
+      if (!response.ok || !data.success) {
+        throw new Error(data?.error || `HTTP ${response.status}`)
+      }
+      setSelfCheck(data.result)
+    } catch (error: any) {
+      setSelfCheckError(error?.message || 'Не удалось выполнить самопроверку')
+    } finally {
+      setSelfCheckLoading(false)
+    }
+  }
 
   const loadPatients = async () => {
     try {
@@ -786,6 +825,16 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
               🩺 Обсудить тактику
             </button>
           )}
+          {!loading && result && !selfCheck && (
+            <button
+              onClick={handleSelfCheck}
+              disabled={selfCheckLoading}
+              title="Отдельный запрос к модели-скептику: ищет пропущенные альтернативы, red flags и необоснованные утверждения в этом разборе"
+              className="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg transition-colors text-sm font-bold disabled:opacity-50"
+            >
+              {selfCheckLoading ? '⏳ Проверяю…' : '🔍 Проверить (Chain-of-Verification)'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -873,6 +922,16 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
                 <span className="tracking-widest uppercase">Обсудить клиническую тактику</span>
                 <div className="absolute -inset-1 bg-gradient-to-r from-teal-400 to-emerald-400 rounded-2xl blur opacity-25 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-pulse-fast"></div>
               </button>
+            </div>
+          )}
+
+          {selfCheckError && (
+            <div className="mt-4 text-sm text-red-600">❌ {selfCheckError}</div>
+          )}
+          {selfCheck && (
+            <div className="mt-6 rounded-xl border border-purple-200 bg-purple-50 p-4">
+              <div className="mb-2 text-sm font-bold text-purple-800">🔍 Самопроверка (независимая критика разбора)</div>
+              <div className="whitespace-pre-wrap text-sm text-purple-900">{selfCheck}</div>
             </div>
           )}
 
