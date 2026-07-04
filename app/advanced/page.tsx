@@ -26,7 +26,7 @@ export default function AdvancedAnalysisPage() {
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [showEditor, setShowEditor] = useState(false)
-  const [isAnonymous, setIsAnonymous] = useState(false)
+  const [maskImage, setMaskImage] = useState(true)
   const BRIDGE_CONTEXT_KEY = 'mobile_bridge_clinical_context_draft'
 
   useEffect(() => {
@@ -96,7 +96,7 @@ export default function AdvancedAnalysisPage() {
       formData.append('imageType', imageType)
       formData.append('stage', 'all')
       formData.append('useStreaming', 'true')
-      formData.append('isAnonymous', isAnonymous.toString())
+      formData.append('maskImage', maskImage.toString())
       formData.append('clinicalContext', additionalContext.trim())
 
       const response = await postAnalyzeImageWithModelConsent({ formData, mode })
@@ -182,17 +182,17 @@ export default function AdvancedAnalysisPage() {
             <label className="flex items-center space-x-2 cursor-pointer p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-900 w-fit shadow-sm">
               <input
                 type="checkbox"
-                checked={isAnonymous}
-                onChange={(e) => setIsAnonymous(e.target.checked)}
+                checked={maskImage}
+                onChange={(e) => setMaskImage(e.target.checked)}
                 disabled={loading}
                 className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
               />
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-blue-900">
-                  🛡️ Анонимный анализ
+                  🖌️ Закрашивать края снимка (защита ПДн)
                 </span>
                 <span className="text-[10px] text-blue-700 font-normal">
-                  ФИО и адрес будут удалены из результата автоматически.
+                  Включено по умолчанию. Отключите только если точно уверены, что на снимке нет персональных данных.
                 </span>
               </div>
             </label>

@@ -45,7 +45,6 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const isAnonymous = formData.get('isAnonymous') === 'true';
 
     if (!file) {
       console.error('❌ [GENETIC] Файл не предоставлен');
@@ -335,9 +334,11 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
       );
     }
 
-    if (isAnonymous) {
-      extractedData = anonymizeText(extractedData);
-    }
+    // Текстовая анонимизация применяется всегда (как во всех остальных модулях),
+    // а не только при включённом чекбоксе "Разовый анонимный анализ" — иначе
+    // ФИО/даты, случайно попавшие в OCR из шапки лабораторного отчёта, могли
+    // уйти во внешнюю модель без маскировки.
+    extractedData = anonymizeText(extractedData);
 
     return NextResponse.json({
       success: true,

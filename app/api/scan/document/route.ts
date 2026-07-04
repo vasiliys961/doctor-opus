@@ -35,7 +35,9 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = anonymizeText(formData.get('prompt') as string || 'Извлеки весь текст из документа. Просто скопируй текст как есть, без комментариев и анализа.');
-    const isAnonymous = formData.get('isAnonymous') === 'true';
+    // По умолчанию (если поле не прислано) — маскирование краёв включено.
+    const maskImageRaw = formData.get('maskImage');
+    const maskImage = maskImageRaw === null ? true : maskImageRaw === 'true';
 
     if (!file) {
       return NextResponse.json(
@@ -73,8 +75,8 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     let buffer = Buffer.from(arrayBuffer);
 
-    // Если анонимно и это изображение - анонимизируем буфер
-    if (isAnonymous && file.type.startsWith('image/')) {
+    // Если маскирование включено и это изображение - анонимизируем буфер
+    if (maskImage && file.type.startsWith('image/')) {
       console.log(`🛡️ [SCAN] Анонимизация изображения: ${file.name}`);
       // @ts-expect-error - Несовместимость типов Buffer
       buffer = await anonymizeImageBuffer(buffer, file.type);

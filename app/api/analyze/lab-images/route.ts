@@ -12,6 +12,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { anonymizeImageBuffer } from '@/lib/server-image-processing';
 
 // Максимальное время выполнения (5 минут)
 export const maxDuration = 300;
@@ -43,14 +44,31 @@ export async function POST(request: NextRequest) {
     const guestKey = userEmail ? null : getRateLimitKey(request);
 
     const body = await request.json();
-    const { images, prompt, clinicalContext, mode, useStreaming, model } = body;
+    const { images: rawImages, prompt, clinicalContext, mode, useStreaming, model, maskImage: maskImageInput } = body;
 
-    if (!images || !Array.isArray(images) || images.length === 0) {
+    if (!rawImages || !Array.isArray(rawImages) || rawImages.length === 0) {
       return NextResponse.json(
         { success: false, error: 'No images provided' },
         { status: 400 }
       );
     }
+
+    // Закрашивание краёв каждой страницы — по умолчанию (если поле не прислано)
+    // включено. Врач мог уже отредактировать страницы вручную через ImageEditor,
+    // повторное наложение чёрных плашек на уже закрашенные зоны безвредно.
+    const maskImage = maskImageInput === undefined ? true : Boolean(maskImageInput);
+    const images = maskImage
+      ? await Promise.all(
+          rawImages.map(async (img: string) => {
+            try {
+              const buffer = await anonymizeImageBuffer(Buffer.from(img, 'base64'), 'image/png');
+              return buffer.toString('base64');
+            } catch {
+              return img;
+            }
+          })
+        )
+      : rawImages;
 
     const estimatedCost = getAnalysisCost(mode || 'optimized', images.length);
     const billing = userEmail

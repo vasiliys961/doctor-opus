@@ -51,7 +51,11 @@ export async function POST(request: NextRequest) {
     const mode = formData.get('mode') as string || 'fast';
     const model = formData.get('model') as string;
     const useStreaming = formData.get('useStreaming') === 'true';
-    const isAnonymous = formData.get('isAnonymous') === 'true';
+    // Закрашивание краёв снимка — отдельно от "не сохранять в базу пациентов"
+    // (то решается только на клиенте). По умолчанию (если поле не прислано) —
+    // маскирование включено.
+    const maskImageRaw = formData.get('maskImage');
+    const maskImage = maskImageRaw === null ? true : maskImageRaw === 'true';
 
     if (!file) {
       return NextResponse.json(
@@ -94,8 +98,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Если анонимно и это изображение - анонимизируем буфер
-    if (isAnonymous && (file.type.startsWith('image/') || fileType === 'jpg' || fileType === 'jpeg' || fileType === 'png')) {
+    // Если маскирование включено и это изображение - анонимизируем буфер
+    if (maskImage && (file.type.startsWith('image/') || fileType === 'jpg' || fileType === 'jpeg' || fileType === 'png')) {
       console.log(`🛡️ [LAB] Анонимизация изображения: ${file.name}`);
       // @ts-expect-error - Несовместимость типов Buffer
       buffer = await anonymizeImageBuffer(buffer, file.type);

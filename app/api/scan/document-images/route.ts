@@ -31,7 +31,9 @@ export async function POST(request: NextRequest) {
     const guestKey = userEmail ? null : getRateLimitKey(request);
 
     const body = await request.json();
-    const { images, prompt, isAnonymous } = body;
+    const { images, prompt, maskImage: maskImageInput } = body;
+    // По умолчанию (если поле не прислано) — маскирование краёв включено.
+    const maskImage = maskImageInput === undefined ? true : Boolean(maskImageInput);
 
     if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
@@ -77,8 +79,8 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < images.length; i++) {
       let imageBase64 = images[i];
 
-      // Если анонимно — затираем данные на изображении
-      if (isAnonymous) {
+      // Если маскирование включено — затираем данные на изображении
+      if (maskImage) {
         console.log(`🛡️ [DOC IMAGES] Анонимизация страницы ${i + 1}`);
         const buffer = Buffer.from(imageBase64, 'base64');
         const anonBuffer = await anonymizeImageBuffer(buffer, 'image/png');

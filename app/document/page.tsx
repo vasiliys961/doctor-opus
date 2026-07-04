@@ -54,6 +54,7 @@ export default function DocumentPage() {
 
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [isAnonymous, setIsAnonymous] = useState(false)
+  const [maskImage, setMaskImage] = useState(true)
   const [model, setModel] = useState<string>('')
   const [mode, setMode] = useState<string>('')
   const [scanMode, setScanMode] = useState<ScanMode>('local')
@@ -311,6 +312,7 @@ export default function DocumentPage() {
       }
 
       formData.append('isAnonymous', isAnonymous.toString())
+      formData.append('maskImage', maskImage.toString())
       formData.append('prompt', 'Отсканируйте и извлеките текст из медицинского документа, СОХРАНЯЯ СТРУКТУРУ: таблицы, списки, заголовки, форматирование.')
 
       const response = await fetch('/api/scan/document', {
@@ -534,10 +536,28 @@ export default function DocumentPage() {
               />
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-blue-900">
-                  🛡️ Анонимный анализ активен
+                  🛡️ Разовый анонимный анализ
                 </span>
                 <span className="text-[10px] text-blue-700 font-normal">
-                  Данные выше уже анонимизированы вами или будут скрыты автоматически.
+                  Результат не будет сохранён в базу пациентов.
+                </span>
+              </div>
+            </label>
+
+            <label className="flex items-center space-x-2 cursor-pointer p-3 bg-green-50 border border-green-100 rounded-xl text-green-900 w-full sm:w-fit shadow-sm">
+              <input
+                type="checkbox"
+                checked={maskImage}
+                onChange={(e) => setMaskImage(e.target.checked)}
+                disabled={loading}
+                className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
+              />
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-green-900">
+                  🖌️ Закрашивать края документа
+                </span>
+                <span className="text-[10px] text-green-700 font-normal">
+                  Включено по умолчанию. Если важные данные (таблицы, шапка) обрезаются — отключите.
                 </span>
               </div>
             </label>

@@ -70,6 +70,7 @@ export default function DermatoscopyPage() {
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [isAnonymous, setIsAnonymous] = useState(false)
+  const [maskImage, setMaskImage] = useState(true)
   const [showEditor, setShowEditor] = useState(false)
   const [indexedAtlases, setIndexedAtlases] = useState<LibraryDocument[]>([])
   const [visualQuery, setVisualQuery] = useState('')
@@ -199,6 +200,7 @@ export default function DermatoscopyPage() {
       formData.append('imageType', studyType)
       formData.append('useStreaming', useStream.toString())
       formData.append('isAnonymous', isAnonymous.toString())
+      formData.append('maskImage', maskImage.toString())
       formData.append('isTwoStage', 'true')
 
       // Добавляем конкретную модель для оптимизированного режима
@@ -400,6 +402,25 @@ export default function DermatoscopyPage() {
                     </span>
                     <span className="text-[10px] text-blue-700 font-normal">
                       Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                    </span>
+                  </div>
+                </label>
+              </div>
+              <div className="mb-4">
+                <label className="flex items-center space-x-2 cursor-pointer p-2 bg-green-50 border border-green-100 rounded-lg text-green-900">
+                  <input
+                    type="checkbox"
+                    checked={maskImage}
+                    onChange={(e) => setMaskImage(e.target.checked)}
+                    disabled={loading}
+                    className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-green-900">
+                      🖌️ Закрашивать края снимка (защита ПДн)
+                    </span>
+                    <span className="text-[10px] text-green-700 font-normal">
+                      При крупном плане поражения (весь кадр — кожа) отключите: края могут задевать саму зону интереса.
                     </span>
                   </div>
                 </label>

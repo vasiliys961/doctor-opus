@@ -687,10 +687,10 @@ export default function GeneticPage() {
               />
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-blue-900">
-                  🛡️ Анонимный анализ активен
+                  🛡️ Разовый анонимный анализ
                 </span>
                 <span className="text-[10px] text-blue-700 font-normal">
-                  ФИО и адрес будут затерты перед отправкой к ИИ.
+                  Результат не будет сохранён в базу пациентов (текстовая анонимизация ФИО/дат/адресов применяется всегда, независимо от этой галочки).
                 </span>
               </div>
             </label>
@@ -725,10 +725,10 @@ export default function GeneticPage() {
               />
               <div className="flex flex-col text-left">
                 <span className="text-sm font-bold text-blue-900">
-                  🛡️ Анонимный анализ
+                  🛡️ Разовый анонимный анализ
                 </span>
                 <span className="text-[10px] text-blue-700 font-normal">
-                  ФИО, даты рождения, паспорта, телефоны будут удалены из результата.
+                  Результат не будет сохранён в базу пациентов (текстовая анонимизация ФИО/дат/адресов применяется всегда, независимо от этой галочки).
                 </span>
               </div>
             </label>

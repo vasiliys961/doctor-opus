@@ -296,7 +296,12 @@ export async function POST(request: NextRequest) {
     const descriptionFromStep1 = anonymizeText(formData.get('description') as string || '');
     const useStreaming = formData.get('useStreaming') === 'true';
     const isTwoStage = formData.get('isTwoStage') === 'true';
-    const isAnonymous = formData.get('isAnonymous') === 'true';
+    // Закрашивание краёв снимка / DICOM-тегов — отдельный флаг от "не сохранять
+    // в базу пациентов" (последнее решается только на клиенте). По умолчанию
+    // (если клиент не прислал поле) считаем маскирование ВКЛЮЧЁННЫМ — это
+    // безопасный дефолт для защиты ПДн, а не наоборот.
+    const maskImageRaw = formData.get('maskImage');
+    const maskImage = maskImageRaw === null ? true : maskImageRaw === 'true';
     
     // Специальности удалены для стабильности
     const specialty = undefined;
@@ -324,8 +329,8 @@ export async function POST(request: NextRequest) {
         const arrayBuffer = await img.arrayBuffer();
         let buffer: Buffer<ArrayBufferLike> = Buffer.from(arrayBuffer);
         
-        // 1. Если анонимно — затираем теги в буфере ПЕРЕД обработкой
-        if (isAnonymous) {
+        // 1. Если маскирование включено — затираем теги в буфере ПЕРЕД обработкой
+        if (maskImage) {
           // Логируем без имени файла (может содержать ПДн)
           // safeLog('🛡️ [DICOM] Анонимизация буфера');
           const { anonymizeDicomBuffer } = await import('@/lib/dicom-processor');
@@ -335,7 +340,7 @@ export async function POST(request: NextRequest) {
         const nativeMeta = extractDicomMetadata(buffer);
         if (nativeMeta.modality) dicomContext += formatDicomMetadataForAI(nativeMeta);
         
-        const jsResult = await processDicomJs(buffer, isAnonymous);
+        const jsResult = await processDicomJs(buffer, maskImage);
         if (jsResult.success && jsResult.image) {
           imagesBase64.push(jsResult.image);
           mimeTypes.push('image/png');
@@ -387,8 +392,8 @@ export async function POST(request: NextRequest) {
           );
         }
         
-        // 2) Применяем анонимизацию для всех изображений (JPG/PNG и т.д.), если включен режим анонимности
-        if (isAnonymous && currentMimeType.startsWith('image/')) {
+        // 2) Применяем анонимизацию для всех изображений (JPG/PNG и т.д.), если включено маскирование
+        if (maskImage && currentMimeType.startsWith('image/')) {
           // Не логируем имя файла — может содержать ПДн
           buffer = await anonymizeImageBuffer(buffer, currentMimeType);
         }

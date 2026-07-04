@@ -103,7 +103,6 @@ export async function POST(request: NextRequest) {
       history = [],
       isFollowUp = false,
       files = [],
-      isAnonymous = false,
     } = body || {};
 
     const estimatedCost = estimateConsultCost({
@@ -138,9 +137,11 @@ export async function POST(request: NextRequest) {
     }
     billedAmount = estimatedCost;
 
-    const analysis = isAnonymous ? anonymizeText(rawAnalysis) : rawAnalysis;
-    const clinicalContext = isAnonymous ? anonymizeText(rawClinicalContext) : rawClinicalContext;
-    const question = isAnonymous ? anonymizeText(rawQuestion) : rawQuestion;
+    // Текстовая анонимизация применяется всегда (как во всех остальных модулях),
+    // а не только при включённом чекбоксе "Разовый анонимный анализ".
+    const analysis = anonymizeText(rawAnalysis);
+    const clinicalContext = anonymizeText(rawClinicalContext);
+    const question = anonymizeText(rawQuestion);
 
     if (!analysis || typeof analysis !== 'string' || analysis.trim().length === 0) {
       return NextResponse.json(

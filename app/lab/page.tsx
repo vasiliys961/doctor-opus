@@ -81,6 +81,7 @@ export default function LabPage() {
   const [useStreaming, setUseStreaming] = useState(true)
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [isAnonymous, setIsAnonymous] = useState(false)
+  const [maskImage, setMaskImage] = useState(true)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [showEditor, setShowEditor] = useState(false)
   const [processedImages, setProcessedImages] = useState<string[]>([])
@@ -207,6 +208,7 @@ export default function LabPage() {
             model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.8'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
+            maskImage: maskImage,
             prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
             clinicalContext: clinicalContext
           }),
@@ -288,6 +290,7 @@ export default function LabPage() {
             model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.8'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
+            maskImage: maskImage,
             prompt: 'Проанализируйте лабораторные данные со всех страниц. Извлеките все показатели, их значения и референсные диапазоны.',
             clinicalContext: clinicalContext
           }),
@@ -349,6 +352,7 @@ export default function LabPage() {
         formData.append('model', targetModelId)
         formData.append('useStreaming', useStreaming.toString())
         formData.append('isAnonymous', isAnonymous.toString())
+        formData.append('maskImage', maskImage.toString())
         formData.append('prompt', 'Проанализируйте лабораторные данные. Извлеките все показатели, их значения и референсные диапазоны.')
         formData.append('clinicalContext', clinicalContext)
 
@@ -483,6 +487,25 @@ export default function LabPage() {
                   </span>
                   <span className="text-[10px] text-blue-700 font-normal">
                     Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                  </span>
+                </div>
+              </label>
+            </div>
+            <div className="mb-4">
+              <label className="flex items-center space-x-2 cursor-pointer p-2 bg-green-50 border border-green-100 rounded-lg text-green-900">
+                <input
+                  type="checkbox"
+                  checked={maskImage}
+                  onChange={(e) => setMaskImage(e.target.checked)}
+                  disabled={loading}
+                  className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                />
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-green-900">
+                    🖌️ Закрашивать края снимка (защита ПДн)
+                  </span>
+                  <span className="text-[10px] text-green-700 font-normal">
+                    Включено по умолчанию (в т.ч. для каждой страницы PDF). Отключите только если точно уверены, что на снимке нет персональных данных.
                   </span>
                 </div>
               </label>

@@ -35,6 +35,7 @@ export default function ECGPage() {
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [analysisStep, setAnalysisStep] = useState<'idle' | 'description' | 'description_complete' | 'tactic'>('idle')
   const [isAnonymous, setIsAnonymous] = useState(false)
+  const [maskImage, setMaskImage] = useState(true)
   const [showCaliper, setShowCaliper] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
 
@@ -115,6 +116,7 @@ export default function ECGPage() {
       formData.append('useStreaming', useStream.toString())
       formData.append('isTwoStage', 'true')
       formData.append('isAnonymous', isAnonymous.toString())
+      formData.append('maskImage', maskImage.toString())
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
@@ -350,6 +352,25 @@ export default function ECGPage() {
                     </span>
                     <span className="text-[10px] text-blue-700 font-normal">
                       Результат не будет сохранен в базу пациентов (максимальная защита ПД).
+                    </span>
+                  </div>
+                </label>
+              </div>
+              <div className="mb-4">
+                <label className="flex items-center space-x-2 cursor-pointer p-2 bg-green-50 border border-green-100 rounded-lg text-green-900">
+                  <input
+                    type="checkbox"
+                    checked={maskImage}
+                    onChange={(e) => setMaskImage(e.target.checked)}
+                    disabled={loading}
+                    className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-green-900">
+                      🖌️ Закрашивать края снимка (защита ПДн)
+                    </span>
+                    <span className="text-[10px] text-green-700 font-normal">
+                      Включено по умолчанию. Отключите только если точно уверены, что на снимке нет персональных данных.
                     </span>
                   </div>
                 </label>

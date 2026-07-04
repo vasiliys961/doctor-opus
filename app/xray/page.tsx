@@ -114,6 +114,9 @@ export default function XRayPage() {
       formData.append('useStreaming', useStream.toString())
       formData.append('isTwoStage', 'true')
       formData.append('isAnonymous', isAnonymous.toString())
+      // На этой странице отдельного чекбокса маскирования нет — включаем по
+      // умолчанию (безопасный дефолт), как и на остальных страницах анализа.
+      formData.append('maskImage', 'true')
 
       if (additionalFiles.length > 0) {
         additionalFiles.forEach((f, i) => {
