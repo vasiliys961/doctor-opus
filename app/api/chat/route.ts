@@ -248,10 +248,12 @@ export async function POST(request: NextRequest) {
       const timeoutMs = Number(process.env.PUBMED_TIMEOUT_MS || 3500);
       try {
         const articles = await searchPubMedEvidence(pubMedQuery, { maxResults, timeoutMs });
-        // MVP open-access enrichment: по DOI из PubMed ищем легальную бесплатную
-        // полнотекстовую копию через Unpaywall API. Не блокирует основной поиск —
-        // при отсутствии UNPAYWALL_EMAIL или ошибке просто возвращает пустую карту.
-        const openAccessLinks = await resolveOpenAccessLinks(articles.map((a) => a.doi));
+        // Europe PMC уже отдаёт open-access ссылку в самом ответе поиска для
+        // части статей (article.openAccessUrl) — Unpaywall дозапрашиваем только
+        // для тех, где Europe PMC такую ссылку не нашёл (например, полный текст
+        // лежит в стороннем университетском репозитории, а не в PMC).
+        const doisNeedingUnpaywall = articles.filter((a) => !a.openAccessUrl).map((a) => a.doi);
+        const openAccessLinks = await resolveOpenAccessLinks(doisNeedingUnpaywall);
         pubMedContext = buildPubMedContextBlock(articles, openAccessLinks);
         console.log(`[PUBMED RAG] enabled=${enableMedicalBrowsing} academic=${isAcademicSearch} specialty=${specialty || 'n/a'} model=${model || 'n/a'} results=${articles.length} openAccessLinks=${openAccessLinks.size}`);
         pubMedRuntimeInstruction = articles.length > 0

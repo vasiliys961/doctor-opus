@@ -1,6 +1,11 @@
 import type { OpenAccessLink } from './unpaywall';
 import { translateToEnglishForPubMed } from './medical-query-translator';
 
+// Источник данных — Europe PMC REST API вместо "сырого" PubMed E-utilities.
+// Europe PMC зеркалирует MEDLINE/PubMed (фильтр SRC:MED ниже — строго те же
+// записи, что и в PubMed) и дополнительно одним запросом отдаёт DOI, флаг
+// open-access, готовую ссылку на PDF полного текста и число цитирований —
+// то, что раньше требовало отдельных esearch+esummary+Unpaywall вызовов.
 type PubMedArticle = {
   pmid: string;
   doi: string | null;
@@ -9,6 +14,9 @@ type PubMedArticle = {
   year: string;
   url: string;
   snippet: string;
+  citedByCount?: number;
+  /** Предзаполнено из Europe PMC, если там уже есть открытая копия полного текста. */
+  openAccessUrl?: string | null;
 };
 
 type SearchOptions = {
@@ -22,8 +30,7 @@ type CacheRecord = {
   articles: PubMedArticle[];
 };
 
-const PUBMED_SEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi';
-const PUBMED_SUMMARY_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi';
+const EUROPEPMC_SEARCH_URL = 'https://www.ebi.ac.uk/europepmc/webservices/rest/search';
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const cache = new Map<string, CacheRecord>();
 
@@ -57,19 +64,16 @@ async function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<any
   }
 }
 
-function extractYear(pubdate: string | undefined): string {
-  if (!pubdate) return 'n/a';
-  const match = pubdate.match(/\b(19|20)\d{2}\b/);
-  return match ? match[0] : 'n/a';
-}
-
 function toSnippet(title: string, journal: string, year: string): string {
   return `${title} — ${journal}${year !== 'n/a' ? ` (${year})` : ''}`;
 }
 
-function extractDoi(articleIds: Array<{ idtype?: string; value?: string }> | undefined): string | null {
-  const doiEntry = articleIds?.find((entry) => entry?.idtype === 'doi');
-  return doiEntry?.value ? String(doiEntry.value).trim() : null;
+function extractOpenAccessPdfUrl(fullTextUrlList: { fullTextUrl?: Array<Record<string, string>> } | undefined): string | null {
+  const urls = fullTextUrlList?.fullTextUrl ?? [];
+  const pdf = urls.find((u) => u?.availabilityCode === 'OA' && u?.documentStyle === 'pdf');
+  if (pdf?.url) return pdf.url;
+  const anyOpen = urls.find((u) => u?.availabilityCode === 'OA');
+  return anyOpen?.url ?? null;
 }
 
 export async function searchPubMedEvidence(
@@ -90,33 +94,30 @@ export async function searchPubMedEvidence(
     return cached.articles;
   }
 
-  // PubMed индексирует статьи на английском и молча игнорирует кириллицу
-  // в запросе (вместо ошибки — нерелевантная выдача по всему английскому
+  // PubMed/Europe PMC индексируют статьи на английском и молча игнорируют
+  // кириллицу в запросе (вместо ошибки — нерелевантная выдача по всему
   // корпусу), поэтому русскоязычные запросы сперва переводим в англоязычные
   // медицинские термины. Латиница переводом не трогается (см. hasCyrillic внутри).
   const englishQuery = await translateToEnglishForPubMed(compact, options.translationTimeoutMs);
 
-  // Глобальный фокус: англоязычные международные публикации из PubMed.
-  const searchTerm = `${englishQuery} AND english[lang]`;
-  const esearchUrl = `${PUBMED_SEARCH_URL}?db=pubmed&retmode=json&sort=relevance&retmax=${maxResults}&term=${encodeURIComponent(searchTerm)}`;
-  const searchData = await fetchJsonWithTimeout(esearchUrl, timeoutMs);
-  const ids: string[] = searchData?.esearchresult?.idlist ?? [];
-  if (!ids.length) {
-    cache.set(cacheKey, { expiresAt: now + CACHE_TTL_MS, articles: [] });
-    return [];
-  }
+  // SRC:MED — строго MEDLINE/PubMed записи (без препринтов и патентов).
+  // resultType=core — в ответе сразу DOI, isOpenAccess, fullTextUrlList, citedByCount.
+  const searchTerm = `${englishQuery} AND SRC:MED AND LANG:"eng"`;
+  const searchUrl = `${EUROPEPMC_SEARCH_URL}?query=${encodeURIComponent(searchTerm)}&format=json&pageSize=${maxResults}&resultType=core`;
+  const searchData = await fetchJsonWithTimeout(searchUrl, timeoutMs);
+  const results: any[] = searchData?.resultList?.result ?? [];
 
-  const esummaryUrl = `${PUBMED_SUMMARY_URL}?db=pubmed&retmode=json&id=${ids.join(',')}`;
-  const summaryData = await fetchJsonWithTimeout(esummaryUrl, timeoutMs);
-
-  const articles: PubMedArticle[] = ids
-    .map((pmid) => {
-      const item = summaryData?.result?.[pmid];
-      if (!item?.title) return null;
+  const articles: PubMedArticle[] = results
+    .filter((item) => item?.pmid && item?.title)
+    .map((item) => {
+      const pmid = String(item.pmid);
       const title = String(item.title).replace(/\s+/g, ' ').trim();
-      const journal = String(item.fulljournalname || item.source || 'Unknown journal').trim();
-      const year = extractYear(item.pubdate);
-      const doi = extractDoi(item.articleids);
+      const journal = String(item.journalInfo?.journal?.title || item.journalTitle || 'Unknown journal').trim();
+      const year = item.pubYear ? String(item.pubYear) : 'n/a';
+      const doi = item.doi ? String(item.doi).trim() : null;
+      const citedByCount = typeof item.citedByCount === 'number' ? item.citedByCount : undefined;
+      const openAccessUrl = item.isOpenAccess === 'Y' ? extractOpenAccessPdfUrl(item.fullTextUrlList) : null;
+
       return {
         pmid,
         doi,
@@ -125,9 +126,10 @@ export async function searchPubMedEvidence(
         year,
         url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
         snippet: toSnippet(title, journal, year),
+        citedByCount,
+        openAccessUrl,
       };
-    })
-    .filter((item): item is PubMedArticle => item !== null);
+    });
 
   cache.set(cacheKey, { expiresAt: now + CACHE_TTL_MS, articles });
   return articles;
@@ -141,16 +143,19 @@ export function buildPubMedContextBlock(
 
   let hasOpenAccessLinks = false;
   const lines = articles.map((article, index) => {
-    const oaLink = article.doi ? openAccessLinks?.get(article.doi) : undefined;
-    const oaLine = oaLink ? (() => {
+    const oaUrl = article.openAccessUrl || (article.doi ? openAccessLinks?.get(article.doi)?.url : undefined);
+    const oaLine = oaUrl ? (() => {
       hasOpenAccessLinks = true;
-      return `\nПолный текст (open access, легально, через Unpaywall): ${oaLink.url}`;
+      return `\nПолный текст (open access, легально): ${oaUrl}`;
     })() : '';
+    const citedLine = typeof article.citedByCount === 'number' && article.citedByCount > 0
+      ? `\nЦитирований: ${article.citedByCount}`
+      : '';
     return `${index + 1}. PMID: ${article.pmid}
 Название: ${article.title}
 Журнал: ${article.journal}
 Год: ${article.year}
-Ссылка: ${article.url}${oaLine}`;
+Ссылка: ${article.url}${citedLine}${oaLine}`;
   });
 
   const openAccessInstruction = hasOpenAccessLinks
