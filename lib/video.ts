@@ -9,8 +9,9 @@
  */
 
 import { getDescriptionPrompt, getDirectivePrompt, getComparisonDescriptionPrompt, ImageType } from './prompts';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 const MODELS = {
   GEMINI_3_FLASH: 'google/gemini-3-flash-preview',
@@ -56,10 +57,10 @@ export interface AnalyzeVideoResult {
 export async function analyzeVideoTwoStage(
   options: AnalyzeVideoOptions
 ): Promise<AnalyzeVideoResult> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = getLlmApiKey();
 
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
+    throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) не настроен. Проверьте переменные окружения.');
   }
 
   const mimeType = options.mimeType || 'video/mp4';
@@ -186,8 +187,8 @@ export async function analyzeVideoTwoStage(
 export async function analyzeTwoVideosTwoStage(
   options: AnalyzeTwoVideosOptions
 ): Promise<AnalyzeVideoResult> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) не настроен');
 
   const imageType = options.imageType || 'universal';
   let totalPromptTokens = 0;

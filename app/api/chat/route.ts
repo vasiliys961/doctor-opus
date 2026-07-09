@@ -17,6 +17,142 @@ const MAX_CHAT_FILES_PER_REQUEST = 4;
 const MAX_CHAT_TOTAL_BYTES_PER_REQUEST = 16 * 1024 * 1024;
 const MIN_CHAT_COST = 0.7;
 const MAX_CHAT_COST = 6;
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+
+type ChatHistoryItem = { role: string; content: string };
+
+function parseStatusFromError(error: unknown): number | null {
+  const text = String((error as any)?.message || '');
+  const statusMatch = text.match(/\b(\d{3})\b/);
+  if (!statusMatch) return null;
+  const status = Number(statusMatch[1]);
+  return Number.isFinite(status) ? status : null;
+}
+
+function isOpenRouterAccessDenied(error: unknown): boolean {
+  const status = parseStatusFromError(error);
+  const message = String((error as any)?.message || '').toLowerCase();
+  return (
+    status === 401 ||
+    status === 403 ||
+    message.includes('access denied by security policy') ||
+    message.includes('permission_denied') ||
+    message.includes('provider returned error')
+  );
+}
+
+function logProviderAccessDiagnostics(params: {
+  request: NextRequest;
+  selectedModel: string;
+  useStreaming: boolean;
+  stage: 'streaming' | 'non-streaming';
+  error: unknown;
+}): void {
+  const { request, selectedModel, useStreaming, stage, error } = params;
+  const errMessage = String((error as any)?.message || 'unknown').slice(0, 500);
+  const status = parseStatusFromError(error);
+  const openrouterKeyPresent = Boolean(process.env.OPENROUTER_API_KEY?.trim());
+  const anthropicKeyPresent = Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+
+  console.warn('[CHAT PROVIDER ACCESS] OpenRouter request failed', {
+    stage,
+    status,
+    selectedModel,
+    useStreaming,
+    host: request.headers.get('host') || 'n/a',
+    origin: request.headers.get('origin') || 'n/a',
+    xForwardedFor: request.headers.get('x-forwarded-for') || 'n/a',
+    userAgent: request.headers.get('user-agent') || 'n/a',
+    openrouterKeyPresent,
+    anthropicKeyPresent,
+    errorSnippet: errMessage,
+  });
+}
+
+function mapOpenRouterToAnthropicModel(selectedModel: string): string {
+  const explicitFallback = process.env.ANTHROPIC_FALLBACK_MODEL?.trim();
+  if (explicitFallback) return explicitFallback;
+  if (selectedModel.includes('opus')) return 'claude-opus-4-1';
+  if (selectedModel.includes('sonnet')) return 'claude-sonnet-4-5';
+  return 'claude-3-5-sonnet-latest';
+}
+
+function buildAnthropicMessages(history: ChatHistoryItem[], finalMessage: string) {
+  const normalizedHistory = history
+    .filter((msg) => msg && (msg.role === 'user' || msg.role === 'assistant') && typeof msg.content === 'string')
+    .map((msg) => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+    }));
+
+  return [
+    ...normalizedHistory,
+    { role: 'user' as const, content: finalMessage },
+  ];
+}
+
+async function sendAnthropicFallbackText(params: {
+  finalMessage: string;
+  history: ChatHistoryItem[];
+  selectedModel: string;
+  systemPrompt?: string;
+}): Promise<{ text: string; model: string }> {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY не настроен для fallback');
+  }
+
+  const model = mapOpenRouterToAnthropicModel(params.selectedModel);
+  const response = await fetch(ANTHROPIC_API_URL, {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4000,
+      temperature: 0.1,
+      system: params.systemPrompt || 'Ты медицинский ИИ-ассистент. Отвечай на русском языке, структурно и по существу.',
+      messages: buildAnthropicMessages(params.history, params.finalMessage),
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Anthropic fallback error: ${response.status} - ${errorText.slice(0, 400)}`);
+  }
+
+  const data = await response.json();
+  const text = (data?.content || [])
+    .filter((part: any) => part?.type === 'text')
+    .map((part: any) => String(part.text || ''))
+    .join('\n')
+    .trim();
+
+  if (!text) {
+    throw new Error('Anthropic fallback returned empty response');
+  }
+
+  return { text, model };
+}
+
+function createSseStreamFromText(text: string, model: string): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      const payload = {
+        id: 'anthropic-fallback',
+        model,
+        choices: [{ delta: { content: text } }],
+      };
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+}
 
 function estimateChatCost(params: {
   selectedModel: string;
@@ -352,23 +488,72 @@ export async function POST(request: NextRequest) {
 
     // Если запрошен streaming без файлов, возвращаем поток
     if (useStreaming) {
-      const stream = await sendTextRequestStreaming(finalMessage, formattedHistory, selectedModel, specialty as any, systemPrompt);
-      return handleStreaming(stream);
+      try {
+        const stream = await sendTextRequestStreaming(finalMessage, formattedHistory, selectedModel, specialty as any, systemPrompt);
+        return handleStreaming(stream);
+      } catch (error) {
+        if (!isOpenRouterAccessDenied(error)) {
+          throw error;
+        }
+
+        logProviderAccessDiagnostics({
+          request,
+          selectedModel,
+          useStreaming,
+          stage: 'streaming',
+          error,
+        });
+
+        const fallback = await sendAnthropicFallbackText({
+          finalMessage,
+          history: formattedHistory,
+          selectedModel,
+          systemPrompt,
+        });
+        console.warn(`[CHAT FALLBACK] OpenRouter blocked, using Anthropic direct API (${fallback.model})`);
+        return handleStreaming(createSseStreamFromText(fallback.text, fallback.model));
+      }
     }
 
     // Обычный режим - полный ответ
     console.log('🚀 [CHAT API] Начало запроса к OpenRouter...');
-    const result = await sendTextRequest(finalMessage, formattedHistory, selectedModel, specialty as any, systemPrompt);
-    console.log('✅ [CHAT API] Ответ от OpenRouter получен успешно.');
+    let result: string;
+    let modelUsed = selectedModel;
+    try {
+      result = await sendTextRequest(finalMessage, formattedHistory, selectedModel, specialty as any, systemPrompt);
+      console.log('✅ [CHAT API] Ответ от OpenRouter получен успешно.');
+    } catch (error) {
+      if (!isOpenRouterAccessDenied(error)) {
+        throw error;
+      }
+
+      logProviderAccessDiagnostics({
+        request,
+        selectedModel,
+        useStreaming,
+        stage: 'non-streaming',
+        error,
+      });
+
+      const fallback = await sendAnthropicFallbackText({
+        finalMessage,
+        history: formattedHistory,
+        selectedModel,
+        systemPrompt,
+      });
+      result = fallback.text;
+      modelUsed = fallback.model;
+      console.warn(`[CHAT FALLBACK] OpenRouter blocked, using Anthropic direct API (${modelUsed})`);
+    }
     
     const { calculateCost } = await import('@/lib/cost-calculator');
-    const costInfo = calculateCost(1000, 1000, selectedModel);
+    const costInfo = calculateCost(1000, 1000, modelUsed);
 
     return NextResponse.json({
       success: true,
       result: result,
       cost: costInfo.totalCostUnits,
-      model: selectedModel
+      model: modelUsed
     });
   } catch (error: any) {
     console.error('🔴 [CHAT API ERROR]:', error);

@@ -4,7 +4,9 @@
 // клинических запросов нужен явный перевод в англоязычный поисковый запрос
 // с медицинской терминологией (MeSH-совместимой) перед вызовом PubMed.
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
+
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 // Быстрая/дешёвая модель — нужен только короткий поисковый запрос, не полноценный ответ.
 const TRANSLATION_MODEL = 'google/gemini-3-flash-preview';
 
@@ -55,7 +57,7 @@ export async function translateToEnglishForPubMed(
     return cached.translated;
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  const apiKey = getLlmApiKey().trim();
   if (!apiKey) return rawQuery;
 
   try {

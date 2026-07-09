@@ -116,7 +116,10 @@ npm install
 
 ### 2. Настройка (.env)
 ```env
-OPENROUTER_API_KEY=ваш_ключ
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=ваш_ключ
+# backward compatibility:
+# OPENROUTER_API_KEY=ваш_ключ
 POSTGRES_URL=ссылка_на_базу
 NEXTAUTH_SECRET=случайная_строка
 NEXTAUTH_URL=https://doctor-opus.ru
@@ -171,7 +174,8 @@ npm run dev:web
 - Сертификаты лежат в `nginx/ssl/` (`fullchain.crt`, `privkey.key`).
 
 ### Обязательные переменные окружения
-- `OPENROUTER_API_KEY`
+- `LLM_BASE_URL`
+- `LLM_API_KEY` (или `OPENROUTER_API_KEY` для обратной совместимости)
 - `NEXTAUTH_SECRET`
 - `NEXTAUTH_URL`
 - `MIGRATION_SECRET`

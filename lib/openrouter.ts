@@ -9,8 +9,9 @@ import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, 
 import { safeLog, safeError, safeWarn } from './logger';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
 import { getValidatedOpusModel } from './validated-opus-model';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 // В Next.js 14 используется встроенный fetch из Node.js 18+
 // fetch доступен глобально на сервере
@@ -172,12 +173,11 @@ function shouldUseProByRouting(modality: string, routing: RoutingMetadata): { es
  */
 export async function analyzeImage(options: VisionRequestOptions): Promise<string> {
   // В Next.js API routes переменные окружения доступны через process.env
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    safeError('OPENROUTER_API_KEY не найден в переменных окружения');
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
+    safeError('LLM_API_KEY / OPENROUTER_API_KEY не найден в переменных окружения');
+    throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) не настроен. Проверьте переменные окружения.');
   }
 
   // Выбираем модель в зависимости от режима
@@ -345,11 +345,10 @@ export async function analyzeImageFast(options: {
   clinicalContext?: string;
   isComparative?: boolean;
 }): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+    throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) не настроен');
   }
 
   const imageType = options.imageType || 'universal';
@@ -451,11 +450,10 @@ export async function analyzeImageOpusTwoStage(options: {
   targetModel?: string; 
   isRadiologyOnly?: boolean;
 }): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+    throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) не настроен');
   }
 
   const prompt = options.prompt || 'Проанализируйте медицинское изображение.';
@@ -587,11 +585,10 @@ export async function extractImageJSON(options: {
   preferModel?: string;
   isComparative?: boolean;
 }): Promise<any> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY is not configured');
+    throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) is not configured');
   }
 
   const modality = options.modality || 'unknown';
@@ -806,9 +803,8 @@ export async function analyzeMultipleImagesTwoStage(options: {
   isRadiologyOnly?: boolean;
   isComparative?: boolean;
 }): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) не настроен');
 
   const imageType = options.imageType || 'universal';
   const specialty = options.specialty;
@@ -933,12 +929,11 @@ export async function analyzeMultipleImages(options: {
   imageType?: ImageType;
   specialty?: Specialty;
 }): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    safeError('OPENROUTER_API_KEY не найден в переменных окружения');
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
+    safeError('LLM_API_KEY / OPENROUTER_API_KEY не найден в переменных окружения');
+    throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) не настроен. Проверьте переменные окружения.');
   }
 
   if (options.imagesBase64.length === 0) {
@@ -1071,12 +1066,11 @@ export async function sendTextRequest(
   specialty?: Specialty,
   customSystemPrompt?: string
 ): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    safeError('OPENROUTER_API_KEY не найден в переменных окружения');
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
+    safeError('LLM_API_KEY / OPENROUTER_API_KEY не найден в переменных окружения');
+    throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) не настроен. Проверьте переменные окружения.');
   }
 
   let selectedModel = model;

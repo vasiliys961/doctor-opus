@@ -7,8 +7,9 @@ import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calc
 import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, prepareVisionDataForTextPrompt, resolvePromptRuntimeVars } from './prompts';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
 import { getValidatedOpusModel } from './validated-opus-model';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 // Актуальные модели (последние флагманы 2025-2026)
 const MODELS = {
@@ -243,9 +244,8 @@ export async function analyzeImageFastStreaming(
   isRadiologyOnly: boolean = false,
   isComparative: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) is not configured');
 
   const allImages = Array.isArray(imagesBase64) ? imagesBase64 : [imagesBase64];
 
@@ -365,9 +365,8 @@ export async function analyzeImageOpusTwoStageStreaming(
   isRadiologyOnly: boolean = false,
   mimeType: string = 'image/png'
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -592,9 +591,8 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
   isRadiologyOnly: boolean = false,
   isComparative: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -830,9 +828,8 @@ export async function analyzeMultipleImagesWithJSONStreaming(
   model: string = MODELS.OPUS,
   history: any[] = []
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -1054,9 +1051,8 @@ export async function analyzeImageWithJSONStreaming(
   model: string = MODELS.OPUS,
   history: any[] = []
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) is not configured');
 
   const jsonExtraction = jsonExtractionWrapper.data || jsonExtractionWrapper;
   const initialUsage = jsonExtractionWrapper.usage;
@@ -1143,9 +1139,8 @@ export async function sendTextRequestStreaming(
   specialty?: Specialty,
   customSystemPrompt?: string
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -1320,9 +1315,8 @@ export async function analyzeImageStreaming(
   history: Array<{role: string, content: string}> = [],
   isRadiologyOnly: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) is not configured');
 
   const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
   
@@ -1429,9 +1423,8 @@ export async function analyzeMultipleImagesStreaming(
   history: Array<{role: string, content: string}> = [],
   isRadiologyOnly: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) is not configured');
 
   const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
   

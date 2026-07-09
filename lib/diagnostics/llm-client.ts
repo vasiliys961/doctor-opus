@@ -5,8 +5,9 @@
  */
 import { calculateCost } from '@/lib/cost-calculator';
 import { safeError, safeLog } from '@/lib/logger';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from '@/lib/llm-provider';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 const REQUEST_TIMEOUT_MS = 60000;
 
 export interface LlmCallResult {
@@ -25,9 +26,9 @@ interface LlmMessagePart {
 }
 
 function getApiKey(): string {
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  const apiKey = getLlmApiKey().trim();
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
+    throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) не настроен. Проверьте переменные окружения.');
   }
   return apiKey;
 }

@@ -8,8 +8,9 @@ import { calculateCost, formatCostLog } from './cost-calculator';
 import { Specialty, TITAN_CONTEXTS, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, resolvePromptRuntimeVars } from './prompts';
 import { isGeoRestrictionStatus, isOpenAIGeoRestrictionError } from './geo-restriction';
 import mammoth from 'mammoth';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 /**
  * Конвертация файла в base64 (Серверная версия для Node.js)
@@ -79,8 +80,7 @@ function shouldUsePermissionFallback(primaryModel: string, status: number, error
  * Используется как fallback для моделей, не поддерживающих PDF нативно
  */
 async function extractPDFTextViaGemini(base64PDF: string, fileName: string): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.replace(/[\n\r\t]/g, '').trim();
+  const apiKey = getLlmApiKey().replace(/[\n\r\t]/g, '').trim();
   if (!apiKey) return '';
 
   try {
@@ -267,11 +267,10 @@ export async function sendTextRequestWithFiles(
   model: string = MODELS.OPUS,
   specialty?: Specialty
 ): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.replace(/[\n\r\t]/g, '').trim();
+  const apiKey = getLlmApiKey().replace(/[\n\r\t]/g, '').trim();
 
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+    throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) не настроен');
   }
 
   // Подготавливаем контент с файлами (передаём модель для выбора стратегии PDF)
@@ -398,11 +397,10 @@ export async function sendTextRequestStreamingWithFiles(
   model: string = MODELS.OPUS,
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.replace(/[\n\r\t]/g, '').trim();
+  const apiKey = getLlmApiKey().replace(/[\n\r\t]/g, '').trim();
 
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+    throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) не настроен');
   }
 
   // Подготавливаем контент с файлами (передаём модель для выбора стратегии PDF)
