@@ -54,7 +54,7 @@
 1.  **Анонимизация (`lib/anonymization.ts`):**
     *   Используется каскад `Regex` для вырезания PHI (Protected Health Information).
     *   Внедрен список `MEDICAL_EXCEPTIONS` (КТ, МРТ, УЗИ и т.д.), чтобы фильтр не удалял важные медицинские аббревиатуры, принимая их за инициалы.
-    *   Функция `anonymizeObject` рекурсивно очищает все данные перед отправкой в OpenRouter API.
+    *   Функция `anonymizeObject` рекурсивно очищает все данные перед отправкой во внешний LLM API (OpenAI-compatible шлюз).
 
 2.  **Аудит по отделениям (`lib/subscription-manager.ts`):**
     *   В объект `Transaction` добавлено обязательное поле `specialty`.
