@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -519,12 +519,36 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
 
 
   const [speaking, setSpeaking] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioUrlRef = useRef<string | null>(null)
 
-  const handleSpeak = () => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current)
+      }
+    }
+  }, [])
+
+  const stopPlayback = () => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+      audioRef.current = null
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current)
+      audioUrlRef.current = null
+    }
+    setSpeaking(false)
+  }
+
+  const handleSpeak = async () => {
     if (speaking) {
-      window.speechSynthesis.cancel()
-      setSpeaking(false)
+      stopPlayback()
       return
     }
 
@@ -561,13 +585,37 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       .trim()
       .substring(0, 1500)
 
-    const utterance = new SpeechSynthesisUtterance(clean)
-    utterance.lang = 'ru-RU'
-    utterance.rate = 0.9
-    utterance.onend = () => setSpeaking(false)
-    utterance.onerror = () => setSpeaking(false)
-    window.speechSynthesis.speak(utterance)
-    setSpeaking(true)
+    if (!clean) return
+
+    try {
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: clean }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload?.error || `TTS error: ${response.status}`)
+      }
+
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      audioUrlRef.current = objectUrl
+
+      const audio = new Audio(objectUrl)
+      audioRef.current = audio
+      setSpeaking(true)
+      audio.onended = () => stopPlayback()
+      audio.onerror = () => stopPlayback()
+      await audio.play()
+    } catch (error) {
+      console.error('Ошибка серверной озвучки:', error)
+      stopPlayback()
+      alert('Не удалось озвучить текст через серверный TTS')
+    }
   }
 
   const handleShare = async () => {

@@ -8,7 +8,8 @@ import { getRateLimitKey } from '@/lib/rate-limiter';
 
 /**
  * API endpoint для транскрипции аудио.
- * Провайдер выбирается через SPEECH_PROVIDER env (assemblyai | yandex).
+ * Провайдер выбирается через SPEECH_PROVIDER env:
+ * assemblyai | yandex | local | polza | hybrid.
  * По умолчанию — AssemblyAI.
  */
 export async function POST(request: NextRequest) {
