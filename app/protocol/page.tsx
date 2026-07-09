@@ -86,6 +86,7 @@ export default function ProtocolPage() {
   const [resolvedModel, setResolvedModel] = useState<string | null>(null)
   const [interactionLoading, setInteractionLoading] = useState(false)
   const [interactionError, setInteractionError] = useState('')
+  const [interactionDetectorModel, setInteractionDetectorModel] = useState<string | null>(null)
   const [interactionExplainerModel, setInteractionExplainerModel] = useState<string | null>(null)
   const [interactionResults, setInteractionResults] = useState<DrugInteractionView[]>([])
   const [interactionChecked, setInteractionChecked] = useState(false)
@@ -443,6 +444,7 @@ export default function ProtocolPage() {
     setResolvedModel(null)
     setInteractionResults([])
     setInteractionError('')
+    setInteractionDetectorModel(null)
     setInteractionExplainerModel(null)
     setInteractionChecked(false)
 
@@ -631,6 +633,7 @@ export default function ProtocolPage() {
     setInteractionChecked(true)
     setInteractionError('')
     setInteractionResults([])
+    setInteractionDetectorModel(null)
     setInteractionExplainerModel(null)
     try {
       const response = await fetch('/api/drug-interactions', {
@@ -643,6 +646,7 @@ export default function ProtocolPage() {
         throw new Error(data?.error || 'Сервис проверки временно недоступен.')
       }
       setInteractionResults(Array.isArray(data.interactions) ? data.interactions : [])
+      setInteractionDetectorModel(typeof data.detectorModel === 'string' ? data.detectorModel : null)
       setInteractionExplainerModel(typeof data.explainerModel === 'string' ? data.explainerModel : null)
     } catch (err: any) {
       setInteractionError(err?.message || 'Ошибка проверки взаимодействий.')
@@ -1578,9 +1582,14 @@ export default function ProtocolPage() {
             <div className="mt-4 border border-orange-200 rounded-lg p-4 bg-orange-50/40">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <h3 className="text-sm font-semibold text-orange-900">Потенциальные взаимодействия</h3>
+                {interactionDetectorModel && (
+                  <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border bg-white text-orange-700 border-orange-200">
+                    Detect: {interactionDetectorModel}
+                  </span>
+                )}
                 {interactionExplainerModel && (
                   <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border bg-white text-orange-700 border-orange-200">
-                    LLM: {interactionExplainerModel}
+                    Explain: {interactionExplainerModel}
                   </span>
                 )}
               </div>

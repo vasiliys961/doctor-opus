@@ -18,6 +18,14 @@ type InteractionRule = {
   recommendation: string;
 };
 
+type LlmDetectedInteraction = {
+  drugA?: string;
+  drugB?: string;
+  severity?: string;
+  mechanism?: string;
+  recommendation?: string;
+};
+
 const RULES: InteractionRule[] = [
   {
     a: ['warfarin', 'варфарин'],
@@ -137,6 +145,83 @@ function findLocalInteractions(protocolText: string): DrugInteractionResult[] {
   return results.slice(0, 6);
 }
 
+function normalizeSeverity(value: unknown): InteractionSeverity {
+  const severity = String(value || '').toLowerCase();
+  if (severity === 'major' || severity.includes('высок')) return 'major';
+  if (severity === 'moderate' || severity.includes('умерен')) return 'moderate';
+  return 'minor';
+}
+
+function dedupeInteractions(items: DrugInteractionResult[]): DrugInteractionResult[] {
+  const map = new Map<string, DrugInteractionResult>();
+  for (const item of items) {
+    const [a, b] = item.pair;
+    const key = [normalize(a), normalize(b)].sort().join('|');
+    if (!map.has(key)) {
+      map.set(key, item);
+      continue;
+    }
+    const existing = map.get(key)!;
+    const rank = { minor: 1, moderate: 2, major: 3 };
+    if (rank[item.severity] > rank[existing.severity]) {
+      map.set(key, item);
+    }
+  }
+  return Array.from(map.values()).slice(0, 8);
+}
+
+export function resolveDrugInteractionDetectorModel(): string {
+  return process.env.DRUG_INTERACTION_DETECTOR_MODEL?.trim() || MODELS.GEMINI_3_FLASH;
+}
+
+async function detectInteractionsWithLlm(protocolText: string): Promise<DrugInteractionResult[]> {
+  const model = resolveDrugInteractionDetectorModel();
+  const systemPrompt = `Ты клинический фармаколог.
+Найди потенциально клинически значимые лекарственные взаимодействия только среди препаратов, реально упомянутых в тексте.
+Верни строго JSON:
+{
+  "items": [
+    {
+      "drugA": "название 1",
+      "drugB": "название 2",
+      "severity": "major|moderate|minor",
+      "mechanism": "кратко",
+      "recommendation": "краткая тактика"
+    }
+  ]
+}
+Если взаимодействий нет, верни {"items":[]}.
+Не добавляй лекарства, которых нет во входном тексте.`;
+
+  const userPrompt = `Текст протокола:\n${protocolText.slice(0, 6000)}`;
+
+  try {
+    const raw = await sendTextRequest(userPrompt, [], model, undefined, systemPrompt);
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+    const items: LlmDetectedInteraction[] = Array.isArray(parsed?.items) ? parsed.items : [];
+
+    const normalized: DrugInteractionResult[] = items
+      .map((item) => {
+        const drugA = String(item?.drugA || '').trim();
+        const drugB = String(item?.drugB || '').trim();
+        if (!drugA || !drugB) return null;
+        return {
+          pair: [drugA, drugB],
+          severity: normalizeSeverity(item?.severity),
+          mechanism: String(item?.mechanism || '').trim() || 'Потенциально значимое фармакологическое взаимодействие.',
+          recommendation: String(item?.recommendation || '').trim() || 'Проверить комбинацию и скорректировать терапию при необходимости.',
+          explanation: '',
+        } as DrugInteractionResult;
+      })
+      .filter(Boolean) as DrugInteractionResult[];
+
+    return dedupeInteractions(normalized);
+  } catch {
+    return [];
+  }
+}
+
 async function enrichInteractionExplanations(
   interactions: DrugInteractionResult[],
   protocolText: string
@@ -188,7 +273,9 @@ export function resolveDrugInteractionExplainerModel(): string {
 
 export async function buildDrugInteractions(protocolText: string): Promise<DrugInteractionResult[]> {
   const local = findLocalInteractions(protocolText);
-  return enrichInteractionExplanations(local, protocolText);
+  const llmOnly = await detectInteractionsWithLlm(protocolText);
+  const merged = dedupeInteractions([...local, ...llmOnly]);
+  return enrichInteractionExplanations(merged, protocolText);
 }
 
 export function renderDrugInteractionsMarkdown(interactions: DrugInteractionResult[]): string {

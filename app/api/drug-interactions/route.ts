@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { anonymizeText } from '@/lib/anonymization';
 import {
   buildDrugInteractions,
+  resolveDrugInteractionDetectorModel,
   resolveDrugInteractionExplainerModel,
   type DrugInteractionResult,
 } from '@/lib/drug-interactions';
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       interactions,
+      detectorModel: resolveDrugInteractionDetectorModel(),
       explainerModel: resolveDrugInteractionExplainerModel(),
     });
   } catch {
