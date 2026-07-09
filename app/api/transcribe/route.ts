@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { maybeApplyRoleDiarization } from '@/lib/stt-role-diarization';
 
 /**
  * API endpoint для транскрипции аудио.
@@ -90,6 +91,7 @@ export async function POST(request: NextRequest) {
     console.log(`🚀 Транскрипция через ${provider.name} с MIME:`, mimeType)
 
     const { text, duration } = await provider.transcribe(arrayBuffer, mimeType);
+    const diarizedText = await maybeApplyRoleDiarization(text);
 
     // Расчет стоимости
     const durationMinutes = duration / 60;
@@ -121,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      transcript: text,
+      transcript: diarizedText,
       duration: duration,
       cost: cost,
       provider: provider.name

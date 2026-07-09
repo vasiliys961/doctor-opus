@@ -133,6 +133,18 @@ ENCRYPTION_SALT=случайная_строка_32_символа
 cp .env.example .env
 ```
 
+Для STT через Polza GigaAM-v3 + ролевая диаризация (врач/пациент):
+```env
+SPEECH_PROVIDER=hybrid
+STT_HYBRID_PREFER_POLZA=true
+POLZA_BASE_URL=https://polza.ai/api/v1
+POLZA_API_KEY=ваш_ключ
+POLZA_WHISPER_MODEL=ai-sage/gigaam-v3
+STT_ENABLE_DIARIZATION=true
+STT_ROLE_DIARIZATION_ENABLED=true
+STT_ROLE_DIARIZATION_MODEL=anthropic/claude-haiku-4.5
+```
+
 ### 3. Запуск
 ```bash
 npm run dev

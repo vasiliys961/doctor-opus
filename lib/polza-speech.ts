@@ -59,9 +59,17 @@ export class PolzaSpeechProvider implements SpeechProvider {
     const formData = new FormData();
     const blob = new Blob([audioData], { type: resolvedMimeType });
     formData.append('file', blob, `recording.${resolvedMimeType.split('/')[1] || 'webm'}`);
+    const diarizationEnabled = String(process.env.STT_ENABLE_DIARIZATION || '').toLowerCase() === 'true';
+    const responseFormat = diarizationEnabled ? 'verbose_json' : 'json';
+
     formData.append('model', model);
     formData.append('language', 'ru');
-    formData.append('response_format', 'json');
+    formData.append('response_format', responseFormat);
+    if (diarizationEnabled) {
+      // Разные OpenAI-compatible шлюзы используют разные имена флагов.
+      formData.append('diarization', 'true');
+      formData.append('speaker_labels', 'true');
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -82,7 +90,7 @@ export class PolzaSpeechProvider implements SpeechProvider {
         throw new Error(String(message));
       }
 
-      const text = String(data?.text || '').trim();
+      const text = formatTranscriptionWithSpeakers(data);
       if (!text) {
         throw new Error('Polza STT returned empty text');
       }
@@ -102,5 +110,36 @@ export class PolzaSpeechProvider implements SpeechProvider {
       clearTimeout(timeout);
     }
   }
+}
+
+function formatTranscriptionWithSpeakers(data: any): string {
+  const utterances = Array.isArray(data?.utterances) ? data.utterances : null;
+  if (utterances && utterances.length > 0) {
+    return utterances
+      .map((u: any) => {
+        const speaker = u?.speaker ?? u?.speaker_id ?? u?.channel ?? '?';
+        const text = String(u?.text || '').trim();
+        if (!text) return '';
+        return `Говорящий ${speaker}: ${text}`;
+      })
+      .filter(Boolean)
+      .join('\n\n')
+      .trim();
+  }
+
+  const segments = Array.isArray(data?.segments) ? data.segments : null;
+  if (segments && segments.length > 0) {
+    const lines = segments
+      .map((s: any) => {
+        const speaker = s?.speaker ?? s?.speaker_id ?? s?.channel;
+        const text = String(s?.text || '').trim();
+        if (!text) return '';
+        return speaker !== undefined ? `Говорящий ${speaker}: ${text}` : text;
+      })
+      .filter(Boolean);
+    if (lines.length > 0) return lines.join('\n\n').trim();
+  }
+
+  return String(data?.text || '').trim();
 }
 
