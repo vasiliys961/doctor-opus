@@ -587,6 +587,656 @@ export default function ProtocolPage() {
     alert('Скопировано без Markdown-разметки')
   }
 
+  const escapeHtml = (text: string) =>
+    text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+
+  const THERAPY_SECTION_MARKERS = [
+    'терапия',
+    'фармакотерапия',
+    'лечение',
+    'назначения',
+    'медикаментозная терапия',
+    'медикамент'
+  ]
+
+  const NON_THERAPY_SECTION_MARKERS = [
+    'жалобы',
+    'анамнез',
+    'осмотр',
+    'объективно',
+    'статус',
+    'диагноз',
+    'обследован',
+    'анализ'
+  ]
+
+  const cleanupMedicationLine = (line: string) =>
+    line
+      .replace(/^\s*[-*•]\s*/, '')
+      .replace(/^\s*\d+[.)]\s*/, '')
+      .replace(/^\s*(rp\.?|s\.?|d\.t\.d\.?)\s*[:.-]?\s*/i, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+  const NON_MEDICATION_PHRASES = [
+    'аллерг',
+    'анамнез',
+    'жалоб',
+    'диагноз',
+    'осмотр',
+    'объективно',
+    'статус',
+    'риски',
+    'наблюдение',
+    'госпитализац',
+    'согласие',
+    'физиотерап',
+    'лфк',
+    'массаж',
+    'магнитотерап',
+    'электрофорез',
+    'увч',
+    'ультразвук',
+    'фонофорез',
+    'лазеротерап',
+    'парафин',
+    'озокерит',
+    'грязелеч'
+  ]
+
+  const PHYSIOTHERAPY_MARKERS = [
+    'физиотерап',
+    'лфк',
+    'массаж',
+    'магнитотерап',
+    'электрофорез',
+    'увч',
+    'ультразвук',
+    'фонофорез',
+    'лазеротерап',
+    'парафин',
+    'озокерит',
+    'грязелеч',
+    'процедур'
+  ]
+
+  const isMedicationLikeLine = (line: string) => {
+    const low = line.toLowerCase()
+    if (PHYSIOTHERAPY_MARKERS.some((marker) => low.includes(marker))) return false
+
+    const hasMnnTag = /\(\s*м[нn]н\s*\)/i.test(low)
+    const hasDose = /(\d+(?:[.,]\d+)?)\s*(мкг\/кг|mcg\/kg|мг\/кг|mg\/kg|мг\/мл|mg\/ml|мг|mg|мл|ml|г|mcg|мкг|ед|%)\b/i.test(low)
+    const hasForm = /таб|капс|амп|раств|сироп|спрей|крем|маз|свеч|капл|инъ|sol|tab|caps|ung|supp|gtt/i.test(low)
+    const hasScheme = /подкож|per os|в\/м|в\/в|внутрь|наружно|по\s+\d+|раз[а]?\s+в\s+(сутки|день)|ежедневно|на\s+ночь/i.test(low)
+    const hasNoiseOnly = NON_MEDICATION_PHRASES.some((marker) => low.includes(marker))
+
+    if (hasNoiseOnly && !hasMnnTag) return false
+    return hasMnnTag || ((hasDose || hasForm) && (hasScheme || hasForm))
+  }
+
+  type ParsedMedication = {
+    drugDisplayName: string
+    dosage: string
+    form: 'Tab.' | 'Sol.' | 'Ung.' | 'Caps.' | 'Supp.' | 'Gtt.'
+    signa: string
+    sourceType: 'mnn' | 'brand' | 'unknown'
+    sourceLine: string
+  }
+
+  const CYR_TO_LAT: Record<string, string> = {
+    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'i',
+    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+    х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'u', я: 'a'
+  }
+
+  const translitRuToLat = (value: string) =>
+    value
+      .toLowerCase()
+      .split('')
+      .map((ch) => CYR_TO_LAT[ch] ?? ch)
+      .join('')
+
+  const toLatinGenitiveWord = (word: string) => {
+    const w = word.toLowerCase()
+    if (w.endsWith('um')) return `${w.slice(0, -2)}i`
+    if (w.endsWith('us')) return `${w.slice(0, -2)}i`
+    if (w.endsWith('a')) return `${w.slice(0, -1)}ae`
+    if (w.endsWith('is')) return w
+    if (w.endsWith('e')) return `${w.slice(0, -1)}is`
+    if (w.endsWith('on')) return `${w}i`
+    return `${w}i`
+  }
+
+  const normalizeToLatinGenitive = (name: string): string => {
+    const latinBase = translitRuToLat(name)
+      .replace(/[^a-z\s-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!latinBase) return '________________'
+
+    return latinBase
+      .split(' ')
+      .map((part) =>
+        part
+          .split('-')
+          .map((word) => (word.length > 2 ? toLatinGenitiveWord(word) : word))
+          .join('-')
+      )
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+  }
+
+  const extractDrugIdentity = (line: string): { name: string; sourceType: ParsedMedication['sourceType'] } => {
+    const cleaned = cleanupMedicationLine(line)
+    const mnnTaggedMatch = cleaned.match(/^(.+?)\s*\(\s*м[нn]н\s*\)/i)
+    const beforeDash = cleaned.split('—')[0]
+    const beforeColon = beforeDash.split(':')[0]
+    const beforeComma = beforeColon.split(',')[0]
+    const candidate = (mnnTaggedMatch?.[1] || beforeComma)
+      .replace(/\([^)]*\)/g, '')
+      .replace(/\b(бренд|генерик|коммерческ\w*|торгов\w*|таб|табл|капс|раствор|мазь|крем|капли)\b/gi, '')
+      .replace(/\d+([.,]\d+)?\s?(мг|mg|мл|ml|г|mcg|мкг|ед|%)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (NON_MEDICATION_PHRASES.some((marker) => candidate.toLowerCase().includes(marker))) {
+      return { name: '', sourceType: 'unknown' }
+    }
+    if (mnnTaggedMatch?.[1]?.trim()) {
+      return { name: mnnTaggedMatch[1].trim(), sourceType: 'mnn' }
+    }
+    if (candidate.length >= 3) {
+      return { name: candidate, sourceType: 'brand' }
+    }
+    return { name: '', sourceType: 'unknown' }
+  }
+
+  const detectForm = (line: string): ParsedMedication['form'] => {
+    const low = line.toLowerCase()
+    if (/(маз|крем|гель|ung)/i.test(low)) return 'Ung.'
+    if (/(подкож|в\/м|в\/в|раств|амп|инъ|sol)/i.test(low)) return 'Sol.'
+    if (/(капл|gtt)/i.test(low)) return 'Gtt.'
+    if (/(свеч|supp)/i.test(low)) return 'Supp.'
+    if (/(капс|caps)/i.test(low)) return 'Caps.'
+    return 'Tab.'
+  }
+
+  const normalizeDoseForRp = (line: string, form: ParsedMedication['form']) => {
+    const low = line.toLowerCase()
+    const mcgPerKgMatch = low.match(/(\d+(?:[.,]\d+)?)\s*(мкг|mcg)\s*\/\s*(кг|kg)/i)
+    const mgPerKgMatch = low.match(/(\d+(?:[.,]\d+)?)\s*(мг|mg)\s*\/\s*(кг|kg)/i)
+    const mgPerMlMatch = low.match(/(\d+(?:[.,]\d+)?)\s*(мг|mg)\s*\/\s*(мл|ml)/i)
+    const percentMatch = low.match(/(\d+(?:[.,]\d+)?)\s*%/)
+    const mlMatch = low.match(/(\d+(?:[.,]\d+)?)\s*(мл|ml)\b/i)
+    const gMatch = low.match(/(\d+(?:[.,]\d+)?)\s*(г|g)\b/i)
+    const mgMatch = low.match(/(\d+(?:[.,]\d+)?)\s*(мг|mg)\b/i)
+    const mcgMatch = low.match(/(\d+(?:[.,]\d+)?)\s*(мкг|mcg)\b/i)
+
+    if (mcgPerKgMatch) {
+      return `${mcgPerKgMatch[1].replace('.', ',')} mcg/kg`
+    }
+
+    if (mgPerKgMatch) {
+      return `${mgPerKgMatch[1].replace('.', ',')} mg/kg`
+    }
+
+    if (form === 'Sol.' && mgPerMlMatch) {
+      const conc = `${mgPerMlMatch[1].replace('.', ',')} mg/ml`
+      const vol = mlMatch ? `${mlMatch[1].replace('.', ',')} ml` : '____ ml'
+      return `${conc} — ${vol}`
+    }
+
+    if (form === 'Sol.' && percentMatch) {
+      const percent = percentMatch[1].replace('.', ',')
+      const vol = mlMatch ? `${mlMatch[1].replace('.', ',')} ml` : '____ ml'
+      return `${percent}% — ${vol}`
+    }
+
+    if (gMatch) {
+      return `${gMatch[1].replace('.', ',')} g`
+    }
+
+    if (mcgMatch) {
+      return `${mcgMatch[1].replace('.', ',')} mcg`
+    }
+
+    if (mgMatch) {
+      return `${mgMatch[1].replace('.', ',')} mg`
+    }
+
+    if (form === 'Sol.' && mlMatch) {
+      return `____% — ${mlMatch[1].replace('.', ',')} ml`
+    }
+
+    return '____'
+  }
+
+  const buildMediumTherapeuticSigna = (form: ParsedMedication['form']) => {
+    if (form === 'Sol.') return 'S.: По 5 ml 2 раза в день.'
+    if (form === 'Ung.') return 'S.: Наносить тонким слоем 2 раза в день.'
+    if (form === 'Gtt.') return 'S.: По 2 капли 3 раза в день.'
+    if (form === 'Supp.') return 'S.: По 1 супп. 1-2 раза в день.'
+    if (form === 'Caps.') return 'S.: По 1 капс. 2 раза в день.'
+    return 'S.: По 1 таб. 2 раза в день.'
+  }
+
+  const extractSignaFromLine = (line: string, form: ParsedMedication['form']) => {
+    const low = line.toLowerCase()
+
+    const route =
+      /(подкож)/i.test(low) ? 'подкожно' :
+      /(в\/м)/i.test(low) ? 'в/м' :
+      /(в\/в)/i.test(low) ? 'в/в' :
+      /(внутрь|per os)/i.test(low) ? 'внутрь' :
+      /(наружно)/i.test(low) ? 'наружно' : ''
+
+    const frequencyMatch = low.match(/(\d+)\s*раз[а]?\s*в\s*(сутки|день)/i)
+    const frequency = frequencyMatch
+      ? `${frequencyMatch[1]} раз${frequencyMatch[1] === '1' ? '' : 'а'} в ${frequencyMatch[2]}`
+      : ''
+
+    const untilMatch = low.match(/(до\s+[^.,;]+)/i)
+    const durationMatch = low.match(/(в\s+течение\s+\d+\s*(дн|дней|нед|недель|мес|месяц\w*))/i)
+    const tail = untilMatch?.[1] || durationMatch?.[1] || ''
+
+    if (!route && !frequency && !tail) {
+      return buildMediumTherapeuticSigna(form)
+    }
+
+    const chunks = [route, frequency, tail].filter(Boolean)
+    return `S.: ${chunks.join(', ')}.`
+  }
+
+  const parseMedicationLine = (line: string): ParsedMedication | null => {
+    if (!isMedicationLikeLine(line)) return null
+    if (PHYSIOTHERAPY_MARKERS.some((marker) => line.toLowerCase().includes(marker))) return null
+
+    const form = detectForm(line)
+    const dosage = normalizeDoseForRp(line, form)
+    let signa = extractSignaFromLine(line, form)
+    const identity = extractDrugIdentity(line)
+    const hasUsefulDose = dosage !== '____'
+    if (!identity.name && !hasUsefulDose) return null
+
+    const drugDisplayName =
+      identity.sourceType === 'mnn'
+        ? normalizeToLatinGenitive(identity.name)
+        : identity.name || '________________'
+
+    return { drugDisplayName, dosage, form, signa, sourceType: identity.sourceType, sourceLine: line }
+  }
+
+  const normalizeMedicationsWithAi = async (items: ParsedMedication[]): Promise<ParsedMedication[]> => {
+    if (items.length === 0) return items
+
+    try {
+      const response = await fetch('/api/prescription/normalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items })
+      })
+      if (!response.ok) return items
+
+      const data = await response.json()
+      if (!data?.success || !Array.isArray(data?.items)) return items
+
+      return items.map((original, idx) => {
+        const normalized = data.items[idx]
+        if (!normalized) return original
+
+        return {
+          ...original,
+          drugDisplayName:
+            typeof normalized.drugDisplayName === 'string' && normalized.drugDisplayName.trim()
+              ? normalized.drugDisplayName.trim()
+              : original.drugDisplayName,
+          dosage:
+            typeof normalized.dosage === 'string' && normalized.dosage.trim()
+              ? normalized.dosage.trim()
+              : original.dosage,
+          form: ['Tab.', 'Sol.', 'Ung.', 'Caps.', 'Supp.', 'Gtt.'].includes(normalized.form)
+            ? normalized.form
+            : original.form,
+          signa:
+            typeof normalized.signa === 'string' && normalized.signa.trim()
+              ? normalized.signa.trim()
+              : original.signa
+        }
+      })
+    } catch {
+      return items
+    }
+  }
+
+  const extractMedicationsFromProtocol = (text: string): ParsedMedication[] => {
+    const lines = text.split('\n')
+    let inTherapyBlock = false
+    const meds: ParsedMedication[] = []
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim()
+      if (!line) continue
+
+      const normalized = line
+        .replace(/^#+\s*/, '')
+        .replace(/[:.]$/, '')
+        .toLowerCase()
+
+      const isHeadingLike = /^#+\s+/.test(line) || /^[А-Яа-яA-Za-z\s-]{4,40}[:.]$/.test(line)
+      if (isHeadingLike) {
+        if (THERAPY_SECTION_MARKERS.some((marker) => normalized.includes(marker))) {
+          inTherapyBlock = true
+          continue
+        }
+        if (NON_THERAPY_SECTION_MARKERS.some((marker) => normalized.includes(marker))) {
+          inTherapyBlock = false
+          continue
+        }
+      }
+
+      if (!inTherapyBlock && !/\(\s*м[нn]н\s*\)/i.test(line)) {
+        continue
+      }
+
+      const parsed = parseMedicationLine(line)
+      if (!parsed) continue
+      meds.push(parsed)
+      if (meds.length >= 16) break
+    }
+
+    return meds.filter(
+      (med, idx, arr) =>
+        arr.findIndex((m) => m.drugDisplayName.toLowerCase() === med.drugDisplayName.toLowerCase()) === idx
+    )
+  }
+
+  const buildRxBlockHtml = (medication?: ParsedMedication) => {
+    if (!medication) {
+      return `
+        <div class="rx-line" contenteditable="true">Rp.: Tab. ________________________________ ____</div>
+        <div class="rx-line" contenteditable="true">D.t.d. N. ______</div>
+        <div class="rx-line" contenteditable="true">S.: ________________________________</div>
+      `
+    }
+
+    return `
+      <div class="rx-line" contenteditable="true">Rp.: ${medication.form} ${escapeHtml(medication.drugDisplayName)} ${escapeHtml(medication.dosage)}</div>
+      <div class="rx-line" contenteditable="true">D.t.d. N. ______</div>
+      <div class="rx-line" contenteditable="true">${escapeHtml(medication.signa)}</div>
+    `
+  }
+
+  const openPrescriptionLayout = async () => {
+    if (!protocol.trim()) return
+    const extractedMedications = await normalizeMedicationsWithAi(extractMedicationsFromProtocol(protocol))
+    const cards = Array.from({ length: 6 }, (_, idx) => ({ number: idx + 1 }))
+
+    const cardsHtml = cards
+      .map((card) => {
+        const medA = extractedMedications[(card.number - 1) * 3]
+        const medB = extractedMedications[(card.number - 1) * 3 + 1]
+        const medC = extractedMedications[(card.number - 1) * 3 + 2]
+
+        return `
+          <section class="rx-card">
+            <div class="rx-form-top">
+              <div class="rx-form-top-left">
+                <div>Министерство здравоохранения<br/>Российской Федерации</div>
+                <div class="rx-form-stamp-line">Наименование (штамп)<br/>медицинской организации</div>
+                <div class="rx-form-stamp-line">Наименование (штамп) индивидуального предпринимателя<br/>и дату лицензии, наименование органа<br/>государственной власти, выдавшего лицензию)</div>
+              </div>
+              <div class="rx-form-top-right">
+                <div>Код формы по ОКУД</div>
+                <div>Код учреждения по ОКПО</div>
+                <div>Медицинская документация</div>
+                <div><strong>Форма № 107-1/у</strong></div>
+                <div>Утверждена приказом<br/>Министерства здравоохранения<br/>Российской Федерации<br/>от 14 января 2019 г. № 4н</div>
+              </div>
+            </div>
+            <div class="rx-form-title-block">
+              <div class="rx-title">РЕЦЕПТ</div>
+              <div class="rx-subtitle">(взрослый, детский — нужное подчеркнуть)</div>
+              <div class="rx-date">« <span contenteditable="true">__</span> » <span contenteditable="true">__________</span> 20<span contenteditable="true">__</span> г.</div>
+            </div>
+            <div class="rx-meta">
+              Ф.И.О. пациента: <span contenteditable="true">__________________________</span>
+            </div>
+            <div class="rx-meta">
+              Ф.И.О. врача: <span contenteditable="true">__________________________</span>
+            </div>
+
+            ${buildRxBlockHtml(medA)}
+            ${buildRxBlockHtml(medB)}
+            ${buildRxBlockHtml(medC)}
+
+            <div class="rx-foot">
+              <div class="rx-foot-sign-row">
+                <div>
+                  Подпись<br/>
+                  и печать лечащего врача<br/>
+                  (подпись фельдшера, акушерки)
+                </div>
+                <div class="rx-foot-mp">М. П.</div>
+              </div>
+              <div class="rx-foot-valid-row">
+                <span>Рецепт действителен в течение 60 дней, до 1 года</span>
+                <span class="rx-foot-months-line"><span contenteditable="true">__________</span></span>
+              </div>
+              <div class="rx-foot-hints-row">
+                <span>(нужное подчеркнуть)</span>
+                <span>(указать количество месяцев)</span>
+              </div>
+            </div>
+          </section>
+        `
+      })
+      .join('')
+
+    const html = `
+      <!doctype html>
+      <html lang="ru">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Рецепты для печати</title>
+        <style>
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            font-family: "Times New Roman", serif;
+            background: #f3f4f6;
+            color: #111827;
+          }
+          .toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: #111827;
+            color: #fff;
+            padding: 10px 14px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+          }
+          .toolbar button {
+            border: 0;
+            border-radius: 8px;
+            padding: 8px 12px;
+            background: #2563eb;
+            color: #fff;
+            cursor: pointer;
+            font-weight: 700;
+          }
+          .toolbar button.secondary {
+            background: #374151;
+          }
+          .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 14px auto;
+            padding: 10mm;
+            background: #fff;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-auto-rows: minmax(33mm, auto);
+            gap: 8mm 8mm;
+          }
+          .rx-card {
+            border: 1px dashed #6b7280;
+            padding: 5mm;
+            display: flex;
+            flex-direction: column;
+            gap: 2mm;
+          }
+          .rx-form-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            font-size: 9px;
+            line-height: 1.2;
+            border-bottom: 1px solid #111827;
+            padding-bottom: 2px;
+            margin-bottom: 2px;
+          }
+          .rx-form-top-left {
+            width: 58%;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+          }
+          .rx-form-top-right {
+            width: 42%;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            text-align: left;
+          }
+          .rx-form-stamp-line {
+            min-height: 26px;
+          }
+          .rx-form-title-block {
+            border-bottom: 1px solid #111827;
+            padding-bottom: 2px;
+            margin-bottom: 2px;
+          }
+          .rx-title {
+            font-weight: 700;
+            font-size: 15px;
+            letter-spacing: 2px;
+            text-align: center;
+          }
+          .rx-subtitle {
+            font-size: 11px;
+            text-align: center;
+            margin-top: 1px;
+          }
+          .rx-date {
+            font-size: 12px;
+            text-align: center;
+            margin-top: 1px;
+          }
+          .rx-meta {
+            font-size: 11px;
+            border-bottom: 1px solid #d1d5db;
+            padding-bottom: 2px;
+          }
+          .rx-line {
+            font-size: 12px;
+            min-height: 14px;
+            border-bottom: 1px dotted #d1d5db;
+            padding: 1px 0;
+          }
+          .rx-foot {
+            margin-top: auto;
+            font-size: 11px;
+            border-top: 1px solid #d1d5db;
+            padding-top: 3px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+          }
+          .rx-foot-sign-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 8px;
+            min-height: 32px;
+          }
+          .rx-foot-mp {
+            font-size: 14px;
+            min-width: 56px;
+            text-align: right;
+            padding-bottom: 2px;
+          }
+          .rx-foot-valid-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            align-items: flex-end;
+            white-space: nowrap;
+          }
+          .rx-foot-months-line {
+            flex: 1;
+            border-bottom: 1px solid #111827;
+            min-height: 14px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: flex-end;
+          }
+          .rx-foot-hints-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            font-size: 10px;
+          }
+          [contenteditable="true"] {
+            outline: none;
+          }
+          [contenteditable="true"]:focus {
+            background: #eff6ff;
+          }
+          @media print {
+            body { background: #fff; }
+            .toolbar { display: none; }
+            .page {
+              margin: 0;
+              width: auto;
+              min-height: auto;
+              padding: 0;
+              gap: 4mm;
+            }
+            .rx-card {
+              break-inside: avoid;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="toolbar">
+          <button onclick="window.print()">🖨 Печать</button>
+          <button class="secondary" onclick="window.close()">✖ Закрыть</button>
+          <span>Автоподстановка: форма + МНН (лат.) + доза. Поля врача/пациента заполняются вручную.</span>
+        </div>
+        <main class="page">
+          ${cardsHtml}
+        </main>
+      </body>
+      </html>
+    `
+
+    const win = window.open('about:blank', '_blank', 'width=1200,height=900')
+    if (!win) {
+      alert('Разрешите всплывающие окна для открытия бланка рецептов.')
+      return
+    }
+    win.document.open()
+    win.document.write(html)
+    win.document.close()
+  }
+
   return (
     <>
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -836,6 +1486,7 @@ export default function ProtocolPage() {
             {protocol && (
               <div className="flex gap-2">
                 <button onClick={handleCopyProtocol} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm">📋</button>
+                <button onClick={openPrescriptionLayout} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm">🧾 Рецепты</button>
                 <button onClick={handleExportToDocx} className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">📄 DOCX</button>
               </div>
             )}
