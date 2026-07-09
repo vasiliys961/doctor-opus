@@ -33,6 +33,16 @@ const PROTOCOL_DRAFT_WINDOW_NAME_PREFIX = 'secure_protocol_draft:'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
 const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
 
+type InteractionSeverity = 'minor' | 'moderate' | 'major'
+
+type DrugInteractionView = {
+  pair: [string, string]
+  severity: InteractionSeverity
+  mechanism: string
+  recommendation: string
+  explanation: string
+}
+
 function chunkTemplateForRag(content: string, maxChunkLength: number = 1200): string[] {
   const clean = content.replace(/\r\n/g, '\n').trim()
   if (!clean) return []
@@ -74,6 +84,11 @@ export default function ProtocolPage() {
   const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini' | 'gpt52'>('gpt52')
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [resolvedModel, setResolvedModel] = useState<string | null>(null)
+  const [interactionLoading, setInteractionLoading] = useState(false)
+  const [interactionError, setInteractionError] = useState('')
+  const [interactionExplainerModel, setInteractionExplainerModel] = useState<string | null>(null)
+  const [interactionResults, setInteractionResults] = useState<DrugInteractionView[]>([])
+  const [interactionChecked, setInteractionChecked] = useState(false)
   
   // Состояния для специалистов и шаблонов
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATES[0].id)
@@ -426,6 +441,10 @@ export default function ProtocolPage() {
     setProtocol('')
     setCurrentCost(0)
     setResolvedModel(null)
+    setInteractionResults([])
+    setInteractionError('')
+    setInteractionExplainerModel(null)
+    setInteractionChecked(false)
 
     const modelsMap: Record<string, string> = {
       'opus': MODELS.OPUS_VALIDATED,
@@ -585,6 +604,51 @@ export default function ProtocolPage() {
     const plainText = markdownToPlainText(protocol)
     await navigator.clipboard.writeText(plainText)
     alert('Скопировано без Markdown-разметки')
+  }
+
+  const getSeverityUi = (severity: InteractionSeverity) => {
+    if (severity === 'major') {
+      return {
+        label: 'Высокий риск',
+        badgeClass: 'bg-red-100 text-red-700 border-red-200'
+      }
+    }
+    if (severity === 'moderate') {
+      return {
+        label: 'Умеренный риск',
+        badgeClass: 'bg-amber-100 text-amber-700 border-amber-200'
+      }
+    }
+    return {
+      label: 'Низкий риск',
+      badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-200'
+    }
+  }
+
+  const handleAnalyzeInteractions = async () => {
+    if (!protocol.trim()) return
+    setInteractionLoading(true)
+    setInteractionChecked(true)
+    setInteractionError('')
+    setInteractionResults([])
+    setInteractionExplainerModel(null)
+    try {
+      const response = await fetch('/api/drug-interactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ protocol })
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Сервис проверки временно недоступен.')
+      }
+      setInteractionResults(Array.isArray(data.interactions) ? data.interactions : [])
+      setInteractionExplainerModel(typeof data.explainerModel === 'string' ? data.explainerModel : null)
+    } catch (err: any) {
+      setInteractionError(err?.message || 'Ошибка проверки взаимодействий.')
+    } finally {
+      setInteractionLoading(false)
+    }
   }
 
   const escapeHtml = (text: string) =>
@@ -1486,6 +1550,13 @@ export default function ProtocolPage() {
             {protocol && (
               <div className="flex gap-2">
                 <button onClick={handleCopyProtocol} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm">📋</button>
+                <button
+                  onClick={handleAnalyzeInteractions}
+                  disabled={interactionLoading}
+                  className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded text-sm disabled:opacity-60"
+                >
+                  {interactionLoading ? '⏳ Проверка...' : '⚠️ Взаимодействия'}
+                </button>
                 <button onClick={openPrescriptionLayout} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm">🧾 Рецепты</button>
                 <button onClick={handleExportToDocx} className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">📄 DOCX</button>
               </div>
@@ -1500,6 +1571,60 @@ export default function ProtocolPage() {
             <div className="text-center text-gray-500 py-20 border-2 border-dashed border-gray-100 rounded-lg">
               {loading ? <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div> : <p className="text-4xl mb-4 opacity-20">📄</p>}
               <p>{loading ? 'ИИ формирует протокол...' : 'Результат появится здесь'}</p>
+            </div>
+          )}
+
+          {protocol && (
+            <div className="mt-4 border border-orange-200 rounded-lg p-4 bg-orange-50/40">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <h3 className="text-sm font-semibold text-orange-900">Потенциальные взаимодействия</h3>
+                {interactionExplainerModel && (
+                  <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border bg-white text-orange-700 border-orange-200">
+                    LLM: {interactionExplainerModel}
+                  </span>
+                )}
+              </div>
+
+              {!interactionLoading && !interactionError && interactionResults.length === 0 && (
+                interactionChecked ? (
+                  <p className="text-xs text-gray-600">
+                    По локальному справочнику клинически значимые взаимодействия не выявлены.
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-600">
+                    Нажмите «⚠️ Взаимодействия», чтобы проверить назначения после генерации протокола.
+                  </p>
+                )
+              )}
+
+              {interactionError && (
+                <p className="text-xs text-red-700">{interactionError}</p>
+              )}
+
+              {interactionLoading && (
+                <p className="text-xs text-orange-700">Проверяем потенциальные взаимодействия...</p>
+              )}
+
+              {interactionResults.length > 0 && (
+                <div className="space-y-2">
+                  {interactionResults.map((item, idx) => {
+                    const severityUi = getSeverityUi(item.severity)
+                    return (
+                      <div key={`${item.pair[0]}-${item.pair[1]}-${idx}`} className="bg-white border border-orange-100 rounded-md p-3">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <strong className="text-sm text-gray-900">{item.pair[0]} + {item.pair[1]}</strong>
+                          <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${severityUi.badgeClass}`}>
+                            {severityUi.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-700"><strong>Механизм:</strong> {item.mechanism}</p>
+                        <p className="text-xs text-gray-700"><strong>Пояснение:</strong> {item.explanation}</p>
+                        <p className="text-xs text-gray-700"><strong>Тактика:</strong> {item.recommendation}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

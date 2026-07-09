@@ -45,14 +45,19 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let buffer = '';
+  let streamCompleted = false;
 
-  const sanitizeEventBlock = (block: string): string => {
+  const sanitizeEventBlock = (block: string): { text: string; hasDone: boolean } => {
     const lines = block.split('\n');
+    let hasDone = false;
     const sanitizedLines = lines.map((line) => {
       if (!line.startsWith('data: ')) return line;
 
       const payload = line.slice(6).trim();
-      if (payload === '[DONE]') return line;
+      if (payload === '[DONE]') {
+        hasDone = true;
+        return '';
+      }
 
       try {
         const parsed = JSON.parse(payload);
@@ -65,7 +70,10 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
         return line;
       }
     });
-    return sanitizedLines.join('\n');
+    return {
+      text: sanitizedLines.filter(Boolean).join('\n'),
+      hasDone,
+    };
   };
 
   return new ReadableStream<Uint8Array>({
@@ -81,14 +89,26 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
             const eventBlock = buffer.slice(0, delimiterIndex);
             buffer = buffer.slice(delimiterIndex + 2);
             const sanitized = sanitizeEventBlock(eventBlock);
-            controller.enqueue(encoder.encode(`${sanitized}\n\n`));
+            if (sanitized.text) {
+              controller.enqueue(encoder.encode(`${sanitized.text}\n\n`));
+            }
+            if (sanitized.hasDone && !streamCompleted) {
+              streamCompleted = true;
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            }
             delimiterIndex = buffer.indexOf('\n\n');
           }
         }
 
         if (buffer.length > 0) {
           const sanitized = sanitizeEventBlock(buffer);
-          controller.enqueue(encoder.encode(sanitized));
+          if (sanitized.text) {
+            controller.enqueue(encoder.encode(sanitized.text));
+          }
+          if (sanitized.hasDone && !streamCompleted) {
+            streamCompleted = true;
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          }
         }
         controller.close();
       } catch (error) {
@@ -302,6 +322,7 @@ ${evidencePriorityDirective}
       });
       result = await sendTextRequest(correctionPrompt, [], MODEL);
     }
+
     result = anonymizeText(result);
     return NextResponse.json({ success: true, protocol: result, resolvedModel: MODEL });
   } catch (error: any) {

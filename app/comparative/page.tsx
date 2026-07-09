@@ -21,6 +21,14 @@ interface ImageWithPreview {
 }
 
 type ComparisonMode = 'temporal' | 'location' | 'general'
+type ComparativeTriageLevel = 'normal' | 'attention' | 'urgent'
+
+interface ComparativeTriage {
+  level: ComparativeTriageLevel
+  summary: string
+  deviations: string[]
+  model?: string
+}
 
 export default function ComparativeAnalysisPage() {
   const [images, setImages] = useState<ImageWithPreview[]>([])
@@ -36,8 +44,61 @@ export default function ComparativeAnalysisPage() {
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [accumulatedDescription, setAccumulatedDescription] = useState('')
+  const [triage, setTriage] = useState<ComparativeTriage | null>(null)
+  const [triageLoading, setTriageLoading] = useState(false)
+  const [triageError, setTriageError] = useState<string | null>(null)
   const [showEditor, setShowEditor] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+
+  const runComparativeTriage = async (descriptionText: string) => {
+    if (!descriptionText.trim()) return
+
+    setTriageLoading(true)
+    setTriageError(null)
+    try {
+      const response = await fetch('/api/analyze/comparative-triage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comparisonText: descriptionText,
+          comparisonMode
+        })
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data?.success || !data?.triage) {
+        throw new Error(data?.error || `HTTP ${response.status}`)
+      }
+
+      setTriage({
+        level: data.triage.level,
+        summary: data.triage.summary,
+        deviations: Array.isArray(data.triage.deviations) ? data.triage.deviations : [],
+        model: data.model
+      })
+    } catch (error: any) {
+      setTriageError(error?.message || 'Не удалось выполнить triage')
+    } finally {
+      setTriageLoading(false)
+    }
+  }
+
+  const triageUi = triage ? {
+    normal: {
+      label: 'Норма',
+      className: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+      badgeClassName: 'bg-emerald-600'
+    },
+    attention: {
+      label: 'Требует внимания',
+      className: 'bg-amber-50 border-amber-200 text-amber-800',
+      badgeClassName: 'bg-amber-600'
+    },
+    urgent: {
+      label: 'Срочно',
+      className: 'bg-red-50 border-red-200 text-red-800',
+      badgeClassName: 'bg-red-600'
+    }
+  }[triage.level] : null
 
   const handleImageUpload = (file: File) => {
     const reader = new FileReader()
@@ -75,6 +136,8 @@ export default function ComparativeAnalysisPage() {
     if (targetStage === 'description') {
       setResult('')
       setAccumulatedDescription('')
+      setTriage(null)
+      setTriageError(null)
       setCurrentCost(0)
     }
     setError(null)
@@ -142,6 +205,7 @@ export default function ComparativeAnalysisPage() {
           if (targetStage === 'description') {
             setAccumulatedDescription(finalText)
             setResult(finalText)
+            runComparativeTriage(finalText)
           } else {
             setResult(accumulatedDescription + "\n\n---\n\n" + finalText)
           }
@@ -309,6 +373,36 @@ export default function ComparativeAnalysisPage() {
       </div>
 
       {error && <div className="bg-red-100 text-red-700 px-4 py-3 rounded mb-6">❌ {error}</div>}
+
+      {triageLoading && (
+        <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+          ⏳ Автооценка динамики: выполняется triage (норма / требует внимания / срочно)...
+        </div>
+      )}
+
+      {triageError && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          ⚠️ Автооценка triage недоступна: {triageError}
+        </div>
+      )}
+
+      {triage && triageUi && (
+        <div className={`mb-4 rounded-lg border px-4 py-3 ${triageUi.className}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className={`inline-flex h-2.5 w-2.5 rounded-full ${triageUi.badgeClassName}`} />
+            <span className="font-bold">Автосортировка: {triageUi.label}</span>
+            <span className="text-xs opacity-80">Gemini 3.1 Flash</span>
+          </div>
+          <p className="text-sm mb-2">{triage.summary}</p>
+          {triage.deviations.length > 0 && (
+            <ul className="list-disc ml-5 text-sm space-y-1">
+              {triage.deviations.map((item, idx) => (
+                <li key={`${item}-${idx}`}>{item}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <AnalysisResult 
         result={result} 
