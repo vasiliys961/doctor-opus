@@ -28,7 +28,18 @@ function buildProtocolCorrectionPrompt(params: {
 3) Если в черновике есть старые данные из шаблона — замени на данные текущего случая.
 4) Если клинические данные не указаны — заполняй нормой (а не старыми значениями шаблона).
 5) Диагноз и тактика обязательны.
-6) Не пиши пояснений. Верни только итоговый исправленный документ.
+6) Запрещено добавлять новые разделы, преамбулы и заголовки вне шаблона.
+7) Запрещены служебные блоки типа "0. ОФИЦИАЛЬНЫЙ ЗАГОЛОВОК", "Official Header", "Conclusion", "Verification Block".
+8) Не пиши пояснений. Верни только итоговый исправленный документ.
+
+ФОРМАТ И СТИЛЬ (ОБЯЗАТЕЛЬНО):
+- Начни строго с первой строки шаблона и закончи последней строкой шаблона.
+- Сохрани названия разделов и порядок разделов шаблона БЕЗ изменений.
+- Для разделов "Жалобы", "Анамнез заболевания", "Анамнез жизни", "Объективный осмотр" пиши единым полотном (одним абзацем без пустых строк внутри раздела).
+- Для блока "Рекомендованные обследования" используй строгую нумерацию "1.", "2.", ...
+- Для блока "Терапия" блок фармакотерапии оформляй только нумерованным списком "1.", "2.", "3.", ...
+- Убери англоязычные дубли и двуязычные заголовки, если они попали в черновик.
+- Не используй формулировку "не проводилась"; при отсутствии отклонений указывай норму.
 
 ТЕКУЩИЙ СЛУЧАЙ:
 ${rawText}
@@ -120,6 +131,150 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
   });
 }
 
+function buildSingleShotSse(text: string, model: string): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const now = Math.floor(Date.now() / 1000);
+  const chunk = {
+    id: 'protocol-strict-final',
+    object: 'chat.completion.chunk',
+    created: now,
+    model,
+    choices: [
+      {
+        index: 0,
+        delta: { content: text },
+        finish_reason: null,
+      },
+    ],
+  };
+  const doneChunk = {
+    id: 'protocol-strict-final',
+    object: 'chat.completion.chunk',
+    created: now,
+    model,
+    choices: [
+      {
+        index: 0,
+        delta: {},
+        finish_reason: 'stop',
+      },
+    ],
+  };
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(doneChunk)}\n\n`));
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+}
+
+const STRICT_PROTOCOL_BANNED_PATTERNS: RegExp[] = [
+  /официальный заголовок/i,
+  /official header/i,
+  /медицинский консультативный отчет/i,
+  /verification block/i,
+  /верифицировано врачом/i,
+  /clinical hypotheses/i,
+  /differential diagnosis/i,
+  /заключение\s*\/\s*conclusion/i,
+  /🚨/,
+];
+
+const PROTOCOL_GPT52_MODEL = 'openai/gpt-5.4';
+
+function normalizeAnchorForSearch(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[*`_#]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractTemplateAnchors(template: string): string[] {
+  return template
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => {
+      const normalized = normalizeAnchorForSearch(line);
+      return normalized.includes(':') || normalized.includes('：');
+    })
+    .slice(0, 10);
+}
+
+function trimToTemplateStart(output: string, template: string): string {
+  const anchors = extractTemplateAnchors(template);
+  if (anchors.length === 0) return output.trim();
+
+  const firstAnchor = normalizeAnchorForSearch(anchors[0]);
+  const outputLower = output.toLowerCase();
+  const rawAnchorPos = outputLower.indexOf(firstAnchor);
+  if (rawAnchorPos > 0) {
+    return output.slice(rawAnchorPos).trimStart();
+  }
+  return output.trim();
+}
+
+function isStructuredProtocolOutputValid(output: string, template: string): boolean {
+  const normalizedOutput = normalizeAnchorForSearch(output);
+
+  for (const pattern of STRICT_PROTOCOL_BANNED_PATTERNS) {
+    if (pattern.test(output)) return false;
+  }
+
+  const anchors = extractTemplateAnchors(template).map(normalizeAnchorForSearch);
+  if (anchors.length === 0) return true;
+
+  if (!normalizedOutput.startsWith(anchors[0])) {
+    return false;
+  }
+
+  let prevPos = -1;
+  for (const anchor of anchors) {
+    const pos = normalizedOutput.indexOf(anchor, prevPos + 1);
+    if (pos === -1 || pos < prevPos) return false;
+    prevPos = pos;
+  }
+
+  return true;
+}
+
+async function enforceStrictTemplateOutput(params: {
+  rawText: string;
+  template: string;
+  draft: string;
+  primaryModel: string;
+  primaryPrompt: string;
+}): Promise<{ text: string; model: string }> {
+  const { rawText, template, draft, primaryModel, primaryPrompt } = params;
+
+  const primaryCorrectionPrompt = buildProtocolCorrectionPrompt({
+    rawText,
+    template,
+    draft,
+  });
+  let corrected = await sendTextRequest(primaryCorrectionPrompt, [], primaryModel);
+  corrected = trimToTemplateStart(corrected, template);
+  if (isStructuredProtocolOutputValid(corrected, template)) {
+    return { text: corrected, model: primaryModel };
+  }
+
+  const fallbackModel = MODELS.SONNET;
+  console.warn(`[PROTOCOL] Strict template guard: output invalid on ${primaryModel}, retry on ${fallbackModel}`);
+  const fallbackDraft = await sendTextRequest(primaryPrompt, [], fallbackModel);
+  const fallbackCorrectionPrompt = buildProtocolCorrectionPrompt({
+    rawText,
+    template,
+    draft: fallbackDraft,
+  });
+  let fallbackCorrected = await sendTextRequest(fallbackCorrectionPrompt, [], fallbackModel);
+  fallbackCorrected = trimToTemplateStart(fallbackCorrected, template);
+  return { text: fallbackCorrected, model: fallbackModel };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -195,7 +350,7 @@ ${safeRagExamples.map((chunk: string, index: number) => `--- ОБРАЗЕЦ #${i
     const templateHasMarkdownTable = /\|.+\|\s*\n\|[\s:-]+\|/m.test(safeTemplate);
     const requiredClinicalBlockDirective =
       !isEcgFunctionalConclusion && (!hasDiagnosisSection || !hasTreatmentSection)
-        ? `\n10. Если в шаблоне нет явных разделов для диагноза/лечения, добавь в КОНЦЕ два коротких раздела: "Диагностическое заключение" и "План лечения и рекомендации".`
+        ? `\n12. Если в шаблоне нет явных разделов для диагноза/лечения, добавь в КОНЦЕ два коротких раздела: "Диагностическое заключение" и "План лечения и рекомендации".`
         : '';
     const strictTemplateDirective = isStrictTemplateMode
       ? `\nСТРОГИЙ РЕЖИМ ЗАПОЛНЕНИЯ:
@@ -216,7 +371,7 @@ ${safeRagExamples.map((chunk: string, index: number) => `--- ОБРАЗЕЦ #${i
 - Пункт(ы) "Диагноз" должны быть заполнены всегда.
 - Сформулируй основной клинический диагноз по данным случая.
 - Добавь код МКБ-10: если код явно указан во входных данных — перенеси его; если кода нет, укажи наиболее клинически обоснованный код.
-- Обязательно заполни блок лечения/рекомендаций в рамках структуры шаблона (или добавь по правилу п.10).`
+- Обязательно заполни блок лечения/рекомендаций в рамках структуры шаблона (или добавь по правилу п.12).`
       : '';
     const refreshFromCurrentCaseDirective = `\nПРИОРИТЕТ ДАННЫХ (КРИТИЧЕСКИ ВАЖНО):
 - Загруженный шаблон и RAG-образцы используй только как ФОРМУ/каркас.
@@ -283,6 +438,8 @@ ${safeTemplate}
 7. Объем: Придерживайся стиля, чтобы текст уместился на 2 страницы А4.
 8. Подвал: Тезис о согласии в конце сделай мелким шрифтом (используй тег <small> или просто выдели текстом в конце).
 9. Ссылки: Указывай ссылки на проверенные международные источники (UpToDate, PubMed, Cochrane, NCCN, ESC, WHO и др.) для ключевых шагов терапии (предпочтительно ≤5 лет).
+10. Запрещено добавлять технические/служебные секции вне шаблона: "0. ...", "Official Header", "Verification Block", "Conclusion", "Differential Diagnosis" (если они не предусмотрены самим шаблоном).
+11. Запрещено дублировать секции на английском языке. Вывод только на русском.
 ${requiredClinicalBlockDirective}
 ${strictTemplateDirective}
 ${tableDirective}
@@ -294,37 +451,101 @@ ${evidencePriorityDirective}
 
 Стиль: строго профессиональный, клинически и технически точный. Язык: русский.`;
 
-    const allowGpt52Protocol = process.env.ALLOW_GPT52_PROTOCOL !== 'false';
-    const effectiveModel = model === 'gpt52' && !allowGpt52Protocol ? 'sonnet' : model;
-    const MODEL = effectiveModel === 'opus' ? MODELS.OPUS_VALIDATED : 
-                 effectiveModel === 'gpt52' ? MODELS.GPT_5_2 : 
-                 (effectiveModel === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
+    const allowGrok45Protocol = process.env.ALLOW_GROK45_PROTOCOL !== 'false';
+    const effectiveModel = model === 'grok45' && !allowGrok45Protocol ? 'sonnet' : model;
+    const MODEL = effectiveModel === 'opus'
+      ? MODELS.OPUS_VALIDATED
+      : effectiveModel === 'gpt52'
+        ? PROTOCOL_GPT52_MODEL
+        : effectiveModel === 'grok45'
+          ? MODELS.GROK_4_5
+          : effectiveModel === 'gemini'
+            ? MODELS.GEMINI_3_FLASH
+            : MODELS.SONNET;
+    const protocolFallbackModel = effectiveModel === 'grok45' ? MODELS.SONNET : null;
     
+    // В strict-режиме шаблона всегда выполняем двухшаговую генерацию (черновик -> коррекция),
+    // даже если клиент запросил streaming. Иначе модель может "уезжать" в свободный формат.
+    if (useStreaming && isStrictTemplateMode && !isEcgFunctionalConclusion) {
+      let resolvedModel = MODEL;
+      let draft: string;
+      try {
+        draft = await sendTextRequest(prompt, [], MODEL);
+      } catch (primaryError) {
+        if (!protocolFallbackModel) throw primaryError;
+        console.warn(`[PROTOCOL] Primary model ${MODEL} failed, fallback to ${protocolFallbackModel}`);
+        resolvedModel = protocolFallbackModel;
+        draft = await sendTextRequest(prompt, [], resolvedModel);
+      }
+
+      const strictResult = await enforceStrictTemplateOutput({
+        rawText,
+        template: safeTemplate,
+        draft,
+        primaryModel: resolvedModel,
+        primaryPrompt: prompt,
+      });
+      resolvedModel = strictResult.model;
+      let corrected = strictResult.text;
+      corrected = anonymizeText(corrected);
+
+      const singleShotStream = buildSingleShotSse(corrected, resolvedModel);
+      return new Response(singleShotStream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Resolved-Model': resolvedModel,
+        },
+      });
+    }
+
     if (useStreaming) {
-      const stream = await sendTextRequestStreaming(prompt, [], MODEL);
+      let resolvedModel = MODEL;
+      let stream: ReadableStream<Uint8Array>;
+      try {
+        stream = await sendTextRequestStreaming(prompt, [], MODEL);
+      } catch (primaryError) {
+        if (!protocolFallbackModel) throw primaryError;
+        console.warn(`[PROTOCOL] Primary model ${MODEL} failed, fallback to ${protocolFallbackModel}`);
+        resolvedModel = protocolFallbackModel;
+        stream = await sendTextRequestStreaming(prompt, [], resolvedModel);
+      }
       const sanitizedStream = sanitizeProtocolSse(stream);
       return new Response(sanitizedStream, {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
-          'X-Resolved-Model': MODEL,
+          'X-Resolved-Model': resolvedModel,
         },
       });
     }
 
-    let result = await sendTextRequest(prompt, [], MODEL);
+    let resolvedModel = MODEL;
+    let result: string;
+    try {
+      result = await sendTextRequest(prompt, [], MODEL);
+    } catch (primaryError) {
+      if (!protocolFallbackModel) throw primaryError;
+      console.warn(`[PROTOCOL] Primary model ${MODEL} failed, fallback to ${protocolFallbackModel}`);
+      resolvedModel = protocolFallbackModel;
+      result = await sendTextRequest(prompt, [], resolvedModel);
+    }
     if (!isEcgFunctionalConclusion && isStrictTemplateMode) {
-      const correctionPrompt = buildProtocolCorrectionPrompt({
+      const strictResult = await enforceStrictTemplateOutput({
         rawText,
         template: safeTemplate,
         draft: result,
+        primaryModel: resolvedModel,
+        primaryPrompt: prompt,
       });
-      result = await sendTextRequest(correctionPrompt, [], MODEL);
+      result = strictResult.text;
+      resolvedModel = strictResult.model;
     }
 
     result = anonymizeText(result);
-    return NextResponse.json({ success: true, protocol: result, resolvedModel: MODEL });
+    return NextResponse.json({ success: true, protocol: result, resolvedModel });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: 'Ошибка генерации протокола' }, { status: 500 });
   }

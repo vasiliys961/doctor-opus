@@ -32,6 +32,7 @@ const PROTOCOL_DRAFT_URL_PARAM = 'draftText'
 const PROTOCOL_DRAFT_WINDOW_NAME_PREFIX = 'secure_protocol_draft:'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
 const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
+const PROTOCOL_GPT52_MODEL = 'openai/gpt-5.4'
 
 type InteractionSeverity = 'minor' | 'moderate' | 'major'
 
@@ -81,7 +82,7 @@ export default function ProtocolPage() {
   const [protocol, setProtocol] = useState('')
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
-  const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini' | 'gpt52'>('gpt52')
+  const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini' | 'gpt52' | 'grok45'>('gpt52')
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [resolvedModel, setResolvedModel] = useState<string | null>(null)
   const [interactionLoading, setInteractionLoading] = useState(false)
@@ -451,7 +452,8 @@ export default function ProtocolPage() {
     const modelsMap: Record<string, string> = {
       'opus': MODELS.OPUS_VALIDATED,
       'sonnet': MODELS.SONNET,
-      'gpt52': MODELS.GPT_5_2,
+      'gpt52': PROTOCOL_GPT52_MODEL,
+      'grok45': MODELS.GROK_4_5,
       'gemini': MODELS.GEMINI_3_FLASH
     };
 
@@ -1525,6 +1527,7 @@ export default function ProtocolPage() {
             </label>
             <select value={model} onChange={(e) => setModel(e.target.value as any)} className="px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
               <option value="gpt52">🚀 GPT-5.4 (быстрее)</option>
+              <option value="grok45">🧪 Grok 4.5 (beta)</option>
               <option value="sonnet">🤖 Sonnet 5 (детальнее, но медленнее)</option>
               <option value="opus">🧠 Opus 4.8</option>
               <option value="gemini">⚡ Gemini 3.1</option>

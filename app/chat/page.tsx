@@ -42,7 +42,7 @@ const specialtyMap: Record<string, Specialty> = {
 };
 
 const getDisplayModelName = (model: 'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable') => {
-  if (model === 'gpt52') return 'openai/gpt-5.4';
+  if (model === 'gpt52') return 'openai/gpt-5.6-terra';
   if (model === 'sonnet') return 'anthropic/claude-sonnet-5';
   if (model === 'opus') return 'anthropic/claude-opus-4.8';
   if (model === 'fable') return 'anthropic/claude-fable-5';
@@ -1617,7 +1617,7 @@ export default function ChatPage() {
               className="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
               disabled={loading}
             >
-              <option value="gpt52">🚀 GPT-5.4</option>
+              <option value="gpt52">🚀 GPT-5.6 Terra</option>
               <option value="opus">🧠 Opus 4.8</option>
               <option value="fable">🚀 Fable 5 (дороже)</option>
               <option value="sonnet">🤖 Sonnet 5</option>

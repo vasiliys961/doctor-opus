@@ -131,7 +131,7 @@ ${specialty ? `Специальность: ${specialty}` : ''}
       MODEL = 'perplexity/sonar';
       MAX_TOKENS = 4000;
     } else if (modelMode === 'detailed') {
-      const allowGpt52ProtocolsSearch = process.env.ALLOW_GPT52_PROTOCOLS_SEARCH === 'true';
+      const allowGpt52ProtocolsSearch = process.env.ALLOW_GPT52_PROTOCOLS_SEARCH !== 'false';
       MODEL = allowGpt52ProtocolsSearch ? MODELS.GPT_5_2 : MODELS.SONNET;
       MAX_TOKENS = 12000; // Оптимизировано: детальный режим
     }

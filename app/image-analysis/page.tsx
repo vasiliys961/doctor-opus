@@ -296,7 +296,7 @@ export default function ImageAnalysisPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo({ 
-            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.8',
+            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-4.8',
             mode: analysisMode + ' (из кэша)' 
           });
           return;
@@ -360,7 +360,7 @@ export default function ImageAnalysisPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         // Не фиксируем версию на клиенте: backend сам выберет validated-модель (4.8/4.7 по env).
@@ -399,7 +399,7 @@ export default function ImageAnalysisPage() {
           let modelUsed = ''
           if (analysisMode === 'fast') modelUsed = 'google/gemini-3-flash-preview'
           else if (analysisMode === 'optimized') {
-            modelUsed = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4'
+            modelUsed = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra'
           } else modelUsed = 'anthropic/claude-opus-4.8'
           
           await handleSSEStream(response, {
@@ -417,7 +417,7 @@ export default function ImageAnalysisPage() {
                   analysisMode === 'fast'
                     ? 'google/gemini-3-flash-preview'
                     : analysisMode === 'optimized'
-                      ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4')
+                      ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra')
                       : 'anthropic/claude-opus-4.8'
                 )
                 

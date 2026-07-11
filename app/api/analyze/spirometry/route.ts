@@ -5,7 +5,7 @@ import { getRateLimitKey } from '@/lib/rate-limiter'
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
-const PRIMARY_MODEL = 'openai/gpt-5.4'
+const PRIMARY_MODEL = 'openai/gpt-5.6-terra'
 const FALLBACK_MODEL = 'anthropic/claude-sonnet-5'
 
 function shouldFallbackFromGpt54(status: number, errorText: string): boolean {

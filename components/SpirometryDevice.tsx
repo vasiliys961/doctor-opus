@@ -378,7 +378,7 @@ export default function SpirometryDevice() {
       const formData = new FormData()
       formData.append('prompt', prompt)
       formData.append('mode', 'optimized')
-      formData.append('model', 'openai/gpt-5.4')
+      formData.append('model', 'openai/gpt-5.6-terra')
       formData.append('isTextOnly', 'true')
 
       if (imageBase64) {
@@ -607,7 +607,7 @@ export default function SpirometryDevice() {
         <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
           <div className="text-5xl mb-4">🧠</div>
           <h3 className="text-xl font-bold mb-2">Анализирую спирометрию...</h3>
-          <p className="text-gray-500">GPT-5.4 интерпретирует по критериям ATS/ERS и GOLD</p>
+          <p className="text-gray-500">GPT-5.6 Terra интерпретирует по критериям ATS/ERS и GOLD</p>
           <div className="mt-6 flex justify-center">
             <div className="w-8 h-8 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
           </div>
@@ -623,7 +623,7 @@ export default function SpirometryDevice() {
               🔄 Новое исследование
             </button>
           </div>
-          <AnalysisResult result={analysisResult} model="openai/gpt-5.4" mode="optimized" images={[]} />
+          <AnalysisResult result={analysisResult} model="openai/gpt-5.6-terra" mode="optimized" images={[]} />
         </div>
       )}
 

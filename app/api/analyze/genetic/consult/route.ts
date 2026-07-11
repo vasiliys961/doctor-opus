@@ -16,7 +16,7 @@ const PRICE_UNITS_PER_1K_TOKENS_SONNET = 2.0; // 2 единицы за 1000 то
 const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4; // 0.4 единицы за 1000 токенов Gemini Flash
 const MIN_CONSULT_COST = 2;
 const MAX_CONSULT_COST = 20;
-const GPT_54_MODEL = 'openai/gpt-5.4';
+const GPT_54_MODEL = 'openai/gpt-5.6-terra';
 const OPUS_FALLBACK_MODEL = 'anthropic/claude-opus-4.6';
 
 function shouldFallbackFromGpt54(status: number, errorText: string): boolean {

@@ -409,7 +409,7 @@ export async function POST(request: NextRequest) {
     }
 
     const finalClinicalContext = [clinicalContext, dicomContext].filter(Boolean).join('\n\n');
-    const allowGpt52Analyze = process.env.ALLOW_GPT52_ANALYZE === 'true';
+    const allowGpt52Analyze = process.env.ALLOW_GPT52_ANALYZE !== 'false';
     const normalizedCustomModel = (() => {
       if (!customModel) return null;
       const isValidatedMode = mode === 'validated';

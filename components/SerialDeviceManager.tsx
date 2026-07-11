@@ -416,7 +416,7 @@ export default function SerialDeviceManager() {
       // Выбираем модели по пресету
       const presetConfig = {
         fast:   { mode: 'fast',      model: 'google/gemini-3-flash-preview',    extractor: 'google/gemini-3-flash-preview' },
-        best:   { mode: 'optimized', model: 'openai/gpt-5.4',                   extractor: 'google/gemini-3-pro-preview' },
+        best:   { mode: 'optimized', model: 'openai/gpt-5.6-terra',             extractor: 'google/gemini-3-pro-preview' },
         expert: { mode: 'validated', model: 'anthropic/claude-opus-4.8',         extractor: 'google/gemini-3-pro-preview' },
       }
       const cfg = presetConfig[analysisPreset]
@@ -661,7 +661,7 @@ export default function SerialDeviceManager() {
                     id: 'best',
                     icon: '⭐',
                     label: 'Лучший',
-                    desc: 'Gemini Pro → GPT-5.4',
+                    desc: 'Gemini Pro → GPT-5.6 Terra',
                     sub: 'Рекомендуется для ЭКГ',
                     color: 'indigo',
                   },
@@ -717,7 +717,7 @@ export default function SerialDeviceManager() {
           <h3 className="text-xl font-bold text-gray-800 mb-2">Анализирую ЭКГ...</h3>
           <p className="text-gray-500">
             {analysisPreset === 'fast'   && 'Gemini Flash обрабатывает и формирует заключение'}
-            {analysisPreset === 'best'   && 'Gemini Pro извлекает данные → GPT-5.4 формирует заключение'}
+            {analysisPreset === 'best'   && 'Gemini Pro извлекает данные → GPT-5.6 Terra формирует заключение'}
             {analysisPreset === 'expert' && 'Gemini Pro извлекает данные → Claude Opus формирует заключение'}
           </p>
           <div className="mt-6 flex justify-center">
@@ -737,7 +737,7 @@ export default function SerialDeviceManager() {
           </div>
           <AnalysisResult
             result={analysisResult}
-            model={analysisModelUsed || 'openai/gpt-5.4'}
+            model={analysisModelUsed || 'openai/gpt-5.6-terra'}
             mode={analysisPreset === 'fast' ? 'fast' : analysisPreset === 'expert' ? 'validated' : 'optimized'}
             images={[]}
           />

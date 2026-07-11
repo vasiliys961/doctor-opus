@@ -98,7 +98,7 @@ export default function ECGPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo(analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.8');
+                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-4.8');
           return;
         }
         // Сохраняем ключ для записи после завершения
@@ -120,7 +120,7 @@ export default function ECGPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-4.8');
@@ -144,7 +144,7 @@ export default function ECGPage() {
             throw new Error(`Ошибка API: ${response.status} - ${errorText}`)
           }
 
-          const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.4';
+          const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
           const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
                           analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.8';
           setModelInfo(modelUsed)
@@ -282,7 +282,7 @@ export default function ECGPage() {
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5) — идеальный баланс глубины и качества для анализа кривых ЭКГ.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.8) — рекомендуется для критических и сложных случаев.",
           extra: [
-            "💡 Рекомендуется GPT-5.4 для быстрых анализов и Opus для сложных случаев.",
+            "💡 Рекомендуется GPT-5.6 Terra для быстрых анализов и Opus для сложных случаев.",
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества для анализа кривых ЭКГ.",
             "📸 Вы можете загрузить файл с ЭКГ, сделать фото с камеры или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
