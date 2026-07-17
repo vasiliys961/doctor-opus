@@ -39,6 +39,7 @@ const specialtyMap: Record<string, Specialty> = {
   'Ревматолог': 'rheumatology',
   'Академический поиск': 'openevidence',
   'ИИ-Эксперт': 'ai_assistant',
+  'Титан: Учитель Хуа То': 'hua_tuo_master',
 };
 
 const getDisplayModelName = (model: 'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable') => {

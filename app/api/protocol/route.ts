@@ -14,6 +14,25 @@ function estimateProtocolCost(rawTextLength: number, strictTemplateMode: boolean
   return Number(Math.min(10, Math.max(1.5, base + sizeFactor)).toFixed(2));
 }
 
+const STRICT_FAST_RAWTEXT_THRESHOLD = 12000;
+const STRICT_FAST_TEMPLATE_THRESHOLD = 6000;
+const STRICT_CORRECTION_TIMEOUT_MS = Number(process.env.PROTOCOL_STRICT_CORRECTION_TIMEOUT_MS || 55000);
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 function buildProtocolCorrectionPrompt(params: {
   rawText: string;
   template: string;
@@ -171,6 +190,81 @@ function buildSingleShotSse(text: string, model: string): ReadableStream<Uint8Ar
   });
 }
 
+function buildDeferredStrictProtocolSse(params: {
+  initialModel: string;
+  generate: () => Promise<{ text: string; model: string }>;
+}): ReadableStream<Uint8Array> {
+  const { initialModel, generate } = params;
+  const encoder = new TextEncoder();
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      let closed = false;
+      const safeEnqueue = (payload: string) => {
+        if (closed) return;
+        controller.enqueue(encoder.encode(payload));
+      };
+      const closeStream = () => {
+        if (closed) return;
+        closed = true;
+        controller.close();
+      };
+
+      // Keep-alive снижает риск 504 на прокси/браузерном ожидании при длинной генерации.
+      const keepAliveInterval = setInterval(() => {
+        safeEnqueue(': keep-alive\n\n');
+      }, 10000);
+
+      void (async () => {
+        try {
+          safeEnqueue(': strict-protocol-processing\n\n');
+          const result = await generate();
+          const now = Math.floor(Date.now() / 1000);
+          const chunk = {
+            id: 'protocol-strict-final',
+            object: 'chat.completion.chunk',
+            created: now,
+            model: result.model || initialModel,
+            choices: [
+              {
+                index: 0,
+                delta: { content: result.text },
+                finish_reason: null,
+              },
+            ],
+          };
+          const doneChunk = {
+            id: 'protocol-strict-final',
+            object: 'chat.completion.chunk',
+            created: now,
+            model: result.model || initialModel,
+            choices: [
+              {
+                index: 0,
+                delta: {},
+                finish_reason: 'stop',
+              },
+            ],
+          };
+
+          safeEnqueue(`data: ${JSON.stringify(chunk)}\n\n`);
+          safeEnqueue(`data: ${JSON.stringify(doneChunk)}\n\n`);
+          safeEnqueue('data: [DONE]\n\n');
+        } catch (error: any) {
+          const message = typeof error?.message === 'string' && error.message.trim()
+            ? error.message
+            : 'Ошибка генерации протокола';
+          safeEnqueue(`data: ${JSON.stringify({ error: { message } })}\n\n`);
+          safeEnqueue('data: [DONE]\n\n');
+        } finally {
+          clearInterval(keepAliveInterval);
+          closeStream();
+        }
+      })();
+    },
+  });
+}
+
 const STRICT_PROTOCOL_BANNED_PATTERNS: RegExp[] = [
   /официальный заголовок/i,
   /official header/i,
@@ -248,29 +342,54 @@ async function enforceStrictTemplateOutput(params: {
   draft: string;
   primaryModel: string;
   primaryPrompt: string;
+  useFastStrict: boolean;
 }): Promise<{ text: string; model: string }> {
-  const { rawText, template, draft, primaryModel, primaryPrompt } = params;
+  const { rawText, template, draft, primaryModel, primaryPrompt, useFastStrict } = params;
 
   const primaryCorrectionPrompt = buildProtocolCorrectionPrompt({
     rawText,
     template,
     draft,
   });
-  let corrected = await sendTextRequest(primaryCorrectionPrompt, [], primaryModel);
-  corrected = trimToTemplateStart(corrected, template);
-  if (isStructuredProtocolOutputValid(corrected, template)) {
-    return { text: corrected, model: primaryModel };
+  try {
+    let corrected = await withTimeout(
+      sendTextRequest(primaryCorrectionPrompt, [], primaryModel),
+      STRICT_CORRECTION_TIMEOUT_MS,
+      'Strict correction timeout'
+    );
+    corrected = trimToTemplateStart(corrected, template);
+    if (isStructuredProtocolOutputValid(corrected, template)) {
+      return { text: corrected, model: primaryModel };
+    }
+
+    // Fast strict: не запускаем дорогой повторный полный цикл, отдаем лучший валидный результат.
+    if (useFastStrict) {
+      return { text: corrected, model: primaryModel };
+    }
+  } catch (error: any) {
+    if (useFastStrict) {
+      console.warn(`[PROTOCOL] Fast strict correction timeout/error on ${primaryModel}: ${String(error?.message || error)}`);
+      return { text: trimToTemplateStart(draft, template), model: primaryModel };
+    }
   }
 
   const fallbackModel = MODELS.SONNET;
   console.warn(`[PROTOCOL] Strict template guard: output invalid on ${primaryModel}, retry on ${fallbackModel}`);
-  const fallbackDraft = await sendTextRequest(primaryPrompt, [], fallbackModel);
+  const fallbackDraft = await withTimeout(
+    sendTextRequest(primaryPrompt, [], fallbackModel),
+    STRICT_CORRECTION_TIMEOUT_MS,
+    'Strict fallback draft timeout'
+  );
   const fallbackCorrectionPrompt = buildProtocolCorrectionPrompt({
     rawText,
     template,
     draft: fallbackDraft,
   });
-  let fallbackCorrected = await sendTextRequest(fallbackCorrectionPrompt, [], fallbackModel);
+  let fallbackCorrected = await withTimeout(
+    sendTextRequest(fallbackCorrectionPrompt, [], fallbackModel),
+    STRICT_CORRECTION_TIMEOUT_MS,
+    'Strict fallback correction timeout'
+  );
   fallbackCorrected = trimToTemplateStart(fallbackCorrected, template);
   return { text: fallbackCorrected, model: fallbackModel };
 }
@@ -331,11 +450,16 @@ export async function POST(request: NextRequest) {
     const specialistDirective = universalPrompt
       ? `СПЕЦИФИЧЕСКАЯ ИНСТРУКЦИЯ ДЛЯ ПРОФИЛЯ (${specialistName}): ${universalPrompt}\n\n`
       : '';
+    const isEcgFunctionalConclusion = templateId === 'ecg-functional-conclusion';
+    const useFastStrict =
+      isStrictTemplateMode &&
+      !isEcgFunctionalConclusion &&
+      (rawText.length >= STRICT_FAST_RAWTEXT_THRESHOLD || safeTemplate.length >= STRICT_FAST_TEMPLATE_THRESHOLD);
     const safeRagExamples = Array.isArray(ragExamples)
       ? ragExamples
           .map((chunk: unknown) => anonymizeText(String(chunk ?? '')).trim())
           .filter(Boolean)
-          .slice(0, 8)
+          .slice(0, useFastStrict ? 4 : 8)
       : [];
     const ragDirective = safeRagExamples.length > 0
       ? `ПРИМЕРЫ ИЗ ПЕРСОНАЛЬНОЙ RAG-БИБЛИОТЕКИ (это эталон ФОРМЫ и порядка заполнения; медицинские факты бери ТОЛЬКО из текущего случая):
@@ -343,8 +467,6 @@ ${safeRagExamples.map((chunk: string, index: number) => `--- ОБРАЗЕЦ #${i
 
 `
       : '';
-
-    const isEcgFunctionalConclusion = templateId === 'ecg-functional-conclusion';
     const hasDiagnosisSection = /(диагноз|заключени|мкб|diagnosis|assessment)/i.test(safeTemplate);
     const hasTreatmentSection = /(лечени|терап|рекомендац|назначени|plan|treatment)/i.test(safeTemplate);
     const templateHasMarkdownTable = /\|.+\|\s*\n\|[\s:-]+\|/m.test(safeTemplate);
@@ -467,35 +589,41 @@ ${evidencePriorityDirective}
     // В strict-режиме шаблона всегда выполняем двухшаговую генерацию (черновик -> коррекция),
     // даже если клиент запросил streaming. Иначе модель может "уезжать" в свободный формат.
     if (useStreaming && isStrictTemplateMode && !isEcgFunctionalConclusion) {
-      let resolvedModel = MODEL;
-      let draft: string;
-      try {
-        draft = await sendTextRequest(prompt, [], MODEL);
-      } catch (primaryError) {
-        if (!protocolFallbackModel) throw primaryError;
-        console.warn(`[PROTOCOL] Primary model ${MODEL} failed, fallback to ${protocolFallbackModel}`);
-        resolvedModel = protocolFallbackModel;
-        draft = await sendTextRequest(prompt, [], resolvedModel);
-      }
+      const deferredStrictStream = buildDeferredStrictProtocolSse({
+        initialModel: MODEL,
+        generate: async () => {
+          let resolvedModel = MODEL;
+          let draft: string;
+          try {
+            draft = await sendTextRequest(prompt, [], MODEL);
+          } catch (primaryError) {
+            if (!protocolFallbackModel) throw primaryError;
+            console.warn(`[PROTOCOL] Primary model ${MODEL} failed, fallback to ${protocolFallbackModel}`);
+            resolvedModel = protocolFallbackModel;
+            draft = await sendTextRequest(prompt, [], resolvedModel);
+          }
 
-      const strictResult = await enforceStrictTemplateOutput({
-        rawText,
-        template: safeTemplate,
-        draft,
-        primaryModel: resolvedModel,
-        primaryPrompt: prompt,
+          const strictResult = await enforceStrictTemplateOutput({
+            rawText,
+            template: safeTemplate,
+            draft,
+            primaryModel: resolvedModel,
+            primaryPrompt: prompt,
+            useFastStrict,
+          });
+          return {
+            text: anonymizeText(strictResult.text),
+            model: strictResult.model,
+          };
+        },
       });
-      resolvedModel = strictResult.model;
-      let corrected = strictResult.text;
-      corrected = anonymizeText(corrected);
 
-      const singleShotStream = buildSingleShotSse(corrected, resolvedModel);
-      return new Response(singleShotStream, {
+      return new Response(deferredStrictStream, {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
-          'X-Resolved-Model': resolvedModel,
+          'X-Resolved-Model': MODEL,
         },
       });
     }
@@ -539,6 +667,7 @@ ${evidencePriorityDirective}
         draft: result,
         primaryModel: resolvedModel,
         primaryPrompt: prompt,
+        useFastStrict,
       });
       result = strictResult.text;
       resolvedModel = strictResult.model;

@@ -106,6 +106,13 @@ export const CHAT_SPECIALISTS: ChatSpecialist[] = [
     label: 'Dr. LongevAI',
     icon: '🧬',
     description: 'A4M + IHS + 5P медицина: anti-aging, гормональная оптимизация, longevity-биомаркеры.'
+  },
+  {
+    id: 'hua_tuo_master',
+    label: 'Титан: Учитель Хуа То',
+    icon: '☯️',
+    description: 'Классическая ТКМ: чжэньцзю, ци, инь-ян, у-син, цзан-фу, чжун яо и даосская медицинская традиция.',
+    highlight: true
   }
 ];
 

@@ -77,6 +77,8 @@ function chunkTemplateForRag(content: string, maxChunkLength: number = 1200): st
 
 export default function ProtocolPage() {
   const [rawText, setRawText] = useState('')
+  const [recordedDraftText, setRecordedDraftText] = useState('')
+  const [autoInsertRecorderToProtocol, setAutoInsertRecorderToProtocol] = useState(false)
   const [showAudioUpload, setShowAudioUpload] = useState(false)
   const [showSecureRecorder, setShowSecureRecorder] = useState(false)
   const [protocol, setProtocol] = useState('')
@@ -1476,14 +1478,68 @@ export default function ProtocolPage() {
                 </div>
                 <p className="text-[11px] text-gray-500 mb-3">
                   Запись → локальное распознавание (Whisper) → проверка текста врачом → черновик жалоб/анамнеза.
-                  Пока идёт запись, объективные данные можно сразу вносить в поле ниже. Аудио на диск не сохраняется.
+                  По умолчанию текст записи изолирован от протокола, чтобы не утяжелять генерацию. Аудио на диск не сохраняется.
                 </p>
+                <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-indigo-700 mb-3">
+                  <input
+                    type="checkbox"
+                    checked={autoInsertRecorderToProtocol}
+                    onChange={(e) => setAutoInsertRecorderToProtocol(e.target.checked)}
+                    className="w-3.5 h-3.5"
+                  />
+                  Автоматически вставлять запись в поле протокола
+                </label>
                 <SecureProtocolRecorder
                   disabled={loading}
                   onInsert={(text) => {
-                    setRawText(prev => prev ? prev + '\n\n' + text : text)
+                    if (autoInsertRecorderToProtocol) {
+                      setRawText(prev => prev ? prev + '\n\n' + text : text)
+                      return
+                    }
+                    setRecordedDraftText(prev => prev ? `${prev}\n\n${text}` : text)
                   }}
                 />
+                {!autoInsertRecorderToProtocol && recordedDraftText.trim() && (
+                  <div className="mt-3 rounded-lg border border-indigo-200 bg-white p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-semibold text-indigo-800">
+                        Черновик из записи ({recordedDraftText.length} символов)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setRecordedDraftText('')}
+                        className="text-[11px] text-gray-500 hover:text-gray-700"
+                      >
+                        Очистить черновик
+                      </button>
+                    </div>
+                    <div className="max-h-32 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-700 whitespace-pre-wrap">
+                      {recordedDraftText}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRawText(prev => prev ? `${prev}\n\n${recordedDraftText}` : recordedDraftText)
+                          setRecordedDraftText('')
+                        }}
+                        className="px-3 py-1.5 bg-indigo-600 text-white rounded text-[11px] font-semibold hover:bg-indigo-700"
+                      >
+                        Добавить в протокол
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRawText(recordedDraftText)
+                          setRecordedDraftText('')
+                        }}
+                        className="px-3 py-1.5 bg-gray-600 text-white rounded text-[11px] font-semibold hover:bg-gray-700"
+                      >
+                        Заменить текст протокола
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
