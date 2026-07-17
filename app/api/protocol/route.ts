@@ -345,6 +345,7 @@ async function enforceStrictTemplateOutput(params: {
   useFastStrict: boolean;
 }): Promise<{ text: string; model: string }> {
   const { rawText, template, draft, primaryModel, primaryPrompt, useFastStrict } = params;
+  let bestEffortText = trimToTemplateStart(draft, template);
 
   const primaryCorrectionPrompt = buildProtocolCorrectionPrompt({
     rawText,
@@ -358,6 +359,7 @@ async function enforceStrictTemplateOutput(params: {
       'Strict correction timeout'
     );
     corrected = trimToTemplateStart(corrected, template);
+    bestEffortText = corrected;
     if (isStructuredProtocolOutputValid(corrected, template)) {
       return { text: corrected, model: primaryModel };
     }
@@ -375,23 +377,28 @@ async function enforceStrictTemplateOutput(params: {
 
   const fallbackModel = MODELS.SONNET;
   console.warn(`[PROTOCOL] Strict template guard: output invalid on ${primaryModel}, retry on ${fallbackModel}`);
-  const fallbackDraft = await withTimeout(
-    sendTextRequest(primaryPrompt, [], fallbackModel),
-    STRICT_CORRECTION_TIMEOUT_MS,
-    'Strict fallback draft timeout'
-  );
-  const fallbackCorrectionPrompt = buildProtocolCorrectionPrompt({
-    rawText,
-    template,
-    draft: fallbackDraft,
-  });
-  let fallbackCorrected = await withTimeout(
-    sendTextRequest(fallbackCorrectionPrompt, [], fallbackModel),
-    STRICT_CORRECTION_TIMEOUT_MS,
-    'Strict fallback correction timeout'
-  );
-  fallbackCorrected = trimToTemplateStart(fallbackCorrected, template);
-  return { text: fallbackCorrected, model: fallbackModel };
+  try {
+    const fallbackDraft = await withTimeout(
+      sendTextRequest(primaryPrompt, [], fallbackModel),
+      STRICT_CORRECTION_TIMEOUT_MS,
+      'Strict fallback draft timeout'
+    );
+    const fallbackCorrectionPrompt = buildProtocolCorrectionPrompt({
+      rawText,
+      template,
+      draft: fallbackDraft,
+    });
+    let fallbackCorrected = await withTimeout(
+      sendTextRequest(fallbackCorrectionPrompt, [], fallbackModel),
+      STRICT_CORRECTION_TIMEOUT_MS,
+      'Strict fallback correction timeout'
+    );
+    fallbackCorrected = trimToTemplateStart(fallbackCorrected, template);
+    return { text: fallbackCorrected, model: fallbackModel };
+  } catch (error: any) {
+    console.warn(`[PROTOCOL] Strict fallback timeout/error on ${fallbackModel}: ${String(error?.message || error)}`);
+    return { text: bestEffortText, model: primaryModel };
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -410,7 +417,8 @@ export async function POST(request: NextRequest) {
       specialistName,
       universalPrompt = '',
       ragExamples = [],
-      strictTemplateMode = true
+      strictTemplateMode = true,
+      speedProfile = 'standard'
     } = body;
     const rawText = anonymizeText(String(rawIncomingText ?? ''));
     const safeTemplate = anonymizeText(String(customTemplate ?? '')).trim();
@@ -451,10 +459,15 @@ export async function POST(request: NextRequest) {
       ? `СПЕЦИФИЧЕСКАЯ ИНСТРУКЦИЯ ДЛЯ ПРОФИЛЯ (${specialistName}): ${universalPrompt}\n\n`
       : '';
     const isEcgFunctionalConclusion = templateId === 'ecg-functional-conclusion';
+    const forceFastProfile = speedProfile === 'fast';
     const useFastStrict =
-      isStrictTemplateMode &&
+      (isStrictTemplateMode || forceFastProfile) &&
       !isEcgFunctionalConclusion &&
-      (rawText.length >= STRICT_FAST_RAWTEXT_THRESHOLD || safeTemplate.length >= STRICT_FAST_TEMPLATE_THRESHOLD);
+      (
+        forceFastProfile ||
+        rawText.length >= STRICT_FAST_RAWTEXT_THRESHOLD ||
+        safeTemplate.length >= STRICT_FAST_TEMPLATE_THRESHOLD
+      );
     const safeRagExamples = Array.isArray(ragExamples)
       ? ragExamples
           .map((chunk: unknown) => anonymizeText(String(chunk ?? '')).trim())

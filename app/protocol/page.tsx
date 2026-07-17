@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import AudioUpload from '@/components/AudioUpload'
 import VoiceInput from '@/components/VoiceInput'
-import SecureProtocolRecorder from '@/components/SecureProtocolRecorder'
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -33,6 +32,7 @@ const PROTOCOL_DRAFT_WINDOW_NAME_PREFIX = 'secure_protocol_draft:'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
 const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
 const PROTOCOL_GPT52_MODEL = 'openai/gpt-5.4'
+const SecureProtocolRecorder = dynamic(() => import('@/components/SecureProtocolRecorder'), { ssr: false })
 
 type InteractionSeverity = 'minor' | 'moderate' | 'major'
 
@@ -84,6 +84,7 @@ export default function ProtocolPage() {
   const [protocol, setProtocol] = useState('')
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
+  const [stabilityMode, setStabilityMode] = useState(false)
   const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini' | 'gpt52' | 'grok45'>('gpt52')
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [resolvedModel, setResolvedModel] = useState<string | null>(null)
@@ -126,6 +127,14 @@ export default function ProtocolPage() {
       document.head.appendChild(script)
     } else if (window.pdfjsLib) {
       setPdfJsLoaded(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return
+    if (/windows/i.test(navigator.userAgent)) {
+      setStabilityMode(true)
+      setUseStreaming(false)
     }
   }, [])
 
@@ -461,20 +470,21 @@ export default function ProtocolPage() {
 
     const finalModel = modelsMap[model] || MODELS.SONNET;
     const safeRawText = anonymizeText(rawText.trim())
+    const effectiveUseStreaming = stabilityMode ? false : useStreaming
 
     try {
       let ragExamples: string[] = []
       if (templateRagDocId) {
         // Для пользовательского шаблона берем больше чанков, чтобы модель видела
         // не только "шапку", но и блоки диагноза/лечения/результата.
-        ragExamples = await getDocumentChunks(templateRagDocId, 8)
+        ragExamples = await getDocumentChunks(templateRagDocId, stabilityMode ? 4 : 8)
       } else if (safeRawText) {
         ragExamples = await searchLibraryLocal(`${specialistName} ${safeRawText}`, 3)
       }
 
       const payload = {
         rawText: safeRawText,
-        useStreaming: useStreaming,
+        useStreaming: effectiveUseStreaming,
         model: model,
         templateId: selectedTemplateId,
         customTemplate: customTemplate,
@@ -483,9 +493,10 @@ export default function ProtocolPage() {
         universalPrompt: universalPrompt,
         ragExamples,
         strictTemplateMode,
+        speedProfile: stabilityMode ? 'fast' : 'standard',
       };
 
-      if (useStreaming) {
+      if (effectiveUseStreaming) {
         const response = await fetch('/api/protocol', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1576,12 +1587,32 @@ export default function ProtocolPage() {
             </button>
           </div>
 
-          <div className="mb-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-[auto_auto_minmax(220px,1fr)] gap-3 items-start md:items-center">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={useStreaming} onChange={(e) => setUseStreaming(e.target.checked)} className="w-4 h-4 text-primary-600" disabled={loading} />
+              <input
+                type="checkbox"
+                checked={useStreaming}
+                onChange={(e) => setUseStreaming(e.target.checked)}
+                className="w-4 h-4 text-primary-600"
+                disabled={loading || stabilityMode}
+              />
               <span className="text-sm">Streaming</span>
             </label>
-            <select value={model} onChange={(e) => setModel(e.target.value as any)} className="px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={stabilityMode}
+                onChange={(e) => {
+                  const enabled = e.target.checked
+                  setStabilityMode(enabled)
+                  if (enabled) setUseStreaming(false)
+                }}
+                className="w-4 h-4 text-amber-600"
+                disabled={loading}
+              />
+              <span className="text-sm text-amber-700 font-semibold leading-tight">🛟 Режим стабильности</span>
+            </label>
+            <select value={model} onChange={(e) => setModel(e.target.value as any)} className="w-full md:w-auto px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
               <option value="gpt52">🚀 GPT-5.4 (быстрее)</option>
               <option value="grok45">🧪 Grok 4.5 (beta)</option>
               <option value="sonnet">🤖 Sonnet 5 (детальнее, но медленнее)</option>
