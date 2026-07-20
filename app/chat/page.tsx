@@ -84,6 +84,40 @@ const resolveUsageCost = (
   return undefined;
 };
 
+const extractTextFromNode = (node: unknown): string => {
+  if (typeof node === 'string') return node;
+  if (Array.isArray(node)) {
+    return node
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (!item || typeof item !== 'object') return '';
+        const asRecord = item as Record<string, unknown>;
+        return typeof asRecord.text === 'string' ? asRecord.text : '';
+      })
+      .join('');
+  }
+  return '';
+};
+
+const extractStreamingContent = (json: any): string => {
+  const choice = json?.choices?.[0];
+  if (!choice) return '';
+
+  const delta = choice?.delta;
+  const fromDelta =
+    extractTextFromNode(delta?.content) ||
+    extractTextFromNode(delta?.text) ||
+    extractTextFromNode(delta?.output_text);
+  if (fromDelta) return fromDelta;
+
+  const fromMessage =
+    extractTextFromNode(choice?.message?.content) ||
+    extractTextFromNode(choice?.message?.text);
+  if (fromMessage) return fromMessage;
+
+  return extractTextFromNode(json?.content);
+};
+
 export default function ChatPage() {
   const { data: session } = useSession()
   const [message, setMessage] = useState('')
@@ -414,7 +448,7 @@ export default function ChatPage() {
                   setIsCutOff(true);
                 }
 
-                const content = json.choices?.[0]?.delta?.content || '';
+                const content = extractStreamingContent(json);
                 if (content) {
                   accumulatedText += content;
                   setMessages(prev => {
@@ -732,7 +766,7 @@ export default function ChatPage() {
                       continue
                     }
 
-                    const content = json.choices?.[0]?.delta?.content || ''
+                    const content = extractStreamingContent(json)
                     if (content) {
                       accumulatedText += content
                       
@@ -893,8 +927,8 @@ export default function ChatPage() {
                       continue;
                     }
 
-                    // OpenRouter формат: json.choices[0].delta.content
-                    const content = json.choices?.[0]?.delta?.content || ''
+                    // Поддерживаем разные форматы стрим-чанков (в т.ч. Fable).
+                    const content = extractStreamingContent(json)
                     if (content) {
                       accumulatedText += content
                       
