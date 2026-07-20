@@ -32,7 +32,6 @@ const PROTOCOL_DRAFT_WINDOW_NAME_PREFIX = 'secure_protocol_draft:'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
 const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
 const PROTOCOL_GPT52_MODEL = 'openai/gpt-5.4'
-const SecureProtocolRecorder = dynamic(() => import('@/components/SecureProtocolRecorder'), { ssr: false })
 
 type InteractionSeverity = 'minor' | 'moderate' | 'major'
 
@@ -77,10 +76,7 @@ function chunkTemplateForRag(content: string, maxChunkLength: number = 1200): st
 
 export default function ProtocolPage() {
   const [rawText, setRawText] = useState('')
-  const [recordedDraftText, setRecordedDraftText] = useState('')
-  const [autoInsertRecorderToProtocol, setAutoInsertRecorderToProtocol] = useState(false)
   const [showAudioUpload, setShowAudioUpload] = useState(false)
-  const [showSecureRecorder, setShowSecureRecorder] = useState(false)
   const [protocol, setProtocol] = useState('')
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
@@ -1468,93 +1464,6 @@ export default function ProtocolPage() {
             )}
           </div>
           
-          <div className="mb-4">
-            <div className="flex items-center gap-3 flex-wrap mb-2">
-              <button
-                onClick={() => setShowSecureRecorder(!showSecureRecorder)}
-                className={`px-4 py-2 rounded-lg transition-colors text-sm text-white ${showSecureRecorder ? 'bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-                disabled={loading}
-              >
-                🎙️ Запись беседы с пациентом
-              </button>
-              <span className="text-[11px] text-gray-500">
-                Запись и ввод объективных данных можно вести одновременно
-              </span>
-            </div>
-            {showSecureRecorder && (
-              <div className="p-4 bg-indigo-50/40 border border-indigo-200 rounded-xl">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold text-sm text-indigo-900">🎙️ Запись беседы с пациентом</h3>
-                  <button onClick={() => setShowSecureRecorder(false)} className="text-gray-400 hover:text-gray-600">✕</button>
-                </div>
-                <p className="text-[11px] text-gray-500 mb-3">
-                  Запись → локальное распознавание (Whisper) → проверка текста врачом → черновик жалоб/анамнеза.
-                  По умолчанию текст записи изолирован от протокола, чтобы не утяжелять генерацию. Аудио на диск не сохраняется.
-                </p>
-                <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-indigo-700 mb-3">
-                  <input
-                    type="checkbox"
-                    checked={autoInsertRecorderToProtocol}
-                    onChange={(e) => setAutoInsertRecorderToProtocol(e.target.checked)}
-                    className="w-3.5 h-3.5"
-                  />
-                  Автоматически вставлять запись в поле протокола
-                </label>
-                <SecureProtocolRecorder
-                  disabled={loading}
-                  onInsert={(text) => {
-                    if (autoInsertRecorderToProtocol) {
-                      setRawText(prev => prev ? prev + '\n\n' + text : text)
-                      return
-                    }
-                    setRecordedDraftText(prev => prev ? `${prev}\n\n${text}` : text)
-                  }}
-                />
-                {!autoInsertRecorderToProtocol && recordedDraftText.trim() && (
-                  <div className="mt-3 rounded-lg border border-indigo-200 bg-white p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px] font-semibold text-indigo-800">
-                        Черновик из записи ({recordedDraftText.length} символов)
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setRecordedDraftText('')}
-                        className="text-[11px] text-gray-500 hover:text-gray-700"
-                      >
-                        Очистить черновик
-                      </button>
-                    </div>
-                    <div className="max-h-32 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-700 whitespace-pre-wrap">
-                      {recordedDraftText}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRawText(prev => prev ? `${prev}\n\n${recordedDraftText}` : recordedDraftText)
-                          setRecordedDraftText('')
-                        }}
-                        className="px-3 py-1.5 bg-indigo-600 text-white rounded text-[11px] font-semibold hover:bg-indigo-700"
-                      >
-                        Добавить в протокол
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRawText(recordedDraftText)
-                          setRecordedDraftText('')
-                        }}
-                        className="px-3 py-1.5 bg-gray-600 text-white rounded text-[11px] font-semibold hover:bg-gray-700"
-                      >
-                        Заменить текст протокола
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700">Текст для обработки:</label>
