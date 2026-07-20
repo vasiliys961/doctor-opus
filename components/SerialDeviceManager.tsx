@@ -43,6 +43,17 @@ interface DetectResult {
   samplesPerSec: number
 }
 
+async function openPortWithControlSignals(port: any, baudRate: number) {
+  await port.open({ baudRate })
+  // Для части USB-Serial приборов (в т.ч. медоборудование) поток не стартует,
+  // пока не подняты DTR/RTS. Ошибки игнорируем, т.к. не все адаптеры это поддерживают.
+  if (typeof port.setSignals === 'function') {
+    try {
+      await port.setSignals({ dataTerminalReady: true, requestToSend: true })
+    } catch {}
+  }
+}
+
 // Мини-canvas для отображения одного канала
 function MiniLeadCanvas({ points, color, height = 70 }: { points: number[]; color: string; height?: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -138,10 +149,12 @@ export default function SerialDeviceManager() {
     return new Promise(async (resolve) => {
       const lines: string[] = []
       try {
-        await p.open({ baudRate: baud })
+        await openPortWithControlSignals(p, baud)
         const td = new TextDecoderStream()
         p.readable.pipeTo(td.writable)
         const reader = td.readable.getReader()
+        // Даем прибору небольшое время на "пробуждение" после открытия порта.
+        await new Promise((r) => setTimeout(r, 250))
         const timer = setTimeout(async () => {
           try { await reader.cancel() } catch {}
           resolve(lines)
@@ -152,7 +165,7 @@ export default function SerialDeviceManager() {
             const { value, done } = await reader.read()
             if (done) break
             buf += value
-            const parts = buf.split('\n')
+            const parts = buf.split(/\r?\n|\r/)
             buf = parts.pop() || ''
             lines.push(...parts.filter(l => l.trim()))
           }
@@ -190,7 +203,14 @@ export default function SerialDeviceManager() {
     for (const baud of BAUD_RATES) {
       addLog(`Проверяю скорость ${baud} baud...`)
       const lines = await samplePort(p, baud, 1500)
-      const valid = lines.filter(l => /^[\d,;.\s-]+$/.test(l.trim()) && l.trim().length > 0)
+      const valid = lines.filter((l) => {
+        const nums = l
+          .trim()
+          .split(/[,;\t ]+/)
+          .map((s) => parseFloat(s))
+          .filter((n) => !isNaN(n))
+        return nums.length > 0
+      })
       addLog(`  → получено ${valid.length} строк с данными`)
       if (valid.length > bestLines.length) {
         bestLines = valid
@@ -251,7 +271,7 @@ export default function SerialDeviceManager() {
   // Запуск чтения данных
   const startReading = async (p: any, baud: number, sep: string, channels: number) => {
     try {
-      if (p.readable === null) await p.open({ baudRate: baud })
+      if (!p.readable) await openPortWithControlSignals(p, baud)
       const td = new TextDecoderStream()
       p.readable.pipeTo(td.writable)
       const reader = td.readable.getReader()
@@ -262,7 +282,7 @@ export default function SerialDeviceManager() {
         const { value, done } = await reader.read()
         if (done) break
         buf += value
-        const lines = buf.split('\n')
+        const lines = buf.split(/\r?\n|\r/)
         buf = lines.pop() || ''
         for (const line of lines) {
           const trimmed = line.trim(); if (!trimmed) continue
@@ -278,7 +298,9 @@ export default function SerialDeviceManager() {
           setLiveMulti(liveMultiRef.current.map(ch => [...ch]))
         }
       }
-    } catch {}
+    } catch (error: any) {
+      setErrorMsg(`Поток данных не читается: ${error?.message || 'неизвестная ошибка'}`)
+    }
   }
 
   // Подключение вручную (расширенный режим)
