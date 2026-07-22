@@ -1060,13 +1060,26 @@ export async function analyzeMultipleImages(options: {
 /**
  * Текстовый запрос к OpenRouter API (для чата)
  */
-export async function sendTextRequest(
+export interface TextRequestUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  total_cost: number;
+}
+
+export interface TextRequestResult {
+  content: string;
+  modelUsed: string;
+  usage: TextRequestUsage;
+}
+
+export async function sendTextRequestWithUsage(
   prompt: string, 
   history: Array<{role: string, content: string}> = [],
   model: string = MODELS.OPUS,
   specialty?: Specialty,
   customSystemPrompt?: string
-): Promise<string> {
+): Promise<TextRequestResult> {
   const apiKey = getLlmApiKey();
   
   if (!apiKey) {
@@ -1202,8 +1215,18 @@ export async function sendTextRequest(
       safeLog(`✅ [${selectedModel}] Запрос завершен`);
       safeLog(`   📊 ${formatCostLog(selectedModel, inputTokens, outputTokens, tokensUsed)}`);
     }
+    const usageCost = calculateCost(inputTokens, outputTokens, selectedModel).totalCostUnits;
 
-    return data.choices[0].message.content || '';
+    return {
+      content: data.choices[0].message.content || '',
+      modelUsed: selectedModel,
+      usage: {
+        prompt_tokens: inputTokens,
+        completion_tokens: outputTokens,
+        total_tokens: tokensUsed || (inputTokens + outputTokens),
+        total_cost: Number(data?.usage?.total_cost) > 0 ? Number(data.usage.total_cost) : usageCost,
+      },
+    };
   } catch (error: any) {
     safeError('Error calling OpenRouter API:', {
       name: error.name,
@@ -1229,4 +1252,15 @@ export async function sendTextRequest(
     
     throw new Error(`Ошибка запроса: ${error.message}`);
   }
+}
+
+export async function sendTextRequest(
+  prompt: string, 
+  history: Array<{role: string, content: string}> = [],
+  model: string = MODELS.OPUS,
+  specialty?: Specialty,
+  customSystemPrompt?: string
+): Promise<string> {
+  const result = await sendTextRequestWithUsage(prompt, history, model, specialty, customSystemPrompt);
+  return result.content;
 }

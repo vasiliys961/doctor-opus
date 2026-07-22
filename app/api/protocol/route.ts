@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendTextRequest, MODELS } from '@/lib/openrouter';
+import { sendTextRequest, sendTextRequestWithUsage, MODELS, type TextRequestUsage } from '@/lib/openrouter';
 import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
 import { formatCostLog } from '@/lib/cost-calculator';
 import { anonymizeText } from '@/lib/anonymization';
@@ -343,8 +343,9 @@ async function enforceStrictTemplateOutput(params: {
   primaryModel: string;
   primaryPrompt: string;
   useFastStrict: boolean;
+  onUsage?: (usage: TextRequestUsage) => void;
 }): Promise<{ text: string; model: string }> {
-  const { rawText, template, draft, primaryModel, primaryPrompt, useFastStrict } = params;
+  const { rawText, template, draft, primaryModel, primaryPrompt, useFastStrict, onUsage } = params;
   let bestEffortText = trimToTemplateStart(draft, template);
 
   const primaryCorrectionPrompt = buildProtocolCorrectionPrompt({
@@ -353,11 +354,13 @@ async function enforceStrictTemplateOutput(params: {
     draft,
   });
   try {
-    let corrected = await withTimeout(
-      sendTextRequest(primaryCorrectionPrompt, [], primaryModel),
+    let correctedResult = await withTimeout(
+      sendTextRequestWithUsage(primaryCorrectionPrompt, [], primaryModel),
       STRICT_CORRECTION_TIMEOUT_MS,
       'Strict correction timeout'
     );
+    onUsage?.(correctedResult.usage);
+    let corrected = correctedResult.content;
     corrected = trimToTemplateStart(corrected, template);
     bestEffortText = corrected;
     if (isStructuredProtocolOutputValid(corrected, template)) {
@@ -378,21 +381,24 @@ async function enforceStrictTemplateOutput(params: {
   const fallbackModel = MODELS.SONNET;
   console.warn(`[PROTOCOL] Strict template guard: output invalid on ${primaryModel}, retry on ${fallbackModel}`);
   try {
-    const fallbackDraft = await withTimeout(
-      sendTextRequest(primaryPrompt, [], fallbackModel),
+    const fallbackDraftResult = await withTimeout(
+      sendTextRequestWithUsage(primaryPrompt, [], fallbackModel),
       STRICT_CORRECTION_TIMEOUT_MS,
       'Strict fallback draft timeout'
     );
+    onUsage?.(fallbackDraftResult.usage);
     const fallbackCorrectionPrompt = buildProtocolCorrectionPrompt({
       rawText,
       template,
-      draft: fallbackDraft,
+      draft: fallbackDraftResult.content,
     });
-    let fallbackCorrected = await withTimeout(
-      sendTextRequest(fallbackCorrectionPrompt, [], fallbackModel),
+    let fallbackCorrectedResult = await withTimeout(
+      sendTextRequestWithUsage(fallbackCorrectionPrompt, [], fallbackModel),
       STRICT_CORRECTION_TIMEOUT_MS,
       'Strict fallback correction timeout'
     );
+    onUsage?.(fallbackCorrectedResult.usage);
+    let fallbackCorrected = fallbackCorrectedResult.content;
     fallbackCorrected = trimToTemplateStart(fallbackCorrected, template);
     return { text: fallbackCorrected, model: fallbackModel };
   } catch (error: any) {
@@ -432,6 +438,19 @@ export async function POST(request: NextRequest) {
     }
 
     const estimatedCost = estimateProtocolCost(rawText.length, isStrictTemplateMode);
+    const actualUsage: TextRequestUsage = {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+      total_cost: 0,
+    };
+    const addUsage = (usage?: TextRequestUsage) => {
+      if (!usage) return;
+      actualUsage.prompt_tokens += Number(usage.prompt_tokens || 0);
+      actualUsage.completion_tokens += Number(usage.completion_tokens || 0);
+      actualUsage.total_tokens += Number(usage.total_tokens || 0);
+      actualUsage.total_cost += Number(usage.total_cost || 0);
+    };
     const billing = userEmail
       ? await checkAndDeductBalance(userEmail, estimatedCost, 'Protocol generation', {
           templateId: templateId || null,
@@ -666,12 +685,18 @@ ${evidencePriorityDirective}
     let resolvedModel = MODEL;
     let result: string;
     try {
-      result = await sendTextRequest(prompt, [], MODEL);
+      const initialResult = await sendTextRequestWithUsage(prompt, [], MODEL);
+      addUsage(initialResult.usage);
+      result = initialResult.content;
+      resolvedModel = initialResult.modelUsed || resolvedModel;
     } catch (primaryError) {
       if (!protocolFallbackModel) throw primaryError;
       console.warn(`[PROTOCOL] Primary model ${MODEL} failed, fallback to ${protocolFallbackModel}`);
       resolvedModel = protocolFallbackModel;
-      result = await sendTextRequest(prompt, [], resolvedModel);
+      const fallbackResult = await sendTextRequestWithUsage(prompt, [], resolvedModel);
+      addUsage(fallbackResult.usage);
+      result = fallbackResult.content;
+      resolvedModel = fallbackResult.modelUsed || resolvedModel;
     }
     if (!isEcgFunctionalConclusion && isStrictTemplateMode) {
       const strictResult = await enforceStrictTemplateOutput({
@@ -681,13 +706,19 @@ ${evidencePriorityDirective}
         primaryModel: resolvedModel,
         primaryPrompt: prompt,
         useFastStrict,
+        onUsage: addUsage,
       });
       result = strictResult.text;
       resolvedModel = strictResult.model;
     }
 
     result = anonymizeText(result);
-    return NextResponse.json({ success: true, protocol: result, resolvedModel });
+    return NextResponse.json({
+      success: true,
+      protocol: result,
+      resolvedModel,
+      usage: actualUsage.total_tokens > 0 ? actualUsage : undefined,
+    });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: 'Ошибка генерации протокола' }, { status: 500 });
   }

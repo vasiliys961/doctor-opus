@@ -126,14 +126,6 @@ export default function ProtocolPage() {
     }
   }, [])
 
-  useEffect(() => {
-    if (typeof navigator === 'undefined') return
-    if (/windows/i.test(navigator.userAgent)) {
-      setStabilityMode(true)
-      setUseStreaming(false)
-    }
-  }, [])
-
   // Загрузка пользовательского шаблона при старте
   useEffect(() => {
     const saved = localStorage.getItem('user_protocol_template')
@@ -538,18 +530,35 @@ export default function ProtocolPage() {
           setProtocol(data.protocol)
           const effectiveResolvedModel = data.resolvedModel || finalModel
           setResolvedModel(effectiveResolvedModel)
-          const inputTokens = Math.ceil(rawText.length / 4) + 1000;
-          const outputTokens = Math.ceil(data.protocol.length / 4);
-          const costInfo = calculateCost(inputTokens, outputTokens, effectiveResolvedModel);
-          setCurrentCost(costInfo.totalCostUnits);
+          const serverUsage = data.usage
+          if (serverUsage && (serverUsage.prompt_tokens || serverUsage.completion_tokens || serverUsage.total_cost)) {
+            const usageCost = Number(serverUsage.total_cost || 0)
+            setCurrentCost(usageCost > 0 ? usageCost : calculateCost(
+              Number(serverUsage.prompt_tokens || 0),
+              Number(serverUsage.completion_tokens || 0),
+              effectiveResolvedModel
+            ).totalCostUnits)
 
-          logUsage({
-            section: 'protocols',
-            model: effectiveResolvedModel,
-            inputTokens,
-            outputTokens,
-            specialty: specialistName // Передаем специальность для аудита
-          });
+            logUsage({
+              section: 'protocols',
+              model: effectiveResolvedModel,
+              inputTokens: Number(serverUsage.prompt_tokens || 0),
+              outputTokens: Number(serverUsage.completion_tokens || 0),
+              specialty: specialistName
+            });
+          } else {
+            const inputTokens = Math.ceil(rawText.length / 4) + 1000;
+            const outputTokens = Math.ceil(data.protocol.length / 4);
+            const costInfo = calculateCost(inputTokens, outputTokens, effectiveResolvedModel);
+            setCurrentCost(costInfo.totalCostUnits);
+            logUsage({
+              section: 'protocols',
+              model: effectiveResolvedModel,
+              inputTokens,
+              outputTokens,
+              specialty: specialistName
+            });
+          }
         }
         else setProtocol(`Ошибка: ${data.error}`)
       }
@@ -1519,7 +1528,12 @@ export default function ProtocolPage() {
                 className="w-4 h-4 text-amber-600"
                 disabled={loading}
               />
-              <span className="text-sm text-amber-700 font-semibold leading-tight">🛟 Режим стабильности</span>
+              <span className="text-sm leading-tight">
+                <span className="text-amber-700 font-semibold">🛟 Режим стабильности</span>
+                <span className="block text-[11px] text-gray-500">
+                  Для слабых ПК/Windows и нестабильной сети: отключает streaming, снижает риск таймаутов.
+                </span>
+              </span>
             </label>
             <select value={model} onChange={(e) => setModel(e.target.value as any)} className="w-full md:w-auto px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
               <option value="gpt52">🚀 GPT-5.4 (быстрее)</option>
