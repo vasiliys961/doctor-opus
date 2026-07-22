@@ -57,6 +57,11 @@ function buildProtocolCorrectionPrompt(params: {
 - Для разделов "Жалобы", "Анамнез заболевания", "Анамнез жизни", "Объективный осмотр" пиши единым полотном (одним абзацем без пустых строк внутри раздела).
 - Для блока "Рекомендованные обследования" используй строгую нумерацию "1.", "2.", ...
 - Для блока "Терапия" блок фармакотерапии оформляй только нумерованным списком "1.", "2.", "3.", ...
+- Запрещены Markdown-артефакты: "**", "__", "#", тройные обратные кавычки, а также HTML-теги "<small>" и "</small>".
+- В разделах "Рекомендованные обследования" и "Фармакотерапия" запрещены маркеры "-", "*", "•" вместо нумерации.
+- В разделе "Фармакотерапия/Рецепты" не оставляй пустые бланки: для каждого пункта укажи МНН + 2 торговых наименования (бренд и генерик) и схему приёма.
+- Если есть блок рецептов (Rp.), оформляй его на латинском по фарм-справочнику: "Rp.: [форма] [наименование] [доза]" + "S.: ...".
+- Для МНН в рецептурной строке используй латинское наименование (предпочтительно в родительном падеже), без кириллических МНН внутри "Rp.".
 - Убери англоязычные дубли и двуязычные заголовки, если они попали в черновик.
 - Не используй формулировку "не проводилась"; при отсутствии отклонений указывай норму.
 
@@ -68,6 +73,61 @@ ${template}
 
 ЧЕРНОВИК ДЛЯ ИСПРАВЛЕНИЯ:
 ${draft}`;
+}
+
+function sanitizeProtocolChunkText(text: string): string {
+  return text
+    .replace(/<\/?small>/gi, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/`{1,3}/g, '');
+}
+
+function normalizeNumberedSection(text: string, sectionHeaderRegex: RegExp): string {
+  const lines = text.split('\n');
+  let inSection = false;
+  let number = 1;
+  const sectionBoundaryRegex = /^[А-ЯA-ZЁ][^:\n]{0,120}:\s*$/;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
+    const trimmed = raw.trim();
+
+    if (sectionHeaderRegex.test(trimmed)) {
+      inSection = true;
+      number = 1;
+      continue;
+    }
+
+    if (!inSection) continue;
+
+    if (sectionBoundaryRegex.test(trimmed) && !sectionHeaderRegex.test(trimmed)) {
+      inSection = false;
+      continue;
+    }
+
+    if (!trimmed) continue;
+
+    const numbered = trimmed.match(/^(\d+)\.\s+/);
+    if (numbered) {
+      const current = Number(numbered[1]);
+      number = Number.isFinite(current) ? current + 1 : number + 1;
+      continue;
+    }
+
+    if (/^[-*•]\s+/.test(trimmed) || /^\(?\d+\)\s+/.test(trimmed) || /^[^\d].+/.test(trimmed)) {
+      lines[i] = raw.replace(/^(\s*)(?:[-*•]\s+|\(?\d+\)\s+)?/, `$1${number}. `);
+      number += 1;
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function postProcessProtocolOutput(text: string): string {
+  let normalized = sanitizeProtocolChunkText(text);
+  normalized = normalizeNumberedSection(normalized, /^Рекомендованные обследования\s*:/i);
+  normalized = normalizeNumberedSection(normalized, /^Фармакотерапия\s*:/i);
+  return normalized.trim();
 }
 
 function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
@@ -93,7 +153,7 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
         const parsed = JSON.parse(payload);
         const content = parsed?.choices?.[0]?.delta?.content;
         if (typeof content === 'string' && content.length > 0) {
-          parsed.choices[0].delta.content = anonymizeText(content);
+          parsed.choices[0].delta.content = sanitizeProtocolChunkText(anonymizeText(content));
         }
         return `data: ${JSON.stringify(parsed)}`;
       } catch {
@@ -594,6 +654,10 @@ ${safeTemplate}
 9. Ссылки: Указывай ссылки на проверенные международные источники (UpToDate, PubMed, Cochrane, NCCN, ESC, WHO и др.) для ключевых шагов терапии (предпочтительно ≤5 лет).
 10. Запрещено добавлять технические/служебные секции вне шаблона: "0. ...", "Official Header", "Verification Block", "Conclusion", "Differential Diagnosis" (если они не предусмотрены самим шаблоном).
 11. Запрещено дублировать секции на английском языке. Вывод только на русском.
+12. Не используй Markdown/HTML-артефакты в тексте: "**", "__", "#", тройные обратные кавычки, "<small>", "</small>".
+13. В "Рекомендованные обследования" и в "Фармакотерапия" используй только нумерацию "1.", "2.", ... (без "-", "*", "•").
+14. В "Фармакотерапия/Рецепты" запрещены пустые бланки: каждый пункт должен содержать конкретный препарат (МНН + бренд + генерик) и схему дозирования.
+15. Если в шаблоне есть рецептурные строки (Rp.), заполняй их на латинском по справочнику (уровень Vidal/РЛС); не оставляй кириллические МНН в строке "Rp.".
 ${requiredClinicalBlockDirective}
 ${strictTemplateDirective}
 ${tableDirective}
@@ -618,7 +682,7 @@ ${evidencePriorityDirective}
             : MODELS.SONNET;
     const protocolFallbackModel = effectiveModel === 'grok45' ? MODELS.SONNET : null;
     
-    // В strict-режиме шаблона всегда выполняем двухшаговую генерацию (черновик -> коррекция),
+    // В strict-режиме выполняем двухшаговую генерацию (черновик -> коррекция),
     // даже если клиент запросил streaming. Иначе модель может "уезжать" в свободный формат.
     if (useStreaming && isStrictTemplateMode && !isEcgFunctionalConclusion) {
       const deferredStrictStream = buildDeferredStrictProtocolSse({
@@ -644,7 +708,7 @@ ${evidencePriorityDirective}
             useFastStrict,
           });
           return {
-            text: anonymizeText(strictResult.text),
+            text: postProcessProtocolOutput(anonymizeText(strictResult.text)),
             model: strictResult.model,
           };
         },
@@ -712,7 +776,7 @@ ${evidencePriorityDirective}
       resolvedModel = strictResult.model;
     }
 
-    result = anonymizeText(result);
+    result = postProcessProtocolOutput(anonymizeText(result));
     return NextResponse.json({
       success: true,
       protocol: result,
