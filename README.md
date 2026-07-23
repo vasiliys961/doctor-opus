@@ -77,7 +77,7 @@
 
 ### 🎙️ Голосовые протоколы
 - **Запись разговора врач–пациент:** поддерживается как источник для структурирования протокола.
-- **Voice-to-Protocol:** Заполнение медицинских протоколов голосом (гибридный STT: local + Polza, с fallback).
+- **Voice-to-Protocol:** Заполнение медицинских протоколов голосом через Polza STT (primary `aiesa/transcribe`, fallback `openai/whisper-large-v3`).
 - **Экспорт:** Генерация профессиональных заключений в формате **Word (.docx)**.
 
 ### 📚 Персональная библиотека и атласы
@@ -123,7 +123,7 @@ LLM_API_KEY=ваш_ключ
 POSTGRES_URL=ссылка_на_базу
 NEXTAUTH_SECRET=случайная_строка
 NEXTAUTH_URL=https://doctor-opus.ru
-ASSEMBLYAI_API_KEY=ваш_ключ
+POLZA_API_KEY=ваш_ключ
 MIGRATION_SECRET=случайная_строка_32_символа
 ENCRYPTION_SALT=случайная_строка_32_символа
 ```
@@ -133,13 +133,13 @@ ENCRYPTION_SALT=случайная_строка_32_символа
 cp .env.example .env
 ```
 
-Для STT через Polza GigaAM-v3 + ролевая диаризация (врач/пациент):
+Для STT через Polza (Aiesa primary + Whisper fallback) + ролевая диаризация (врач/пациент):
 ```env
-SPEECH_PROVIDER=hybrid
-STT_HYBRID_PREFER_POLZA=true
+SPEECH_PROVIDER=polza
 POLZA_BASE_URL=https://polza.ai/api/v1
 POLZA_API_KEY=ваш_ключ
-POLZA_WHISPER_MODEL=ai-sage/gigaam-v3
+POLZA_STT_PRIMARY_MODEL=aiesa/transcribe
+POLZA_STT_FALLBACK_MODEL=openai/whisper-large-v3
 STT_ENABLE_DIARIZATION=true
 STT_ROLE_DIARIZATION_ENABLED=true
 STT_ROLE_DIARIZATION_MODEL=anthropic/claude-haiku-4.5
@@ -149,14 +149,8 @@ STT_ROLE_DIARIZATION_MODEL=anthropic/claude-haiku-4.5
 ```bash
 npm run dev
 ```
-Команда поднимает сразу:
+Команда поднимает:
 - основной интерфейс: [http://localhost:3000](http://localhost:3000)
-- локальный Whisper STT: [http://localhost:8000](http://localhost:8000)
-
-Если нужен только Next.js без STT, используйте:
-```bash
-npm run dev:web
-```
 
 ---
 

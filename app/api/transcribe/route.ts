@@ -9,9 +9,8 @@ import { maybeApplyRoleDiarization } from '@/lib/stt-role-diarization';
 
 /**
  * API endpoint для транскрипции аудио.
- * Провайдер выбирается через SPEECH_PROVIDER env:
- * assemblyai | yandex | local | polza | hybrid.
- * По умолчанию — AssemblyAI.
+ * Используется Polza STT с модельным fallback:
+ * primary: aiesa/transcribe -> fallback: openai/whisper-large-v3.
  */
 export async function POST(request: NextRequest) {
   let billedAmount = 0;
@@ -86,7 +85,7 @@ export async function POST(request: NextRequest) {
       console.log(`🔧 MIME тип не определен, использую: ${mimeType} (по расширению: ${extension})`)
     }
 
-    // Получаем провайдер (AssemblyAI или Yandex SpeechKit)
+    // Получаем провайдер Polza STT (Aiesa primary + Whisper fallback)
     const provider = getSpeechProvider();
     console.log(`🚀 Транскрипция через ${provider.name} с MIME:`, mimeType)
 

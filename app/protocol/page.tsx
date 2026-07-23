@@ -76,7 +76,13 @@ function chunkTemplateForRag(content: string, maxChunkLength: number = 1200): st
 
 export default function ProtocolPage() {
   const [rawText, setRawText] = useState('')
-  const [showAudioUpload, setShowAudioUpload] = useState(false)
+  const [showConversationRecorder, setShowConversationRecorder] = useState(false)
+  const [conversationTranscriptText, setConversationTranscriptText] = useState('')
+  const [recordedDraftText, setRecordedDraftText] = useState('')
+  const [draftFromConversationLoading, setDraftFromConversationLoading] = useState(false)
+  const [draftFromConversationError, setDraftFromConversationError] = useState('')
+  const [draftFromConversationModel, setDraftFromConversationModel] = useState<string | null>(null)
+  const [autoInsertConversationToProtocol, setAutoInsertConversationToProtocol] = useState(false)
   const [protocol, setProtocol] = useState('')
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
@@ -106,6 +112,7 @@ export default function ProtocolPage() {
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const conversationRecorderRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.pdfjsLib) {
@@ -125,6 +132,12 @@ export default function ProtocolPage() {
       setPdfJsLoaded(true)
     }
   }, [])
+
+  useEffect(() => {
+    if (!showConversationRecorder) return
+    // Важно для UX: блок записи открывается рядом с кнопкой и сразу попадает в видимую область.
+    conversationRecorderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [showConversationRecorder])
 
   // Загрузка пользовательского шаблона при старте
   useEffect(() => {
@@ -169,7 +182,7 @@ export default function ProtocolPage() {
     }
   }, [])
 
-  // Импорт черновика из URL (например, переход из stt-service localhost:8000 -> localhost:3000/protocol?draftText=...)
+  // Импорт черновика из URL (например, переход с внешнего STT-потока -> /protocol?draftText=...)
   useEffect(() => {
     if (typeof window === 'undefined') return
 
@@ -958,6 +971,38 @@ export default function ProtocolPage() {
     return { drugDisplayName, dosage, form, signa, sourceType: identity.sourceType, sourceLine: line }
   }
 
+  const parseRpLine = (line: string): ParsedMedication | null => {
+    const cleaned = cleanupMedicationLine(line)
+      .replace(/\bD\.?\s*t\.?\s*d\.?\b[\s.:-]*N\.?\s*\d*/i, '')
+      .replace(/\bS\.?\s*[:.-].*$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!cleaned) return null
+
+    const fallback = parseMedicationLine(cleaned)
+    if (fallback) {
+      return { ...fallback, sourceLine: line }
+    }
+
+    const form = detectForm(cleaned)
+    const dosage = normalizeDoseForRp(cleaned, form)
+    const identity = extractDrugIdentity(cleaned)
+    const drugDisplayName =
+      identity.sourceType === 'mnn'
+        ? normalizeToLatinGenitive(identity.name)
+        : identity.name || '________________'
+
+    if (!drugDisplayName && dosage === '____') return null
+    return {
+      drugDisplayName: drugDisplayName || '________________',
+      dosage,
+      form,
+      signa: buildMediumTherapeuticSigna(form),
+      sourceType: identity.sourceType,
+      sourceLine: line
+    }
+  }
+
   const normalizeMedicationsWithAi = async (items: ParsedMedication[]): Promise<ParsedMedication[]> => {
     if (items.length === 0) return items
 
@@ -1002,6 +1047,46 @@ export default function ProtocolPage() {
 
   const extractMedicationsFromProtocol = (text: string): ParsedMedication[] => {
     const lines = text.split('\n')
+    const medsFromRp: ParsedMedication[] = []
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const rawLine = lines[i]
+      const line = rawLine.trim()
+      if (!line) continue
+      if (!/^rp\.?\s*[:.-]/i.test(line)) continue
+
+      const parsedRp = parseRpLine(line)
+      if (!parsedRp) continue
+
+      let signaFromNearby = ''
+      for (let j = i + 1; j <= Math.min(i + 3, lines.length - 1); j += 1) {
+        const next = lines[j].trim()
+        if (!next) continue
+        if (/^s\.?\s*[:.-]/i.test(next)) {
+          signaFromNearby = next.replace(/^s\.?\s*[:.-]?\s*/i, '').trim()
+          break
+        }
+        if (/^rp\.?\s*[:.-]/i.test(next)) break
+      }
+
+      medsFromRp.push({
+        ...parsedRp,
+        signa: signaFromNearby ? `S.: ${signaFromNearby}` : parsedRp.signa
+      })
+      if (medsFromRp.length >= 16) break
+    }
+
+    if (medsFromRp.length > 0) {
+      return medsFromRp.filter(
+        (med, idx, arr) =>
+          arr.findIndex(
+            (m) =>
+              m.drugDisplayName.toLowerCase() === med.drugDisplayName.toLowerCase() &&
+              m.dosage.toLowerCase() === med.dosage.toLowerCase()
+          ) === idx
+      )
+    }
+
     let inTherapyBlock = false
     const meds: ParsedMedication[] = []
 
@@ -1325,6 +1410,46 @@ export default function ProtocolPage() {
     win.document.close()
   }
 
+  const buildDraftFromConversation = async (transcriptText: string) => {
+    const safeTranscript = anonymizeText(transcriptText || '').trim()
+    if (!safeTranscript) return
+
+    setDraftFromConversationLoading(true)
+    setDraftFromConversationError('')
+    try {
+      const response = await fetch('/api/protocol/dialogue-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcript: safeTranscript,
+          specialistName,
+        }),
+      })
+      const data = await response.json()
+      if (!data?.success) {
+        throw new Error(data?.error || 'Не удалось собрать черновик')
+      }
+      const draft = String(data?.draft || '').trim()
+      if (!draft) {
+        throw new Error('Черновик получился пустым')
+      }
+      setRecordedDraftText(draft)
+      setDraftFromConversationModel(typeof data?.modelUsed === 'string' ? data.modelUsed : null)
+      if (autoInsertConversationToProtocol) {
+        setRawText((prev) => (prev ? `${prev}\n\n${draft}` : draft))
+      }
+    } catch (error: any) {
+      setDraftFromConversationError(error?.message || 'Ошибка формирования черновика')
+      setRecordedDraftText(safeTranscript)
+      setDraftFromConversationModel(null)
+      if (autoInsertConversationToProtocol) {
+        setRawText((prev) => (prev ? `${prev}\n\n${safeTranscript}` : safeTranscript))
+      }
+    } finally {
+      setDraftFromConversationLoading(false)
+    }
+  }
+
   return (
     <>
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -1334,19 +1459,6 @@ export default function ProtocolPage() {
         </h1>
       </div>
       
-      {showAudioUpload && (
-        <div className="mb-4 bg-white rounded-lg shadow-lg p-4">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold">🎤 Загрузка аудио</h3>
-            <button onClick={() => setShowAudioUpload(false)} className="text-gray-500 hover:text-gray-700">✕</button>
-          </div>
-          <AudioUpload onTranscribe={(transcript) => {
-            setRawText(prev => prev ? prev + '\n\n' + transcript : transcript)
-            setShowAudioUpload(false)
-          }} />
-        </div>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow-lg p-6">
           <h2 className="text-xl font-semibold mb-4">Настройки и ввод данных</h2>
@@ -1497,13 +1609,93 @@ export default function ProtocolPage() {
           </div>
 
           <div className="flex gap-2 mb-4 flex-wrap">
-            <button onClick={() => setShowAudioUpload(!showAudioUpload)} className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors text-sm" disabled={loading}>
-              📁 Аудио файл
+            <button onClick={() => setShowConversationRecorder(!showConversationRecorder)} className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors text-sm" disabled={loading}>
+              🎙️ Запись беседы
             </button>
             <button onClick={() => setRawText('')} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm" disabled={!rawText || loading}>
               🗑️ Очистить
             </button>
           </div>
+
+          {showConversationRecorder && (
+            <div ref={conversationRecorderRef} className="mb-4 bg-white rounded-lg shadow-lg p-4 border border-indigo-100">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-semibold">🎙️ Запись беседы с пациентом</h3>
+                <button onClick={() => setShowConversationRecorder(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+              </div>
+              <p className="text-[11px] text-gray-500 mb-3">
+                Поток: запись/загрузка аудио → транскрипция через Polza STT (Aiesa, fallback Whisper) → черновик беседы.
+                Далее можно вручную добавить объективные данные и сформировать итоговый протокол.
+              </p>
+              <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-indigo-700 mb-3">
+                <input
+                  type="checkbox"
+                  checked={autoInsertConversationToProtocol}
+                  onChange={(e) => setAutoInsertConversationToProtocol(e.target.checked)}
+                  className="w-3.5 h-3.5"
+                />
+                Автоматически вставлять транскрипт в поле протокола
+              </label>
+              <AudioUpload
+                autoStartOnMount
+                onTranscribe={(transcript) => {
+                  const nextTranscript = conversationTranscriptText
+                    ? `${conversationTranscriptText}\n\n${transcript}`
+                    : transcript
+                  setConversationTranscriptText(nextTranscript)
+                  void buildDraftFromConversation(nextTranscript)
+                }}
+              />
+              {draftFromConversationLoading && (
+                <p className="mt-2 text-xs text-indigo-600">⏳ Лёгкая модель формирует черновик по транскрипту...</p>
+              )}
+              {draftFromConversationError && (
+                <p className="mt-2 text-xs text-amber-700">⚠️ {draftFromConversationError}</p>
+              )}
+              {draftFromConversationModel && (
+                <p className="mt-2 text-[11px] text-blue-700">🤖 Черновик собран моделью: {draftFromConversationModel}</p>
+              )}
+              {recordedDraftText && (
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-gray-700 mb-2">Черновик по жалобам/анамнезу (можно редактировать перед вставкой):</label>
+                  <textarea
+                    value={recordedDraftText}
+                    onChange={(e) => setRecordedDraftText(e.target.value)}
+                    className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-xs min-h-[140px] focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder="Транскрипт беседы появится здесь..."
+                    disabled={loading}
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setRawText(prev => prev ? `${prev}\n\n${recordedDraftText}` : recordedDraftText)}
+                      className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-colors"
+                      disabled={loading || !recordedDraftText.trim()}
+                    >
+                      ➕ Вставить черновик в протокол
+                    </button>
+                    <button
+                      onClick={() => setRecordedDraftText('')}
+                      className="px-3 py-1.5 bg-gray-500 text-white rounded-lg text-xs font-semibold hover:bg-gray-600 transition-colors"
+                      disabled={loading}
+                    >
+                      🗑️ Очистить черновик
+                    </button>
+                  </div>
+                </div>
+              )}
+              {conversationTranscriptText && (
+                <details className="mt-3">
+                  <summary className="text-xs text-gray-500 cursor-pointer">Показать исходную транскрипцию беседы</summary>
+                  <textarea
+                    value={conversationTranscriptText}
+                    onChange={(e) => setConversationTranscriptText(e.target.value)}
+                    className="mt-2 w-full px-3 py-2 border border-gray-200 rounded-lg text-xs min-h-[100px] focus:ring-2 focus:ring-gray-400 outline-none"
+                    disabled={loading}
+                  />
+                </details>
+              )}
+            </div>
+          )}
 
           <div className="mb-4 grid grid-cols-1 md:grid-cols-[auto_auto_minmax(220px,1fr)] gap-3 items-start md:items-center">
             <label className="flex items-center gap-2 cursor-pointer">

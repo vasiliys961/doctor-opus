@@ -105,7 +105,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com",
               "img-src 'self' data: blob:",
               "font-src 'self' data: https://fonts.gstatic.com",
-              "connect-src 'self' blob: data: https://openrouter.ai https://api.assemblyai.com https://api.cloud.yandex.net https://cdn.tailwindcss.com",
+              "connect-src 'self' blob: data: https://openrouter.ai https://polza.ai https://cdn.tailwindcss.com",
               "media-src 'self' blob:",
               "worker-src 'self' blob:",
               "frame-ancestors 'self'",

@@ -17,6 +17,7 @@ function estimateProtocolCost(rawTextLength: number, strictTemplateMode: boolean
 const STRICT_FAST_RAWTEXT_THRESHOLD = 12000;
 const STRICT_FAST_TEMPLATE_THRESHOLD = 6000;
 const STRICT_CORRECTION_TIMEOUT_MS = Number(process.env.PROTOCOL_STRICT_CORRECTION_TIMEOUT_MS || 55000);
+const LATIN_RX_FIX_TIMEOUT_MS = Number(process.env.PROTOCOL_LATIN_RX_FIX_TIMEOUT_MS || 25000);
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -75,6 +76,34 @@ ${template}
 ${draft}`;
 }
 
+function buildLatinPrescriptionFixPrompt(params: {
+  template: string;
+  draft: string;
+}): string {
+  const { template, draft } = params;
+  return `Ты — медицинский редактор рецептурного блока.
+
+ЗАДАЧА:
+Исправь ТОЛЬКО рецептурные строки в формате "Rp." и связанные строки "S.".
+Верни ПОЛНЫЙ документ целиком, без комментариев.
+
+ПРАВИЛА (ОБЯЗАТЕЛЬНО):
+1) Структуру, порядок и остальные разделы НЕ МЕНЯЙ.
+2) В каждой строке "Rp." используй ТОЛЬКО латиницу (без кириллицы).
+3) Убери пустые бланки и плейсхолдеры вида [ ... ], "____", "(...)" в рецептах.
+4) Формат рецепта:
+   Rp.: [лекарственная форма лат.] [наименование лат.] [доза]
+   S.: [схема применения на русском]
+5) Если исходная строка "Rp." не содержит конкретного препарата, заполни ее клинически уместным и безопасным примером (МНН в латинской записи).
+6) Не добавляй markdown/HTML.
+
+ШАБЛОН (для якорей структуры):
+${template}
+
+ДОКУМЕНТ ДЛЯ ИСПРАВЛЕНИЯ:
+${draft}`;
+}
+
 function sanitizeProtocolChunkText(text: string): string {
   return text
     .replace(/<\/?small>/gi, '')
@@ -121,6 +150,23 @@ function normalizeNumberedSection(text: string, sectionHeaderRegex: RegExp): str
   }
 
   return lines.join('\n');
+}
+
+function extractRpLines(text: string): string[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => /^Rp\.\s*:|^Rp:/i.test(line));
+}
+
+function hasPrescriptionPlaceholders(line: string): boolean {
+  return /\[[^\]]*]/.test(line) || /_{2,}/.test(line) || /\(\s*\.\.\.\s*\)/.test(line);
+}
+
+function hasInvalidLatinInPrescriptions(text: string): boolean {
+  const rpLines = extractRpLines(text);
+  if (rpLines.length === 0) return false;
+  return rpLines.some((line) => /[А-Яа-яЁё]/.test(line) || hasPrescriptionPlaceholders(line));
 }
 
 function postProcessProtocolOutput(text: string): string {
@@ -378,6 +424,9 @@ function isStructuredProtocolOutputValid(output: string, template: string): bool
   for (const pattern of STRICT_PROTOCOL_BANNED_PATTERNS) {
     if (pattern.test(output)) return false;
   }
+  if (hasInvalidLatinInPrescriptions(output)) {
+    return false;
+  }
 
   const anchors = extractTemplateAnchors(template).map(normalizeAnchorForSearch);
   if (anchors.length === 0) return true;
@@ -422,6 +471,23 @@ async function enforceStrictTemplateOutput(params: {
     onUsage?.(correctedResult.usage);
     let corrected = correctedResult.content;
     corrected = trimToTemplateStart(corrected, template);
+    if (hasInvalidLatinInPrescriptions(corrected)) {
+      try {
+        const latinFixPrompt = buildLatinPrescriptionFixPrompt({
+          template,
+          draft: corrected,
+        });
+        const latinFixedResult = await withTimeout(
+          sendTextRequestWithUsage(latinFixPrompt, [], primaryModel),
+          LATIN_RX_FIX_TIMEOUT_MS,
+          'Latin prescription fix timeout'
+        );
+        onUsage?.(latinFixedResult.usage);
+        corrected = trimToTemplateStart(latinFixedResult.content, template);
+      } catch (latinFixError: any) {
+        console.warn(`[PROTOCOL] Latin Rx fix failed on ${primaryModel}: ${String(latinFixError?.message || latinFixError)}`);
+      }
+    }
     bestEffortText = corrected;
     if (isStructuredProtocolOutputValid(corrected, template)) {
       return { text: corrected, model: primaryModel };

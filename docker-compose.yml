@@ -31,36 +31,6 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  stt:
-    build:
-      context: ./stt-service
-      dockerfile: Dockerfile
-    container_name: doctor-opus-stt-en
-    restart: always
-    environment:
-      - HF_HOME=/models
-      - WHISPER_MODEL=${WHISPER_MODEL:-small}
-      - WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-int8}
-      - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
-      - WHISPER_LANGUAGE=${WHISPER_LANGUAGE:-ru}
-      - WHISPER_BEAM_SIZE=${WHISPER_BEAM_SIZE:-1}
-      - WHISPER_VAD_FILTER=${WHISPER_VAD_FILTER:-true}
-      - WHISPER_CPU_THREADS=${WHISPER_CPU_THREADS:-0}
-      - STT_MAX_UPLOAD_MB=${STT_MAX_UPLOAD_MB:-200}
-      # Нужен для fallback-сборки черновика в stt-service (/draft).
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - DRAFT_MODEL=${DRAFT_MODEL:-google/gemini-3-flash-preview}
-    volumes:
-      - stt-models-en:/models
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
-      interval: 20s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    networks:
-      - doctor-opus-en
-
   medical-assistant-en:
     build:
       context: .
@@ -85,22 +55,16 @@ services:
       - ENCRYPTION_SALT=${ENCRYPTION_SALT:-}
       
       # === ТРАНСКРИПЦИЯ ===
-      - ASSEMBLYAI_API_KEY=${ASSEMBLYAI_API_KEY:-}
-      - SPEECH_PROVIDER=${SPEECH_PROVIDER:-hybrid}
-      - YANDEX_SPEECHKIT_API_KEY=${YANDEX_SPEECHKIT_API_KEY:-}
-      - YANDEX_SPEECHKIT_FOLDER_ID=${YANDEX_SPEECHKIT_FOLDER_ID:-}
+      - SPEECH_PROVIDER=${SPEECH_PROVIDER:-polza}
       - POLZA_BASE_URL=${POLZA_BASE_URL:-https://polza.ai/api/v1}
       - POLZA_API_KEY=${POLZA_API_KEY:-}
-      - POLZA_WHISPER_MODEL=${POLZA_WHISPER_MODEL:-ai-sage/gigaam-v3}
+      - POLZA_STT_PRIMARY_MODEL=${POLZA_STT_PRIMARY_MODEL:-aiesa/transcribe}
+      - POLZA_STT_FALLBACK_MODEL=${POLZA_STT_FALLBACK_MODEL:-openai/whisper-large-v3}
       - STT_POLZA_TIMEOUT_MS=${STT_POLZA_TIMEOUT_MS:-30000}
       - STT_ENABLE_DIARIZATION=${STT_ENABLE_DIARIZATION:-true}
       - STT_ROLE_DIARIZATION_ENABLED=${STT_ROLE_DIARIZATION_ENABLED:-true}
       - STT_ROLE_DIARIZATION_MODEL=${STT_ROLE_DIARIZATION_MODEL:-anthropic/claude-haiku-4.5}
-      # Локальный Whisper STT внутри docker-сети.
-      - STT_SERVICE_URL=${STT_SERVICE_URL:-http://stt:8000}
       - STT_TIMEOUT_MS=${STT_TIMEOUT_MS:-280000}
-      - STT_LOCAL_MAX_SECONDS=${STT_LOCAL_MAX_SECONDS:-45}
-      - STT_HYBRID_PREFER_POLZA=${STT_HYBRID_PREFER_POLZA:-true}
       
       # === EMAIL ===
       - EMAIL_PROVIDER=${EMAIL_PROVIDER:-smtp}
@@ -137,8 +101,6 @@ services:
     depends_on:
       db-en:
         condition: service_started
-      stt:
-        condition: service_healthy
     logging:
       driver: "json-file"
       options:
@@ -149,9 +111,6 @@ services:
       - ./exports:/app/exports
     networks:
       - doctor-opus-en
-
-volumes:
-  stt-models-en:
 
 networks:
   doctor-opus-en:

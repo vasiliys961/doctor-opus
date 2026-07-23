@@ -6,9 +6,10 @@ interface AudioUploadProps {
   onTranscribe: (transcript: string, data?: { duration: number; cost: number }) => void
   accept?: string
   maxSize?: number // в MB
+  autoStartOnMount?: boolean
 }
 
-export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize = 2000 }: AudioUploadProps) {
+export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize = 2000, autoStartOnMount = false }: AudioUploadProps) {
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [transcribing, setTranscribing] = useState(false)
@@ -30,6 +31,15 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!autoStartOnMount) return
+    // Небольшая задержка нужна, чтобы DOM успел отрисоваться перед запросом доступа к микрофону.
+    const timer = setTimeout(() => {
+      void startRecording()
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [autoStartOnMount])
 
   const handleFile = async (file: File) => {
     setError(null)
@@ -88,21 +98,45 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      
-      // Определяем поддерживаемый MIME тип
-      let mimeType = 'audio/webm'
-      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-        mimeType = 'audio/webm;codecs=opus'
-      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-        mimeType = 'audio/webm'
-      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-        mimeType = 'audio/mp4'
-      } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
-        mimeType = 'audio/ogg'
+      if (typeof window === 'undefined' || !navigator?.mediaDevices?.getUserMedia) {
+        setError('Браузер не поддерживает доступ к микрофону (mediaDevices/getUserMedia недоступен).')
+        return
       }
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType })
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1'
+      if (!window.isSecureContext && !isLocalhost) {
+        setError('Для доступа к микрофону откройте сайт по HTTPS (или через localhost).')
+        return
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
+      
+      // Определяем поддерживаемый MIME тип
+      const candidateMimeTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg',
+      ]
+      const mimeType = candidateMimeTypes.find((t) => MediaRecorder.isTypeSupported(t)) || ''
+
+      let mediaRecorder: MediaRecorder
+      try {
+        mediaRecorder = mimeType
+          ? new MediaRecorder(stream, { mimeType })
+          : new MediaRecorder(stream)
+      } catch {
+        // Fallback для браузеров/драйверов, где options с mimeType могут падать.
+        mediaRecorder = new MediaRecorder(stream)
+      }
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []
 
@@ -113,19 +147,20 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
       }
 
       mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: mimeType })
+        const finalMimeType = mimeType || mediaRecorder.mimeType || 'audio/webm'
+        const blob = new Blob(chunksRef.current, { type: finalMimeType })
         
         // Создаем файл из blob с правильным MIME типом
-        const extension = mimeType.includes('webm') ? 'webm' : 
-                         mimeType.includes('mp4') ? 'mp4' : 
-                         mimeType.includes('ogg') ? 'ogg' : 'webm'
-        const file = new File([blob], `recording.${extension}`, { type: mimeType })
+        const extension = finalMimeType.includes('webm') ? 'webm' : 
+                         finalMimeType.includes('mp4') ? 'mp4' : 
+                         finalMimeType.includes('ogg') ? 'ogg' : 'webm'
+        const file = new File([blob], `recording.${extension}`, { type: finalMimeType })
         
         console.log('📁 Создан файл для транскрипции:', {
           name: file.name,
           type: file.type,
           size: file.size,
-          mimeType: mimeType
+          mimeType: finalMimeType
         })
         
         // Останавливаем все треки
@@ -151,7 +186,20 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
         setRecordingTime(prev => prev + 1)
       }, 1000)
     } catch (err: any) {
-      setError('Не удалось получить доступ к микрофону: ' + err.message)
+      const code = String(err?.name || '')
+      if (code === 'NotAllowedError' || code === 'SecurityError') {
+        setError('Доступ к микрофону запрещён. Разрешите микрофон для сайта в браузере и перезагрузите страницу.')
+        return
+      }
+      if (code === 'NotFoundError' || code === 'DevicesNotFoundError') {
+        setError('Микрофон не найден. Проверьте подключение устройства и настройки Windows.')
+        return
+      }
+      if (code === 'NotReadableError') {
+        setError('Микрофон занят другим приложением. Закройте Zoom/Teams/диктофон и повторите.')
+        return
+      }
+      setError('Не удалось получить доступ к микрофону: ' + (err?.message || 'неизвестная ошибка'))
     }
   }
 
