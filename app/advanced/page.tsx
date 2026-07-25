@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
-import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
+import AnalysisModeSelector, { AnalysisMode, AnalysisRecommendation, OptimizedModel } from '@/components/AnalysisModeSelector'
 import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import { handleSSEStream } from '@/lib/streaming-utils'
@@ -28,6 +28,41 @@ export default function AdvancedAnalysisPage() {
   const [showEditor, setShowEditor] = useState(false)
   const [maskImage, setMaskImage] = useState(true)
   const BRIDGE_CONTEXT_KEY = 'mobile_bridge_clinical_context_draft'
+
+  const modelRecommendation = useMemo<AnalysisRecommendation | null>(() => {
+    const hasMain = Boolean(mainImage || mainImagePreview)
+    const contextLength = additionalContext.trim().length
+    const hasManyAttachments = additionalFiles.length >= 2
+    const isComplexModality =
+      imageType === 'ct' ||
+      imageType === 'mri' ||
+      imageType === 'histology' ||
+      imageType === 'mammography'
+
+    if (!hasMain) {
+      return {
+        mode: 'optimized',
+        optimizedModel: 'gpt52',
+        title: 'Быстрый старт расширенного анализа',
+        reason: 'Для первичного прогона обычно достаточно оптимизированного режима.',
+      }
+    }
+
+    if (isComplexModality || hasManyAttachments || contextLength > 900) {
+      return {
+        mode: 'validated',
+        title: 'Сложный мультимодальный кейс',
+        reason: 'При high-risk модальности, вложениях и объемном контексте лучше экспертный режим.',
+      }
+    }
+
+    return {
+      mode: 'optimized',
+      optimizedModel: 'sonnet',
+      title: 'Контекстный кейс',
+      reason: 'Для расширенного анализа с контекстом обычно полезнее более глубокая интерпретация.',
+    }
+  }, [additionalContext, additionalFiles.length, imageType, mainImage, mainImagePreview])
 
   useEffect(() => {
     const raw = localStorage.getItem(BRIDGE_CONTEXT_KEY)
@@ -83,7 +118,7 @@ export default function AdvancedAnalysisPage() {
         ? 'google/gemini-3-flash-preview' 
         : mode === 'optimized' 
           ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra')
-          : 'anthropic/claude-opus-4.8'
+          : 'anthropic/claude-opus-5'
       
       const formData = new FormData()
       formData.append('file', mainImage)
@@ -142,7 +177,7 @@ export default function AdvancedAnalysisPage() {
         content={{
           fast: "базовый скрининг основного изображения с учетом контекста.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5) — лучший выбор для анализа снимков с описанием.",
-          validated: "двухэтапный экспертный анализ (Gemini JSON + Opus 4.8) — объединяет точность зрения Gemini и клинический интеллект Opus.",
+          validated: "двухэтапный экспертный анализ (Gemini JSON + Opus 5) — объединяет точность зрения Gemini и клинический интеллект Opus.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini JSON + Sonnet) — лучший выбор для анализа снимков с описанием.",
             "📎 Вы можете приложить дополнительные PDF, DOCX или фото для анализа в контексте.",
@@ -239,6 +274,7 @@ export default function AdvancedAnalysisPage() {
             onChange={setMode} 
             optimizedModel={optimizedModel}
             onOptimizedModelChange={setOptimizedModel}
+            recommendation={modelRecommendation}
             disabled={loading} 
           />
         </div>

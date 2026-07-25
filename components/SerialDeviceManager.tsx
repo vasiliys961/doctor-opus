@@ -439,7 +439,7 @@ export default function SerialDeviceManager() {
       const presetConfig = {
         fast:   { mode: 'fast',      model: 'google/gemini-3-flash-preview',    extractor: 'google/gemini-3-flash-preview' },
         best:   { mode: 'optimized', model: 'openai/gpt-5.6-terra',             extractor: 'google/gemini-3-pro-preview' },
-        expert: { mode: 'validated', model: 'anthropic/claude-opus-4.8',         extractor: 'google/gemini-3-pro-preview' },
+        expert: { mode: 'validated', model: 'anthropic/claude-opus-5',         extractor: 'google/gemini-3-pro-preview' },
       }
       const cfg = presetConfig[analysisPreset]
       setAnalysisModelUsed(cfg.model)
@@ -691,7 +691,7 @@ export default function SerialDeviceManager() {
                     id: 'expert',
                     icon: '🧠',
                     label: 'Экспертный',
-                    desc: 'Gemini Pro → Opus 4.8',
+                    desc: 'Gemini Pro → Opus 5',
                     sub: 'Сложные и критические случаи',
                     color: 'purple',
                   },

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
-import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
+import AnalysisModeSelector, { AnalysisMode, AnalysisRecommendation, OptimizedModel } from '@/components/AnalysisModeSelector'
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
@@ -120,7 +120,7 @@ export default function UltrasoundPage() {
       // Подбор модели
       const targetModelId = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
                            analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') :
-                           'anthropic/claude-opus-4.8';
+                           'anthropic/claude-opus-5';
       formData.append('model', targetModelId);
 
       const response = await postAnalyzeImageWithModelConsent({ formData, mode: analysisMode })
@@ -252,6 +252,46 @@ export default function UltrasoundPage() {
     const topEnglishTerm = ultrasoundReferenceLinks[0]?.titleEn || 'ultrasound interpretation'
     return buildUltrasoundGeneralLinks(topEnglishTerm)
   }, [ultrasoundReferenceLinks])
+
+  const modelRecommendation = useMemo<AnalysisRecommendation | null>(() => {
+    const hasInput = Boolean(file || imagePreview || videoUrl)
+    const contextLength = clinicalContext.trim().length
+    const hasManyFrames = extractedFrames.length >= 4
+    const hasSeries = additionalFiles.length > 1
+
+    if (!hasInput) {
+      return {
+        mode: 'optimized',
+        optimizedModel: 'gpt52',
+        title: 'Быстрый старт по УЗИ',
+        reason: 'Для первичного прогона обычно достаточно оптимизированного режима.',
+      }
+    }
+
+    if (isVideo && hasManyFrames) {
+      return {
+        mode: 'validated',
+        title: 'Видео/Cine-loop анализ',
+        reason: 'При анализе нескольких кадров из видео выше риск пропуска деталей, лучше экспертный режим.',
+      }
+    }
+
+    if (hasSeries || contextLength > 700) {
+      return {
+        mode: 'optimized',
+        optimizedModel: 'sonnet',
+        title: 'Сложный контекст УЗИ',
+        reason: 'При серии кадров и объемном контексте полезнее более глубокая интерпретация.',
+      }
+    }
+
+    return {
+      mode: 'optimized',
+      optimizedModel: 'gpt52',
+      title: 'Рутинный УЗИ-кейс',
+      reason: 'Обычно это лучший баланс скорости и качества для типового случая.',
+    }
+  }, [additionalFiles.length, clinicalContext, extractedFrames.length, file, imagePreview, isVideo, videoUrl])
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -428,7 +468,7 @@ export default function UltrasoundPage() {
               </div>
             </div>
             <div>
-              <AnalysisModeSelector value={mode} onChange={setMode} optimizedModel={optimizedModel} onOptimizedModelChange={setOptimizedModel} disabled={loading} />
+              <AnalysisModeSelector value={mode} onChange={setMode} optimizedModel={optimizedModel} onOptimizedModelChange={setOptimizedModel} recommendation={modelRecommendation} disabled={loading} />
               <div className="mt-6 flex flex-col gap-3">
                 <button
                   onClick={() => analyzeUltrasound(mode, useStreaming)}

@@ -40,7 +40,7 @@ export default function FableUpgradeModal({
         </p>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 mb-3">
-          <div><strong>Opus 4.8:</strong> ~{estimatedCostOpus.toFixed(2)} ед.</div>
+          <div><strong>Opus 5:</strong> ~{estimatedCostOpus.toFixed(2)} ед.</div>
           <div><strong>Fable 5:</strong> ~{estimatedCostFable.toFixed(2)} ед.</div>
           <div><strong>Разница:</strong> +{estimatedDifference.toFixed(2)} ед.</div>
         </div>
@@ -54,7 +54,7 @@ export default function FableUpgradeModal({
             onClick={() => onSelect('opus')}
             className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors"
           >
-            Остаться на Opus 4.8
+            Остаться на Opus 5
           </button>
           <button
             onClick={() => onSelect('fable')}

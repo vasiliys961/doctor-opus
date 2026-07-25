@@ -28,7 +28,7 @@ Doctor Opus — веб-платформа поддержки врачебных 
 | Роль в системе | Model ID (OpenAI-compatible) | Где используется |
 |---|---|---|
 | Базовый Opus (режим optimized/direct) | `anthropic/claude-opus-4.6` | Точный анализ изображений по умолчанию, сравнительный анализ, чат |
-| Opus для режима **validated** | `anthropic/claude-opus-4.8` (откат на `4.7` через env `VALIDATED_OPUS_MODEL`, без деплоя) | Максимальная точность в `/image-analysis`, `/xray`, `/ct`, `/mri` и др. при выборе режима "validated" |
+| Opus для режима **validated** | `anthropic/claude-opus-5` (откат на `4.7` через env `VALIDATED_OPUS_MODEL`, без деплоя) | Максимальная точность в `/image-analysis`, `/xray`, `/ct`, `/mri` и др. при выборе режима "validated" |
 | Sonnet | `anthropic/claude-sonnet-5` | Этап 2 обычного анализа, роли Test-Chooser/Stewardship и мнения специальностей в Консилиуме |
 | GPT | `openai/gpt-5.6-terra` | Geo/permission fallback для Anthropic-моделей |
 | Быстрая vision-модель | `google/gemini-3-flash-preview` | Vision JSON (этап 1), OCR, triage, маршрутизация специальностей в Консилиуме |
@@ -39,7 +39,7 @@ Doctor Opus — веб-платформа поддержки врачебных 
 > **Важно по Fable 5:** это не модель "по умолчанию для всех" — она подключена целенаправленно только к трём ролям дебатов Консилиума (Hypothesis/Challenger/Checklist), где по данным HealthBench Professional показывает более высокий результат, чем Opus и GPT-5.5. Остальные роли Консилиума (Test-Chooser, Stewardship, синтез AMSC, маршрутизация) работают на Sonnet 5 — это сознательный баланс стоимости и клинической глубины, а не ограничение возможностей.
 - **Двухэтапный pipeline для изображений:**
   1. Этап 1 (Vision JSON) — быстрая модель (обычно Gemini 3 Flash) извлекает находки в строгий JSON: `findings`, `metrics`, `is_critical`, `confidence`.
-  2. Этап 2 (клиническое рассуждение) — более сильная модель (Sonnet 5 / Opus 4.8 / GPT-5.6 Terra) строит на этом JSON полноценную клиническую директиву по единому промпту `STRATEGIC_SYSTEM_PROMPT`.
+  2. Этап 2 (клиническое рассуждение) — более сильная модель (Sonnet 5 / Opus 5 / GPT-5.6 Terra) строит на этом JSON полноценную клиническую директиву по единому промпту `STRATEGIC_SYSTEM_PROMPT`.
 - **Smart routing:** при `self_confidence < 0.75`, высокой заявленной сложности или high-risk модальности (КТ, МРТ, гистология, маммография) происходит эскалация с Gemini Flash на Gemini 3.1 Pro без участия пользователя.
 - **Streaming:** SSE через `TransformStream` с padding (2–4 КБ) против буферизации прокси, heartbeat каждые 5 с, агрегация usage с обоих этапов для точного биллинга.
 - **Адаптивные лимиты токенов** (`lib/adaptive-tokens.ts`) — `max_tokens` рассчитывается по длине диалога/файлов/режима, а не берётся фиксированным.
@@ -169,7 +169,7 @@ Doctor Opus — веб-платформа поддержки врачебных 
 | Dr. Stewardship | Sonnet 5 | Контролирует избыточность назначений и ресурсные затраты |
 | Dr. Checklist | **Fable 5** | Финальная проверка и формирование итогового диагноза |
 
-Модель **Fable 5** — модель по умолчанию для этих трёх ролей, выбрана за более высокий результат на HealthBench Professional, чем у Opus и GPT-5.5; при технических сбоях автоматически подменяется на Sakana Fugu Ultra без участия пользователя. Ручной откат на Opus (для сравнения или при необходимости) — через `CONSILIUM_DEBATE_MODEL=opus`, что подключает `anthropic/claude-opus-4.8` (`OPUS_VALIDATED`), без деплоя.
+Модель **Fable 5** — модель по умолчанию для этих трёх ролей, выбрана за более высокий результат на HealthBench Professional, чем у Opus и GPT-5.5; при технических сбоях автоматически подменяется на Sakana Fugu Ultra без участия пользователя. Ручной откат на Opus (для сравнения или при необходимости) — через `CONSILIUM_DEBATE_MODEL=opus`, что подключает `anthropic/claude-opus-5` (`OPUS_VALIDATED`), без деплоя.
 
 **Политика безопасности эскалации к врачу (`escalation.ts`):**
 - Расхождение мнений > 0.6 → обязательная проверка врачом.

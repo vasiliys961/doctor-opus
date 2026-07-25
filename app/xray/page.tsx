@@ -5,7 +5,7 @@ import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
-import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
+import AnalysisModeSelector, { AnalysisMode, AnalysisRecommendation, OptimizedModel } from '@/components/AnalysisModeSelector'
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
@@ -134,7 +134,7 @@ export default function XRayPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-4.8');
+        formData.append('model', 'anthropic/claude-opus-5');
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3-flash-preview');
       }
@@ -158,7 +158,7 @@ export default function XRayPage() {
         
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.8';
+                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
 
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
@@ -200,7 +200,7 @@ export default function XRayPage() {
         if (data.success) {
           setResult(data.result)
           setAnalysisStep('description_complete')
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.8');
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5');
           setCurrentCost(data.cost || 1.0)
           setModelInfo({ model: modelUsed, mode: analysisMode });
 
@@ -273,6 +273,45 @@ export default function XRayPage() {
     return buildXrayGeneralLinks(topEnglishTerm)
   }, [xrayReferenceLinks])
 
+  const modelRecommendation = useMemo<AnalysisRecommendation | null>(() => {
+    const hasImageLoaded = Boolean(file || imagePreview)
+    const contextLength = clinicalContext.trim().length
+    const hasComparativeStudy = isComparisonMode || Boolean(archivePreview) || additionalFiles.length > 0
+
+    if (!hasImageLoaded) {
+      return {
+        mode: 'optimized',
+        optimizedModel: 'gpt52',
+        title: 'Быстрый старт по рентгену',
+        reason: 'Для первичного прогона обычно лучше быстрый и экономичный баланс.',
+      }
+    }
+
+    if (hasComparativeStudy) {
+      return {
+        mode: 'validated',
+        title: 'Сравнительное исследование',
+        reason: 'При сравнении текущего и архивного снимков лучше сразу использовать экспертный режим.',
+      }
+    }
+
+    if (contextLength > 900) {
+      return {
+        mode: 'optimized',
+        optimizedModel: 'sonnet',
+        title: 'Развернутый клинический контекст',
+        reason: 'При большом объеме анамнеза полезнее более обстоятельная интерпретация.',
+      }
+    }
+
+    return {
+      mode: 'optimized',
+      optimizedModel: 'gpt52',
+      title: 'Стандартный рентген-кейс',
+      reason: 'Обычно это лучший баланс скорости и качества для рутинного снимка.',
+    }
+  }, [additionalFiles.length, archivePreview, clinicalContext, file, imagePreview, isComparisonMode])
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="mb-6 flex items-center justify-between">
@@ -283,11 +322,11 @@ export default function XRayPage() {
         content={{
           fast: "двухэтапный скрининг рентгена (сначала структурированное описание снимка, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5) — идеальный баланс точности и качества для анализа рентгенограмм.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.8) — рекомендуется для критических и сложных случаев.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 5) — рекомендуется для критических и сложных случаев.",
           extra: [
             "✅ **GPT-5.6 Terra**: ЛУЧШИЙ выбор для 80% рентгена (общий анализ, МРТ).",
             "🦴 **Claude Sonnet 5**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах (83% точности).",
-            "🧠 **Claude Opus 4.8**: экспертный режим для сложных и спорных случаев с максимальной глубиной разбора.",
+            "🧠 **Claude Opus 5**: экспертный режим для сложных и спорных случаев с максимальной глубиной разбора.",
             "📸 Вы можете загрузить файл рентгена, сделать фото с камеры или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
             "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
@@ -410,6 +449,7 @@ export default function XRayPage() {
               onChange={setMode}
               optimizedModel={optimizedModel}
               onOptimizedModelChange={setOptimizedModel}
+              recommendation={modelRecommendation}
               disabled={loading}
             />
             <label className="flex items-center space-x-2 cursor-pointer">

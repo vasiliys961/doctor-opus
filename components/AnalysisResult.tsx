@@ -115,7 +115,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   const getModelDisplayName = (modelName?: string) => {
     if (!modelName) return null
     if (modelName.includes('fable')) return '🚀 Fable 5'
-    if (modelName.includes('opus')) return '🧠 Opus 4.8'
+    if (modelName.includes('opus')) return '🧠 Opus 5'
     if (modelName.includes('sonnet')) return '🤖 Sonnet 5'
     if (modelName.includes('gemini') || modelName.includes('flash')) return '⚡ Gemini 3.1'
     return modelName

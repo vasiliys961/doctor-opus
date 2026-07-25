@@ -14,7 +14,7 @@ const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 // Актуальные модели (последние флагманы 2025-2026)
 const MODELS = {
   OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6 (default)
-  OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 4.8, rollback: VALIDATED_OPUS_MODEL=4.7
+  OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 5, rollback: VALIDATED_OPUS_MODEL=4.7
   SONNET: 'anthropic/claude-sonnet-5',                   // Claude Sonnet 5
   GPT_5_2: 'openai/gpt-5.6-terra',                  // GPT-5.6 Terra (legacy key name kept for compatibility)
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5

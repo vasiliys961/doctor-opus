@@ -7,6 +7,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'anthropic/claude-opus-4.6': { input: 5.0, output: 25.0 },
   'anthropic/claude-opus-4.7': { input: 5.0, output: 25.0 },
   'anthropic/claude-opus-4.8': { input: 5.0, output: 25.0 },
+  'anthropic/claude-opus-5': { input: 5.0, output: 25.0 },
   'anthropic/claude-fable-5': { input: 10.0, output: 50.0 },
   'sakana/fugu-ultra': { input: 5.0, output: 30.0 },
   'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },

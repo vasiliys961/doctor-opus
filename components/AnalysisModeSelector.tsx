@@ -5,12 +5,19 @@ import { useEffect } from 'react'
 
 export type AnalysisMode = 'fast' | 'optimized' | 'validated'
 export type OptimizedModel = 'sonnet' | 'gpt52'
+export interface AnalysisRecommendation {
+  mode: AnalysisMode
+  optimizedModel?: OptimizedModel
+  title: string
+  reason: string
+}
 
 interface AnalysisModeSelectorProps {
   value: AnalysisMode
   onChange: (mode: AnalysisMode) => void
   optimizedModel?: OptimizedModel
   onOptimizedModelChange?: (model: OptimizedModel) => void
+  recommendation?: AnalysisRecommendation | null
   disabled?: boolean
   useLibrary?: boolean
   onLibraryToggle?: (val: boolean) => void
@@ -21,6 +28,7 @@ export default function AnalysisModeSelector({
   onChange, 
   optimizedModel = 'sonnet',
   onOptimizedModelChange,
+  recommendation = null,
   disabled = false,
   useLibrary = false,
   onLibraryToggle
@@ -44,6 +52,36 @@ export default function AnalysisModeSelector({
     } catch {}
   }
 
+  const modeLabelMap: Record<AnalysisMode, string> = {
+    fast: '⚡ Быстрый анализ',
+    optimized: '⭐ Оптимизированный',
+    validated: '🧠 С валидацией',
+  }
+
+  const optimizedModelLabelMap: Record<OptimizedModel, string> = {
+    sonnet: 'Claude Sonnet 5',
+    gpt52: 'GPT-5.6 Terra',
+  }
+
+  const isRecommendationApplied = recommendation
+    ? recommendation.mode === value &&
+      (recommendation.mode !== 'optimized' ||
+        !recommendation.optimizedModel ||
+        recommendation.optimizedModel === optimizedModel)
+    : false
+
+  const applyRecommendation = () => {
+    if (!recommendation) return
+    onChange(recommendation.mode)
+    if (
+      recommendation.mode === 'optimized' &&
+      recommendation.optimizedModel &&
+      onOptimizedModelChange
+    ) {
+      onOptimizedModelChange(recommendation.optimizedModel)
+    }
+  }
+
   const modes: Array<{ value: AnalysisMode; label: string; description: string; icon: string }> = [
     {
       value: 'fast',
@@ -60,13 +98,51 @@ export default function AnalysisModeSelector({
     {
       value: 'validated',
       label: '🧠 С валидацией',
-      description: 'Gemini JSON + Opus 4.8 (для сложных кейсов может быть предложен Fable 5)',
+      description: 'Gemini JSON + Opus 5 (для сложных кейсов может быть предложен Fable 5)',
       icon: '🧠'
     }
   ]
 
   return (
     <div className="space-y-4">
+      {recommendation && (
+        <div className={`p-3 rounded-lg border ${isRecommendationApplied ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-xs font-bold text-gray-900">
+                💡 Рекомендация: {recommendation.title}
+              </p>
+              <p className="text-[11px] text-gray-700 mt-0.5">
+                {recommendation.reason}
+              </p>
+              <p className="text-[11px] text-gray-700 mt-1">
+                Режим: <span className="font-semibold">{modeLabelMap[recommendation.mode]}</span>
+                {recommendation.mode === 'optimized' && recommendation.optimizedModel && (
+                  <>
+                    {' '}· Модель: <span className="font-semibold">{optimizedModelLabelMap[recommendation.optimizedModel]}</span>
+                  </>
+                )}
+              </p>
+            </div>
+            {!isRecommendationApplied && (
+              <button
+                type="button"
+                onClick={applyRecommendation}
+                disabled={disabled}
+                className="px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 disabled:opacity-50"
+              >
+                Применить
+              </button>
+            )}
+            {isRecommendationApplied && (
+              <span className="px-2 py-1 rounded-md bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
+                Уже выбрано
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
           Режим анализа:
@@ -142,7 +218,7 @@ export default function AnalysisModeSelector({
       {value === 'validated' && (
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
           <p className="text-xs text-blue-900">
-            <strong>💡 Экспертный режим:</strong> по умолчанию используется Opus 4.8. Для сложных случаев система может
+            <strong>💡 Экспертный режим:</strong> по умолчанию используется Opus 5. Для сложных случаев система может
             предложить перейти на Fable 5 с явным подтверждением и показом разницы в стоимости.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -166,7 +242,7 @@ export default function AnalysisModeSelector({
                   : 'bg-white text-blue-900 border-blue-200 hover:bg-blue-100'
               } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              Всегда Opus 4.8
+              Всегда Opus 5
             </button>
             <button
               disabled={disabled}

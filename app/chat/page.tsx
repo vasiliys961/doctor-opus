@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import AudioUpload from '@/components/AudioUpload'
 import FileUpload from '@/components/FileUpload'
@@ -21,6 +21,7 @@ import ConsiliumAuditView from '@/components/advanced/ConsiliumAuditView'
 import { ConsiliumProgressEvent, DiagnosticResult } from '@/lib/diagnostics/types'
 
 type ResponseStyle = 'brief' | 'detailed'
+type ChatModel = 'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable'
 const MAX_CHAT_FILES_PER_BATCH = 4;
 const MAX_CHAT_TOTAL_BYTES_PER_BATCH = 16 * 1024 * 1024;
 const BRIDGE_CHAT_KEY = 'mobile_bridge_chat_draft';
@@ -42,10 +43,10 @@ const specialtyMap: Record<string, Specialty> = {
   'Титан: Учитель Хуа То': 'hua_tuo_master',
 };
 
-const getDisplayModelName = (model: 'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable') => {
+const getDisplayModelName = (model: ChatModel) => {
   if (model === 'gpt52') return 'openai/gpt-5.6-terra';
   if (model === 'sonnet') return 'anthropic/claude-sonnet-5';
-  if (model === 'opus') return 'anthropic/claude-opus-4.8';
+  if (model === 'opus') return 'anthropic/claude-opus-5';
   if (model === 'fable') return 'anthropic/claude-fable-5';
   if (model === 'gemini') return 'google/gemini-3-flash-preview';
   return model;
@@ -140,7 +141,7 @@ export default function ChatPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
   const [useLibrary, setUseLibrary] = useState(false)
-  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable'>('sonnet')
+  const [model, setModel] = useState<ChatModel>('sonnet')
   const [responseStyle, setResponseStyle] = useState<ResponseStyle>('brief')
   const [specialty, setSpecialty] = useState<Specialty>('universal')
   const [isCutOff, setIsCutOff] = useState(false)
@@ -167,6 +168,65 @@ export default function ChatPage() {
   // --- Triage-подсказка сложности кейса (только совет врачу, ничего не решает автоматически) ---
   const [triageSuggestion, setTriageSuggestion] = useState<{ complexity: 'complex'; reasoning: string } | null>(null)
   const [triageDismissed, setTriageDismissed] = useState(false)
+  const chatModelRecommendation = useMemo<{
+    model: ChatModel
+    title: string
+    reason: string
+  } | null>(() => {
+    if (consiliumMode) return null
+
+    const text = message.trim()
+    const textLower = text.toLowerCase()
+    const hasFiles = selectedFiles.length > 0
+    const isComplexRequest =
+      text.length > 650 ||
+      /дифф|диагноз|тактик|алгоритм|осложнен|коморбид|инфаркт|инсульт|сепсис|онколог|critical|urgent/i.test(textLower)
+
+    if (!text && !hasFiles) {
+      return {
+        model: 'sonnet',
+        title: 'Стандартный чат-режим',
+        reason: 'Для большинства рабочих вопросов Sonnet дает хороший баланс скорости и глубины.',
+      }
+    }
+
+    if (triageSuggestion) {
+      return {
+        model: 'fable',
+        title: 'Сложный клинический случай',
+        reason: 'Система уже заметила повышенную сложность — лучше включить более глубокое рассуждение.',
+      }
+    }
+
+    if (isComplexRequest || hasFiles || specialty !== 'universal') {
+      return {
+        model: 'opus',
+        title: 'Углубленный клинический разбор',
+        reason: 'Для сложного запроса или профильной задачи обычно полезнее максимально сильная модель.',
+      }
+    }
+
+    if (text.length <= 180 && !useLibrary) {
+      return {
+        model: 'gpt52',
+        title: 'Короткий быстрый вопрос',
+        reason: 'Для кратких уточнений обычно быстрее и дешевле использовать Terra.',
+      }
+    }
+
+    return {
+      model: 'sonnet',
+      title: 'Сбалансированный режим',
+      reason: 'Оптимален для повседневного диалога без выраженной клинической сложности.',
+    }
+  }, [consiliumMode, message, selectedFiles.length, specialty, triageSuggestion, useLibrary])
+  const chatModelLabelMap: Record<ChatModel, string> = {
+    gpt52: 'GPT-5.6 Terra',
+    opus: 'Opus 5',
+    fable: 'Fable 5',
+    sonnet: 'Sonnet 5',
+    gemini: 'Gemini 3.1',
+  }
 
   // Загружаем PDF.js v3 из локальных файлов (public/pdfjs/)
   useEffect(() => {
@@ -1653,12 +1713,37 @@ export default function ChatPage() {
               disabled={loading}
             >
               <option value="gpt52">🚀 GPT-5.6 Terra</option>
-              <option value="opus">🧠 Opus 4.8</option>
+              <option value="opus">🧠 Opus 5</option>
               <option value="fable">🚀 Fable 5 (дороже)</option>
               <option value="sonnet">🤖 Sonnet 5</option>
               <option value="gemini">⚡ Gemini 3.1</option>
             </select>
           </div>
+          {chatModelRecommendation && (
+            <div className="w-full sm:w-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] sm:text-xs font-bold text-amber-900">
+                  💡 Рекомендуем: {chatModelLabelMap[chatModelRecommendation.model]}
+                </span>
+                {model !== chatModelRecommendation.model ? (
+                  <button
+                    type="button"
+                    onClick={() => setModel(chatModelRecommendation.model)}
+                    className="ml-auto rounded-full bg-amber-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-amber-700"
+                  >
+                    Применить
+                  </button>
+                ) : (
+                  <span className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    Уже выбрано
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-[10px] sm:text-[11px] text-amber-800">
+                {chatModelRecommendation.title}: {chatModelRecommendation.reason}
+              </p>
+            </div>
+          )}
 
           <div className="w-full sm:w-auto rounded-lg border-2 border-teal-300 bg-teal-50 px-3 py-2">
             <div className="flex items-center gap-2">

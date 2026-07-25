@@ -6,7 +6,7 @@ import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor, { DrawingPath } from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
-import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
+import AnalysisModeSelector, { AnalysisMode, AnalysisRecommendation, OptimizedModel } from '@/components/AnalysisModeSelector'
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import dynamic from 'next/dynamic'
@@ -186,7 +186,7 @@ export default function MRIPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-4.8');
+        formData.append('model', 'anthropic/claude-opus-5');
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3-flash-preview');
       }
@@ -205,7 +205,7 @@ export default function MRIPage() {
         
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.8';
+                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
 
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
@@ -245,7 +245,7 @@ export default function MRIPage() {
         if (data.success) {
           setResult(data.result)
           setAnalysisStep('description_complete')
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.8');
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5');
           setCurrentCost(data.cost || 1.5)
           setModelInfo({ model: modelUsed, mode: analysisMode });
           
@@ -308,6 +308,36 @@ export default function MRIPage() {
     return buildRadiologyGeneralLinks('mri', topEnglishTerm)
   }, [mriReferenceLinks])
 
+  const modelRecommendation = useMemo<AnalysisRecommendation | null>(() => {
+    const hasImageLoaded = Boolean(file || imagePreview)
+    const contextLength = clinicalContext.trim().length
+    const hasSeries = additionalFiles.length > 0 || originalDicomStack.length > 1
+
+    if (!hasImageLoaded) {
+      return {
+        mode: 'optimized',
+        optimizedModel: 'sonnet',
+        title: 'Стартовый режим для МРТ',
+        reason: 'Для первичного прогона обычно достаточно оптимизированного режима.',
+      }
+    }
+
+    if (hasSeries || contextLength > 700) {
+      return {
+        mode: 'validated',
+        title: 'Сложный МРТ-кейс',
+        reason: 'При множественных срезах или большом клиническом контексте лучше экспертный режим.',
+      }
+    }
+
+    return {
+      mode: 'optimized',
+      optimizedModel: 'sonnet',
+      title: 'Рутинный МРТ-кейс',
+      reason: 'Обычно Sonnet в optimized дает хороший баланс глубины и скорости.',
+    }
+  }, [additionalFiles.length, clinicalContext, file, imagePreview, originalDicomStack.length])
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="mb-6 flex items-center justify-between">
@@ -318,11 +348,11 @@ export default function MRIPage() {
         content={{
           fast: "двухэтапный скрининг (сначала структурированное описание последовательностей, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5) — идеальный баланс точности и качества для МРТ‑исследований.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.8) — рекомендуется для критических и сложных случаев.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 5) — рекомендуется для критических и сложных случаев.",
           extra: [
             "✅ **GPT-5.6 Terra**: ЛУЧШИЙ выбор для 80% исследований (общий анализ, МРТ).",
             "🦴 **Claude Sonnet 5**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах и костных травмах.",
-            "🧠 **Claude Opus 4.8**: экспертный режим для сложных и спорных случаев с максимальной глубиной разбора.",
+            "🧠 **Claude Opus 5**: экспертный режим для сложных и спорных случаев с максимальной глубиной разбора.",
             "📸 Вы можете загрузить снимки МРТ, сделать фото или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
             "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."
@@ -453,6 +483,7 @@ export default function MRIPage() {
               onChange={setMode}
               optimizedModel={optimizedModel}
               onOptimizedModelChange={setOptimizedModel}
+              recommendation={modelRecommendation}
               disabled={loading}
             />
             <label className="flex items-center space-x-2 cursor-pointer">

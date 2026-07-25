@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
-import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
+import AnalysisModeSelector, { AnalysisMode, AnalysisRecommendation, OptimizedModel } from '@/components/AnalysisModeSelector'
 import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import { handleSSEStream } from '@/lib/streaming-utils'
@@ -49,6 +49,49 @@ export default function ComparativeAnalysisPage() {
   const [triageError, setTriageError] = useState<string | null>(null)
   const [showEditor, setShowEditor] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+
+  const modelRecommendation = useMemo<AnalysisRecommendation | null>(() => {
+    const imageCount = images.length
+    const contextLength = additionalContext.trim().length
+    const isHighRiskModality =
+      imageType === 'ct' ||
+      imageType === 'mri' ||
+      imageType === 'histology' ||
+      imageType === 'mammography'
+
+    if (imageCount < 2) {
+      return {
+        mode: 'optimized',
+        optimizedModel: 'sonnet',
+        title: 'Подготовка к сравнению',
+        reason: 'После загрузки минимум двух снимков лучше начинать с оптимизированного режима.',
+      }
+    }
+
+    if (isHighRiskModality || imageCount >= 4 || comparisonMode !== 'general') {
+      return {
+        mode: 'validated',
+        title: 'Сложный сравнительный кейс',
+        reason: 'При динамике, множественных снимках и high-risk модальностях лучше экспертный режим.',
+      }
+    }
+
+    if (contextLength > 700) {
+      return {
+        mode: 'optimized',
+        optimizedModel: 'sonnet',
+        title: 'Сравнение с клиническим контекстом',
+        reason: 'При развернутом контексте полезнее более глубокая интерпретация.',
+      }
+    }
+
+    return {
+      mode: 'optimized',
+      optimizedModel: 'gpt52',
+      title: 'Рутинное сравнение',
+      reason: 'Обычно это лучший баланс скорости и качества для типового сравнения.',
+    }
+  }, [additionalContext, comparisonMode, imageType, images.length])
 
   const runComparativeTriage = async (descriptionText: string) => {
     if (!descriptionText.trim()) return
@@ -158,7 +201,7 @@ export default function ComparativeAnalysisPage() {
         ? 'google/gemini-3-flash-preview' 
         : mode === 'optimized' 
           ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra')
-          : 'anthropic/claude-opus-4.8'
+          : 'anthropic/claude-opus-5'
       
       const formData = new FormData()
       formData.append('file', images[0].file)
@@ -229,7 +272,7 @@ export default function ComparativeAnalysisPage() {
         content={{
           fast: "быстрое сравнение основных признаков на нескольких изображениях.",
           optimized: "рекомендуемый режим: «Оптимизированный» (Gemini JSON → Sonnet) — оптимально для сравнения 'было/стало'.",
-          validated: "двухэтапный разбор (Gemini JSON → Opus 4.8) — максимально точная оценка динамики HU и структурных изменений.",
+          validated: "двухэтапный разбор (Gemini JSON → Opus 5) — максимально точная оценка динамики HU и структурных изменений.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini JSON → Sonnet) — оптимально для сравнения 'было/стало'.",
             "⏰ Используйте режим 'Динамика во времени' для анализа прогрессирования.",
@@ -349,6 +392,7 @@ export default function ComparativeAnalysisPage() {
             onChange={setMode} 
             optimizedModel={optimizedModel}
             onOptimizedModelChange={setOptimizedModel}
+            recommendation={modelRecommendation}
             disabled={loading} 
           />
         </div>

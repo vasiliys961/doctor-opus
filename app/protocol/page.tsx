@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import AudioUpload from '@/components/AudioUpload'
 import VoiceInput from '@/components/VoiceInput'
@@ -32,6 +32,7 @@ const PROTOCOL_DRAFT_WINDOW_NAME_PREFIX = 'secure_protocol_draft:'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
 const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
 const PROTOCOL_GPT52_MODEL = 'openai/gpt-5.4'
+type ProtocolModel = 'sonnet' | 'opus' | 'gemini' | 'gpt52' | 'grok45'
 
 type InteractionSeverity = 'minor' | 'moderate' | 'major'
 
@@ -87,7 +88,7 @@ export default function ProtocolPage() {
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
   const [stabilityMode, setStabilityMode] = useState(false)
-  const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini' | 'gpt52' | 'grok45'>('gpt52')
+  const [model, setModel] = useState<ProtocolModel>('gpt52')
   const [currentCost, setCurrentCost] = useState<number>(0)
   const [resolvedModel, setResolvedModel] = useState<string | null>(null)
   const [interactionLoading, setInteractionLoading] = useState(false)
@@ -105,6 +106,61 @@ export default function ProtocolPage() {
   const [templateRagDocId, setTemplateRagDocId] = useState<string | null>(null)
   const [isTemplateLocked, setIsTemplateLocked] = useState(false)
   const [strictTemplateMode, setStrictTemplateMode] = useState(true)
+  const protocolModelRecommendation = useMemo<{
+    model: ProtocolModel
+    title: string
+    reason: string
+  } | null>(() => {
+    const sourceText = `${rawText}\n${conversationTranscriptText}`.trim()
+    const sourceLength = sourceText.length
+    const hasCriticalSignals =
+      /(инфаркт|инсульт|sepsis|сепсис|шок|онколог|тромб|декомпенсац|кровотеч|дыхательн)/i.test(sourceText)
+
+    if (!sourceText) {
+      return {
+        model: 'gpt52',
+        title: 'Быстрый старт протокола',
+        reason: 'Для первичного черновика обычно достаточно самой быстрой модели.',
+      }
+    }
+
+    if (stabilityMode) {
+      return {
+        model: 'gpt52',
+        title: 'Режим стабильности',
+        reason: 'Для слабых ПК и нестабильной сети чаще лучше быстрый и предсказуемый режим.',
+      }
+    }
+
+    if (hasCriticalSignals || sourceLength > 7000) {
+      return {
+        model: 'opus',
+        title: 'Сложный клинический кейс',
+        reason: 'При тяжелом/объемном кейсе полезнее максимально глубокая клиническая логика.',
+      }
+    }
+
+    if (strictTemplateMode && sourceLength <= 3500) {
+      return {
+        model: 'gpt52',
+        title: 'Строгий шаблон протокола',
+        reason: 'Для шаблонной структуры и скорости в большинстве случаев этого достаточно.',
+      }
+    }
+
+    return {
+      model: 'sonnet',
+      title: 'Баланс качества и структуры',
+      reason: 'Для среднего по сложности кейса часто дает более детальный разбор без лишней задержки.',
+    }
+  }, [conversationTranscriptText, rawText, stabilityMode, strictTemplateMode])
+  const protocolModelLabelMap: Record<ProtocolModel, string> = {
+    gpt52: 'GPT-5.4',
+    grok45: 'Grok 4.5',
+    sonnet: 'Sonnet 5',
+    opus: 'Opus 5',
+    gemini: 'Gemini 3.1',
+  }
 
   // Универсальные промпты
   const [selectedUniversalKey, setSelectedUniversalKey] = useState<string>('')
@@ -1731,10 +1787,35 @@ export default function ProtocolPage() {
               <option value="gpt52">🚀 GPT-5.4 (быстрее)</option>
               <option value="grok45">🧪 Grok 4.5 (beta)</option>
               <option value="sonnet">🤖 Sonnet 5 (детальнее, но медленнее)</option>
-              <option value="opus">🧠 Opus 4.8</option>
+              <option value="opus">🧠 Opus 5</option>
               <option value="gemini">⚡ Gemini 3.1</option>
             </select>
           </div>
+          {protocolModelRecommendation && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-amber-900">
+                  💡 Рекомендуем: {protocolModelLabelMap[protocolModelRecommendation.model]}
+                </span>
+                <span className="text-amber-800">{protocolModelRecommendation.title}</span>
+                {model !== protocolModelRecommendation.model ? (
+                  <button
+                    type="button"
+                    onClick={() => setModel(protocolModelRecommendation.model)}
+                    className="ml-auto rounded-full bg-amber-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-amber-700"
+                    disabled={loading}
+                  >
+                    Применить
+                  </button>
+                ) : (
+                  <span className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                    Уже выбрано
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-[11px] text-amber-700">{protocolModelRecommendation.reason}</p>
+            </div>
+          )}
 
           <button onClick={handleGenerateProtocol} data-tour="protocol-generate-button" disabled={!rawText.trim() || loading} className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50 font-semibold shadow-md">
             {loading ? '⏳ Генерация...' : '📝 Создать протокол'}

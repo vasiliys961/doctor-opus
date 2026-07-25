@@ -7,7 +7,7 @@ import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import VoiceInput from '@/components/VoiceInput'
 import AnalysisResult from '@/components/AnalysisResult'
-import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
+import AnalysisModeSelector, { AnalysisMode, AnalysisRecommendation, OptimizedModel } from '@/components/AnalysisModeSelector'
 import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisTips from '@/components/AnalysisTips'
@@ -83,6 +83,51 @@ export default function ImageAnalysisPage() {
     imageType === 'ct' || imageType === 'mri' || imageType === 'xray' || imageType === 'ultrasound'
       ? 'soft'
       : 'strict';
+
+  const modelRecommendation = useMemo<AnalysisRecommendation | null>(() => {
+    const hasImageLoaded = Boolean(file || imagePreview || dicomAnalysisImage)
+    const hasLabs = labsContext.trim().length > 0
+    const contextLength = clinicalContext.trim().length + labsContext.trim().length
+    const hasMultiImages = additionalFiles.length > 0
+    const highComplexityModality =
+      imageType === 'ct' ||
+      imageType === 'mri' ||
+      imageType === 'histology' ||
+      imageType === 'mammography'
+
+    if (!hasImageLoaded) {
+      return {
+        mode: 'optimized',
+        optimizedModel: 'gpt52',
+        title: 'Быстрый старт',
+        reason: 'Для первичного прогона без загруженного кейса обычно хватает более быстрого режима.',
+      }
+    }
+
+    if (highComplexityModality || hasMultiImages) {
+      return {
+        mode: 'validated',
+        title: 'Сложный визуальный кейс',
+        reason: 'Для КТ/МРТ/гистологии, маммографии и сравнительных серий выше шанс пропуска деталей — лучше экспертный разбор.',
+      }
+    }
+
+    if (hasLabs || contextLength > 900 || imageType === 'ecg') {
+      return {
+        mode: 'optimized',
+        optimizedModel: 'sonnet',
+        title: 'Кейс с клиническим контекстом',
+        reason: 'Когда есть лаборатория/объемный анамнез, обычно полезнее более обстоятельная интерпретация.',
+      }
+    }
+
+    return {
+      mode: 'optimized',
+      optimizedModel: 'gpt52',
+      title: 'Стандартный кейс',
+      reason: 'Для большинства рутинных снимков это лучший баланс скорости и качества.',
+    }
+  }, [additionalFiles.length, clinicalContext, dicomAnalysisImage, file, imagePreview, imageType, labsContext])
 
   useEffect(() => {
     try {
@@ -296,7 +341,7 @@ export default function ImageAnalysisPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo({ 
-            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-4.8',
+            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5',
             mode: analysisMode + ' (из кэша)' 
           });
           return;
@@ -400,7 +445,7 @@ export default function ImageAnalysisPage() {
           if (analysisMode === 'fast') modelUsed = 'google/gemini-3-flash-preview'
           else if (analysisMode === 'optimized') {
             modelUsed = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra'
-          } else modelUsed = 'anthropic/claude-opus-4.8'
+          } else modelUsed = 'anthropic/claude-opus-5'
           
           await handleSSEStream(response, {
             onChunk: (content, accumulatedText) => {
@@ -418,7 +463,7 @@ export default function ImageAnalysisPage() {
                     ? 'google/gemini-3-flash-preview'
                     : analysisMode === 'optimized'
                       ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra')
-                      : 'anthropic/claude-opus-4.8'
+                      : 'anthropic/claude-opus-5'
                 )
                 
                 setModelInfo({ model: modelUsed, mode: analysisMode })
@@ -466,7 +511,7 @@ export default function ImageAnalysisPage() {
 
           logUsage({
             section: imageType !== 'universal' ? imageType : 'image-analysis',
-            model: data.model || 'anthropic/claude-opus-4.8',
+            model: data.model || 'anthropic/claude-opus-5',
             inputTokens: 2000,
             outputTokens: 1500,
           })
@@ -565,7 +610,7 @@ export default function ImageAnalysisPage() {
         content={{
           fast: "двухэтапный скрининг (сначала краткое структурированное описание исследования, затем текстовый разбор), даёт компактное заключение и общий сигнал риска, удобен для первичного просмотра и триажа.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5) — идеальный баланс точности и цены для большинства медицинских исследований.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 4.8) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 5) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для большинства медицинских изображений.",
             "💡 Система автоматически определяет тип изображения: ЭКГ, Рентген, КТ, МРТ, УЗИ, Дерматоскопия, Гистология, Офтальмология, Маммография. Поддерживается формат DICOM.",
@@ -752,6 +797,7 @@ export default function ImageAnalysisPage() {
                   onChange={setMode}
                   optimizedModel={optimizedModel}
                   onOptimizedModelChange={setOptimizedModel}
+                  recommendation={modelRecommendation}
                   disabled={loading}
                   useLibrary={useLibrary}
                   onLibraryToggle={setUseLibrary}
