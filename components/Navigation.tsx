@@ -225,6 +225,7 @@ export default function Navigation() {
             <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Клиническая версия</p>
             <ul className="space-y-1 text-xs opacity-70">
               <li>• Opus 5 / Fable 5 + Gemini 3.1</li>
+              <li>• Подсказка «Рекомендуем модель» (без автопереключения)</li>
               <li>• Просмотр DICOM + измерения</li>
               <li>• Мультимодальный анализ (изображения + документы)</li>
               <li>• Анализ динамики и RAG</li>
