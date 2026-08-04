@@ -2071,6 +2071,22 @@
       const [category, setCategory] = useState('all');
       const [formData, setFormData] = useState({});
       const [result, setResult] = useState(null);
+      const buildDefaultFormData = (calc) => {
+        if (!calc || !Array.isArray(calc.fields)) return {};
+        const defaults = {};
+        calc.fields.forEach((field) => {
+          if (field.type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
+            defaults[field.id] = field.options[0].value;
+            return;
+          }
+          if (field.type === 'checkbox') {
+            defaults[field.id] = false;
+            return;
+          }
+          defaults[field.id] = '';
+        });
+        return defaults;
+      };
       const categories = ['all', ...new Set(Object.values(CALCULATORS_DB).map(c => c.category))];
       const filteredCalcs = Object.entries(CALCULATORS_DB).filter(([id, calc]) => {
         const matchesSearch = calc.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -2085,12 +2101,27 @@
       const handleCalculate = () => {
         const calc = CALCULATORS_DB[activeCalc];
         if (calc) {
-          const res = calc.calculate(formData);
+          const preparedFormData = { ...buildDefaultFormData(calc), ...formData };
+          const hasMissingNumeric = calc.fields.some(
+            (field) => field.type === 'number' && (preparedFormData[field.id] === '' || preparedFormData[field.id] === undefined)
+          );
+          if (hasMissingNumeric) {
+            setResult({
+              score: '—',
+              result: 'Please fill all numeric fields',
+              color: 'gray',
+              details: 'One or more required values are missing.',
+            });
+            return;
+          }
+          setFormData(preparedFormData);
+          const res = calc.calculate(preparedFormData);
           setResult(res);
         }
       };
       const handleReset = () => {
-        setFormData({});
+        const calc = CALCULATORS_DB[activeCalc];
+        setFormData(calc ? buildDefaultFormData(calc) : {});
         setResult(null);
       };
       const renderField = (field) => {
@@ -2205,7 +2236,7 @@
                             key={id}
                             onClick={() => {
                               setActiveCalc(id);
-                              setFormData({});
+                              setFormData(buildDefaultFormData(CALCULATORS_DB[id]));
                               setResult(null);
                             }}
                             className="p-6 border-2 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all text-left group"
