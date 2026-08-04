@@ -63,8 +63,8 @@ Additional files: ${additionalFiles.length}`
       const modelToUse = mode === 'fast' 
         ? 'google/gemini-3-flash-preview' 
         : mode === 'optimized' 
-          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4')
-          : 'anthropic/claude-opus-4.6'
+          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra')
+          : 'anthropic/claude-opus-5'
       
       const formData = new FormData()
       formData.append('file', mainImage)
@@ -123,8 +123,8 @@ Additional files: ${additionalFiles.length}`
       <AnalysisTips 
         content={{
           fast: "Basic screening of the main image with context.",
-          optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — best choice for image analysis with clinical description.",
-          validated: "Two-stage expert analysis (Gemini JSON + Opus 4.6) — combining Gemini's visual accuracy and Opus's clinical intelligence.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 5) — best choice for image analysis with clinical description.",
+          validated: "Two-stage expert analysis (Gemini JSON + Opus 5) — combining Gemini's visual accuracy and Opus's clinical intelligence.",
           extra: [
             "⭐ Recommended mode: «Optimized» (Gemini JSON + Sonnet) — best choice for image analysis with clinical description.",
             "📎 You can attach additional PDFs, DOCX, or photos for contextual analysis.",

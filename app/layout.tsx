@@ -8,6 +8,11 @@ import LegalFooter from '@/components/LegalFooter'
 import CookieBanner from '@/components/CookieBanner'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import OnboardingTour from '@/components/OnboardingTour'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
+import AgentNavigator from '@/components/AgentNavigator'
+import { getRequestLocale } from '@/lib/i18n/server'
+import { RTL_LOCALES } from '@/lib/i18n/config'
+import { uiMessages } from '@/lib/i18n/messages'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -48,26 +53,36 @@ export const viewport: Viewport = {
   themeColor: '#064e3b',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const locale = await getRequestLocale()
+  const ui = uiMessages[locale]
+  const dir = RTL_LOCALES.has(locale) ? 'rtl' : 'ltr'
+
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang={locale} dir={dir} className={inter.variable}>
       <body className="antialiased">
+        <div className="fixed right-3 top-2 z-50">
+          <div className="rounded-lg border border-primary-700 bg-primary-900/95 px-2 py-1 shadow-lg">
+            <LanguageSwitcher locale={locale} label={ui.languageLabel} />
+          </div>
+        </div>
         <div className="fixed left-0 right-0 top-14 lg:top-0 z-40 pointer-events-none bg-amber-50 border-b border-amber-100 py-1 px-4 text-[10px] sm:text-xs text-amber-800 text-center leading-tight">
           <span className="sm:hidden">
-            ⚠️ For licensed healthcare professionals only. Physician verification required.
+            ⚠️ {ui.bannerMobile}
           </span>
           <span className="hidden sm:inline">
-            ⚠️ <strong>doctor-opus.online</strong> — Clinical Decision Support Software for healthcare professionals. Not a medical device. Does not replace clinical judgment or physician consultation.
+            ⚠️ <strong>doctor-opus.online</strong> — {ui.bannerDesktopBody}
           </span>
         </div>
         <Providers>
           <OnboardingTour />
+          <AgentNavigator locale={locale} />
           <div className="flex min-h-screen">
-            <Navigation />
+            <Navigation locale={locale} />
             <main className="flex-1 flex flex-col pt-24 sm:pt-20 lg:pt-0 p-4 sm:p-6 lg:p-8">
               <ErrorBoundary componentName="Main content">
                 <div className="flex-1">

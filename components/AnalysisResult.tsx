@@ -7,6 +7,9 @@ import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import { saveAnalysisResult, getAllPatients, Patient } from '@/lib/patient-db'
 import LibrarySearch from './LibrarySearch'
+import { getClientLocale } from '@/lib/i18n/client'
+import { analysisResultComponentMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 
 interface AnalysisResultProps {
   result: string
@@ -21,6 +24,8 @@ interface AnalysisResultProps {
 
 export default function AnalysisResult({ result, loading = false, model, mode, imageType, cost, isAnonymous, images }: AnalysisResultProps) {
   const router = useRouter()
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = analysisResultComponentMessages[locale]
   const [copied, setCopied] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [showPatientSelector, setShowPatientSelector] = useState(false)
@@ -31,6 +36,10 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
 
   const PROTOCOL_DRAFT_KEY = 'protocol_draft'
   const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
+
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
 
   useEffect(() => {
     if (showPatientSelector) {
@@ -62,11 +71,11 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         conclusion: result,
         imageType: imageType
       })
-      alert('Result successfully saved to patient record!')
+      alert(t.saveSuccess)
       setShowPatientSelector(false)
     } catch (error) {
       console.error('Error saving result:', error)
-      alert('Failed to save result.')
+      alert(t.saveFailed)
     } finally {
       setSaving(false)
     }
@@ -74,9 +83,11 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
 
   const getModelDisplayName = (modelName?: string) => {
     if (!modelName) return null
-    if (modelName.includes('opus')) return '🧠 Opus 4.6'
-    if (modelName.includes('sonnet')) return '🤖 Sonnet 4.6'
-    if (modelName.includes('gemini') || modelName.includes('flash')) return '⚡ Gemini 3.1'
+    if (modelName.includes('opus')) return '🧠 Opus 5'
+    if (modelName.includes('sonnet')) return '🤖 Sonnet 5'
+    if (modelName.includes('gpt-5')) return '🚀 GPT-5.6 Terra'
+    if (modelName.includes('fable')) return '🧬 Fable 5'
+    if (modelName.includes('gemini') || modelName.includes('flash')) return '⚡ Gemini 3 Flash'
     return modelName
   }
 
@@ -307,7 +318,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       saveAs(blob, fileName)
     } catch (error: any) {
       console.error('Error downloading document:', error?.message || error, error?.stack)
-      alert(`Download error: ${error?.message || 'Unknown error'}. Try refreshing the page.`)
+      alert(`${t.downloadError}: ${error?.message || t.unknownError}. Try refreshing the page.`)
     } finally {
       setDownloading(false)
     }
@@ -462,7 +473,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       // Проверяем поддержку Web Share API
       if (navigator.share) {
         await navigator.share({
-          title: 'Medical Analysis Result',
+          title: t.shareTitle,
           text: result.substring(0, 1000) + (result.length > 1000 ? '...' : ''),
           url: window.location.href
         })
@@ -470,20 +481,20 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         await navigator.clipboard.writeText(result)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
-        alert('Text copied to clipboard!')
+        alert(t.copiedToClipboard)
       }
     } catch (error: any) {
       if (error.name !== 'AbortError') {
         await navigator.clipboard.writeText(result)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
-        alert('Text copied to clipboard!')
+        alert(t.copiedToClipboard)
       }
     }
   }
 
   const handleTransferToConsultant = () => {
-    const truncated = result.length > 2000 ? result.substring(0, 2000) + '\n\n[...result truncated for transfer]' : result;
+    const truncated = result.length > 2000 ? result.substring(0, 2000) + `\n\n${t.transferTruncated}` : result;
     const data = {
       text: truncated,
       type: imageType,
@@ -582,7 +593,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex items-center justify-center space-x-2">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-            <span className="text-primary-900 font-semibold">Analysis in progress...</span>
+            <span className="text-primary-900 font-semibold">{t.loading}</span>
           </div>
         </div>
       )
@@ -594,18 +605,22 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mt-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-xl font-bold text-primary-900">🩺 Consultative Report</h3>
+          <h3 className="text-xl font-bold text-primary-900">🩺 {t.reportTitle}</h3>
           {loading && (
             <div className="flex items-center space-x-2 mt-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
-              <span className="text-sm text-gray-600">Analysis in progress...</span>
+              <span className="text-sm text-gray-600">{t.loading}</span>
             </div>
           )}
           {model && (
             <div className="flex flex-wrap items-center gap-2 mt-1">
               <p className="text-sm text-gray-600">
-                Model used: <span className="font-semibold">{getModelDisplayName(model)}</span>
-                {mode && <span className="ml-2">({mode === 'fast' ? 'fast' : mode === 'optimized' ? 'optimized' : 'expert validated'})</span>}
+                {t.modelUsed}: <span className="font-semibold">{getModelDisplayName(model)}</span>
+                {mode && (
+                  <span className="ml-2">
+                    ({mode === 'fast' ? t.modeFast : mode === 'optimized' ? t.modeOptimized : t.modeValidated})
+                  </span>
+                )}
               </p>
               {cost !== undefined && cost > 0 && !loading && (
                 <div className="bg-teal-50 text-teal-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-teal-200 shadow-sm">
@@ -621,37 +636,37 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
               onClick={() => setShowPatientSelector(true)}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm flex items-center gap-2"
             >
-              📌 Save to Patient Record
+              📌 {t.saveToPatient}
             </button>
           )}
           <button
             onClick={() => setShowLibrarySearch(!showLibrarySearch)}
             className={`px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2 font-bold ${showLibrarySearch ? 'bg-primary-100 text-primary-700' : 'bg-primary-50 text-primary-600 hover:bg-primary-100'}`}
           >
-            📚 {showLibrarySearch ? 'Hide Library' : 'Search Library'}
+            📚 {showLibrarySearch ? t.hideLibrary : t.searchLibrary}
           </button>
           <button
             onClick={handleCopy}
             className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors text-sm"
           >
-            {copied ? '✓ Copied' : '📋 Copy'}
+            {copied ? `✓ ${t.copied}` : `📋 ${t.copy}`}
           </button>
           {!loading && result && imageType === 'ecg' && (
             <button
               onClick={handleTransferToEcgProtocol}
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
-              title="Generate a short ECG functional conclusion using template"
+              title={t.ecgProtocol}
             >
-              🫀 ECG Protocol
+              🫀 {t.ecgProtocol}
             </button>
           )}
           {!loading && result && imageType !== 'ecg' && (
             <button
               onClick={() => handleTransferToProtocol(false)}
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
-              title="Transfer clean conclusion to Protocol section"
+              title={t.toProtocol}
             >
-              📄 To Protocol
+              📄 {t.toProtocol}
             </button>
           )}
           <button
@@ -659,26 +674,26 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             disabled={downloading}
             className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {downloading ? '⏳ Downloading...' : '📄 Download .docx'}
+            {downloading ? `⏳ ${t.downloading}` : `📄 ${t.downloadDocx}`}
           </button>
           <button
             onClick={() => window.print()}
             className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors text-sm"
           >
-            🖨️ Print
+            🖨️ {t.print}
           </button>
           <button
             onClick={handleShare}
             className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors text-sm"
           >
-            🔗 Share
+            🔗 {t.share}
           </button>
           {!loading && result && (
             <button
               onClick={handleTransferToConsultant}
               className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
             >
-              🩺 Discuss Management
+              🩺 {t.discussManagement}
             </button>
           )}
         </div>
@@ -688,7 +703,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
             <div className="p-4 border-b flex justify-between items-center bg-indigo-50 rounded-t-xl">
-              <h4 className="font-bold text-indigo-900">Select Patient</h4>
+              <h4 className="font-bold text-indigo-900">{t.selectPatient}</h4>
               <button 
                 onClick={() => setShowPatientSelector(false)}
                 className="text-gray-500 hover:text-gray-700 p-1"
@@ -699,12 +714,12 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             <div className="overflow-y-auto p-2 flex-grow">
               {patients.length === 0 ? (
                 <div className="p-8 text-center">
-                  <p className="text-gray-500 mb-4">Patient database is empty</p>
+                  <p className="text-gray-500 mb-4">{t.emptyPatients}</p>
                   <a 
                     href="/patients" 
                     className="text-indigo-600 hover:underline font-semibold"
                   >
-                    Go to create patient
+                    {t.goCreatePatient}
                   </a>
                 </div>
               ) : (
@@ -718,7 +733,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
                     >
                       <div className="font-semibold text-gray-900 group-hover:text-indigo-700">{p.name}</div>
                       <div className="text-xs text-gray-500">
-                        {p.age} y.o. • {p.diagnosis || 'No diagnosis'}
+                        {p.age} y.o. • {p.diagnosis || t.noDiagnosis}
                       </div>
                     </button>
                   ))}
@@ -730,7 +745,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
                 onClick={() => setShowPatientSelector(false)}
                 className="text-sm text-gray-600 hover:text-gray-800"
               >
-                Cancel
+                {t.cancel}
               </button>
             </div>
           </div>
@@ -764,7 +779,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
                 className="group relative px-10 py-5 bg-gradient-to-r from-teal-500 via-emerald-500 to-teal-600 text-white rounded-2xl transition-all shadow-[0_0_20px_rgba(20,184,166,0.4)] hover:shadow-[0_0_40px_rgba(20,184,166,0.7)] hover:scale-105 flex items-center gap-4 text-xl font-black animate-bounce-slow"
               >
                 <span className="text-3xl animate-pulse">🩺</span>
-                <span className="tracking-widest uppercase">Discuss Clinical Management</span>
+                <span className="tracking-widest uppercase">{t.discussClinicalManagement}</span>
                 <div className="absolute -inset-1 bg-gradient-to-r from-teal-400 to-emerald-400 rounded-2xl blur opacity-25 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-pulse-fast"></div>
               </button>
             </div>
@@ -777,12 +792,12 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       <div className="mt-8 pt-4 border-t border-gray-100">
         <div className="flex flex-col md:flex-row justify-between gap-4 text-[10px] text-gray-400">
           <div className="space-y-1 max-w-2xl">
-            <p><strong>⚠️ Verification Required:</strong> This consultative report must be reviewed and signed by the treating physician. Doctor Opus is an informational-analytical SaaS service and does not provide medical services. All content is for informational purposes only.</p>
-            <p><strong>ℹ️ Pricing:</strong> Credit cost reflects the service charge (AI models + infrastructure: server processing, storage, delivery). Repeated requests for the same data are re-billed unless cached.</p>
+            <p><strong>⚠️ </strong>{t.verificationRequired}</p>
+            <p><strong>ℹ️ </strong>{t.pricingInfo}</p>
           </div>
           <div className="text-right">
-            <p>Session ID: {sessionId || 'N/A'}</p>
-            <p>Core version: 4.1.0-rational</p>
+            <p>{t.sessionId}: {sessionId || t.notAvailable}</p>
+            <p>{t.coreVersion}: 4.1.0-rational</p>
           </div>
         </div>
       </div>

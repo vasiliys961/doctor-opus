@@ -51,7 +51,8 @@ export async function POST(request: NextRequest) {
     const mode = formData.get('mode') as string || 'fast';
     const model = formData.get('model') as string;
     const useStreaming = formData.get('useStreaming') === 'true';
-    const isAnonymous = formData.get('isAnonymous') === 'true';
+    const maskImageRaw = formData.get('maskImage');
+    const maskImage = maskImageRaw === null ? true : maskImageRaw === 'true';
 
     if (!file) {
       return NextResponse.json(
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Если анонимно и это изображение - анонимизируем буфер
-    if (isAnonymous && (file.type.startsWith('image/') || fileType === 'jpg' || fileType === 'jpeg' || fileType === 'png')) {
+    if (maskImage && (file.type.startsWith('image/') || fileType === 'jpg' || fileType === 'jpeg' || fileType === 'png')) {
       console.log(`🛡️ [LAB] Анонимизация изображения: ${file.name}`);
       // @ts-expect-error - Несовместимость типов Buffer
       buffer = await anonymizeImageBuffer(buffer, file.type);

@@ -104,16 +104,16 @@ async function extractFrameAtTime(
 /**
  * Применяет анонимизацию к canvas (черные полосы по краям)
  */
-function anonymizeCanvas(canvas: HTMLCanvasElement): void {
+function anonymizeCanvas(canvas: HTMLCanvasElement, mode: 'strict' | 'soft' = 'strict'): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   
   const { width, height } = canvas;
   
   // Зоны анонимизации (такие же, как для изображений)
-  const TOP_PERCENT = 0.10;    // 10% сверху
-  const BOTTOM_PERCENT = 0.08; // 8% снизу
-  const SIDE_PERCENT = 0.12;   // 12% с боков
+  const TOP_PERCENT = mode === 'soft' ? 0.07 : 0.10;
+  const BOTTOM_PERCENT = mode === 'soft' ? 0.05 : 0.08;
+  const SIDE_PERCENT = mode === 'soft' ? 0.08 : 0.12;
   
   const topHeight = Math.floor(height * TOP_PERCENT);
   const bottomHeight = Math.floor(height * BOTTOM_PERCENT);
@@ -157,7 +157,8 @@ async function canvasToFile(
  */
 export async function extractAndAnonymizeFrames(
   videoFile: File,
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  mode: 'strict' | 'soft' = 'strict'
 ): Promise<ExtractedFrame[]> {
   console.log('🎬 [Frame Extractor] Начало извлечения кадров из:', videoFile.name);
   
@@ -197,7 +198,7 @@ export async function extractAndAnonymizeFrames(
       const canvas = await extractFrameAtTime(video, timeSeconds);
       
       // Анонимизируем
-      anonymizeCanvas(canvas);
+      anonymizeCanvas(canvas, mode);
       console.log(`🛡️ [Frame Extractor] Кадр ${i + 1} анонимизирован`);
       
       // Конвертируем в File

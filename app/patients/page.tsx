@@ -6,18 +6,24 @@ import dynamic from 'next/dynamic'
 import { getAllPatients, savePatient, deletePatient, Patient, getPatientHistory, deleteHistoryRecord, AnalysisRecord } from '@/lib/patient-db'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { getClientLocale } from '@/lib/i18n/client'
+import { patientsMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 
 const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
 const LabTrendChart = dynamic(() => import('@/components/LabTrendChart'), { ssr: false })
 
 function PatientsContent() {
+  const [locale, setLocale] = useState<Locale>('en')
   const searchParams = useSearchParams()
+  const t = patientsMessages[locale]
   const [patients, setPatients] = useState<Patient[]>([])
   const [filteredPatients, setFilteredPatients] = useState<Patient[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
   
   useEffect(() => {
+    setLocale(getClientLocale())
     const action = searchParams.get('action')
     const patientId = searchParams.get('id')
     const recordId = searchParams.get('record')
@@ -110,7 +116,7 @@ function PatientsContent() {
   }
 
   const handleDeleteHistory = async (id: string) => {
-    if (confirm('Delete this record from history?')) {
+    if (confirm(t.confirmDeleteRecord)) {
       await deleteHistoryRecord(id)
       if (selectedPatient) loadHistory(selectedPatient.id)
     }
@@ -168,7 +174,7 @@ function PatientsContent() {
 
   const addPatient = async () => {
     if (!newPatient.name.trim()) {
-      alert('Please enter a patient name')
+      alert(t.patientNameRequired)
       return
     }
 
@@ -199,7 +205,7 @@ function PatientsContent() {
   }
 
   const handleDeletePatient = async (id: string) => {
-    if (confirm('Are you sure you want to delete this patient?')) {
+    if (confirm(t.confirmDeletePatient)) {
       await deletePatient(id)
       loadPatients()
       setSelectedPatient(null)
@@ -208,7 +214,7 @@ function PatientsContent() {
 
   const formatDate = (isoString: string) => {
     const date = new Date(isoString)
-    return date.toLocaleDateString('ru-RU', {
+    return date.toLocaleDateString(locale, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -220,9 +226,9 @@ function PatientsContent() {
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-primary-900 mb-6">👤 Patient Database</h1>
+        <h1 className="text-3xl font-bold text-primary-900 mb-6">👤 {t.title}</h1>
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600">{t.loading}</p>
         </div>
       </div>
     )
@@ -231,12 +237,12 @@ function PatientsContent() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-primary-900">👤 Patient Database</h1>
+        <h1 className="text-3xl font-bold text-primary-900">👤 {t.title}</h1>
         <button
           onClick={() => setShowAddModal(true)}
           className="bg-primary-500 hover:bg-primary-600 text-white px-6 py-2 rounded-lg transition-colors font-semibold"
         >
-          ➕ Add Patient
+          ➕ {t.addPatient}
         </button>
       </div>
 
@@ -244,7 +250,7 @@ function PatientsContent() {
       <div className="mb-6">
         <input
           type="text"
-          placeholder="🔍 Search by name, diagnosis, notes..."
+          placeholder={`🔍 ${t.searchPlaceholder}`}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -254,15 +260,15 @@ function PatientsContent() {
       {/* Статистика */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow-lg p-4">
-          <div className="text-gray-600 text-sm mb-1">Total patients</div>
+          <div className="text-gray-600 text-sm mb-1">{t.totalPatients}</div>
           <div className="text-3xl font-bold text-primary-700">{patients.length}</div>
         </div>
         <div className="bg-white rounded-lg shadow-lg p-4">
-          <div className="text-gray-600 text-sm mb-1">Search results</div>
+          <div className="text-gray-600 text-sm mb-1">{t.searchResults}</div>
           <div className="text-3xl font-bold text-secondary-600">{filteredPatients.length}</div>
         </div>
         <div className="bg-white rounded-lg shadow-lg p-4">
-          <div className="text-gray-600 text-sm mb-1">Last updated</div>
+          <div className="text-gray-600 text-sm mb-1">{t.lastUpdated}</div>
           <div className="text-sm font-semibold text-gray-700">
             {patients.length > 0
               ? formatDate(patients[patients.length - 1].lastVisit)
@@ -276,8 +282,8 @@ function PatientsContent() {
         <div className="bg-white rounded-lg shadow-lg p-8 text-center">
           <p className="text-gray-600 text-lg">
             {patients.length === 0
-              ? '📋 Patient database is empty. Add your first patient!'
-              : '🔍 No patients found. Try a different search.'}
+              ? `📋 ${t.emptyDb}`
+              : `🔍 ${t.notFound}`}
           </p>
         </div>
       ) : (
@@ -287,19 +293,19 @@ function PatientsContent() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Patient
+                    {t.tablePatient}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Age
+                    {t.tableAge}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Diagnosis
+                    {t.tableDiagnosis}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Last Visit
+                    {t.tableLastVisit}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
+                    {t.tableActions}
                   </th>
                 </tr>
               </thead>
@@ -313,7 +319,7 @@ function PatientsContent() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {patient.age ? `${patient.age} y.o.` : '—'}
+                      {patient.age ? `${patient.age} ${t.ageSuffix}` : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-700">
                       {patient.diagnosis || '—'}
@@ -326,7 +332,7 @@ function PatientsContent() {
                         onClick={() => setSelectedPatient(patient)}
                         className="text-primary-600 hover:text-primary-900 mr-4"
                       >
-                        View
+                        {t.view}
                       </button>
                     </td>
                   </tr>
@@ -342,12 +348,12 @@ function PatientsContent() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">➕ Add Patient</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">➕ {t.addModalTitle}</h2>
               
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Patient Name *
+                    {t.patientName}
                   </label>
                   <input
                     type="text"
@@ -360,7 +366,7 @@ function PatientsContent() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.tableAge}</label>
                     <input
                       type="number"
                       value={newPatient.age || ''}
@@ -370,22 +376,22 @@ function PatientsContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.gender}</label>
                     <select
                       value={newPatient.gender || 'male'}
                       onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value as any })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white"
                     >
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
+                      <option value="male">{t.male}</option>
+                      <option value="female">{t.female}</option>
+                      <option value="other">{t.other}</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.phone}</label>
                     <input
                       type="tel"
                       value={newPatient.phone || ''}
@@ -397,7 +403,7 @@ function PatientsContent() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t.email}</label>
                   <input
                     type="email"
                     value={newPatient.email || ''}
@@ -409,7 +415,7 @@ function PatientsContent() {
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-medium text-gray-700">Diagnosis</label>
+                    <label className="block text-sm font-medium text-gray-700">{t.diagnosis}</label>
                     <VoiceInput onTranscript={(text) => setNewPatient({ ...newPatient, diagnosis: newPatient.diagnosis ? `${newPatient.diagnosis} ${text}` : text })} />
                   </div>
                   <input
@@ -417,13 +423,13 @@ function PatientsContent() {
                     value={newPatient.diagnosis || ''}
                     onChange={(e) => setNewPatient({ ...newPatient, diagnosis: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    placeholder="Primary diagnosis"
+                    placeholder={t.diagnosis}
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-medium text-gray-700">Notes</label>
+                    <label className="block text-sm font-medium text-gray-700">{t.notes}</label>
                     <VoiceInput onTranscript={(text) => setNewPatient({ ...newPatient, notes: newPatient.notes ? `${newPatient.notes} ${text}` : text })} />
                   </div>
                   <textarea
@@ -431,7 +437,7 @@ function PatientsContent() {
                     onChange={(e) => setNewPatient({ ...newPatient, notes: e.target.value })}
                     rows={4}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    placeholder="Additional patient information..."
+                    placeholder={t.notes}
                   />
                 </div>
               </div>
@@ -452,13 +458,13 @@ function PatientsContent() {
                   }}
                   className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Cancel
+                  {t.cancel}
                 </button>
                 <button
                   onClick={addPatient}
                   className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold"
                 >
-                  Add
+                  {t.add}
                 </button>
               </div>
             </div>
@@ -479,7 +485,7 @@ function PatientsContent() {
                     activeTab === 'info' ? 'bg-primary-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  Chart
+                  {t.chart}
                 </button>
                 <button
                   onClick={() => setActiveTab('history')}
@@ -487,7 +493,7 @@ function PatientsContent() {
                     activeTab === 'history' ? 'bg-primary-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  📜 History ({history.length})
+                  📜 {t.history} ({history.length})
                 </button>
                 <button
                   onClick={() => setActiveTab('trends')}
@@ -495,7 +501,7 @@ function PatientsContent() {
                     activeTab === 'trends' ? 'bg-primary-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  📈 Trends
+                  📈 {t.trends}
                 </button>
                 <button
                   onClick={() => setActiveTab('timeline')}
@@ -503,7 +509,7 @@ function PatientsContent() {
                     activeTab === 'timeline' ? 'bg-primary-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  🕒 Timeline
+                  🕒 {t.timeline}
                 </button>
               </div>
             </div>
@@ -512,7 +518,7 @@ function PatientsContent() {
               {activeTab === 'info' ? (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Patient Name</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.patientName}</label>
                     <input
                       type="text"
                       value={selectedPatient.name}
@@ -523,7 +529,7 @@ function PatientsContent() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.tableAge}</label>
                       <input
                         type="number"
                         value={selectedPatient.age || ''}
@@ -532,22 +538,22 @@ function PatientsContent() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.gender}</label>
                       <select
                         value={selectedPatient.gender || 'male'}
                         onChange={(e) => setSelectedPatient({ ...selectedPatient, gender: e.target.value as any })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white"
                       >
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                        <option value="other">Other</option>
+                        <option value="male">{t.male}</option>
+                        <option value="female">{t.female}</option>
+                        <option value="other">{t.other}</option>
                       </select>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.phone}</label>
                       <input
                         type="tel"
                         value={selectedPatient.phone || ''}
@@ -556,7 +562,7 @@ function PatientsContent() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.email}</label>
                       <input
                         type="email"
                         value={selectedPatient.email || ''}
@@ -568,7 +574,7 @@ function PatientsContent() {
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-sm font-medium text-gray-700">Diagnosis</label>
+                      <label className="block text-sm font-medium text-gray-700">{t.diagnosis}</label>
                       <VoiceInput onTranscript={(text) => setSelectedPatient({ ...selectedPatient, diagnosis: selectedPatient.diagnosis ? `${selectedPatient.diagnosis} ${text}` : text })} />
                     </div>
                     <input
@@ -581,7 +587,7 @@ function PatientsContent() {
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-sm font-medium text-gray-700">Notes</label>
+                      <label className="block text-sm font-medium text-gray-700">{t.notes}</label>
                       <VoiceInput onTranscript={(text) => setSelectedPatient({ ...selectedPatient, notes: selectedPatient.notes ? `${selectedPatient.notes} ${text}` : text })} />
                     </div>
                     <textarea
@@ -594,19 +600,19 @@ function PatientsContent() {
 
                   <div className="bg-gray-50 p-3 rounded-lg">
                     <p className="text-xs text-gray-500">
-                      <strong>Created:</strong> {formatDate(selectedPatient.createdAt)} | 
-                      <strong> Last modified:</strong> {formatDate(selectedPatient.lastVisit)}
+                      <strong>{t.created}</strong> {formatDate(selectedPatient.createdAt)} |
+                      <strong> {t.lastModified}</strong> {formatDate(selectedPatient.lastVisit)}
                     </p>
                   </div>
                 </div>
               ) : activeTab === 'history' ? (
                 <div className="space-y-4">
                   {loadingHistory ? (
-                    <p className="text-center py-8 text-gray-500">Loading history...</p>
+                    <p className="text-center py-8 text-gray-500">{t.loading}</p>
                   ) : history.length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                      <p className="text-gray-500">Analysis history is empty</p>
-                      <p className="text-xs text-gray-400 mt-1">Save results from «Image Analysis» or «ECG» sections</p>
+                      <p className="text-gray-500">{t.historyEmpty}</p>
+                      <p className="text-xs text-gray-400 mt-1">{t.historyHint}</p>
                     </div>
                   ) : (
                     <div className="space-y-6">
@@ -615,7 +621,7 @@ function PatientsContent() {
                           <button
                             onClick={() => handleDeleteHistory(record.id)}
                             className="absolute top-4 right-4 text-gray-300 hover:text-red-500 transition-colors p-1"
-                            title="Delete record"
+                            title={t.deleteRecordTitle}
                           >
                             🗑️
                           </button>
@@ -646,7 +652,7 @@ function PatientsContent() {
                               }}
                               className="text-xs text-primary-600 font-semibold mt-2 hover:underline"
                             >
-                              Show full
+                              {t.showFull}
                             </button>
                           )}
                         </div>
@@ -657,7 +663,7 @@ function PatientsContent() {
               ) : activeTab === 'timeline' ? (
                 <div className="space-y-0 relative">
                   <div className="flex justify-between items-center mb-6">
-                    <h3 className="font-bold text-gray-900">Patient Event Feed</h3>
+                    <h3 className="font-bold text-gray-900">{t.timelineTitle}</h3>
                     {history.length > 0 && (
                       <button
                         onClick={handleGenerateSummary}
@@ -665,9 +671,9 @@ function PatientsContent() {
                         className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
                       >
                         {generatingSummary ? (
-                          <>⏳ Generating summary...</>
+                          <>⏳ {t.generatingSummary}</>
                         ) : (
-                          <>🧠 Generate AI Case Summary</>
+                          <>🧠 {t.generateSummary}</>
                         )}
                       </button>
                     )}
@@ -676,7 +682,7 @@ function PatientsContent() {
                   {caseSummary && (
                     <div className="mb-8 p-4 bg-indigo-50 border border-indigo-100 rounded-xl shadow-sm relative animate-in fade-in slide-in-from-top-4 duration-500">
                       <div className="absolute -top-3 left-4 bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter">
-                        AI Case Summary
+                        {t.summaryTitle}
                       </div>
                       <div className="prose prose-sm max-w-none text-indigo-900 leading-relaxed italic">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{caseSummary}</ReactMarkdown>
@@ -686,7 +692,7 @@ function PatientsContent() {
 
                   {history.length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                      <p className="text-gray-500">No events yet</p>
+                      <p className="text-gray-500">{t.noEvents}</p>
                     </div>
                   ) : (
                     <div className="relative ml-4 border-l-2 border-primary-100 pl-8 pb-4 space-y-8">
@@ -697,7 +703,7 @@ function PatientsContent() {
                           
                           <div className="flex flex-col">
                             <span className="text-xs font-bold text-primary-600 mb-1">
-                              {new Date(record.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                              {new Date(record.date).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })}
                             </span>
                             <div className="bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer" onClick={() => setActiveTab('history')}>
                               <div className="flex items-center gap-2 mb-2">
@@ -705,9 +711,9 @@ function PatientsContent() {
                                   {record.type === 'ecg' ? '📈' : record.type === 'image' ? '🩻' : record.type === 'lab' ? '🔬' : '📝'}
                                 </span>
                                 <span className="font-bold text-sm text-gray-800 uppercase tracking-tight">
-                                  {record.type === 'ecg' ? 'ECG Analysis' : 
-                                   record.type === 'image' ? (record.imageType === 'xray' ? 'X-Ray' : record.imageType === 'ct' ? 'CT' : record.imageType === 'mri' ? 'MRI' : 'Image Analysis') : 
-                                   record.type === 'lab' ? 'Laboratory Analysis' : 'Examination'}
+                                  {record.type === 'ecg' ? t.ecgAnalysis :
+                                   record.type === 'image' ? (record.imageType === 'xray' ? 'X-Ray' : record.imageType === 'ct' ? 'CT' : record.imageType === 'mri' ? 'MRI' : t.imageAnalysis) :
+                                   record.type === 'lab' ? t.labAnalysis : t.examination}
                                 </span>
                               </div>
                               <p className="text-xs text-gray-600 line-clamp-2 italic">
@@ -725,9 +731,9 @@ function PatientsContent() {
                         </div>
                         <div className="flex flex-col">
                           <span className="text-xs font-bold text-gray-400 mb-1">
-                            {new Date(selectedPatient.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            {new Date(selectedPatient.createdAt).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })}
                           </span>
-                          <div className="text-xs text-gray-400 italic">Patient record created</div>
+                          <div className="text-xs text-gray-400 italic">{t.recordCreated}</div>
                         </div>
                       </div>
                     </div>
@@ -735,13 +741,12 @@ function PatientsContent() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  <h3 className="font-bold text-gray-900 mb-4">Lab Value Trends</h3>
+                  <h3 className="font-bold text-gray-900 mb-4">{t.trendTitle}</h3>
                   {Object.keys(labTrends).length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                      <p className="text-gray-500">No trend data available</p>
+                      <p className="text-gray-500">{t.noTrendData}</p>
                       <p className="text-xs text-gray-400 mt-1 italic">
-                        Upload lab results in the "Lab Data" section for this patient.
-                        <br />The system will automatically extract values (Hemoglobin, Glucose, etc.)
+                        {t.trendHint}
                       </p>
                     </div>
                   ) : (
@@ -765,21 +770,21 @@ function PatientsContent() {
                 onClick={() => handleDeletePatient(selectedPatient.id)}
                 className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-semibold"
               >
-                🗑️ Delete patient
+                🗑️ {t.deletePatient}
               </button>
               <div className="flex gap-3">
                 <button
                   onClick={() => setSelectedPatient(null)}
                   className="px-6 py-2 border border-gray-300 bg-white rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
                 >
-                  Close
+                  {t.close}
                 </button>
                 {activeTab === 'info' && (
                   <button
                     onClick={() => updatePatient(selectedPatient)}
                     className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors text-sm font-bold shadow-sm"
                   >
-                    Save changes
+                    {t.saveChanges}
                   </button>
                 )}
               </div>
@@ -791,8 +796,7 @@ function PatientsContent() {
       {/* Информация */}
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="text-sm text-blue-800">
-          <strong>ℹ️ Note:</strong> Patient data is stored locally in your browser. 
-          A database configuration is required for server-side storage.
+          <strong>ℹ️ Note:</strong> {t.note}
         </p>
       </div>
     </div>
@@ -801,7 +805,7 @@ function PatientsContent() {
 
 export default function PatientsPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-gray-600">Loading...</div>}>
+    <Suspense fallback={<div className="p-6 text-gray-600">...</div>}>
       <PatientsContent />
     </Suspense>
   )

@@ -1,22 +1,29 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compression'
 import ImageEditor from './ImageEditor'
+import { getClientLocale } from '@/lib/i18n/client'
+import { uploadComponentMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 
 interface FileUploadProps {
   onUpload: (files: File[]) => void
   accept?: string
   maxSize?: number // в MB
   multiple?: boolean
+  anonymizationMode?: 'strict' | 'soft'
 }
 
 export default function FileUpload({ 
   onUpload, 
   accept = 'image/*,application/pdf,.doc,.docx,.txt,.csv', 
   maxSize = 50,
-  multiple = true 
+  multiple = true,
+  anonymizationMode = 'strict',
 }: FileUploadProps) {
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = uploadComponentMessages[locale]
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewFiles, setPreviewFiles] = useState<Array<{ file: File; preview?: string }>>([])
@@ -25,6 +32,10 @@ export default function FileUpload({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -38,7 +49,7 @@ export default function FileUpload({
       for (const file of Array.from(files)) {
         // Проверка размера
         if (file.size > maxSize * 1024 * 1024) {
-          setError(`File ${file.name} is too large. Maximum size: ${maxSize}MB`)
+          setError(`File ${file.name} ${t.fileTooLarge} ${maxSize}MB`)
           continue
         }
 
@@ -50,7 +61,7 @@ export default function FileUpload({
         )
         
         if (isDuplicate) {
-          setError(`File ${file.name} has already been added`)
+          setError(`File ${file.name} ${t.fileAlreadyAdded}`)
           continue
         }
 
@@ -89,7 +100,7 @@ export default function FileUpload({
       }
     } catch (err) {
       console.error("Processing error:", err)
-      setError("Error processing files")
+      setError(t.processingError)
     } finally {
       setIsCompressing(false)
     }
@@ -140,7 +151,7 @@ export default function FileUpload({
             return item;
           }
 
-          const anonymized = await anonymizeMedicalImage(item.file);
+          const anonymized = await anonymizeMedicalImage(item.file, anonymizationMode);
           
           // Обновляем превью
           return new Promise<{ file: File; preview?: string }>((resolve) => {
@@ -260,7 +271,7 @@ export default function FileUpload({
                 className="w-full flex items-center justify-center space-x-2 py-2 px-4 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Redact personal data areas on all images"
               >
-                <span>🛡️ Anonymize all images</span>
+                <span>🛡️ {t.quickAnonymize}</span>
               </button>
               <p className="text-xs text-gray-500 mt-2 italic text-center">
                 Automatically hides areas with names and personal data on all uploaded scans. 
@@ -318,7 +329,7 @@ export default function FileUpload({
           {isCompressing ? (
             <div className="flex flex-col items-center space-y-2">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
-              <p className="text-primary-600 font-medium">Optimizing files...</p>
+              <p className="text-primary-600 font-medium">{t.processingData}</p>
             </div>
           ) : (
             <>
@@ -330,33 +341,33 @@ export default function FileUpload({
                   onClick={() => fileInputRef.current?.click()}
                   className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold"
                 >
-                  📁 Choose files
+                  📁 {t.chooseFiles}
                 </button>
 
                 <button
                   onClick={() => folderInputRef.current?.click()}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-semibold"
                 >
-                  📂 Choose folder
+                  📂 {t.chooseFolder}
                 </button>
                 
                 <button
                   onClick={() => cameraInputRef.current?.click()}
                   className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold"
                 >
-                  📷 Take photo
+                  📷 {t.takePhoto}
                 </button>
               </div>
               
-              <span className="text-gray-600">or drag and drop a folder with images here</span>
+              <span className="text-gray-600">{t.dragFolder}</span>
             </>
           )}
           
           <p className="text-sm text-gray-500">
-            Supported: DICOM series (.dcm), images (JPG, PNG), PDF, documents
+            {t.supportedExtended}
             <br />
             Max file size: {maxSize}MB
-            {multiple && ' • Multiple files can be uploaded'}
+            {multiple && ` • ${t.multipleFilesHint}`}
           </p>
         </div>
       </div>

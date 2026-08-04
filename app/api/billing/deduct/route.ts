@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
  *   "amount": 5.5,
  *   "operation": "Анализ ЭКГ",
  *   "metadata": {
- *     "model": "anthropic/claude-opus-4.6",
+ *     "model": "anthropic/claude-opus-5",
  *     "tokens": { "input": 1000, "output": 500 }
  *   }
  * }

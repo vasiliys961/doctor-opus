@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
@@ -12,6 +12,10 @@ import AnalysisTips from '@/components/AnalysisTips'
 import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
 import FeedbackForm from '@/components/FeedbackForm'
 import BillingErrorNotice from '@/components/BillingErrorNotice'
+import { getClientLocale } from '@/lib/i18n/client'
+import { ctPageMessages } from '@/lib/i18n/ui-client-messages'
+import { REQUEST_PROMPTS } from '@/lib/request-prompts'
+import type { Locale } from '@/lib/i18n/config'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
@@ -19,6 +23,8 @@ import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
 const Dicom3DViewer = dynamic(() => import('@/components/Dicom3DViewer'), { ssr: false })
 
 export default function CTPage() {
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = ctPageMessages[locale]
   const [file, setFile] = useState<File | null>(null)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [originalDicomStack, setOriginalDicomStack] = useState<File[]>([])
@@ -100,7 +106,7 @@ export default function CTPage() {
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
-      setError('Please upload an image first')
+      setError(t.uploadFirst)
       return
     }
 
@@ -116,7 +122,7 @@ export default function CTPage() {
       const formData = new FormData()
       formData.append('file', file)
       // Специальный промпт для первого этапа (только описание)
-      formData.append('prompt', 'Analyze the CT study and generate a diagnostic protocol.')
+      formData.append('prompt', REQUEST_PROMPTS.ct.single)
       formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', 'ct')
@@ -132,10 +138,10 @@ export default function CTPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-4.6');
+        formData.append('model', 'anthropic/claude-opus-5');
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3-flash-preview');
       }
@@ -155,9 +161,9 @@ export default function CTPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.6';
+                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
 
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
@@ -181,7 +187,7 @@ export default function CTPage() {
           },
           onError: (error) => {
             console.error('❌ [CT STREAMING] Ошибка:', error)
-            setError(`Streaming error: ${error.message}`)
+            setError(`${t.streamingError}: ${error.message}`)
           },
           onComplete: (finalText) => {
             console.log('✅ [CT STREAMING] Analysis complete')
@@ -200,7 +206,7 @@ export default function CTPage() {
         if (data.success) {
           setResult(data.result)
           setAnalysisStep('description_complete')
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.6');
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5');
           setCurrentCost(data.cost || 1.5)
           setModelInfo({ model: modelUsed, mode: analysisMode });
 
@@ -211,11 +217,11 @@ export default function CTPage() {
             outputTokens: 1500,
           })
         } else {
-          setError(data.error || 'Analysis error')
+          setError(data.error || t.analysisError)
         }
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(err.message || t.genericError)
     } finally {
       setLoading(false)
     }
@@ -253,19 +259,23 @@ export default function CTPage() {
     setError(null)
   }
 
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🩻 CT Analysis</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">🩻 {t.title}</h1>
       
       <AnalysisTips 
         content={{
           fast: "Two-stage CT screening (structured HU density and structure description, then clinical interpretation). Provides a concise conclusion and overall risk signal.",
-          optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — ideal balance of accuracy and quality for CT studies.",
-          validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for critical and complex cases.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and quality for CT studies.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 5) — recommended for critical and complex cases.",
           extra: [
-            "✅ **GPT-5.4**: BEST choice for 80% of CT studies (general analysis, CT anatomy).",
-            "🦴 **Claude Sonnet 4.6**: EXCEPTION — BEST results on fractures and fine structures.",
-            "⚠️ **Claude Opus 4.6**: NOT recommended for this section (weaker model for imaging).",
+            "✅ **GPT-5.6 Terra**: BEST choice for 80% of CT studies (general analysis, CT anatomy).",
+            "🦴 **Claude Sonnet 5**: EXCEPTION — BEST results on fractures and fine structures.",
+            "⚠️ **Claude Opus 5**: NOT recommended for this section (weaker model for imaging).",
             "📸 You can upload CT images, take a photo, or use a URL.",
             "🔄 Streaming mode lets you see the model's reasoning in real time.",
             "💾 Results can be saved to patient context and exported to a report."
@@ -274,13 +284,13 @@ export default function CTPage() {
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Upload CT Image or DICOM file</h2>
-        <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
+        <h2 className="text-xl font-semibold mb-4">{t.uploadTitle}</h2>
+        <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} anonymizationMode="soft" />
       </div>
 
       {file && imagePreview && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">📷 Uploaded Image</h2>
+          <h2 className="text-xl font-semibold mb-4">📷 {t.uploadedImage}</h2>
           <div className="flex flex-col items-center w-full">
             <img 
               src={imagePreview} 
@@ -292,7 +302,7 @@ export default function CTPage() {
                 onClick={() => setShowEditor(true)}
                 className="px-6 py-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-all shadow-lg hover:scale-105 active:scale-95 flex items-center gap-2"
               >
-                <span>🎨 Redact Data</span>
+                <span>🎨 {t.redactData}</span>
               </button>
               {originalDicomStack.length > 0 && (
                 <div className="flex flex-col items-center gap-2">
@@ -300,16 +310,16 @@ export default function CTPage() {
                     onClick={() => setShow3D(true)}
                     className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-all shadow-lg hover:scale-105 active:scale-95"
                   >
-                    <span>🧊 MPR 2x2</span>
+                    <span>🧊 {t.mpr2x2}</span>
                   </button>
                   <Link
                     href="/advanced-3d"
                     className="flex items-center space-x-2 px-6 py-3 bg-orange-600 text-white rounded-full hover:bg-orange-700 transition-all shadow-lg hover:scale-105 active:scale-95 animate-pulse"
                   >
-                    <span>✨ Cinematic 3D</span>
+                    <span>✨ {t.cinematic3d}</span>
                   </Link>
                   <p className="text-[10px] text-blue-600 font-medium">
-                    ✨ 3D reconstruction and MIP effect available
+                    ✨ {t.reconHint}
                   </p>
                 </div>
               )}
@@ -324,7 +334,7 @@ export default function CTPage() {
               />
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-700">
-                  👤 Clinical Context (complaints, history, study objective)
+                  👤 {t.clinicalContext}
                 </label>
                 <VoiceInput 
                   onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
@@ -359,16 +369,16 @@ export default function CTPage() {
                   />
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-blue-900">
-                      🛡️ One-time anonymous analysis
+                      🛡️ {t.anonymousTitle}
                     </span>
                     <span className="text-[10px] text-blue-700 font-normal">
-                      Result will not be saved to patient database (maximum PHI protection).
+                      {t.anonymousHint}
                     </span>
                   </div>
                 </label>
               </div>
               <p className="text-xs text-gray-500 mb-4">
-                💡 Adding clinical context significantly improves analysis accuracy.
+                💡 {t.contextHint}
               </p>
             </div>
 
@@ -388,7 +398,7 @@ export default function CTPage() {
                 className="w-4 h-4 text-primary-600 rounded"
               />
               <span className="text-sm text-gray-700">
-                📡 Streaming mode (progressive text output)
+                📡 {t.streamingMode}
               </span>
             </label>
             
@@ -398,21 +408,21 @@ export default function CTPage() {
                 disabled={loading}
                 className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⚡ Fast {useStreaming ? '(streaming)' : ''}
+                ⚡ {t.fast} {useStreaming ? t.streamingSuffix : ''}
               </button>
               <button
                 onClick={() => analyzeImage('optimized', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⭐ Optimized {useStreaming ? '(streaming)' : ''}
+                ⭐ {t.optimized} {useStreaming ? t.streamingSuffix : ''}
               </button>
               <button
                 onClick={() => analyzeImage('validated', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
               >
-                🧠 Expert Validated {useStreaming ? '(streaming)' : ''}
+                🧠 {t.expert} {useStreaming ? t.streamingSuffix : ''}
               </button>
             </div>
           </div>

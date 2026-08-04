@@ -116,6 +116,7 @@ Physician: ____________________
 - **Prohibitions:** Avoid introductory phrases such as "Based on the data provided...". Begin immediately with substance. No treatment advice.
 - **Language:** Professional medical English (terminology: "infiltration", "extravasation", "dislocation", "deprivation", etc.).
 - **Format:** Write in clean Markdown. For tabular data, use standard Markdown tables with | and separator rows |---|. Do not use single-line pseudo-tables with || and do not embed tables in code blocks.
+- **Termination:** End the response immediately after the final substantive section. Do not append technical tails, repeated endings, or empty filler lines.
 
 ### RESPONSE CONCLUSION
 **Mandatory disclaimer (formatted as blockquote):**
@@ -167,6 +168,8 @@ You are Doctor Opus, an expert AI system operating at the level of a clinical pr
 - Write in clean Markdown.
 - For tabular data, use standard Markdown tables with | and separator rows |---|.
 - Do not use single-line pseudo-tables with || and do not embed tables in code blocks.
+- When suggesting medications, use INN/generic names only (English/Latin script), avoid Russian/Cyrillic drug naming and local trade names by default.
+- End immediately after the final useful line (no technical postscript or repeated ending).
 
 ---
 
@@ -229,7 +232,7 @@ D. **Secondary prevention.**
 export const SPECIALIST_CRITERIA = {
   ecg: {
     title: 'ECG (Advanced Electrophysiology Analysis)',
-    requirements: 'EXTRACT ALL METRICS WITH MAXIMUM PRECISION: 1. Technical parameters (Voltage, Speed mm/s). 2. Rhythm (regularity, source), HR. 3. Electrical axis (alpha angle in degrees). 4. Intervals in ms: P-wave (amplitude, duration), PR (interval), QRS (complex), QT/QTc (corrected). 5. Segments: ST (elevation/depression in mm relative to TP baseline, morphology: upsloping, downsloping, horizontal). 6. Waves: Q (pathological: depth >1/4 R), R (progression V1–V6), T (amplitude, polarity, symmetry). 7. Hypertrophy signs (Sokolov-Lyon, Cornell, voltage criteria). 8. Conduction: bundle branch blocks, AV blocks.',
+    requirements: 'EXTRACT ALL METRICS WITH MAXIMUM PRECISION: 1. Technical parameters (Voltage, Speed mm/s). 2. Rhythm (regularity, source), HR. 3. Electrical axis (alpha angle in degrees). 4. Intervals in ms: P-wave (amplitude, duration), PR (interval), QRS (complex), QT/QTc (corrected). 5. Segments: ST (elevation/depression in mm relative to TP baseline, morphology: upsloping, downsloping, horizontal). 6. Waves: Q (pathological: depth >1/4 R), R (progression V1–V6), T (amplitude, polarity, symmetry). 7. Hypertrophy signs (Sokolov-Lyon, Cornell, voltage criteria). 8. Conduction: AV block (I/II/III), complete/incomplete RBBB and LBBB, fascicular blocks (LAFB/LPFB), bifascicular/trifascicular variants; for each variant provide core ECG criteria (QRS duration, V1/V6 morphology, axis deviation).',
     pathologies: 'Acute Coronary Syndrome (ACS: STEMI, NSTEMI), ischemia localization by leads, arrhythmias (AF, AFL, ectopy, paroxysmal tachycardias), WPW syndrome, Brugada syndrome, PE (McGinn-White S1Q3T3 sign), electrolyte disorders (hyper/hypokalemia: peaked T, U-wave), digoxin toxicity, pericarditis.',
   },
   xray: {

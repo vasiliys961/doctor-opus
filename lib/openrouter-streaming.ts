@@ -5,19 +5,11 @@
 
 import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
 import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
+import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
+import { MODELS, resolveModelId } from './openrouter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-
-// Актуальные модели (последние флагманы 2025-2026)
-const MODELS = {
-  OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6
-  SONNET: 'anthropic/claude-sonnet-4.6',                 // Claude Sonnet 4.6
-  GPT_5_2: 'openai/gpt-5.4',                        // GPT-5.4 Chat
-  HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
-  LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
-  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
-  GEMINI_3_PRO: 'google/gemini-3.1-pro-preview'          // Gemini 3.1 Pro Preview
-};
+const RESPONSE_STOP_SEQUENCES = ['Defined by', 'defined by', '---', '###'];
 
 function isNetworkStage2Error(error: any): boolean {
   const message = String(error?.message || '').toLowerCase();
@@ -32,30 +24,14 @@ function isNetworkStage2Error(error: any): boolean {
   );
 }
 
-function isAnthropicModel(model: string): boolean {
-  const normalized = String(model || '').toLowerCase();
-  return normalized.startsWith('anthropic/') || normalized.includes('claude');
-}
-
-function isAnthropicGeoRestrictionError(errorText: string): boolean {
-  const normalized = String(errorText || '').toLowerCase();
-  return (
-    normalized.includes('access to anthropic models is not allowed') ||
-    normalized.includes('unsupported countries') ||
-    normalized.includes('unsupported countries, regions, or territories')
-  );
-}
-
 function getStage2FallbackModel(primaryModel: string): string | null {
-  return isAnthropicModel(primaryModel) ? MODELS.GPT_5_2 : null;
-}
-
-function isOpenAIGeoRestrictionError(errorText: string): boolean {
-  const normalized = String(errorText || '').toLowerCase();
-  return (
-    normalized.includes('unsupported_country_region_territory') ||
-    normalized.includes('country, region, or territory not supported')
-  );
+  if (isAnthropicModel(primaryModel)) {
+    return MODELS.GPT_5_2;
+  }
+  if (primaryModel === MODELS.GPT_5_2) {
+    return MODELS.SONNET;
+  }
+  return null;
 }
 
 function getChatFallbackModel(primaryModel: string): string | null {
@@ -321,6 +297,7 @@ ${directivePrompt}`;
           ],
           max_tokens: 8000, // Оптимизировано: быстрый режим Gemini, достаточно для базового протокола
           temperature: 0.1,
+          stop: RESPONSE_STOP_SEQUENCES,
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -478,7 +455,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
             'X-Title': 'Doctor Opus'
           },
           body: JSON.stringify({
-            model: targetModel,
+            model: resolveModelId(targetModel),
             messages: [
               { role: 'system', content: systemPrompt },
               {
@@ -491,6 +468,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
             ],
             max_tokens: 8000, // Оптимизировано: одно изображение, достаточно для экспертного протокола
             temperature: 0.1,
+            stop: RESPONSE_STOP_SEQUENCES,
             stream: true,
             stream_options: { include_usage: true }
           })
@@ -528,7 +506,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
           throw primaryError;
         }
 
-        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to GPT-5.4 fallback...\n\n`;
+        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to ${fallbackModel} fallback...\n\n`;
         await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
         stage2ModelUsed = fallbackModel!;
         response = await runStage2Request(stage2ModelUsed);
@@ -538,9 +516,9 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
 
       if (!response.ok) {
         const errorText = await response.text();
-        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && isAnthropicGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, response.status, errorText);
         if (shouldFallback) {
-          const switchMsg = `\n\n> Claude is temporarily unavailable in the current provider region. Switching to GPT-5.4 fallback...\n\n`;
+          const switchMsg = `\n\n> Primary model is temporarily unavailable in the current provider region. Switching to ${fallbackModel} fallback...\n\n`;
           await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
           stage2ModelUsed = fallbackModel!;
           response = await runStage2Request(stage2ModelUsed);
@@ -743,13 +721,14 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
               'X-Title': 'Doctor Opus'
             },
             body: JSON.stringify({
-              model: targetModel,
+              model: resolveModelId(targetModel),
               messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: contentItems }
               ],
               max_tokens: 12000, // Оптимизировано: множественные изображения, сравнительный анализ
               temperature: 0.1,
+              stop: RESPONSE_STOP_SEQUENCES,
               stream: true,
               stream_options: { include_usage: true }
             }),
@@ -768,7 +747,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
         if (!shouldFallback) {
           throw primaryError;
         }
-        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to GPT-5.4 fallback...\n\n`;
+        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to ${fallbackModel} fallback...\n\n`;
         await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
         stage2ModelUsed = fallbackModel!;
         response = await runStage2Request(stage2ModelUsed);
@@ -779,9 +758,9 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
       // Heartbeat остановится в finally
       if (!response.ok) {
         const errorText = await response.text();
-        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && isAnthropicGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, response.status, errorText);
         if (shouldFallback) {
-          const switchMsg = `\n\n> Claude is temporarily unavailable in the current provider region. Switching to GPT-5.4 fallback...\n\n`;
+          const switchMsg = `\n\n> Primary model is temporarily unavailable in the current provider region. Switching to ${fallbackModel} fallback...\n\n`;
           await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
           stage2ModelUsed = fallbackModel!;
           response = await runStage2Request(stage2ModelUsed);
@@ -968,13 +947,14 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
               'X-Title': 'Doctor Opus'
             },
             body: JSON.stringify({
-              model: targetModel,
+              model: resolveModelId(targetModel),
               messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: contentItems }
               ],
               max_tokens: 10000, // Оптимизировано: validated режим с JSON-контекстом
               temperature: 0.1,
+              stop: RESPONSE_STOP_SEQUENCES,
               stream: true,
               stream_options: { include_usage: true }
             }),
@@ -993,7 +973,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
         if (!shouldFallback) {
           throw primaryError;
         }
-        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to GPT-5.4 fallback...\n\n`;
+        const switchMsg = `\n\n> Primary model timed out or had a network issue. Switching to ${fallbackModel} fallback...\n\n`;
         await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
         stage2ModelUsed = fallbackModel!;
         response = await runStage2Request(stage2ModelUsed);
@@ -1003,9 +983,9 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
 
       if (!response.ok) {
         const errorText = await response.text();
-        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && isAnthropicGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && stage2ModelUsed === model && shouldUseStage2GeoFallback(model, response.status, errorText);
         if (shouldFallback) {
-          const switchMsg = `\n\n> Claude is temporarily unavailable in the current provider region. Switching to GPT-5.4 fallback...\n\n`;
+          const switchMsg = `\n\n> Primary model is temporarily unavailable in the current provider region. Switching to ${fallbackModel} fallback...\n\n`;
           await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: switchMsg } }] })}\n\n`));
           stage2ModelUsed = fallbackModel!;
           response = await runStage2Request(stage2ModelUsed);
@@ -1082,7 +1062,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
   }
 
   const fallbackModel = getStage2FallbackModel(model);
-  let modelUsed = model;
+  let modelUsed = resolveModelId(model);
 
   const runRequest = async (targetModel: string) => {
     return fetch(OPENROUTER_API_URL, {
@@ -1094,7 +1074,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
         'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify({
-        model: targetModel,
+        model: resolveModelId(targetModel),
         messages: [
           { role: 'system', content: systemPrompt },
           { 
@@ -1107,6 +1087,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
         ],
         max_tokens: 8000, // Оптимизировано: одно изображение, базовый протокол
         temperature: 0.1,
+        stop: RESPONSE_STOP_SEQUENCES,
         stream: true,
         stream_options: { include_usage: true }
       })
@@ -1116,7 +1097,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
   let response = await runRequest(model);
   if (!response.ok) {
     const errorText = await response.text();
-    const shouldFallback = !!fallbackModel && isAnthropicGeoRestrictionError(errorText);
+    const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(model, response.status, errorText);
     if (shouldFallback) {
       modelUsed = fallbackModel!;
       response = await runRequest(modelUsed);
@@ -1201,7 +1182,7 @@ export async function sendTextRequestStreaming(
       const REQUEST_TIMEOUT_MS = 45000;
       const MAX_RETRIES = 2;
       let response: Response | null = null;
-      let modelUsed = model;
+      let modelUsed = resolveModelId(model);
 
       const runStreamingRequest = async (targetModel: string): Promise<Response> => {
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1218,10 +1199,11 @@ export async function sendTextRequestStreaming(
                   'X-Title': 'Medical AI'
                 },
               body: JSON.stringify({
-                model: targetModel,
+                model: resolveModelId(targetModel),
                 messages,
                 max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от длины диалога
                 temperature: 0.1,
+                stop: RESPONSE_STOP_SEQUENCES,
                 stream: true,
                 stream_options: { include_usage: true }
               }),
@@ -1268,7 +1250,7 @@ export async function sendTextRequestStreaming(
       if (!response.ok) {
         const errorText = await response.text();
         const fallbackModel = getChatFallbackModel(modelUsed);
-        const shouldFallback = !!fallbackModel && isOpenAIGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
         if (shouldFallback) {
           console.warn(`⚠️ [TEXT STREAM FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
           modelUsed = fallbackModel!;
@@ -1378,6 +1360,7 @@ export async function analyzeImageStreaming(
           ],
           max_tokens: 8000, // Оптимизировано: одно изображение, базовый протокол
           temperature: 0.1,
+          stop: RESPONSE_STOP_SEQUENCES,
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -1486,6 +1469,7 @@ export async function analyzeMultipleImagesStreaming(
           ],
           max_tokens: 12000, // Оптимизировано: множественные изображения
           temperature: 0.1,
+          stop: RESPONSE_STOP_SEQUENCES,
           stream: true,
           stream_options: { include_usage: true }
         })

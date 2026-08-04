@@ -60,7 +60,10 @@ export async function compressMedicalImage(
  * Накладывает черные плашки на зоны риска (ФИО пациента) — КЛИЕНТ.
  * РАСШИРЕННАЯ ВЕРСИЯ: закрашивает верх, низ и боковые края.
  */
-export async function anonymizeMedicalImage(file: File): Promise<File> {
+export async function anonymizeMedicalImage(
+  file: File,
+  mode: 'strict' | 'soft' = 'strict'
+): Promise<File> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.src = URL.createObjectURL(file);
@@ -80,9 +83,9 @@ export async function anonymizeMedicalImage(file: File): Promise<File> {
       // Накладываем плашки (расширенные зоны)
       ctx.fillStyle = 'black';
       
-      const topPercent = 0.10;      // 10% сверху
-      const bottomPercent = 0.15;   // 15% снизу (увеличено для скрытия печатей и подписей)
-      const sidePercent = 0.12;     // 12% с боков по всей высоте
+      const topPercent = mode === 'soft' ? 0.07 : 0.10;
+      const bottomPercent = mode === 'soft' ? 0.10 : 0.15;
+      const sidePercent = mode === 'soft' ? 0.08 : 0.12;
       
       const topRows = Math.floor(canvas.height * topPercent);
       const bottomRows = Math.floor(canvas.height * bottomPercent);

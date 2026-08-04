@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Примерные тарифы OpenRouter за 1000 токенов в условных единицах (для отображения)
-const PRICE_UNITS_PER_1K_TOKENS_SONNET = 2.0; // 2 единицы за 1000 токенов Claude Sonnet 4.6
+const PRICE_UNITS_PER_1K_TOKENS_SONNET = 2.0; // 2 единицы за 1000 токенов Claude Sonnet 5
 const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4; // 0.4 единицы за 1000 токенов Gemini Flash
 
 /**
@@ -18,7 +18,7 @@ const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4; // 0.4 единицы за 1000 т
  * На основе уже выполненного извлечения, клинического контекста и вопроса пользователя.
  * Поддерживается два режима:
  *  - fast      → Gemini (дешевле, короче)
- *  - professor → Claude Sonnet 4.6 (подробное экспертное заключение)
+ *  - professor → Claude Sonnet 5 (подробное экспертное заключение)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -216,8 +216,8 @@ export async function POST(request: NextRequest) {
     }
 
     const consultModel =
-      model === 'gpt52' ? 'openai/gpt-5.4' : 
-      mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.6';
+      model === 'gpt52' ? 'openai/gpt-5.6-terra' : 
+      mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5';
 
     const payload: any = {
       model: consultModel,

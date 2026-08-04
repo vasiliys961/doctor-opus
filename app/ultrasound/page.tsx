@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -15,8 +15,14 @@ import { calculateCost } from '@/lib/cost-calculator'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { type ExtractedFrame, extractAndAnonymizeFrames, formatTimestamp } from '@/lib/video-frame-extractor'
 import ImageEditor from '@/components/ImageEditor'
+import { getClientLocale } from '@/lib/i18n/client'
+import { ultrasoundPageMessages } from '@/lib/i18n/ui-client-messages'
+import { REQUEST_PROMPTS } from '@/lib/request-prompts'
+import type { Locale } from '@/lib/i18n/config'
 
 export default function UltrasoundPage() {
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = ultrasoundPageMessages[locale]
   const [file, setFile] = useState<File | null>(null)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [imagePreview, setImagePreview] = useState<string | null>(null)
@@ -43,7 +49,7 @@ export default function UltrasoundPage() {
 
   const analyzeUltrasound = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file && extractedFrames.length === 0) {
-      setError('Please upload an image first or capture frames from video')
+      setError(t.uploadFirst)
       return
     }
 
@@ -71,7 +77,7 @@ export default function UltrasoundPage() {
         }
       }
 
-      formData.append('prompt', 'Analyze the ultrasound study and generate a diagnostic protocol.')
+      formData.append('prompt', REQUEST_PROMPTS.ultrasound.single)
       formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', 'ultrasound')
@@ -81,8 +87,8 @@ export default function UltrasoundPage() {
 
       // Подбор модели
       const targetModelId = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                           analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') :
-                           'anthropic/claude-opus-4.6';
+                          analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') :
+                          'anthropic/claude-opus-5';
       formData.append('model', targetModelId);
 
       const response = await fetch('/api/analyze/image', {
@@ -123,7 +129,7 @@ export default function UltrasoundPage() {
         setLoading(false)
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(err.message || t.genericError)
       setLoading(false)
     }
   }
@@ -199,35 +205,39 @@ export default function UltrasoundPage() {
     if (!file) return
     setExtracting(true)
     try {
-      const frames = await extractAndAnonymizeFrames(file)
+      const frames = await extractAndAnonymizeFrames(file, undefined, 'soft')
       setExtractedFrames(frames)
     } catch (err: any) {
-      setError('Extraction error: ' + err.message)
+      setError(`${t.extractionError}: ${err.message}`)
     } finally {
       setExtracting(false)
     }
   }
 
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🔊 Ultrasound Analysis (Cine-loop)</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">🔊 {t.title}</h1>
       
       <AnalysisTips 
         content={{
-          fast: "quick analysis of ultrasound images or captured cine-loop frames.",
-          optimized: "Recommended mode for detailed assessment of echo structures.",
-          validated: "Expert analysis for complex cases (Gemini + Opus).",
+          fast: t.tipsFast,
+          optimized: t.tipsOptimized,
+          validated: t.tipsValidated,
           extra: [
-            "📹 **Cine-loop**: You can upload an ultrasound video and capture specific frames for analysis.",
-            "🖱️ Use «Manual Capture» to select the exact frame (e.g., valve opening).",
-            "🛡️ All captured frames can be manually anonymized before submission."
+            `📹 ${t.tipsExtra1}`,
+            `🖱️ ${t.tipsExtra2}`,
+            `🛡️ ${t.tipsExtra3}`
           ]
         }}
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6 text-center">
-        <h2 className="text-xl font-semibold mb-4 text-left">Upload Ultrasound (image or cine-loop)</h2>
-        <ImageUpload onUpload={handleUpload} accept="image/*,video/*,.dcm,.dicom" maxSize={100} />
+        <h2 className="text-xl font-semibold mb-4 text-left">{t.uploadTitle}</h2>
+        <ImageUpload onUpload={handleUpload} accept="image/*,video/*,.dcm,.dicom" maxSize={100} anonymizationMode="soft" />
       </div>
 
       {isVideo && videoUrl && (
@@ -242,7 +252,7 @@ export default function UltrasoundPage() {
                     className="absolute bottom-16 right-4 px-6 py-3 bg-blue-600/90 hover:bg-blue-600 text-white font-black rounded-2xl shadow-2xl transform active:scale-95 transition-all flex items-center gap-2 backdrop-blur-sm z-10 border border-blue-400"
                   >
                     <span className="text-2xl">📸</span>
-                    CAPTURE
+                    {t.capture}
                   </button>
                 )}
               </div>
@@ -263,11 +273,11 @@ export default function UltrasoundPage() {
                   <button 
                     onClick={() => { setIsManualCaptureMode(true); setExtractedFrames([]); }}
                     className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${isManualCaptureMode ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
-                  >🖱️ Manual Capture</button>
+                  >🖱️ {t.manualCapture}</button>
                   <button 
                     onClick={() => { setIsManualCaptureMode(false); handleAutoExtract(); }}
                     className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${!isManualCaptureMode ? 'bg-green-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
-                  >🤖 Auto-Extract</button>
+                  >🤖 {t.autoExtract}</button>
                 </div>
 
                 {!isManualCaptureMode && (
@@ -276,7 +286,7 @@ export default function UltrasoundPage() {
                     disabled={extracting}
                     className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-xs shadow-lg transition-all"
                   >
-                    {extracting ? '⏳ Extracting...' : '🎞️ Extract Frames'}
+                    {extracting ? `⏳ ${t.extracting}` : `🎞️ ${t.extractFrames}`}
                   </button>
                 )}
               </div>
@@ -284,18 +294,18 @@ export default function UltrasoundPage() {
             
             {extractedFrames.length > 0 && (
               <div className="w-full md:w-64 bg-gray-800 rounded-lg p-3 overflow-y-auto max-h-[450px]">
-                <h3 className="text-white text-xs font-bold mb-3 uppercase tracking-widest text-center">Captured: {extractedFrames.length}</h3>
+                <h3 className="text-white text-xs font-bold mb-3 uppercase tracking-widest text-center">{t.captured}: {extractedFrames.length}</h3>
                 <div className="grid grid-cols-2 gap-2">
                   {extractedFrames.map((f, i) => (
                     <div key={i} className="relative group aspect-video rounded border border-gray-600 overflow-hidden">
                       <img src={f.preview} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                        <button onClick={() => setEditingFrameIndex(i)} className="text-[10px] bg-white text-black px-1 rounded font-bold"> EDIT</button>
+                        <button onClick={() => setEditingFrameIndex(i)} className="text-[10px] bg-white text-black px-1 rounded font-bold"> {t.edit}</button>
                       </div>
                     </div>
                   ))}
                 </div>
-                <button onClick={() => setExtractedFrames([])} className="w-full mt-4 text-[10px] text-red-400 hover:text-red-300 underline font-bold">RESET ALL</button>
+                <button onClick={() => setExtractedFrames([])} className="w-full mt-4 text-[10px] text-red-400 hover:text-red-300 underline font-bold">{t.resetAll}</button>
               </div>
             )}
           </div>
@@ -310,7 +320,7 @@ export default function UltrasoundPage() {
               onClick={() => setShowEditor(true)}
               className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
             >
-              🎨 Redact Data
+              🎨 {t.redactData}
             </button>
           </div>
         </div>
@@ -322,13 +332,13 @@ export default function UltrasoundPage() {
             <div>
               <PatientSelector onSelect={setClinicalContext} disabled={loading} />
               <div className="flex items-center justify-between mb-2 mt-4">
-                <label className="text-sm font-bold text-gray-700">👤 Clinical context</label>
+                <label className="text-sm font-bold text-gray-700">👤 {t.clinicalContext}</label>
                 <VoiceInput onTranscript={(t) => setClinicalContext(p => p ? `${p} ${t}` : t)} disabled={loading} />
               </div>
               <textarea
                 value={clinicalContext}
                 onChange={(e) => setClinicalContext(e.target.value)}
-                placeholder="Complaints, history, study objective..."
+                placeholder={t.clinicalContext}
                 className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 text-sm h-32 ${
                   /\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) 
                   ? 'border-red-500 bg-red-50' 
@@ -338,7 +348,7 @@ export default function UltrasoundPage() {
               />
               {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
                 <p className="text-[10px] text-red-600 mb-2 font-bold">
-                  ⚠️ It looks like you entered a patient name. Please remove personal identifying information.
+                  ⚠️ {t.noPhiWarning}
                 </p>
               )}
               <div className="mb-4 mt-4">
@@ -352,10 +362,10 @@ export default function UltrasoundPage() {
                   />
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-blue-900">
-                      🛡️ One-time anonymous analysis
+                      🛡️ {t.anonymousTitle}
                     </span>
                     <span className="text-[10px] text-blue-700 font-normal">
-                      Result will not be saved to patient database (maximum PHI protection).
+                      {t.anonymousHint}
                     </span>
                   </div>
                 </label>
@@ -370,11 +380,11 @@ export default function UltrasoundPage() {
                   className="w-full py-4 bg-primary-600 hover:bg-primary-700 text-white font-black rounded-2xl shadow-xl transform hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                 >
                   <span className="text-2xl">🚀</span>
-                  RUN ANALYSIS {isVideo ? `(${extractedFrames.length} FRAMES)` : ''}
+                  {t.expert} {isVideo ? `(${extractedFrames.length} ${t.framesSuffix})` : ''}
                 </button>
                 <label className="flex items-center justify-center gap-2 cursor-pointer text-xs text-gray-500">
                   <input type="checkbox" checked={useStreaming} onChange={(e) => setUseStreaming(e.target.checked)} className="rounded text-primary-600" />
-                  Streaming mode
+                  {t.streamingMode}
                 </label>
               </div>
             </div>

@@ -9,12 +9,9 @@
  */
 
 import { getDescriptionPrompt, getDirectivePrompt, getComparisonDescriptionPrompt, ImageType } from './prompts';
+import { MODELS } from './openrouter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-
-const MODELS = {
-  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',
-} as const;
 
 export interface AnalyzeVideoOptions {
   /** Дополнительный текстовый контекст от пользователя */

@@ -5,37 +5,72 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import BalanceWidget from './BalanceWidget'
 import { useSession, signOut } from 'next-auth/react'
+import type { Locale } from '@/lib/i18n/config'
+import { uiMessages } from '@/lib/i18n/messages'
+import LanguageSwitcher from './LanguageSwitcher'
 
-export default function Navigation() {
+type Props = {
+  locale: Locale;
+};
+
+export default function Navigation({ locale }: Props) {
   const pathname = usePathname()
   const { data: session, status } = useSession()
   const [isOpen, setIsOpen] = useState(false)
+  const ui = uiMessages[locale]
+
+  const pageLabels: Record<string, Record<Locale, string>> = {
+    home: { en: '🏠 Home', es: '🏠 Inicio', fr: '🏠 Accueil', ar: '🏠 الرئيسية', hi: '🏠 होम', 'pt-BR': '🏠 Início', id: '🏠 Beranda', ms: '🏠 Utama', tr: '🏠 Ana sayfa', 'zh-CN': '🏠 首页' },
+    manual: { en: '📘 Physician Guide', es: '📘 Guía médica', fr: '📘 Guide médecin', ar: '📘 دليل الطبيب', hi: '📘 डॉक्टर गाइड', 'pt-BR': '📘 Guia médico', id: '📘 Panduan dokter', ms: '📘 Panduan doktor', tr: '📘 Hekim rehberi', 'zh-CN': '📘 医师指南' },
+    chat: { en: '🤖 AI Assistant', es: '🤖 Asistente IA', fr: '🤖 Assistant IA', ar: '🤖 مساعد الذكاء', hi: '🤖 AI असिस्टेंट', 'pt-BR': '🤖 Assistente IA', id: '🤖 Asisten AI', ms: '🤖 Pembantu AI', tr: '🤖 YZ Asistanı', 'zh-CN': '🤖 AI 助手' },
+    library: { en: '📚 Personal Library', es: '📚 Biblioteca personal', fr: '📚 Bibliothèque', ar: '📚 مكتبة شخصية', hi: '📚 पर्सनल लाइब्रेरी', 'pt-BR': '📚 Biblioteca pessoal', id: '📚 Perpustakaan', ms: '📚 Perpustakaan', tr: '📚 Kişisel kütüphane', 'zh-CN': '📚 个人资料库' },
+    protocol: { en: '📝 Visit Protocol', es: '📝 Protocolo de visita', fr: '📝 Protocole de visite', ar: '📝 بروتوكول الزيارة', hi: '📝 विज़िट प्रोटोकॉल', 'pt-BR': '📝 Protocolo da consulta', id: '📝 Protokol kunjungan', ms: '📝 Protokol lawatan', tr: '📝 Muayene protokolü', 'zh-CN': '📝 就诊记录' },
+    calculators: { en: '🧮 Medical Calculators', es: '🧮 Calculadoras médicas', fr: '🧮 Calculateurs médicaux', ar: '🧮 حاسبات طبية', hi: '🧮 मेडिकल कैलकुलेटर्स', 'pt-BR': '🧮 Calculadoras médicas', id: '🧮 Kalkulator medis', ms: '🧮 Kalkulator perubatan', tr: '🧮 Tıbbi hesaplayıcılar', 'zh-CN': '🧮 医学计算器' },
+    protocols: { en: '📚 Clinical Guidelines', es: '📚 Guías clínicas', fr: '📚 Recommandations cliniques', ar: '📚 إرشادات سريرية', hi: '📚 क्लिनिकल गाइडलाइंस', 'pt-BR': '📚 Diretrizes clínicas', id: '📚 Panduan klinis', ms: '📚 Garis panduan klinikal', tr: '📚 Klinik kılavuzlar', 'zh-CN': '📚 临床指南' },
+    ecg: { en: '📈 ECG Analysis', es: '📈 Análisis ECG', fr: '📈 Analyse ECG', ar: '📈 تحليل ECG', hi: '📈 ECG विश्लेषण', 'pt-BR': '📈 Análise ECG', id: '📈 Analisis ECG', ms: '📈 Analisis ECG', tr: '📈 ECG analizi', 'zh-CN': '📈 ECG 分析' },
+    image: { en: '🔍 Image Analysis + Sync', es: '🔍 Análisis de imagen', fr: '🔍 Analyse d’images', ar: '🔍 تحليل الصور', hi: '🔍 इमेज विश्लेषण', 'pt-BR': '🔍 Análise de imagem', id: '🔍 Analisis gambar', ms: '🔍 Analisis imej', tr: '🔍 Görüntü analizi', 'zh-CN': '🔍 影像分析' },
+    advanced: { en: '🔬 Case Review (Advanced)', es: '🔬 Revisión avanzada', fr: '🔬 Revue avancée', ar: '🔬 مراجعة متقدمة', hi: '🔬 एडवांस्ड रिव्यू', 'pt-BR': '🔬 Revisão avançada', id: '🔬 Tinjauan lanjutan', ms: '🔬 Semakan lanjutan', tr: '🔬 Gelişmiş inceleme', 'zh-CN': '🔬 高级分析' },
+    comparative: { en: '📊 Follow-up Comparison', es: '📊 Comparación de seguimiento', fr: '📊 Comparaison de suivi', ar: '📊 مقارنة المتابعة', hi: '📊 फॉलो-अप तुलना', 'pt-BR': '📊 Comparação de seguimento', id: '📊 Perbandingan tindak lanjut', ms: '📊 Perbandingan susulan', tr: '📊 Takip karşılaştırması', 'zh-CN': '📊 随访对比' },
+    xray: { en: '🩻 X-Ray Report', es: '🩻 Informe Rayos X', fr: '🩻 Rapport radio', ar: '🩻 تقرير أشعة سينية', hi: '🩻 एक्स-रे रिपोर्ट', 'pt-BR': '🩻 Laudo de raio-X', id: '🩻 Laporan X-Ray', ms: '🩻 Laporan X-Ray', tr: '🩻 X-Ray raporu', 'zh-CN': '🩻 X 光报告' },
+    mri: { en: '🧠 MRI Report', es: '🧠 Informe MRI', fr: '🧠 Rapport IRM', ar: '🧠 تقرير MRI', hi: '🧠 MRI रिपोर्ट', 'pt-BR': '🧠 Laudo de MRI', id: '🧠 Laporan MRI', ms: '🧠 Laporan MRI', tr: '🧠 MRI raporu', 'zh-CN': '🧠 MRI 报告' },
+    ct: { en: '🩻 CT Report', es: '🩻 Informe CT', fr: '🩻 Rapport CT', ar: '🩻 تقرير CT', hi: '🩻 CT रिपोर्ट', 'pt-BR': '🩻 Laudo de CT', id: '🩻 Laporan CT', ms: '🩻 Laporan CT', tr: '🩻 CT raporu', 'zh-CN': '🩻 CT 报告' },
+    advanced3d: { en: '🔬 3D Visualization (Cinematic)', es: '🔬 Visualización 3D', fr: '🔬 Visualisation 3D', ar: '🔬 عرض ثلاثي الأبعاد', hi: '🔬 3D विज़ुअलाइज़ेशन', 'pt-BR': '🔬 Visualização 3D', id: '🔬 Visualisasi 3D', ms: '🔬 Visualisasi 3D', tr: '🔬 3D görselleştirme', 'zh-CN': '🔬 3D 可视化' },
+    ultrasound: { en: '🔊 Ultrasound Report', es: '🔊 Informe de ultrasonido', fr: '🔊 Rapport échographie', ar: '🔊 تقرير الموجات فوق الصوتية', hi: '🔊 अल्ट्रासाउंड रिपोर्ट', 'pt-BR': '🔊 Laudo de ultrassom', id: '🔊 Laporan USG', ms: '🔊 Laporan ultrasound', tr: '🔊 Ultrason raporu', 'zh-CN': '🔊 超声报告' },
+    dermatoscopy: { en: '🔬 Dermoscopy Analysis', es: '🔬 Análisis dermatoscopia', fr: '🔬 Analyse dermoscopie', ar: '🔬 تحليل الديرموسكوبي', hi: '🔬 डर्मोस्कोपी विश्लेषण', 'pt-BR': '🔬 Análise dermatoscopia', id: '🔬 Analisis dermoskopi', ms: '🔬 Analisis dermoskopi', tr: '🔬 Dermoskopi analizi', 'zh-CN': '🔬 皮肤镜分析' },
+    lab: { en: '🔬 Lab Data Interpretation', es: '🔬 Interpretación de laboratorio', fr: '🔬 Interprétation labo', ar: '🔬 تفسير بيانات المختبر', hi: '🔬 लैब डेटा व्याख्या', 'pt-BR': '🔬 Interpretação laboratorial', id: '🔬 Interpretasi data lab', ms: '🔬 Tafsiran data makmal', tr: '🔬 Laboratuvar veri yorumu', 'zh-CN': '🔬 检验数据解读' },
+    video: { en: '🎬 Video Case Review', es: '🎬 Revisión de video', fr: '🎬 Revue vidéo', ar: '🎬 مراجعة فيديو', hi: '🎬 वीडियो केस रिव्यू', 'pt-BR': '🎬 Revisão de vídeo', id: '🎬 Tinjauan video', ms: '🎬 Semakan video', tr: '🎬 Video vaka inceleme', 'zh-CN': '🎬 视频病例分析' },
+    document: { en: '📄 Document Scan', es: '📄 Escaneo de documentos', fr: '📄 Scan documents', ar: '📄 مسح المستندات', hi: '📄 डॉक्यूमेंट स्कैन', 'pt-BR': '📄 Escanear documento', id: '📄 Pindai dokumen', ms: '📄 Imbas dokumen', tr: '📄 Belge tarama', 'zh-CN': '📄 文档扫描' },
+    genetic: { en: '🧬 Genetic Profile', es: '🧬 Perfil genético', fr: '🧬 Profil génétique', ar: '🧬 ملف جيني', hi: '🧬 जेनेटिक प्रोफाइल', 'pt-BR': '🧬 Perfil genético', id: '🧬 Profil genetik', ms: '🧬 Profil genetik', tr: '🧬 Genetik profil', 'zh-CN': '🧬 遗传档案' },
+    devices: { en: '🧪 Lab Devices (USB)', es: '🧪 Dispositivos de laboratorio', fr: '🧪 Appareils labo', ar: '🧪 أجهزة مختبر (USB)', hi: '🧪 लैब डिवाइस', 'pt-BR': '🧪 Dispositivos de laboratório', id: '🧪 Perangkat lab (USB)', ms: '🧪 Peranti makmal', tr: '🧪 Lab cihazları (USB)', 'zh-CN': '🧪 实验室设备' },
+    patients: { en: '👤 Patient Database', es: '👤 Base de pacientes', fr: '👤 Base patients', ar: '👤 قاعدة المرضى', hi: '👤 पेशेंट डेटाबेस', 'pt-BR': '👤 Base de pacientes', id: '👤 Database pasien', ms: '👤 Pangkalan pesakit', tr: '👤 Hasta veritabanı', 'zh-CN': '👤 患者数据库' },
+    stats: { en: '📊 Credit Usage', es: '📊 Uso de créditos', fr: '📊 Utilisation crédits', ar: '📊 استهلاك الوحدات', hi: '📊 क्रेडिट उपयोग', 'pt-BR': '📊 Uso de créditos', id: '📊 Penggunaan kredit', ms: '📊 Penggunaan kredit', tr: '📊 Kredi kullanımı', 'zh-CN': '📊 额度使用' },
+  };
 
   const pages = [
-    { name: '🏠 Home', href: '/' },
-    { name: '📘 Physician Guide', href: '/manual' },
-    { name: '🤖 AI Assistant', href: '/chat' },
-    { name: '📚 Personal Library', href: '/library' },
-    { name: '📝 Visit Protocol', href: '/protocol' },
-    { name: '🧮 Medical Calculators', href: '/calculators' },
-    { name: '📚 Clinical Guidelines', href: '/protocols' },
-    { name: '📈 ECG Analysis', href: '/ecg' },
-    { name: '🔍 Image Analysis + Sync', href: '/image-analysis' },
-    { name: '🔬 Case Review (Advanced)', href: '/advanced' },
-    { name: '📊 Follow-up Comparison', href: '/comparative' },
-    { name: '🩻 X-Ray Report', href: '/xray' },
-    { name: '🧠 MRI Report', href: '/mri' },
-    { name: '🩻 CT Report', href: '/ct' },
-    { name: '🔬 3D Visualization (Cinematic)', href: '/advanced-3d' },
-    { name: '🔊 Ultrasound Report', href: '/ultrasound' },
-    { name: '🔬 Dermoscopy Analysis', href: '/dermatoscopy' },
-    { name: '🔬 Lab Data Interpretation', href: '/lab' },
-    { name: '🎬 Video Case Review', href: '/video' },
-    { name: '📄 Document Scan', href: '/document' },
-    { name: '🧬 Genetic Profile', href: '/genetic' },
-    { name: '🧪 Lab Devices (USB)', href: '/devices' },
-    { name: '👤 Patient Database', href: '/patients' },
-    { name: '📊 Credit Usage', href: '/statistics' },
+    { key: 'home', href: '/' },
+    { key: 'manual', href: '/manual' },
+    { key: 'chat', href: '/chat' },
+    { key: 'library', href: '/library' },
+    { key: 'protocol', href: '/protocol' },
+    { key: 'calculators', href: '/calculators' },
+    { key: 'protocols', href: '/protocols' },
+    { key: 'ecg', href: '/ecg' },
+    { key: 'image', href: '/image-analysis' },
+    { key: 'advanced', href: '/advanced' },
+    { key: 'comparative', href: '/comparative' },
+    { key: 'xray', href: '/xray' },
+    { key: 'mri', href: '/mri' },
+    { key: 'ct', href: '/ct' },
+    { key: 'advanced3d', href: '/advanced-3d' },
+    { key: 'ultrasound', href: '/ultrasound' },
+    { key: 'dermatoscopy', href: '/dermatoscopy' },
+    { key: 'lab', href: '/lab' },
+    { key: 'video', href: '/video' },
+    { key: 'document', href: '/document' },
+    { key: 'genetic', href: '/genetic' },
+    { key: 'devices', href: '/devices' },
+    { key: 'patients', href: '/patients' },
+    { key: 'stats', href: '/statistics' },
   ]
 
   const isAdmin = (session?.user as any)?.isAdmin
@@ -57,7 +92,7 @@ export default function Navigation() {
                 href="/auth/signin" 
                 className="text-xs bg-white text-primary-900 px-3 py-1.5 rounded-full font-bold shadow-sm"
               >
-                Sign In
+                {ui.signIn}
               </Link>
             )}
             <button
@@ -99,30 +134,33 @@ export default function Navigation() {
         `}
       >
         <div className="px-4 py-4 mt-16 lg:mt-0">
+          <div className="mb-4 flex justify-end">
+            <LanguageSwitcher locale={locale} label={ui.languageLabel} />
+          </div>
           <div className="mb-6">
             <BalanceWidget />
           </div>
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold">🧠 Menu</h1>
+            <h1 className="text-2xl font-bold">🧠 {ui.menu}</h1>
             {status === 'authenticated' ? (
               <button
                 onClick={() => signOut({ callbackUrl: '/auth/signin' })}
                 className="text-[10px] bg-red-500/20 hover:bg-red-500/40 text-red-200 px-2 py-1 rounded transition-colors"
               >
-                Sign Out
+                {ui.signOut}
               </button>
             ) : (
               <Link
                 href="/auth/signin"
                 className="text-[10px] bg-teal-500/20 hover:bg-teal-500/40 text-teal-200 px-2 py-1 rounded transition-colors"
               >
-                Sign In
+                {ui.signIn}
               </Link>
             )}
           </div>
           {session?.user && (
             <div className="mb-4 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
-              <p className="text-[10px] text-primary-300 uppercase font-bold tracking-tighter">Signed in as</p>
+              <p className="text-[10px] text-primary-300 uppercase font-bold tracking-tighter">{ui.signedInAs}</p>
               <p className="text-xs truncate font-medium text-white">{session.user.email}</p>
             </div>
           )}
@@ -140,7 +178,7 @@ export default function Navigation() {
                     className="block w-full text-left py-2.5 px-4 rounded-lg transition-all touch-manipulation text-sm bg-white/95 text-gray-800 hover:bg-white hover:shadow-sm active:bg-primary-50"
                   >
                     <span className="flex items-center gap-3">
-                      {page.name}
+                      {pageLabels[page.key][locale]}
                       <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
@@ -170,7 +208,7 @@ export default function Navigation() {
                   }`}
                 >
                   <span className="flex items-center gap-3">
-                    {page.name}
+                    {pageLabels[page.key][locale]}
                   </span>
                 </Link>
               )
@@ -187,15 +225,15 @@ export default function Navigation() {
                     : 'bg-red-500/20 text-red-200 hover:bg-red-500/30 border border-red-500/30'
                 }`}
               >
-                ⚙️ Admin Panel (Payments)
+                ⚙️ {ui.adminPayments}
               </Link>
             </div>
           )}
           <div className="mt-6 p-4 bg-primary-800/50 rounded-lg text-sm border border-primary-700">
             <p className="font-semibold mb-1">Clinical Assistant v3.50</p>
-            <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Clinical Edition</p>
+            <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">{ui.clinicalEdition}</p>
             <ul className="space-y-1 text-xs opacity-70">
-              <li>• Opus 4.6 + Gemini 3.1</li>
+              <li>• Opus 5 + Gemini 3 Flash</li>
               <li>• DICOM Viewer + Measure</li>
               <li>• Multi-modal (Images + Labs)</li>
               <li>• Trend Analysis & RAG</li>

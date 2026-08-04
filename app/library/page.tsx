@@ -7,8 +7,12 @@ import {
   deleteDocument, 
   LibraryDocument 
 } from '@/lib/library-db';
+import { getClientLocale } from '@/lib/i18n/client';
+import { libraryMessages } from '@/lib/i18n/ui-client-messages';
+import type { Locale } from '@/lib/i18n/config';
 
 export default function LibraryPage() {
+  const [locale, setLocale] = useState<Locale>('en');
   const [documents, setDocuments] = useState<LibraryDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -16,8 +20,10 @@ export default function LibraryPage() {
   const [progress, setProgress] = useState<string>('');
 
   useEffect(() => {
+    setLocale(getClientLocale());
     fetchDocuments();
   }, []);
+  const t = libraryMessages[locale];
 
   const fetchDocuments = async () => {
     try {
@@ -25,7 +31,7 @@ export default function LibraryPage() {
       const docs = await getAllDocuments();
       setDocuments(docs || []);
     } catch (err) {
-      setError('Failed to load document list');
+      setError(t.loadError);
     } finally {
       setIsLoading(false);
     }
@@ -36,14 +42,14 @@ export default function LibraryPage() {
     if (!file) return;
 
     if (file.type !== 'application/pdf') {
-      alert('Please select a file in PDF format');
+      alert(t.pdfOnly);
       return;
     }
 
     try {
       setUploading(true);
       setError(null);
-      setProgress('Uploading file to local server...');
+      setProgress(t.uploadProgress);
       
       const formData = new FormData();
       formData.append('file', file);
@@ -56,10 +62,10 @@ export default function LibraryPage() {
       const result = await response.json();
 
       if (!result.success) {
-        throw new Error(result.error || 'PDF processing error');
+        throw new Error(result.error || t.pdfError);
       }
 
-      setProgress('Saving to local database...');
+      setProgress(t.saveProgress);
 
       // Сохраняем результат в IndexedDB
       const newDoc: LibraryDocument = {
@@ -77,19 +83,19 @@ export default function LibraryPage() {
       setProgress('');
     } catch (err: any) {
       console.error('Upload error:', err);
-      setError(err.message || 'PDF processing error');
+      setError(err.message || t.pdfError);
     } finally {
       setUploading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this document?')) return;
+    if (!confirm(t.confirmDelete)) return;
     try {
       await deleteDocument(id);
       setDocuments(prev => prev.filter(doc => doc.id !== id));
     } catch (err) {
-      alert('Deletion error');
+      alert(t.deleteError);
     }
   };
 
@@ -97,11 +103,10 @@ export default function LibraryPage() {
     <div className="max-w-4xl mx-auto py-4 sm:py-8">
       <div className="bg-white rounded-2xl shadow-sm p-6 mb-8 border border-gray-100">
         <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-primary-900">
-          <span>📚</span> Personal Library
+          <span>📚</span> {t.title}
         </h2>
         <p className="text-gray-600 mb-6 text-sm sm:text-base">
-          Upload PDF literature. Files are processed on **your local server** 
-          (not sent to the internet) and stored in your browser. Large files up to 100 MB are supported.
+          {t.description}
         </p>
 
         <div className="flex items-center justify-center w-full">
@@ -109,9 +114,9 @@ export default function LibraryPage() {
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
               <span className="text-3xl mb-2">{uploading ? '⚙️' : '📄'}</span>
               <p className="mb-2 text-sm text-primary-700 font-semibold text-center px-4">
-                {uploading ? progress : 'Choose PDF to process'}
+                {uploading ? progress : t.choosePdf}
               </p>
-              <p className="text-xs text-primary-500">Up to 100 MB • Processed on local server</p>
+              <p className="text-xs text-primary-500">{t.processedLocal}</p>
             </div>
             {!uploading && (
               <input 
@@ -129,11 +134,11 @@ export default function LibraryPage() {
         <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 flex items-start shadow-sm border border-red-100">
           <span className="mr-2 text-xl">⚠️</span>
           <div className="flex-1">
-            <p className="font-bold mb-1">Processing error</p>
+            <p className="font-bold mb-1">{t.processingError}</p>
             <p className="text-sm">{error}</p>
             {error.includes('Python') && (
               <p className="text-xs mt-2 bg-red-100 p-2 rounded">
-                💡 Установите PyMuPDF: <code className="font-mono">pip install pymupdf</code>
+                💡 {t.installHint}: <code className="font-mono">pip install pymupdf</code>
               </p>
             )}
           </div>
@@ -145,23 +150,23 @@ export default function LibraryPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Document</th>
-                <th className="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Chunks</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Size</th>
-                <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">{t.document}</th>
+                <th className="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">{t.chunks}</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">{t.size}</th>
+                <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">{t.action}</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-10 text-center text-gray-400 text-sm italic">Loading...</td>
+                  <td colSpan={4} className="px-6 py-10 text-center text-gray-400 text-sm italic">{t.loading}</td>
                 </tr>
               ) : documents.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-6 py-10 text-center text-gray-400 text-sm italic">
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-4xl">📚</span>
-                      <p>Library is empty. Upload your first document.</p>
+                      <p>{t.emptyLibrary}</p>
                     </div>
                   </td>
                 </tr>
@@ -183,7 +188,7 @@ export default function LibraryPage() {
                         onClick={() => handleDelete(doc.id)}
                         className="text-red-500 hover:text-red-700 font-bold px-3 py-1 rounded-lg hover:bg-red-50 transition-all"
                       >
-                        Удалить
+                        {t.delete}
                       </button>
                     </td>
                   </tr>

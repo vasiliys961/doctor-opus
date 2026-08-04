@@ -3,14 +3,20 @@
 import { useState, useEffect } from 'react'
 import { getUsageBySections, getCurrentMonthName, clearCurrentMonthStats } from '@/lib/simple-logger'
 import { signOut } from 'next-auth/react'
+import { getClientLocale } from '@/lib/i18n/client'
+import { statisticsMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 
 // Цены моделей (для расчета условных единиц за 1M токенов)
 const MODEL_PRICING = {
-  'anthropic/claude-opus-4.6': { input: 5.0, output: 25.0 },
-  'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
-  'anthropic/claude-sonnet-4.6': { input: 3.0, output: 15.0 },
+  'anthropic/claude-opus-5': { input: 5.0, output: 25.0 },
+  'anthropic/claude-fable-5': { input: 10.0, output: 50.0 },
+  'anthropic/claude-sonnet-5': { input: 3.0, output: 15.0 },
+  'openai/gpt-5.6-terra': { input: 2.5, output: 15.0 },
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
+  'google/gemini-3-flash': { input: 0.50, output: 3.00 },
   'google/gemini-3-flash-preview': { input: 0.50, output: 3.00 },
+  'google/gemini-3-pro': { input: 2.00, output: 12.00 },
   'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },
 }
 
@@ -35,6 +41,7 @@ interface SectionStats {
 }
 
 export default function StatisticsPage() {
+  const [locale, setLocale] = useState<Locale>('en')
   const [stats, setStats] = useState<ModelStats[]>([])
   const [totalCost, setTotalCost] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -42,8 +49,10 @@ export default function StatisticsPage() {
   const [monthTotalCost, setMonthTotalCost] = useState(0)
   const [monthTotalCalls, setMonthTotalCalls] = useState(0)
   const [trainingStats, setTrainingStats] = useState<{ totalReady: number, totalCount: number, threshold: number } | null>(null)
+  const t = statisticsMessages[locale]
 
   useEffect(() => {
+    setLocale(getClientLocale())
     loadStatistics()
     loadSectionStatistics()
     loadTrainingStats()
@@ -142,7 +151,7 @@ export default function StatisticsPage() {
   }
 
   const clearStatistics = () => {
-    if (confirm('Are you sure you want to clear all statistics?')) {
+    if (confirm(t.clearAllConfirm)) {
       localStorage.removeItem('modelStatistics')
       setStats([])
       setTotalCost(0)
@@ -150,7 +159,7 @@ export default function StatisticsPage() {
   }
 
   const clearMonthStatistics = () => {
-    if (confirm("Are you sure you want to clear this month's statistics?")) {
+    if (confirm(t.clearMonthConfirm)) {
       clearCurrentMonthStats()
       setSectionStats({})
       setMonthTotalCost(0)
@@ -163,11 +172,11 @@ export default function StatisticsPage() {
   }
 
   const handleDeleteAccount = async () => {
-    if (!confirm('WARNING! This action is irreversible. Your account, balance, and all cloud data will be deleted. Are you sure?')) {
+    if (!confirm(t.deleteAccountWarn1)) {
       return
     }
 
-    if (!confirm('Do you confirm deletion of all your data (GDPR right to erasure)?')) {
+    if (!confirm(t.deleteAccountWarn2)) {
       return
     }
 
@@ -176,23 +185,23 @@ export default function StatisticsPage() {
       const data = await response.json()
       
       if (data.success) {
-        alert('Your account has been successfully deleted. All data erased.')
+        alert(t.deletedOk)
         signOut({ callbackUrl: '/auth/signin' })
       } else {
-        alert('Deletion error: ' + data.error)
+        alert(`${t.deleteError} ${data.error}`)
       }
     } catch (error) {
       console.error('Error deleting account:', error)
-      alert('A technical error occurred while deleting the account.')
+      alert(t.deleteTechError)
     }
   }
 
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 Usage Statistics</h1>
+        <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 {t.title}</h1>
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600">{t.loading}</p>
         </div>
       </div>
     )
@@ -201,14 +210,14 @@ export default function StatisticsPage() {
   if (stats.length === 0 && Object.keys(sectionStats).length === 0 && !trainingStats) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 Usage Statistics</h1>
+        <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 {t.title}</h1>
         
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
           <p className="text-blue-800">
-            📈 Statistics not available yet. Use analysis features to accumulate data.
+            📈 {t.noStats}
           </p>
           <p className="text-sm text-blue-600 mt-2">
-            Try running an analysis in: Laboratory Data, ECG, or Genetics sections
+            {t.noStatsHint}
           </p>
         </div>
       </div>
@@ -218,20 +227,20 @@ export default function StatisticsPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-primary-900">📊 Usage Statistics</h1>
+        <h1 className="text-3xl font-bold text-primary-900">📊 {t.title}</h1>
         {(stats.length > 0 || Object.keys(sectionStats).length > 0) && (
           <div className="flex gap-2">
             <button
               onClick={clearMonthStatistics}
               className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
             >
-              🗓️ Clear Month
+              🗓️ {t.clearMonth}
             </button>
             <button
               onClick={clearStatistics}
               className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
             >
-              🔄 Clear All
+              🔄 {t.clearAll}
             </button>
           </div>
         )}
@@ -244,11 +253,11 @@ export default function StatisticsPage() {
             <p className="text-lg opacity-90 mb-2">📅 {getCurrentMonthName()}</p>
             <div className="grid grid-cols-2 gap-4 mt-4">
               <div>
-                <p className="text-sm opacity-80">Spent</p>
+                <p className="text-sm opacity-80">{t.monthSpent}</p>
                 <p className="text-3xl font-bold">{monthTotalCost.toFixed(2)} cr.</p>
               </div>
               <div>
-                <p className="text-sm opacity-80">Requests</p>
+                <p className="text-sm opacity-80">{t.monthRequests}</p>
                 <p className="text-3xl font-bold">{monthTotalCalls}</p>
               </div>
             </div>
@@ -296,22 +305,22 @@ export default function StatisticsPage() {
       {/* Статистика по разделам */}
       {Object.keys(sectionStats).length > 0 && (
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">📂 By Section</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">📂 {t.sectionTitle}</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Section
+                    {t.section}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Requests
+                    {t.requests}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cost (cr.)
+                    {t.cost}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    % of total
+                    {t.ofTotal}
                   </th>
                 </tr>
               </thead>
@@ -357,7 +366,7 @@ export default function StatisticsPage() {
       {/* Общая стоимость всех запросов */}
       <div className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white rounded-lg shadow-lg p-6 mb-6">
         <div className="text-center">
-          <p className="text-lg opacity-90 mb-2">💰 Total cost of all requests (all time)</p>
+          <p className="text-lg opacity-90 mb-2">💰 {t.totalCostAllTime}</p>
           <p className="text-4xl font-bold">≈ {totalCost.toFixed(2)} cr.</p>
         </div>
       </div>
@@ -369,22 +378,22 @@ export default function StatisticsPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Model
+                  {t.model}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Total calls
+                  {t.totalCalls}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Successful
+                  {t.successful}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Failed
+                  {t.failed}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Success rate
+                  {t.successRate}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Tokens
+                  {t.tokens}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Cost (cr.)
@@ -441,7 +450,7 @@ export default function StatisticsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* График успешности */}
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Model Success Rate</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">{t.modelSuccessRate}</h2>
           <div className="space-y-3">
             {stats.map((stat, index) => {
               const successRate = stat.totalCalls > 0 
@@ -470,7 +479,7 @@ export default function StatisticsPage() {
 
         {/* График количества вызовов */}
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Number of Calls</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">{t.numberOfCalls}</h2>
           <div className="space-y-3">
             {stats.map((stat, index) => {
               const maxCalls = Math.max(...stats.map(s => s.totalCalls))
@@ -500,8 +509,7 @@ export default function StatisticsPage() {
       {/* Информация */}
       <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
         <p className="text-sm text-yellow-800">
-          <strong>ℹ️ Note:</strong> Costs are calculated in credits based on current model pricing. 
-          Statistics are stored locally in your browser.
+          <strong>ℹ️ Note:</strong> {t.note}
         </p>
       </div>
 
@@ -511,7 +519,7 @@ export default function StatisticsPage() {
           onClick={handleDeleteAccount}
           className="text-xs text-red-400 hover:text-red-600 transition-colors flex items-center gap-2 underline"
         >
-          🗑️ Delete account and all personal data (Right to erasure)
+          🗑️ {t.deleteAccount}
         </button>
       </div>
     </div>

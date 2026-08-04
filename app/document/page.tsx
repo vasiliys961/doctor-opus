@@ -5,6 +5,10 @@ import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisTips from '@/components/AnalysisTips'
 import { logUsage } from '@/lib/simple-logger'
+import { getClientLocale } from '@/lib/i18n/client'
+import { documentPageMessages } from '@/lib/i18n/ui-client-messages'
+import { REQUEST_PROMPTS } from '@/lib/request-prompts'
+import type { Locale } from '@/lib/i18n/config'
 import { Document, Packer, Paragraph, ImageRun, AlignmentType } from 'docx'
 import { saveAs } from 'file-saver'
 
@@ -20,6 +24,8 @@ declare global {
 type ScanMode = 'local' | 'ai'
 
 export default function DocumentPage() {
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = documentPageMessages[locale]
   const [file, setFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [processedImage, setProcessedImage] = useState<string | null>(null)
@@ -273,7 +279,7 @@ export default function DocumentPage() {
       }
 
       formData.append('isAnonymous', isAnonymous.toString())
-      formData.append('prompt', 'Scan and extract text from the medical document, PRESERVING STRUCTURE: tables, lists, headings, formatting.')
+      formData.append('prompt', REQUEST_PROMPTS.document.scan)
 
       const response = await fetch('/api/scan/document', {
         method: 'POST',
@@ -304,11 +310,15 @@ export default function DocumentPage() {
     }
   }
 
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
+
   return (
     <>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-primary-900 mb-6">📄 Document Scanning</h1>
+        <h1 className="text-3xl font-bold text-primary-900 mb-6">📄 {t.title}</h1>
         
         <div className="flex gap-4 mb-8">
           <button
@@ -321,8 +331,8 @@ export default function DocumentPage() {
           >
             <span className="text-2xl">💾</span>
             <div>
-              <div className="text-sm uppercase tracking-wider">Local</div>
-              <div className="text-[10px] font-normal opacity-80">No AI, 100% private</div>
+              <div className="text-sm uppercase tracking-wider">{t.localMode}</div>
+              <div className="text-[10px] font-normal opacity-80">{t.noAiPrivate}</div>
             </div>
           </button>
           <button
@@ -335,34 +345,34 @@ export default function DocumentPage() {
           >
             <span className="text-2xl">🧠</span>
             <div>
-              <div className="text-sm uppercase tracking-wider">Smart OCR</div>
-              <div className="text-[10px] font-normal opacity-80">AI-powered text recognition</div>
+              <div className="text-sm uppercase tracking-wider">{t.aiMode}</div>
+              <div className="text-[10px] font-normal opacity-80">{t.aiPowered}</div>
             </div>
           </button>
         </div>
 
         <AnalysisTips 
-          title="Document Scanning Tips"
+          title={t.scanningTipsTitle}
           content={{
-            fast: scanMode === 'ai' ? "Uses Gemini 3.1 Flash — ideal for fast and accurate text extraction." : "Local mode instantly creates a quality digital scan without sending data online.",
+            fast: scanMode === 'ai' ? t.aiTipFast : t.localTipFast,
             extra: scanMode === 'ai' ? [
-              "⭐ Recommended mode: Gemini 3.1 Flash — best balance of text recognition speed and cost.",
-              "🛡️ In AI mode, always use the anonymization toggle to protect personal data.",
-              "🔍 The system preserves document structure: tables are converted to Markdown."
+              `⭐ ${t.aiTip1}`,
+              `🛡️ ${t.aiTip2}`,
+              `🔍 ${t.aiTip3}`
             ] : [
-              "💾 Use filters to improve readability (contrast, brightness).",
-              "📄 The «Word» button creates a document with the scan at full page width.",
-              "🌍 100% private: processing happens directly in your browser."
+              `💾 ${t.localTip1}`,
+              `📄 ${t.localTip2}`,
+              `🌍 ${t.localTip3}`
             ]
           }}
         />
         
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">
-            {scanMode === 'local' ? '1. Upload or photograph the document' : 'Upload document for recognition'}
+            {scanMode === 'local' ? t.uploadTitleLocal : t.uploadTitleAi}
           </h2>
           <p className="text-sm text-gray-600 mb-4">
-            Supported formats: PDF, images (JPG, PNG)
+            {t.supportedFormats}
           </p>
           <ImageUpload onUpload={handleUpload} accept=".pdf,image/*" maxSize={50} />
         </div>
@@ -374,8 +384,8 @@ export default function DocumentPage() {
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-700 mr-3"></div>
               <span>
                 {conversionProgress 
-                  ? `Converting PDF: page ${conversionProgress.current} of ${conversionProgress.total}...`
-                  : 'Preparing PDF for conversion...'}
+                  ? `${t.convertingPdfProgress} ${conversionProgress.current} / ${conversionProgress.total}...`
+                  : t.preparingPdf}
               </span>
             </div>
           </div>
@@ -384,16 +394,16 @@ export default function DocumentPage() {
       {file && imagePreview && scanMode === 'local' && (
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-            🎨 2. Settings and Export
+            🎨 {t.settingsExport}
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-6">
               <div className="p-4 bg-gray-50 rounded-lg space-y-4">
-                <h3 className="font-semibold text-sm text-gray-700 uppercase tracking-widest">Copier Tools</h3>
+                <h3 className="font-semibold text-sm text-gray-700 uppercase tracking-widest">{t.copierTools}</h3>
                 
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Brightness ({brightness}%)</label>
+                  <label className="text-xs text-gray-500 mb-1 block">{t.brightness} ({brightness}%)</label>
                   <input 
                     type="range" min="50" max="200" value={brightness} 
                     onChange={(e) => setBrightness(Number(e.target.value))}
@@ -402,7 +412,7 @@ export default function DocumentPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Contrast ({contrast}%)</label>
+                  <label className="text-xs text-gray-500 mb-1 block">{t.contrast} ({contrast}%)</label>
                   <input 
                     type="range" min="50" max="250" value={contrast} 
                     onChange={(e) => setContrast(Number(e.target.value))}
@@ -411,14 +421,14 @@ export default function DocumentPage() {
                 </div>
 
                 <div className="flex items-center justify-between pt-2">
-                  <span className="text-sm font-medium">Grayscale mode</span>
+                  <span className="text-sm font-medium">{t.grayscaleMode}</span>
                   <button 
                     onClick={() => setIsGrayscale(!isGrayscale)}
                     className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                       isGrayscale ? 'bg-gray-800 text-white' : 'bg-gray-200 text-gray-600'
                     }`}
                   >
-                    {isGrayscale ? 'ON' : 'OFF'}
+                    {isGrayscale ? t.on : t.off}
                   </button>
                 </div>
               </div>
@@ -429,21 +439,21 @@ export default function DocumentPage() {
                 className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
               >
                 <span className="text-xl">🎨</span>
-                Manually Redact Data
+                {t.redactData}
               </button>
               <button
                 onClick={handleDownloadWord}
                   className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-3"
                 >
                   <span className="text-xl">📝</span>
-                  Save as Word (.docx)
+                  {t.saveWord}
                 </button>
                 <button
                   onClick={handlePrintPDF}
                   className="w-full py-4 bg-green-600 text-white rounded-xl font-bold shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-3"
                 >
                   <span className="text-xl">💾</span>
-                  Download/Print as PDF
+                  {t.downloadPdf}
                 </button>
               </div>
             </div>
@@ -462,13 +472,13 @@ export default function DocumentPage() {
       {file && imagePreview && scanMode === 'ai' && (
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">📷 Preview and Anonymization</h2>
+            <h2 className="text-xl font-semibold">📷 {t.previewAndAnonymization}</h2>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowEditor(true)}
                 className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-all border border-indigo-200 flex items-center gap-2"
               >
-                🎨 Manually Redact Data
+                🎨 {t.redactData}
               </button>
             </div>
           </div>
@@ -492,10 +502,10 @@ export default function DocumentPage() {
               />
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-blue-900">
-                  🛡️ Anonymous analysis active
+                  🛡️ {t.anonymousActive}
                 </span>
                 <span className="text-[10px] text-blue-700 font-normal">
-                  Data above has been anonymized by you or will be hidden automatically.
+                  {t.anonymousHint}
                 </span>
               </div>
             </label>
@@ -506,7 +516,7 @@ export default function DocumentPage() {
               className="w-full sm:w-auto px-10 py-4 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-lg transform hover:scale-105 disabled:opacity-50 flex items-center justify-center gap-3"
             >
               <span className="text-xl">🚀</span>
-              Recognize Text
+              {t.recognizeText}
             </button>
           </div>
         </div>

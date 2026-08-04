@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisTips from '@/components/AnalysisTips'
@@ -9,6 +9,9 @@ import PatientSelector from '@/components/PatientSelector'
 import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import ImageEditor, { DrawingPath } from '@/components/ImageEditor'
 import BillingErrorNotice from '@/components/BillingErrorNotice'
+import { getClientLocale } from '@/lib/i18n/client'
+import { videoPageMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 import { 
   extractAndAnonymizeFrames, 
   formatTimestamp, 
@@ -21,6 +24,8 @@ const Dicom3DViewer = dynamic(() => import('@/components/Dicom3DViewer'), { ssr:
 import { logUsage } from '@/lib/simple-logger'
 
 export default function VideoPage() {
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = videoPageMessages[locale]
   const [file, setFile] = useState<File | null>(null)
   const [playlist, setPlaylist] = useState<File[]>([])
   const [result, setResult] = useState<string>('')
@@ -67,7 +72,7 @@ export default function VideoPage() {
       // Проверка размера (100MB max)
       const maxSize = 100 * 1024 * 1024
       if (selectedFile.size > maxSize) {
-        setError(`Video size exceeds 100MB (${(selectedFile.size / 1024 / 1024).toFixed(1)}MB)`)
+        setError(`${t.videoTooLarge} (${(selectedFile.size / 1024 / 1024).toFixed(1)}MB)`)
         return
       }
       
@@ -137,7 +142,7 @@ export default function VideoPage() {
         setFile(selectedFile);
       }
     } catch (err: any) {
-      setError('DICOM processing error: ' + err.message);
+      setError(`${t.dicomProcessingError}: ${err.message}`);
     } finally {
       setExtracting(false);
     }
@@ -174,7 +179,7 @@ export default function VideoPage() {
           setAnalysisMode('frames');
         }
       } catch (err: any) {
-        setError('Folder processing error: ' + err.message);
+        setError(`${t.folderProcessingError}: ${err.message}`);
       } finally {
         setExtracting(false);
       }
@@ -188,7 +193,7 @@ export default function VideoPage() {
         setExtractedFrames([]);
         setError(null);
       } else {
-        setError('No DICOM files or video found in folder');
+        setError(t.noDicomOrVideoInFolder);
       }
     }
   }
@@ -196,7 +201,7 @@ export default function VideoPage() {
   // Извлечение и анонимизация frames из ВСЕХ видео в плейлисте (по порядку)
   const handleExtractFrames = async () => {
     if (playlist.length === 0 && !file) {
-      setError('Please select a video file or folder')
+      setError(t.selectVideoOrFolder)
       return
     }
 
@@ -223,7 +228,8 @@ export default function VideoPage() {
               current: (i * total) + current, 
               total: filesToProcess.length * total 
             })
-          }
+          },
+          'soft'
         )
         
         // Добавляем информацию о том, из какого видео кадр
@@ -244,7 +250,7 @@ export default function VideoPage() {
       
     } catch (err: any) {
       console.error('❌ [VIDEO] Frame extraction error:', err)
-      setError(err.message || 'Frame extraction error')
+      setError(err.message || t.frameExtractionError)
     } finally {
       setExtracting(false)
     }
@@ -361,7 +367,7 @@ export default function VideoPage() {
   // Анализ извлеченных frames
   const handleAnalyzeFrames = async () => {
     if (extractedFrames.length === 0) {
-      setError('Please extract frames from video first')
+      setError(t.extractFramesFirst)
       return
     }
 
@@ -425,11 +431,11 @@ export default function VideoPage() {
           outputTokens: data.usage?.completion_tokens || 0,
         })
       } else {
-        setError(data.error || 'Frame analysis error')
+        setError(data.error || t.frameAnalysisError)
       }
     } catch (err: any) {
       console.error('❌ [VIDEO] Error:', err)
-      setError(err.message || 'An error occurred during analysis')
+      setError(err.message || t.genericAnalysisError)
     } finally {
       setAnalyzing(false)
       setLoading(false)
@@ -439,17 +445,17 @@ export default function VideoPage() {
   // Анализ полного видео (для анонимных файлов)
   const handleAnalyzeFullVideo = async () => {
     if (!file) {
-      setError('Please select a video file')
+      setError(t.selectVideoFile)
       return
     }
 
     if (playlist.length > 1) {
-      setError('"Full Video" mode currently supports only one file. To analyze a full folder use "Safe Mode (frame extraction)".')
+      setError(t.fullVideoSingleFileOnly)
       return
     }
 
     if (!confirmNoPersonalData) {
-      setError('You must confirm the absence of personal data')
+      setError(t.mustConfirmNoPersonalData)
       return
     }
 
@@ -497,11 +503,11 @@ export default function VideoPage() {
           outputTokens: data.usage?.completion_tokens || 4000,
         })
       } else {
-        setError(data.error || 'Video analysis error')
+        setError(data.error || t.videoAnalysisError)
       }
     } catch (err: any) {
       console.error('❌ [VIDEO] Error:', err)
-      setError(err.message || 'An error occurred during analysis')
+      setError(err.message || t.genericAnalysisError)
     } finally {
       setAnalyzing(false)
       setLoading(false)
@@ -517,27 +523,31 @@ export default function VideoPage() {
     }
   }
 
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🎬 Video Analysis</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">🎬 {t.title}</h1>
       
       <AnalysisTips 
         content={{
-          fast: "Two-stage screening (structured video description via Gemini Vision, then clinical interpretation via Gemini Flash). Provides a concise conclusion and risk signal.",
-          validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for detailed clinical review of video materials; most resource-intensive mode.",
+          fast: t.tipFast,
+          validated: t.tipValidated,
           extra: [
-            "🛡️ Video is automatically processed: the system extracts 5-12 key frames (adaptive to video length).",
-            "🔒 Each frame is anonymized: black bars on edges (10% top, 8% bottom, 12% sides).",
-            "👁️ Preview before sending: you can see all frames and manually edit any of them.",
-            "🎯 ~92-95% accuracy with 7 frames — optimal quality and safety balance.",
-            "💰 5-6x cost savings compared to sending the full video.",
-            "⏱️ Processing takes 4-8 seconds depending on video length."
+            `🛡️ ${t.tipExtra1}`,
+            `🔒 ${t.tipExtra2}`,
+            `👁️ ${t.tipExtra3}`,
+            `🎯 ${t.tipExtra4}`,
+            `💰 ${t.tipExtra5}`,
+            `⏱️ ${t.tipExtra6}`
           ]
         }}
       />
 
       <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Upload Video for Analysis</h2>
+        <h2 className="text-xl font-semibold mb-4">{t.uploadTitle}</h2>
         
         <div className="space-y-4">
           {/* Загрузка видео или папки */}
@@ -567,18 +577,18 @@ export default function VideoPage() {
                   onClick={() => fileInputRef.current?.click()}
                   className="text-primary-600 hover:text-primary-700 font-semibold underline"
                 >
-                  Choose file
+                  {t.chooseFile}
                 </button>
                 <span className="text-gray-600"> or </span>
                 <button
                   onClick={() => folderInputRef.current?.click()}
                   className="text-primary-600 hover:text-primary-700 font-semibold underline"
                 >
-                  entire folder
+                  {t.entireFolder}
                 </button>
               </div>
               <p className="text-sm text-gray-500">
-                Supported: Video (MP4, MOV, AVI) or DICOM series (folder)
+                {t.supported}
               </p>
             </div>
           </div>
@@ -587,14 +597,14 @@ export default function VideoPage() {
               <div className="mt-2 space-y-2">
                 <p className="text-sm text-gray-600">
                   {playlist.length > 1 
-                    ? `✅ Found in folder: ${playlist.length} videos`
-                    : `✅ Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`
+                    ? `✅ ${t.foundInFolder}: ${playlist.length} ${t.videosLabel}`
+                    : `✅ ${t.selected}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`
                   }
                 </p>
 
                 {playlist.length > 1 && (
                   <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg max-h-40 overflow-y-auto">
-                    <p className="text-xs font-bold text-blue-700 mb-2 uppercase">File list for comprehensive analysis:</p>
+                    <p className="text-xs font-bold text-blue-700 mb-2 uppercase">{t.fileListTitle}</p>
                     <ul className="text-xs text-blue-600 space-y-1">
                       {playlist.map((f, i) => (
                         <li key={i} className="flex justify-between">
@@ -608,7 +618,7 @@ export default function VideoPage() {
                 
                 {/* Переключатель режимов анализа */}
                 <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <p className="text-sm font-semibold text-gray-900 mb-2">Select analysis mode:</p>
+                  <p className="text-sm font-semibold text-gray-900 mb-2">{t.analysisMode}</p>
                   <div className="space-y-2">
                     <label className="flex items-start cursor-pointer">
                       <input
@@ -622,11 +632,9 @@ export default function VideoPage() {
                         className="mt-1 mr-3"
                       />
                       <div className="flex-1">
-                        <span className="font-semibold text-green-700">🛡️ Safe (frame extraction)</span>
+                        <span className="font-semibold text-green-700">🛡️ {t.safeMode}</span>
                         <p className="text-xs text-gray-600 mt-1">
-                          The system will extract 5-12 key frames, anonymize each (black bars on edges), 
-                          and show a preview. You can manually edit any frame. 
-                          <strong>Recommended by default.</strong>
+                          {t.safeModeDescription} <strong>{t.safeModeRecommended}</strong>
                         </p>
                       </div>
                     </label>
@@ -640,11 +648,10 @@ export default function VideoPage() {
                         className="mt-1 mr-3"
                       />
                       <div className="flex-1">
-                        <span className="font-semibold text-amber-700">⚡ Full Video</span>
+                        <span className="font-semibold text-amber-700">⚡ {t.fullVideo}</span>
                         <p className="text-xs text-gray-600 mt-1">
-                          Video is sent in full without processing. Higher accuracy (100%), 
-                          but requires prior verification of absence of personal data.
-                          <strong> For anonymous files only!</strong>
+                          {t.fullVideoDescription}
+                          <strong> {t.fullVideoAnonymousOnly}</strong>
                         </p>
                       </div>
                     </label>
@@ -657,16 +664,16 @@ export default function VideoPage() {
                     <div className="flex items-start space-x-2 mb-3">
                       <span className="text-2xl">⚠️</span>
                       <div>
-                        <p className="font-bold text-red-900 text-lg">WARNING: Risk of personal data exposure!</p>
+                        <p className="font-bold text-red-900 text-lg">{t.warning}</p>
                         <p className="text-red-800 text-sm mt-1">
-                          In "Full Video" mode, frames are NOT anonymized automatically. 
-                          If the video contains patient names, date of birth, ID, or address — 
-                          <strong> this is a HIPAA/GDPR violation!</strong>
+                          {t.fullVideoWarningBody}
+                          {t.containsPatientData} 
+                          <strong> {t.hipaaViolation}</strong>
                         </p>
                         <ul className="text-red-700 text-xs mt-2 ml-4 list-disc space-y-1">
-                          <li>Video will be sent to OpenRouter (US) in full</li>
-                          <li>All frames will be processed without modification</li>
-                          <li>Text overlays and metadata are preserved</li>
+                          <li>{t.fullVideoBullet1}</li>
+                          <li>{t.fullVideoBullet2}</li>
+                          <li>{t.fullVideoBullet3}</li>
                         </ul>
                       </div>
                     </div>
@@ -680,9 +687,7 @@ export default function VideoPage() {
                         required
                       />
                       <span className="text-sm font-semibold text-red-900">
-                        I confirm: I have reviewed the video and certify it does NOT contain 
-                        patient personal data (name, date of birth, passport, ID, address, phone). 
-                        I take full responsibility for HIPAA/GDPR compliance.
+                        {t.noPhiConfirm}
                       </span>
                     </label>
                   </div>
@@ -701,7 +706,7 @@ export default function VideoPage() {
                         : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
                     }`}
                   >
-                    🤖 Auto-Extract
+                    🤖 {t.autoExtractMode}
                   </button>
                   <button
                     onClick={() => {
@@ -714,7 +719,7 @@ export default function VideoPage() {
                         : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
                     }`}
                   >
-                    🖱️ Manual Capture (Cine-loop)
+                    🖱️ {t.manualCaptureCineLoop}
                   </button>
                 </div>
 
@@ -732,7 +737,7 @@ export default function VideoPage() {
                         className="absolute bottom-16 right-4 px-6 py-3 bg-blue-600/90 hover:bg-blue-600 text-white font-black rounded-2xl shadow-2xl transform active:scale-95 transition-all flex items-center gap-2 backdrop-blur-sm z-10 border border-blue-400"
                       >
                         <span className="text-2xl">📸</span>
-                        CAPTURE
+                        {t.captureFrame}
                       </button>
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-3">
@@ -764,7 +769,7 @@ export default function VideoPage() {
                         className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg transition-all transform active:scale-95 flex items-center gap-2"
                       >
                         <span className="text-xl">📸</span>
-                        <span>CAPTURE FRAME</span>
+                        <span>{t.captureFrame}</span>
                       </button>
                     </div>
                     <p className="text-[10px] text-gray-400 text-center mt-3">
@@ -781,8 +786,8 @@ export default function VideoPage() {
                     className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {extracting 
-                      ? `⏳ Extracting frames... ${extractionProgress.current}/${extractionProgress.total}` 
-                      : '🎞️ Extract and anonymize frames'
+                      ? `⏳ ${t.extractingFramesProgress} ${extractionProgress.current}/${extractionProgress.total}` 
+                      : `🎞️ ${t.extractAndAnonymize}`
                     }
                   </button>
                 )}
@@ -794,14 +799,14 @@ export default function VideoPage() {
             <div className={`p-4 rounded-lg border ${isManualCaptureMode ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className={`font-semibold ${isManualCaptureMode ? 'text-blue-900' : 'text-green-900'}`}>
-                  ✅ {isManualCaptureMode ? 'Captured' : 'Extracted'} {extractedFrames.length} frames
+                  ✅ {isManualCaptureMode ? t.captured : t.extracted} {extractedFrames.length} {t.framesUnit}
                 </h3>
                 <div className="flex items-center space-x-3">
                   <button
                     onClick={() => setShow3D(true)}
                     className="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-xs font-bold shadow-sm"
                   >
-                    <span>🧊 Rotate in 3D</span>
+                    <span>🧊 {t.rotate3d}</span>
                   </button>
                   <button
                     onClick={() => {
@@ -810,7 +815,7 @@ export default function VideoPage() {
                     }}
                     className={`text-sm underline ${isManualCaptureMode ? 'text-blue-700 hover:text-blue-900' : 'text-green-700 hover:text-green-900'}`}
                   >
-                    🔄 Reset frames
+                    🔄 {t.resetFrames}
                   </button>
                 </div>
               </div>
@@ -830,7 +835,7 @@ export default function VideoPage() {
                         onClick={() => setEditingFrameIndex(frame.index)}
                         className="opacity-0 group-hover:opacity-100 bg-white text-gray-900 px-2 py-1 rounded text-xs font-semibold shadow-lg transition-opacity"
                       >
-                        🎨 Edit
+                        🎨 {t.editFrame}
                       </button>
                     </div>
                     <p className={`text-xs text-center mt-1 ${isManualCaptureMode ? 'text-blue-700' : 'text-green-700'}`}>
@@ -841,7 +846,7 @@ export default function VideoPage() {
               </div>
               
               <p className={`text-xs ${isManualCaptureMode ? 'text-blue-700' : 'text-green-700'}`}>
-                💡 {isManualCaptureMode ? 'You can capture more frames or submit the current ones for analysis.' : 'Hover over a frame to manually edit it.'}
+                💡 {isManualCaptureMode ? t.manualHint : t.autoHint}
               </p>
             </div>
           )}
@@ -862,7 +867,7 @@ export default function VideoPage() {
             
             <div className="flex items-center justify-between">
               <label className="block text-sm font-medium text-gray-700">
-                Additional Context
+                {t.additionalContext}
               </label>
               <VoiceInput 
                 onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
@@ -872,7 +877,7 @@ export default function VideoPage() {
             <textarea
               value={clinicalContext}
               onChange={(e) => setClinicalContext(e.target.value)}
-              placeholder="Enter additional information: patient complaints, history, study objective..."
+              placeholder={t.additionalContextPlaceholder}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
               rows={4}
               disabled={loading}
@@ -891,15 +896,15 @@ export default function VideoPage() {
             className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
           >
             {analyzing 
-              ? '⏳ Analyzing...' 
+              ? `⏳ ${t.analyzing}`
               : analysisMode === 'frames'
                 ? (extractedFrames.length > 0
-                    ? `📤 Submit ${extractedFrames.length} frames for analysis`
-                    : '🎬 Extract frames first'
+                    ? `📤 ${t.submitFrames}: ${extractedFrames.length}`
+                    : `🎬 ${t.extractFramesFirst}`
                   )
                 : (confirmNoPersonalData
-                    ? '⚡ Submit full video for analysis'
-                    : '⚠️ Confirm absence of PHI'
+                    ? `⚡ ${t.submitFullVideo}`
+                    : `⚠️ ${t.confirmNoPhi}`
                   )
             }
           </button>
@@ -912,7 +917,7 @@ export default function VideoPage() {
         <div className="bg-primary-50 border border-primary-200 text-primary-800 px-4 py-3 rounded mb-6">
           <div className="flex items-center">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600 mr-3"></div>
-            <span>Video analysis may take 30–60 seconds...</span>
+            <span>{t.streamingMode}</span>
           </div>
         </div>
       )}
@@ -933,7 +938,7 @@ export default function VideoPage() {
             onClick={() => setShowTechnicalData(prev => !prev)}
             className="px-3 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
           >
-            {showTechnicalData ? 'Hide technical data (Stage 1)' : 'Show technical data (Stage 1)'}
+            {showTechnicalData ? t.hideStage1 : t.showStage1}
           </button>
           {showTechnicalData && (
             <div className="mt-3 border border-gray-200 rounded-lg bg-gray-50 p-3">

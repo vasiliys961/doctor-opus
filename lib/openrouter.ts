@@ -7,22 +7,47 @@
 import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
 import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
 import { safeLog, safeError, safeWarn } from './logger';
+import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const RESPONSE_STOP_SEQUENCES = ['Defined by', 'defined by', '---', '###'];
 
 // В Next.js 14 используется встроенный fetch из Node.js 18+
 // fetch доступен глобально на сервере
 
-// Актуальные модели (последние флагманы 2025-2026)
-export const MODELS = {
-  OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6
-  SONNET: 'anthropic/claude-sonnet-4.6',                 // Claude Sonnet 4.6
-  GPT_5_2: 'openai/gpt-5.4',                        // GPT-5.4 Chat
-  HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
-  LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
-  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
-  GEMINI_3_PRO: 'google/gemini-3.1-pro-preview'          // Gemini 3.1 Pro Preview
+const resolveModel = (envName: string, fallback: string): string => {
+  const value = process.env[envName]?.trim();
+  return value || fallback;
 };
+
+// Модельный реестр (можно переопределить через .env без правок кода)
+export const MODELS = {
+  OPUS: resolveModel('MODEL_OPUS', 'anthropic/claude-opus-5'),
+  SONNET: resolveModel('MODEL_SONNET', 'anthropic/claude-sonnet-5'),
+  GPT_5_2: resolveModel('MODEL_GPT', 'openai/gpt-5.6-terra'),
+  HAIKU: resolveModel('MODEL_HAIKU', 'anthropic/claude-haiku-4.5'),
+  LLAMA: resolveModel('MODEL_LLAMA', 'meta-llama/llama-3.2-90b-vision-instruct'),
+  GEMINI_3_FLASH: resolveModel('MODEL_GEMINI_FLASH', 'google/gemini-3-flash-preview'),
+  GEMINI_3_PRO: resolveModel('MODEL_GEMINI_PRO', 'google/gemini-3.1-pro-preview'),
+  FABLE_5: resolveModel('MODEL_FABLE', 'anthropic/claude-fable-5'),
+};
+
+const LEGACY_MODEL_ALIASES: Record<string, string> = {
+  'anthropic/claude-opus-4.6': MODELS.OPUS,
+  'anthropic/claude-sonnet-4.6': MODELS.SONNET,
+  'anthropic/claude-sonnet-4.5': MODELS.SONNET,
+  'openai/gpt-5.2': MODELS.GPT_5_2,
+  'openai/gpt-5.4': MODELS.GPT_5_2,
+  'google/gemini-3-flash-preview': MODELS.GEMINI_3_FLASH,
+  'google/gemini-3-flash': MODELS.GEMINI_3_FLASH,
+  'google/gemini-3.1-pro-preview': MODELS.GEMINI_3_PRO,
+  'google/gemini-3-pro': MODELS.GEMINI_3_PRO,
+};
+
+export function resolveModelId(model: string): string {
+  const normalized = model.trim();
+  return LEGACY_MODEL_ALIASES[normalized] || normalized;
+}
 
 const MODELS_LIST = [
   MODELS.OPUS,
@@ -85,30 +110,14 @@ function isRateLimit(status: number, errorText?: string) {
   return text.includes('rate-limited') || text.includes('rate limited');
 }
 
-function isAnthropicModel(model: string): boolean {
-  const normalized = String(model || '').toLowerCase();
-  return normalized.startsWith('anthropic/') || normalized.includes('claude');
-}
-
-function isAnthropicGeoRestrictionError(errorText: string): boolean {
-  const normalized = String(errorText || '').toLowerCase();
-  return (
-    normalized.includes('access to anthropic models is not allowed') ||
-    normalized.includes('unsupported countries') ||
-    normalized.includes('unsupported countries, regions, or territories')
-  );
-}
-
 function getStage2FallbackModel(primaryModel: string): string | null {
-  return isAnthropicModel(primaryModel) ? MODELS.GPT_5_2 : null;
-}
-
-function isOpenAIGeoRestrictionError(errorText: string): boolean {
-  const normalized = String(errorText || '').toLowerCase();
-  return (
-    normalized.includes('unsupported_country_region_territory') ||
-    normalized.includes('country, region, or territory not supported')
-  );
+  if (isAnthropicModel(primaryModel)) {
+    return MODELS.GPT_5_2;
+  }
+  if (primaryModel === MODELS.GPT_5_2) {
+    return MODELS.SONNET;
+  }
+  return null;
 }
 
 function getChatFallbackModel(primaryModel: string): string | null {
@@ -180,7 +189,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   }
 
   // Выбираем модель в зависимости от режима
-  let model = options.model;
+  let model = options.model ? resolveModelId(options.model) : undefined;
   if (!model) {
     if (options.mode === 'fast') {
       model = MODELS.GEMINI_3_FLASH; // Gemini Flash 1.5 для быстрого анализа
@@ -264,13 +273,14 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     messages,
     max_tokens: options.maxTokens || 10000, // Оптимизированный базовый лимит для стандартных отчетов
     temperature: 0.1,
+    stop: RESPONSE_STOP_SEQUENCES,
   };
 
   try {
     // Логируем для отладки (с маскировкой ключа через safeLog)
     safeLog('Calling OpenRouter API:', {
       url: OPENROUTER_API_URL,
-      model: model,
+      model: resolveModelId(model),
       hasApiKey: !!apiKey,
       mimeType,
       imageSize: options.imageBase64.length
@@ -408,6 +418,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
             messages: messages,
             max_tokens: 10000, // Оптимизировано: текстовый анализ
             temperature: 0.1,
+            stop: RESPONSE_STOP_SEQUENCES,
           })
         });
 
@@ -481,7 +492,7 @@ export async function analyzeImageOpusTwoStage(options: {
     const directiveCriteria = getDirectivePrompt(imageType, prompt, specialty);
     
     // Шаг 2: Целевая модель (Opus, Sonnet или GPT-5.4)
-    const textModel = options.targetModel || MODELS.SONNET;
+    const textModel = resolveModelId(options.targetModel || MODELS.SONNET);
     let stage2ModelUsed = textModel;
     const fallbackModel = getStage2FallbackModel(textModel);
     
@@ -510,10 +521,11 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
           'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify({
-          model: targetModel,
+          model: resolveModelId(targetModel),
           messages: messages,
           max_tokens: 10000, // Оптимизировано: двухэтапный анализ
           temperature: 0.1,
+          stop: RESPONSE_STOP_SEQUENCES,
         })
       });
     };
@@ -521,9 +533,9 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
     let textResponse = await runStage2Request(textModel);
     if (!textResponse.ok) {
       const errorText = await textResponse.text();
-      const shouldFallback = !!fallbackModel && isAnthropicGeoRestrictionError(errorText);
+      const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(textModel, textResponse.status, errorText);
       if (shouldFallback) {
-        safeWarn(`⚠️ [TWO-STAGE] Региональная недоступность Claude, переключение на ${fallbackModel}`);
+        safeWarn(`⚠️ [TWO-STAGE] Региональная недоступность ${textModel}, переключение на ${fallbackModel}`);
         stage2ModelUsed = fallbackModel!;
         textResponse = await runStage2Request(stage2ModelUsed);
       } else {
@@ -631,6 +643,7 @@ export async function extractImageJSON(options: {
       messages: [{ role: 'user', content }],
       max_tokens: 16000,
       temperature: 0.1,
+      stop: ['Defined by', 'defined by'],
     };
 
     const response = await fetchWithTimeout(OPENROUTER_API_URL, {
@@ -824,7 +837,7 @@ export async function analyzeMultipleImagesTwoStage(options: {
     const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
     const directiveCriteria = getDirectivePrompt(imageType, options.prompt, specialty);
     
-    const textModel = options.targetModel || MODELS.SONNET;
+    const textModel = resolveModelId(options.targetModel || MODELS.SONNET);
     let stage2ModelUsed = textModel;
     const fallbackModel = getStage2FallbackModel(textModel);
     
@@ -853,13 +866,14 @@ ${directiveCriteria}`;
           'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify({
-          model: targetModel,
+          model: resolveModelId(targetModel),
           messages: [
             { role: 'system' as const, content: basePrompt },
             { role: 'user' as const, content: contextPrompt }
           ],
           max_tokens: 12000, // Оптимизировано: множественные изображения
           temperature: 0.1,
+          stop: RESPONSE_STOP_SEQUENCES,
         })
       });
     };
@@ -867,9 +881,9 @@ ${directiveCriteria}`;
     let textResponse = await runStage2Request(textModel);
     if (!textResponse.ok) {
       const errorText = await textResponse.text();
-      const shouldFallback = !!fallbackModel && isAnthropicGeoRestrictionError(errorText);
+      const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(textModel, textResponse.status, errorText);
       if (shouldFallback) {
-        safeWarn(`⚠️ [MULTI-TWO-STAGE] Региональная недоступность Claude, переключение на ${fallbackModel}`);
+        safeWarn(`⚠️ [MULTI-TWO-STAGE] Региональная недоступность ${textModel}, переключение на ${fallbackModel}`);
         stage2ModelUsed = fallbackModel!;
         textResponse = await runStage2Request(stage2ModelUsed);
       } else {
@@ -937,7 +951,7 @@ export async function analyzeMultipleImages(options: {
     throw new Error('Необходимо предоставить минимум одно изображение');
   }
 
-  const model = options.model || MODELS.OPUS; // Используем Opus для точного сравнительного анализа
+  const model = resolveModelId(options.model || MODELS.OPUS); // Используем Opus для точного сравнительного анализа
   const imageType = options.imageType || 'universal';
   const specialty = options.specialty;
   
@@ -986,12 +1000,13 @@ export async function analyzeMultipleImages(options: {
     messages,
     max_tokens: options.maxTokens || 12000, // Оптимизировано для сравнительного анализа
     temperature: 0.1,
+    stop: RESPONSE_STOP_SEQUENCES,
   };
 
   try {
     safeLog(`Calling OpenRouter API with ${options.imagesBase64.length} images for comparative analysis:`, {
       url: OPENROUTER_API_URL,
-      model: model,
+      model: resolveModelId(model),
       hasApiKey: !!apiKey,
       imageCount: options.imagesBase64.length,
       imageSizes: options.imagesBase64.map(img => img.length)
@@ -1070,7 +1085,7 @@ export async function sendTextRequest(
     throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
   }
 
-  let selectedModel = model;
+  let selectedModel = resolveModelId(model);
   const { TITAN_CONTEXTS } = await import('./prompts');
   
   // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
@@ -1111,10 +1126,11 @@ export async function sendTextRequest(
       let attemptResponse: Response | null = null;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         const payload = {
-          model: targetModel,
+          model: resolveModelId(targetModel),
           messages,
           max_tokens: 10000, // Оптимизировано: текстовый запрос
           temperature: 0.1,
+          stop: RESPONSE_STOP_SEQUENCES,
         };
         try {
           attemptResponse = await fetchWithTimeout(OPENROUTER_API_URL, {
@@ -1162,7 +1178,7 @@ export async function sendTextRequest(
     if (!response.ok) {
       const errorText = await response.text();
       const fallbackModel = getChatFallbackModel(selectedModel);
-      const shouldFallback = !!fallbackModel && isOpenAIGeoRestrictionError(errorText);
+      const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
       if (shouldFallback) {
         safeWarn(`⚠️ [CHAT FALLBACK] Модель ${selectedModel} недоступна по региону, переключаемся на ${fallbackModel}`);
         selectedModel = fallbackModel!;

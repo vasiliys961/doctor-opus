@@ -19,10 +19,10 @@ A comprehensive web application for physicians and expert clinics, built on **Ne
 
 ### 🤖 Advanced AI Analysis
 - **Multi-model Council:**
-  - **Claude Opus 4.6:** Deep reasoning for complex clinical cases and genomics.
-  - **Claude Sonnet 4.6:** Best-in-class for fractures and skeletal pathology (83% accuracy).
-  - **GPT-5.4:** Best choice for 80% of X-Ray, MRI, and general clinical analysis.
-  - **Gemini 3.1 Flash:** High-speed data extraction (OCR) and screening.
+- **Claude Opus 5:** Deep reasoning for complex clinical cases and genomics.
+- **Claude Sonnet 5:** Best-in-class for fractures and skeletal pathology (83% accuracy).
+- **GPT-5.6 Terra:** Best choice for 80% of X-Ray, MRI, and general clinical analysis.
+- **Gemini 3 Flash:** High-speed data extraction (OCR) and screening.
 - **Two-stage Workflow:** Structured data extraction (JSON) → Clinical directive generation.
 - **Streaming (SSE):** Real-time token-by-token output for immediate feedback.
 

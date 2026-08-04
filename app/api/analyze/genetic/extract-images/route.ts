@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     console.log('🧬 [GENETIC IMAGES] Начало обработки изображений...');
 
     const body = await request.json();
-    const { images, fileName, isAnonymous } = body;
+    const { images, fileName } = body;
 
     if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
@@ -270,9 +270,7 @@ IMPORTANT:
       .filter(data => data.trim().length > 0)
       .join('\n');
     
-    if (isAnonymous) {
-      extractedData = anonymizeText(extractedData);
-    }
+    extractedData = anonymizeText(extractedData);
 
     const ocrApproxCostUnits = Number(((totalTokens / 1000) * PRICE_UNITS_PER_1K_TOKENS_GEMINI).toFixed(2));
 

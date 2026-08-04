@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import dynamic from 'next/dynamic'
 import ImageUpload from '@/components/ImageUpload'
@@ -13,6 +13,9 @@ import DeviceSync from '@/components/DeviceSync'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import BillingErrorNotice from '@/components/BillingErrorNotice'
+import { getClientLocale } from '@/lib/i18n/client'
+import { imageAnalysisPageMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 
 const DicomViewer = dynamic(() => import('@/components/DicomViewer'), { ssr: false })
 const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false })
@@ -22,8 +25,13 @@ import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-cache'
 import { getOnboardingStatus, isOnboardingCompleted, setOnboardingStatus } from '@/lib/onboarding'
+import { getRelevanceBundle } from '@/lib/image-relevance-links'
+import { buildDiagnosticQueryText } from '@/lib/diagnostic-query'
+import { MODELS } from '@/lib/openrouter'
 
 export default function ImageAnalysisPage() {
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = imageAnalysisPageMessages[locale]
   const [file, setFile] = useState<File | null>(null)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [validation, setValidation] = useState<ImageValidationResult | null>(null)
@@ -48,6 +56,12 @@ export default function ImageAnalysisPage() {
   const [useLibrary, setUseLibrary] = useState(false)
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
+  const [diagnosticSourceText, setDiagnosticSourceText] = useState('')
+  const lastDiagnosticLenRef = useRef(0)
+  const imageAnonymizationMode: 'strict' | 'soft' =
+    imageType === 'ct' || imageType === 'mri' || imageType === 'xray' || imageType === 'ultrasound'
+      ? 'soft'
+      : 'strict'
 
   const dataUrlToFile = (dataUrl: string, filename: string) => {
     const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/)
@@ -89,10 +103,10 @@ export default function ImageAnalysisPage() {
         setLabsContext(prev => prev ? `${prev}\n\n${data.labsText}` : data.labsText)
         setLabFile(null) // Сбрасываем файл после успешной оцифровки
       } else {
-        setError('Error digitizing lab results: ' + (data.error || 'unknown error'))
+        setError(`${t.digitizeError} ${data.error || t.unknown}`)
       }
     } catch (err) {
-      setError('Error loading lab results')
+      setError(t.loadLabsError)
     } finally {
       setParsingLabs(false)
     }
@@ -100,7 +114,7 @@ export default function ImageAnalysisPage() {
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
-      setError('Please upload an image first')
+      setError(t.uploadFirst)
       return
     }
 
@@ -142,7 +156,7 @@ export default function ImageAnalysisPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo({ 
-            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6', 
+            model: analysisMode === 'fast' ? MODELS.GEMINI_3_FLASH : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? MODELS.SONNET : MODELS.GPT_5_2) : MODELS.OPUS,
             mode: analysisMode + ' (from cache)' 
           });
           return;
@@ -205,12 +219,12 @@ export default function ImageAnalysisPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? MODELS.SONNET : MODELS.GPT_5_2;
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-4.6');
+        formData.append('model', MODELS.OPUS);
       } else if (analysisMode === 'fast') {
-        formData.append('model', 'google/gemini-3-flash-preview');
+        formData.append('model', MODELS.GEMINI_3_FLASH);
       }
 
       if (useStream) {
@@ -222,18 +236,32 @@ export default function ImageAnalysisPage() {
           })
 
           if (!response.ok) {
-            const errorText = await response.text()
-            console.error('❌ [CLIENT] Streaming ошибка:', response.status, errorText)
-            throw new Error(`HTTP error! status: ${response.status}`)
+            const contentType = response.headers.get('content-type') || ''
+            let serverError = `HTTP error ${response.status}`
+            try {
+              if (contentType.includes('application/json')) {
+                const payload = await response.json()
+                serverError = payload?.error || payload?.message || serverError
+              } else {
+                const errorText = await response.text()
+                if (errorText?.trim()) {
+                  serverError = errorText.slice(0, 400)
+                }
+              }
+            } catch {
+              // keep fallback status message
+            }
+            console.error('❌ [CLIENT] Streaming ошибка:', response.status, serverError)
+            throw new Error(serverError)
           }
           
           const { handleSSEStream } = await import('@/lib/streaming-utils')
           
           // Определяем модель для отображения в UI
           let modelUsed = ''
-          if (analysisMode === 'fast') modelUsed = 'google/gemini-3-flash-preview'
-          else if (analysisMode === 'optimized') modelUsed = 'anthropic/claude-sonnet-4.6'
-          else modelUsed = 'anthropic/claude-opus-4.6'
+          if (analysisMode === 'fast') modelUsed = MODELS.GEMINI_3_FLASH
+          else if (analysisMode === 'optimized') modelUsed = MODELS.SONNET
+          else modelUsed = MODELS.OPUS
           
           await handleSSEStream(response, {
             onChunk: (content, accumulatedText) => {
@@ -246,7 +274,7 @@ export default function ImageAnalysisPage() {
               
               flushSync(() => {
                 setCurrentCost(usage.total_cost)
-                const modelUsed = usage.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6')
+                const modelUsed = usage.model || (analysisMode === 'fast' ? MODELS.GEMINI_3_FLASH : analysisMode === 'optimized' ? MODELS.SONNET : MODELS.OPUS)
                 
                 setModelInfo({ model: modelUsed, mode: analysisMode })
                 setLastAnalysisData({ model: modelUsed, mode: analysisMode })
@@ -261,7 +289,7 @@ export default function ImageAnalysisPage() {
             },
             onError: (error) => {
               console.error('❌ [STREAMING] Ошибка:', error)
-              setError(`Streaming error: ${error.message}`)
+              setError(`${t.streamingError}: ${error.message}`)
             },
             onComplete: (finalText) => {
               console.log('✅ [IMAGE-ANALYSIS STREAMING] Анализ завершен')
@@ -296,16 +324,16 @@ export default function ImageAnalysisPage() {
 
           logUsage({
             section: imageType !== 'universal' ? imageType : 'image-analysis',
-            model: data.model || 'anthropic/claude-opus-4.6',
+            model: data.model || MODELS.OPUS,
             inputTokens: 2000,
             outputTokens: 1500,
           })
         } else {
-          setError(data.error || 'Analysis error')
+          setError(data.error || t.analysisError)
         }
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(err.message || t.genericError)
     } finally {
       setLoading(false)
     }
@@ -319,7 +347,33 @@ export default function ImageAnalysisPage() {
       setAdditionalFiles([])
     }
     setValidation(null)
-    const isDcm = uploadedFile.name.toLowerCase().endsWith('.dcm') || uploadedFile.name.toLowerCase().endsWith('.dicom')
+    const isLikelyDicom = async (file: File): Promise<boolean> => {
+      const fileName = file.name.toLowerCase()
+      const fileType = (file.type || '').toLowerCase()
+      if (fileName.endsWith('.dcm') || fileName.endsWith('.dicom')) return true
+      if (fileType === 'application/dicom') return true
+      try {
+        const header = new Uint8Array(await file.slice(0, 512).arrayBuffer())
+        if (header.length >= 132) {
+          const signature = String.fromCharCode(...Array.from(header.slice(128, 132)))
+          if (signature === 'DICM') return true
+        }
+        if (header.length >= 2) {
+          const littleEndianGroup = header[0] | (header[1] << 8)
+          const bigEndianGroup = (header[0] << 8) | header[1]
+          if (
+            littleEndianGroup === 0x0002 ||
+            littleEndianGroup === 0x0008 ||
+            bigEndianGroup === 0x0002 ||
+            bigEndianGroup === 0x0008
+          ) return true
+        }
+      } catch {
+        // ignore
+      }
+      return false
+    }
+    const isDcm = await isLikelyDicom(uploadedFile)
     setIsDicom(isDcm)
     
     if (isDcm) {
@@ -347,6 +401,10 @@ export default function ImageAnalysisPage() {
   }
 
   useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
+
+  useEffect(() => {
     if (loading || !result.trim()) return
     if (isOnboardingCompleted()) return
     if (getOnboardingStatus() !== 'image_uploaded') return
@@ -355,9 +413,73 @@ export default function ImageAnalysisPage() {
     window.dispatchEvent(new Event('onboardingCompleted'))
   }, [loading, result])
 
+  useEffect(() => {
+    const fallbackContext = [clinicalContext].filter(Boolean).join('\n')
+    if (!result.trim()) {
+      setDiagnosticSourceText(fallbackContext)
+      lastDiagnosticLenRef.current = 0
+      return
+    }
+
+    const candidate = buildDiagnosticQueryText(result, fallbackContext)
+    if (loading) {
+      if (result.length < 1200) return
+      const currentLen = candidate.length
+      if (Math.abs(currentLen - lastDiagnosticLenRef.current) < 200) return
+      lastDiagnosticLenRef.current = currentLen
+      setDiagnosticSourceText(candidate)
+      return
+    }
+
+    setDiagnosticSourceText(candidate)
+    lastDiagnosticLenRef.current = candidate.length
+  }, [result, loading, clinicalContext])
+
+  const relevanceBundle = useMemo(() => {
+    return getRelevanceBundle(imageType, diagnosticSourceText)
+  }, [imageType, diagnosticSourceText])
+
+  const relevanceTitle = useMemo(() => {
+    switch (imageType) {
+      case 'xray':
+        return t.relevanceTitleXray
+      case 'ct':
+        return t.relevanceTitleCt
+      case 'mri':
+        return t.relevanceTitleMri
+      case 'ultrasound':
+        return t.relevanceTitleUltrasound
+      case 'ecg':
+        return t.relevanceTitleEcg
+      case 'dermatoscopy':
+        return t.relevanceTitleDermatoscopy
+      default:
+        return t.relevanceTitleUniversal
+    }
+  }, [imageType, t])
+
+  const relevanceHint = useMemo(() => {
+    switch (imageType) {
+      case 'xray':
+        return t.relevanceHintXray
+      case 'ct':
+        return t.relevanceHintCt
+      case 'mri':
+        return t.relevanceHintMri
+      case 'ultrasound':
+        return t.relevanceHintUltrasound
+      case 'ecg':
+        return t.relevanceHintEcg
+      case 'dermatoscopy':
+        return t.relevanceHintDermatoscopy
+      default:
+        return t.relevanceHintUniversal
+    }
+  }, [imageType, t])
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">🔍 Medical Image Analysis</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">🔍 {t.title}</h1>
       
       <DeviceSync 
         currentImage={imagePreview}
@@ -379,7 +501,7 @@ export default function ImageAnalysisPage() {
               document.getElementById('synced-image-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }, 50)
           } catch (_e) {
-            setError('Failed to receive image: invalid data format')
+            setError(t.invalidSync)
           }
         }}
       />
@@ -387,8 +509,8 @@ export default function ImageAnalysisPage() {
       <AnalysisTips 
         content={{
           fast: "Two-stage screening (structured image description then clinical interpretation). Provides a concise conclusion and risk signal — convenient for initial review and triage.",
-          optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — ideal balance of accuracy and cost for most medical studies.",
-          validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for critical and complex cases; the most resource-intensive mode.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and cost for most medical studies.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 5) — recommended for critical and complex cases; the most resource-intensive mode.",
           extra: [
             "⭐ Recommended mode: «Optimized» (Gemini + Sonnet) — best balance of cost and quality for most medical images.",
             "💡 The system supports: ECG, X-Ray, CT, MRI, Ultrasound, Dermatoscopy, Histology, Ophthalmology, Mammography. DICOM format supported.",
@@ -400,18 +522,23 @@ export default function ImageAnalysisPage() {
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Upload Medical Image</h2>
+        <h2 className="text-xl font-semibold mb-4">{t.uploadTitle}</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Supported types: ECG, X-Ray, MRI, CT, Ultrasound, Dermatoscopy, Histology, Ophthalmology, Mammography, DICOM (.dcm)
+          {t.supportedTypes}
         </p>
         
         <div data-tour="image-upload-zone">
-          <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} />
+          <ImageUpload
+            onUpload={handleUpload}
+            accept="image/*,.dcm,.dicom"
+            maxSize={500}
+            anonymizationMode={imageAnonymizationMode}
+          />
         </div>
 
         {validation && validation.warnings.length > 0 && (
           <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-            <h4 className="text-amber-800 font-bold text-sm mb-1">🔍 Preliminary image quality assessment:</h4>
+            <h4 className="text-amber-800 font-bold text-sm mb-1">🔍 {t.qualityCheckTitle}</h4>
             <ul className="text-xs text-amber-700 list-disc list-inside">
               {validation.warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
@@ -428,7 +555,7 @@ export default function ImageAnalysisPage() {
                 />
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold text-gray-700">
-                    👤 Clinical Context (complaints, history, study objective)
+                    👤 {t.clinicalContext}
                   </label>
                   <VoiceInput 
                     onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
@@ -436,8 +563,7 @@ export default function ImageAnalysisPage() {
                   />
                 </div>
                 <div className="mb-2 p-2 bg-amber-50 border border-amber-100 rounded text-[10px] text-amber-800">
-                  ⚠️ <strong>Important:</strong> Do not enter patient name, date of birth, or other identifying information. 
-                  Use anonymized descriptions (e.g., "Male patient, 45 y.o.").
+                  ⚠️ <strong>{t.importantNoPhi}</strong> {t.noPhiWarning}
                 </div>
                 <textarea
                   value={clinicalContext}
@@ -467,21 +593,21 @@ export default function ImageAnalysisPage() {
                     />
                     <div className="flex flex-col">
                       <span className="text-xs font-bold text-blue-900">
-                        🛡️ One-time anonymous analysis
+                        🛡️ {t.anonymousTitle}
                       </span>
                       <span className="text-[10px] text-blue-700">
-                        Result will not be saved to the patient database (maximum PHI protection).
+                        {t.anonymousHint}
                       </span>
                     </div>
                   </label>
                 </div>
                 <p className="text-xs text-gray-500 mb-4">
-                  💡 Adding clinical context significantly improves analysis accuracy.
+                  💡 {t.contextHint}
                 </p>
 
                 <div className="mt-4 p-4 border border-dashed border-gray-300 rounded-lg bg-indigo-50/30">
                   <h3 className="text-sm font-bold text-indigo-900 mb-2 flex items-center gap-2">
-                    🧪 Add Laboratory Results (Multi-modal Analysis)
+                    🧪 {t.labsTitle}
                   </h3>
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
@@ -497,7 +623,7 @@ export default function ImageAnalysisPage() {
                         htmlFor="labs-upload" 
                         className={`px-3 py-2 bg-white border border-indigo-300 rounded text-xs font-semibold cursor-pointer hover:bg-indigo-50 flex items-center gap-2 ${parsingLabs ? 'opacity-50' : ''}`}
                       >
-                        {labFile ? `📎 ${labFile.name.substring(0, 20)}...` : '📄 Choose lab photo/PDF'}
+                        {labFile ? `📎 ${labFile.name.substring(0, 20)}...` : `📄 ${t.chooseLabFile}`}
                       </label>
                       
                       {labFile && !parsingLabs && (
@@ -505,24 +631,24 @@ export default function ImageAnalysisPage() {
                           onClick={parseLabs}
                           className="px-3 py-2 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 transition-colors"
                         >
-                          ⚡ Digitize Lab Results
+                          ⚡ {t.digitizeLabs}
                         </button>
                       )}
                       
                       {parsingLabs && (
-                        <span className="text-[10px] text-indigo-600 animate-pulse font-bold">⌛ Digitizing with Gemini 3.1...</span>
+                        <span className="text-[10px] text-indigo-600 animate-pulse font-bold">⌛ {t.digitizing}</span>
                       )}
                     </div>
                     
                     {!labFile && !labsContext && (
-                      <span className="text-[10px] text-indigo-600">AI will auto-extract lab values (Gemini 3.1)</span>
+                      <span className="text-[10px] text-indigo-600">{t.autoExtractHint}</span>
                     )}
                     {labsContext && (
                       <div className="relative">
                         <textarea
                           value={labsContext}
                           onChange={(e) => setLabsContext(e.target.value)}
-                          placeholder="Lab results will appear here..."
+                          placeholder={t.labsPlaceholder}
                           className="w-full px-3 py-2 border border-indigo-200 rounded text-xs bg-white h-24 font-mono"
                           disabled={loading}
                         />
@@ -563,7 +689,7 @@ export default function ImageAnalysisPage() {
                     className="w-4 h-4 text-primary-600 rounded"
                   />
                   <span className="text-sm text-gray-700">
-                    📡 Streaming mode (progressive text output)
+                    📡 {t.streamingMode}
                   </span>
                 </label>
               </div>
@@ -575,21 +701,21 @@ export default function ImageAnalysisPage() {
                   disabled={loading}
                   className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed font-bold"
                 >
-                  ⚡ Screening {useStreaming ? '(streaming)' : ''}
+                  ⚡ {t.screening} {useStreaming ? t.streamingSuffix : ''}
                 </button>
                 <button
                   onClick={() => analyzeImage('optimized', useStreaming)}
                   disabled={loading}
                   className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-bold"
                 >
-                  ⭐ Get Consultation {useStreaming ? '(streaming)' : ''}
+                  ⭐ {t.consultation} {useStreaming ? t.streamingSuffix : ''}
                 </button>
                 <button
                   onClick={() => analyzeImage('validated', useStreaming)}
                   disabled={loading}
                   className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed font-bold"
                 >
-                  🧠 Expert Review {useStreaming ? '(streaming)' : ''}
+                  🧠 {t.expertReview} {useStreaming ? t.streamingSuffix : ''}
                 </button>
               </div>
             </div>
@@ -600,8 +726,8 @@ export default function ImageAnalysisPage() {
       {file && isDicom && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">🖥️ DICOM Viewer (Cornerstone.js)</h2>
-            <div className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">Browser-side processing</div>
+            <h2 className="text-xl font-semibold">🖥️ {t.dicomViewer}</h2>
+            <div className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">{t.browserSide}</div>
           </div>
           <DicomViewer 
             file={file} 
@@ -613,7 +739,7 @@ export default function ImageAnalysisPage() {
           />
           {dicomAnalysisImage && (
             <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded text-green-700 text-sm flex items-center gap-2">
-              <span>✅ Image captured. Now select a mode and press the analysis button below.</span>
+              <span>✅ {t.dicomReady}</span>
             </div>
           )}
         </div>
@@ -621,24 +747,24 @@ export default function ImageAnalysisPage() {
 
       {file && !isDicom && imagePreview && (
         <div id="synced-image-preview" className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">📷 Uploaded Image</h2>
+          <h2 className="text-xl font-semibold mb-4">📷 {t.uploadedImage}</h2>
           <div className="flex flex-col items-center w-full">
             <img 
               src={imagePreview} 
-              alt="Uploaded Image" 
+              alt={t.uploadedImage}
               className="w-full max-h-[800px] rounded-lg shadow-md object-contain border border-gray-200"
             />
             <button
               onClick={() => setShowEditor(true)}
               className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
             >
-              🎨 Redact Data
+              🎨 {t.redactData}
             </button>
           </div>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600 border-t pt-4">
-            <p><strong>Name:</strong> {file.name}</p>
-            <p><strong>Size:</strong> {(file.size / 1024 / 1024).toFixed(2)} MB</p>
-            <p><strong>Type:</strong> {file.type || 'not specified'}</p>
+            <p><strong>{t.name}</strong> {file.name}</p>
+            <p><strong>{t.size}</strong> {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+            <p><strong>{t.type}</strong> {file.type || t.unknown}</p>
           </div>
         </div>
       )}
@@ -646,6 +772,46 @@ export default function ImageAnalysisPage() {
       {error && (
         <BillingErrorNotice error={error} />
       )}
+
+      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
+        <h3 className="text-lg font-bold text-primary-900 mb-2">🔗 {relevanceTitle}</h3>
+        <p className="text-xs text-gray-600 mb-4">{relevanceHint}</p>
+
+        {relevanceBundle.links.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {relevanceBundle.links.map((link) => (
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-gray-200 px-3 py-2 hover:border-primary-400 hover:bg-primary-50 transition-colors"
+              >
+                <div className="text-sm font-semibold text-gray-900">{link.title}</div>
+                <div className="text-[11px] text-gray-500">{link.source}</div>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-600 mb-3">
+            {t.relevanceEmpty}
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          {relevanceBundle.generalLinks.map((link) => (
+            <a
+              key={link.id}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex rounded-lg bg-indigo-600 text-white text-sm font-semibold px-4 py-2 hover:bg-indigo-700 transition-colors"
+            >
+              {t.relevanceOpenPrefix} {link.source}
+            </a>
+          ))}
+        </div>
+      </div>
 
       <div data-tour={result && !loading ? 'image-analysis-result-ready' : undefined}>
         <AnalysisResult 

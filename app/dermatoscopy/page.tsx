@@ -12,6 +12,7 @@ import FeedbackForm from '@/components/FeedbackForm'
 import BillingErrorNotice from '@/components/BillingErrorNotice'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
+import { REQUEST_PROMPTS } from '@/lib/request-prompts'
 
 export default function DermatoscopyPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -43,7 +44,7 @@ export default function DermatoscopyPage() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('prompt', 'Analyze the dermoscopy image. Describe the structure, colors, borders, and signs of melanoma using ABCDE criteria.')
+      formData.append('prompt', REQUEST_PROMPTS.dermatoscopy.single)
       formData.append('clinicalContext', clinicalContext)
       formData.append('mode', analysisMode)
       formData.append('imageType', 'dermatoscopy') // Указываем тип изображения
@@ -53,10 +54,10 @@ export default function DermatoscopyPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-4.6');
+        formData.append('model', 'anthropic/claude-opus-5');
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3-flash-preview');
       }
@@ -76,10 +77,10 @@ export default function DermatoscopyPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.6';
+                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
 
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
@@ -121,7 +122,7 @@ export default function DermatoscopyPage() {
         if (data.success) {
           setResult(data.result)
           
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.6');
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5');
           const inputTokens = 2000;
           const outputTokens = Math.ceil(data.result.length / 4);
           const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
@@ -164,8 +165,8 @@ export default function DermatoscopyPage() {
       <AnalysisTips 
         content={{
           fast: "Two-stage screening (structured description of lesion structure and color, then clinical interpretation). Provides a concise conclusion and risk signal.",
-          optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — ideal balance of accuracy and quality for dermatoscopy.",
-          validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for critical and complex cases.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and quality for dermatoscopy.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 5) — recommended for critical and complex cases.",
           extra: [
             "⭐ Recommended mode: «Optimized» (Gemini + Sonnet) — ideal balance of accuracy and quality for dermatoscopy.",
             "📸 You can upload dermatoscopy images, take a photo, or use a URL.",

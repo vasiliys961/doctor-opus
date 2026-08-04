@@ -10,9 +10,13 @@ import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import ImageEditor from '@/components/ImageEditor'
 import BillingErrorNotice from '@/components/BillingErrorNotice'
+import { getClientLocale } from '@/lib/i18n/client'
+import { labPageMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { handleSSEStream } from '@/lib/streaming-utils'
+import { REQUEST_PROMPTS } from '@/lib/request-prompts'
 
 // Расширяем Window для PDF.js
 declare global {
@@ -22,6 +26,8 @@ declare global {
 }
 
 export default function LabPage() {
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = labPageMessages[locale]
   const [file, setFile] = useState<File | null>(null)
   const [result, setResult] = useState<string>('')
   const [loading, setLoading] = useState(false)
@@ -170,10 +176,10 @@ export default function LabPage() {
           body: JSON.stringify({
             images: processedImages,
             mode: mode,
-            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6'),
+            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
-            prompt: 'Analyze the laboratory data from all pages. Extract all parameters, their values, and reference ranges.',
+            prompt: REQUEST_PROMPTS.lab.allPages,
             clinicalContext: clinicalContext
           }),
         })
@@ -189,7 +195,7 @@ export default function LabPage() {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
-              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6')
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5')
               setModelInfo({ model: usedModel, mode: mode })
               
               logUsage({
@@ -211,7 +217,7 @@ export default function LabPage() {
           const data = await response.json()
           if (data.success) {
             setResult(data.result)
-            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6');
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5');
             setCurrentCost(data.cost || 1.0);
             setModelInfo({ model: usedModel, mode: mode });
 
@@ -251,10 +257,10 @@ export default function LabPage() {
           body: JSON.stringify({
             images: pdfImages,
             mode: mode,
-            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6'),
+            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
-            prompt: 'Analyze the laboratory data from all pages. Extract all parameters, their values, and reference ranges.',
+            prompt: REQUEST_PROMPTS.lab.allPages,
             clinicalContext: clinicalContext
           }),
         })
@@ -270,7 +276,7 @@ export default function LabPage() {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
-              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6')
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5')
               setModelInfo({ model: usedModel, mode: mode })
               
               logUsage({
@@ -292,7 +298,7 @@ export default function LabPage() {
           const data = await response.json()
           if (data.success) {
             setResult(data.result)
-            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6');
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5');
             setCurrentCost(data.cost || 1.0);
             setModelInfo({ model: usedModel, mode: mode });
 
@@ -311,11 +317,11 @@ export default function LabPage() {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('mode', mode)
-        const targetModelId = mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6');
+        const targetModelId = mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5');
         formData.append('model', targetModelId)
         formData.append('useStreaming', useStreaming.toString())
         formData.append('isAnonymous', isAnonymous.toString())
-        formData.append('prompt', 'Analyze the laboratory data. Extract all parameters, their values, and reference ranges.')
+        formData.append('prompt', REQUEST_PROMPTS.lab.single)
         formData.append('clinicalContext', clinicalContext)
 
         const response = await fetch('/api/analyze/lab', {
@@ -334,7 +340,7 @@ export default function LabPage() {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
-              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6')
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5')
               setModelInfo({ model: usedModel, mode: mode })
               
               logUsage({
@@ -356,7 +362,7 @@ export default function LabPage() {
           const data = await response.json()
           if (data.success) {
             setResult(data.result)
-            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-opus-4.6');
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5');
             setCurrentCost(data.cost || 1.0);
             setModelInfo({ model: usedModel, mode: mode });
 
@@ -384,18 +390,22 @@ export default function LabPage() {
     handleFileSelect(uploadedFile)
   }
 
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
+
   return (
     <>
       <div className="container mx-auto px-4 py-8 max-w-7xl">
-        <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 Laboratory Data Analysis</h1>
+        <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 {t.title}</h1>
         
         <AnalysisTips 
           content={{
-            fast: "Fast analysis via Gemini 3.1 Flash — ideal for instant extraction of data from lab reports.",
-            optimized: "Balanced mode (Gemini JSON + Sonnet 4.6) — deep clinical interpretation of extracted data.",
-            validated: "Expert analysis (Gemini JSON + Opus 4.6) — the most detailed assessment of abnormal values.",
+            fast: "Fast analysis via Gemini 3 Flash — ideal for instant extraction of data from lab reports.",
+            optimized: "Balanced mode (Gemini JSON + Sonnet 5) — deep clinical interpretation of extracted data.",
+            validated: "Expert analysis (Gemini JSON + Opus 5) — the most detailed assessment of abnormal values.",
             extra: [
-              "🚀 Recommended: Gemini 3.1 Flash (Fast mode) — highest accuracy for table and value recognition.",
+              "🚀 Recommended: Gemini 3 Flash (Fast mode) — highest accuracy for table and value recognition.",
               "📄 You can upload PDF, Excel (XLSX/XLS), CSV, or a photo of a lab report.",
               "🔍 The system automatically recognizes tables and converts them to digital format.",
               "💾 Results can be saved and used for comparative analysis in the future."
@@ -404,7 +414,7 @@ export default function LabPage() {
         />
         
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Upload Laboratory Data File</h2>
+          <h2 className="text-xl font-semibold mb-4">{t.uploadTitle}</h2>
           
           <div className="mb-6">
             <PatientSelector 
@@ -412,7 +422,7 @@ export default function LabPage() {
               disabled={loading} 
             />
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              👤 Clinical Context (complaints, diagnosis, study objective)
+              👤 {t.clinicalContext}
             </label>
             <textarea
               value={clinicalContext}
@@ -428,7 +438,7 @@ export default function LabPage() {
             />
             {/\b[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\s[А-ЯA-Z][а-яa-z]+\b/.test(clinicalContext) && (
               <p className="text-[10px] text-red-600 mb-2 font-bold">
-                ⚠️ It looks like you entered a patient name. Please remove personal identifying information.
+                ⚠️ {t.noPhiWarning}
               </p>
             )}
             <div className="mb-4">
@@ -442,10 +452,10 @@ export default function LabPage() {
                 />
                 <div className="flex flex-col">
                   <span className="text-xs font-bold text-blue-900">
-                    🛡️ One-time anonymous analysis
+                    🛡️ {t.anonymousTitle}
                   </span>
                   <span className="text-[10px] text-blue-700 font-normal">
-                    Result will not be saved to the patient database (maximum PHI protection).
+                    {t.anonymousHint}
                   </span>
                 </div>
               </label>
@@ -475,20 +485,20 @@ export default function LabPage() {
                 className="w-4 h-4 text-primary-600 rounded"
               />
               <span className="text-sm text-gray-700">
-                📡 Streaming mode (progressive text output)
+                📡 {t.streamingMode}
               </span>
             </label>
           </div>
 
           <p className="text-sm text-gray-600 mb-4">
-            Supported formats: PDF, XLSX, XLS, CSV, images (JPG, PNG)
+            {t.formats}
           </p>
           <ImageUpload onUpload={handleUpload} accept=".pdf,.xlsx,.xls,.csv,image/*" maxSize={50} />
 
           {file && processedImages.length > 0 && (
             <div className="mt-6 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-700">📷 Image Preview</h3>
+                <h3 className="text-sm font-bold text-gray-700">📷 {t.imagePreview}</h3>
                 <div className="text-xs text-gray-500">
                   {processedImages.length > 1 && `Page ${currentEditorIndex + 1} of ${processedImages.length}`}
                 </div>
@@ -552,7 +562,7 @@ export default function LabPage() {
                 disabled={convertingPDF}
                 className="px-6 py-2 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700 transition-all shadow-md"
               >
-                {convertingPDF ? '⌛ Processing...' : '📄 Prepare Pages for Anonymization'}
+                {convertingPDF ? `⌛ ${t.processing}` : `📄 ${t.preparePages}`}
               </button>
             </div>
           )}
@@ -574,7 +584,7 @@ export default function LabPage() {
                 className="w-full sm:w-auto px-10 py-4 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 transition-all shadow-lg transform hover:scale-105 active:scale-95 flex items-center justify-center gap-3"
               >
                 <span className="text-xl">🚀</span>
-                Run Analysis ({mode === 'fast' ? 'Fast' : mode === 'optimized' ? 'Optimized' : 'Expert'})
+                {t.runAnalysis} ({mode === 'fast' ? 'Fast' : mode === 'optimized' ? 'Optimized' : 'Expert'})
               </button>
             </div>
           )}

@@ -1,9 +1,12 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import JSZip from 'jszip'
 import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compression'
 import ImageEditor from './ImageEditor'
+import { getClientLocale } from '@/lib/i18n/client'
+import { uploadComponentMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 
 interface DrawingPath {
   points: Array<{ x: number; y: number }>
@@ -14,9 +17,17 @@ interface ImageUploadProps {
   onUpload: (file: File, additionalFiles?: File[], originalFiles?: File[]) => void
   accept?: string
   maxSize?: number // in MB
+  anonymizationMode?: 'strict' | 'soft'
 }
 
-export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', maxSize = 500 }: ImageUploadProps) {
+export default function ImageUpload({
+  onUpload,
+  accept = 'image/*,.dcm,.dicom',
+  maxSize = 500,
+  anonymizationMode = 'strict',
+}: ImageUploadProps) {
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = uploadComponentMessages[locale]
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -27,12 +38,72 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
   const additionalFilesRef = useRef<File[]>([]) // Ref для немедленного доступа
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  const acceptedRules = accept
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+  const acceptsDicom = acceptedRules.some(
+    (rule) => rule === '.dcm' || rule === '.dicom' || rule === 'application/dicom'
+  )
+
+  const isLikelyDicomFile = async (file: File): Promise<boolean> => {
+    const fileName = (file.name || '').toLowerCase()
+    const fileType = (file.type || '').toLowerCase()
+    if (fileName.endsWith('.dcm') || fileName.endsWith('.dicom')) return true
+    if (fileType === 'application/dicom') return true
+
+    try {
+      const header = new Uint8Array(await file.slice(0, 512).arrayBuffer())
+      if (header.length >= 132) {
+        const signature = String.fromCharCode(...Array.from(header.slice(128, 132)))
+        if (signature === 'DICM') return true
+      }
+      if (header.length >= 2) {
+        const littleEndianGroup = header[0] | (header[1] << 8)
+        const bigEndianGroup = (header[0] << 8) | header[1]
+        if (
+          littleEndianGroup === 0x0002 ||
+          littleEndianGroup === 0x0008 ||
+          bigEndianGroup === 0x0002 ||
+          bigEndianGroup === 0x0008
+        ) return true
+      }
+    } catch (e) {
+      console.warn('Cannot inspect DICOM signature:', e)
+    }
+    return false
+  }
+
+  const isFileAccepted = async (file: File, dicomLike?: boolean): Promise<boolean> => {
+    if (acceptedRules.length === 0) return true
+    const fileName = (file.name || '').toLowerCase()
+    const fileType = (file.type || '').toLowerCase()
+    const matchedByRule = acceptedRules.some((rule) => {
+      if (rule === '*/*') return true
+      if (rule.startsWith('.')) return fileName.endsWith(rule)
+      if (rule.endsWith('/*')) return fileType.startsWith(rule.slice(0, -1))
+      return fileType === rule
+    })
+    if (matchedByRule) return true
+    if (!acceptsDicom) return false
+    if (typeof dicomLike === 'boolean') return dicomLike
+    return await isLikelyDicomFile(file)
+  }
+
+  const showUnsupportedFormatError = () => {
+    const readableFormats = acceptedRules.join(', ') || 'image/*'
+    setError(`Unsupported format for this section. Allowed: ${readableFormats}`)
+  }
+
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
 
   const handleAnonymize = async () => {
     if (!currentFile) return;
     setIsCompressing(true);
     try {
-      const anonymized = await anonymizeMedicalImage(currentFile);
+      const anonymized = await anonymizeMedicalImage(currentFile, anonymizationMode);
       setCurrentFile(anonymized);
       const reader = new FileReader();
       reader.onloadend = () => setPreview(reader.result as string);
@@ -127,11 +198,19 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
     
     if (input instanceof FileList || Array.isArray(input)) {
       const files = Array.from(input);
-      const dicomFiles = files.filter(f => 
-        f.name.toLowerCase().endsWith('.dcm') || 
-        f.name.toLowerCase().endsWith('.dicom') || 
-        f.type === 'application/dicom'
-      );
+      const inspected = await Promise.all(
+        files.map(async (file) => {
+          const dicomLike = acceptsDicom ? await isLikelyDicomFile(file) : false
+          const accepted = await isFileAccepted(file, dicomLike)
+          return { file, accepted, dicomLike }
+        })
+      )
+      const allowedFiles = inspected.filter((entry) => entry.accepted).map((entry) => entry.file)
+      if (allowedFiles.length === 0) {
+        showUnsupportedFormatError()
+        return
+      }
+      const dicomFiles = inspected.filter((entry) => entry.dicomLike && entry.accepted).map((entry) => entry.file)
 
       if (dicomFiles.length > 0) {
         setIsCompressing(true);
@@ -160,12 +239,12 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         return;
       }
 
-      const videoFiles = files.filter(f => f.type.startsWith('video/'));
+      const videoFiles = allowedFiles.filter(f => f.type.startsWith('video/'));
       if (videoFiles.length > 0) {
         setIsCompressing(true);
         try {
           const { extractAndAnonymizeFrames } = await import('@/lib/video-frame-extractor');
-          const frames = await extractAndAnonymizeFrames(videoFiles[0]);
+          const frames = await extractAndAnonymizeFrames(videoFiles[0], undefined, anonymizationMode);
           const frameFiles = frames.map(f => f.file);
           if (frameFiles.length > 0) {
             const additionalFrames = frameFiles.slice(1);
@@ -185,8 +264,8 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
         return;
       }
 
-      if (files.length > 1) {
-        const imageFiles = files.filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name));
+      if (allowedFiles.length > 1) {
+        const imageFiles = allowedFiles.filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name));
         if (imageFiles.length > 0) {
           const additionalImages = imageFiles.slice(1);
           setAdditionalFiles(additionalImages);
@@ -198,14 +277,19 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           onUpload(imageFiles[0], [], imageFiles);
           return;
         }
-      } else if (files.length > 0) {
-        return handleFile(files[0]);
+      } else if (allowedFiles.length > 0) {
+        return handleFile(allowedFiles[0]);
       }
       return;
     }
 
     const file = input as File;
     if (!file || !file.name) return;
+    const dicomLike = acceptsDicom ? await isLikelyDicomFile(file) : false
+    if (!(await isFileAccepted(file, dicomLike))) {
+      showUnsupportedFormatError()
+      return
+    }
 
     if (file.size > maxSize * 1024 * 1024) {
       setError(`File is too large. Maximum size: ${maxSize}MB`)
@@ -214,7 +298,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
 
     const fileName = file.name.toLowerCase();
     const isZip = fileName.endsWith('.zip');
-    const isDicom = fileName.endsWith('.dcm') || fileName.endsWith('.dicom') || file.type === 'application/dicom';
+    const isDicom = dicomLike || fileName.endsWith('.dcm') || fileName.endsWith('.dicom') || file.type === 'application/dicom';
     const isVideo = file.type.startsWith('video/');
     const isImage = file.type.startsWith('image/');
 
@@ -290,7 +374,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
       setIsCompressing(true);
       try {
         const { extractAndAnonymizeFrames } = await import('@/lib/video-frame-extractor');
-        const frames = await extractAndAnonymizeFrames(file);
+        const frames = await extractAndAnonymizeFrames(file, undefined, anonymizationMode);
         const frameFiles = frames.map(f => f.file);
         if (frameFiles.length > 0) {
           const additionalFrames = frameFiles.slice(1);
@@ -346,7 +430,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full" data-tour="upload-zone">
       {preview && (
         <div className="mb-4 text-center">
           <div className="relative inline-block">
@@ -362,7 +446,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
                 className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium shadow-lg disabled:opacity-50"
                 title="Auto-redact standard areas (edges and corners)"
               >
-                <span>🛡️ Quick Anonymize</span>
+                <span>🛡️ {t.quickAnonymize}</span>
               </button>
               <button
                 onClick={() => setIsEditorOpen(true)}
@@ -370,13 +454,13 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
                 className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium shadow-lg disabled:opacity-50"
                 title="Open editor for precise manual redaction"
               >
-                <span>🎨 Precision Redact</span>
+                <span>🎨 {t.precisionRedact}</span>
               </button>
             </div>
           </div>
           <p className="text-xs text-gray-500 mt-2 italic">
-            <strong>Quick:</strong> automatically hides edges and corners. 
-            <strong>Precision:</strong> manually redact any areas containing personal data.
+            <strong>Quick:</strong> {t.quickHint} 
+            <strong>Precision:</strong> {t.precisionHint}
           </p>
         </div>
       )}
@@ -415,7 +499,7 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
           {isCompressing ? (
             <div className="flex flex-col items-center space-y-2">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
-              <p className="text-primary-600 font-medium">Processing data...</p>
+              <p className="text-primary-600 font-medium">{t.processingData}</p>
             </div>
           ) : (
             <>
@@ -426,22 +510,22 @@ export default function ImageUpload({ onUpload, accept = 'image/*,.dcm,.dicom', 
                     onClick={() => fileInputRef.current?.click()}
                     className="text-primary-600 hover:text-primary-700 font-semibold underline"
                   >
-                    Choose file
+                    {t.chooseFile}
                   </button>
                   <span className="text-gray-600"> or </span>
                   <button
                     onClick={() => folderInputRef.current?.click()}
                     className="text-primary-600 hover:text-primary-700 font-semibold underline"
                   >
-                    entire folder
+                    {t.chooseFolder}
                   </button>
                 </div>
-                <div className="text-gray-500 text-sm italic">or drag and drop here</div>
+                <div className="text-gray-500 text-sm italic">{t.dragDrop}</div>
               </div>
             </>
           )}
           <p className="text-sm text-gray-500">
-            Supported: DICOM (series), JPG, PNG, PDF
+            {t.supported}
             <br />
             Max file size: {maxSize}MB
           </p>

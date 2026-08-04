@@ -28,7 +28,7 @@ export default function AnalysisModeSelector({
     {
       value: 'fast',
       label: '⚡ Fast Analysis',
-      description: 'Gemini 3.1 — concise report for initial screening',
+      description: 'Gemini 3 Flash — concise report for initial screening',
       icon: '⚡'
     },
     {
@@ -40,7 +40,7 @@ export default function AnalysisModeSelector({
     {
       value: 'validated',
       label: '🧠 Expert Validated',
-      description: 'Gemini JSON + Opus 4.6 — expert review for complex cases',
+      description: 'Gemini JSON + Opus 5 — expert review for complex cases',
       icon: '🧠'
     }
   ]
@@ -99,7 +99,7 @@ export default function AnalysisModeSelector({
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
-                Claude Sonnet 4.6
+                Claude Sonnet 5
                 <div className="text-[9px] font-normal opacity-80">Recommended: best speed/quality balance</div>
               </button>
               <button
@@ -111,7 +111,7 @@ export default function AnalysisModeSelector({
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
-                GPT-5.4 ⚡️
+                GPT-5.6 Terra ⚡️
                 <div className="text-[9px] font-normal opacity-80">Deeper reasoning for complex cases</div>
               </button>
             </div>

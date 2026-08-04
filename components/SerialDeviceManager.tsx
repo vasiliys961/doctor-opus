@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { AnalysisMode } from './AnalysisModeSelector'
 import AnalysisResult from './AnalysisResult'
+import { MODELS } from '@/lib/openrouter'
 
 interface SerialDeviceManagerProps {
   onDataCaptured?: (dataUrl: string) => void
@@ -271,7 +272,7 @@ export default function SerialDeviceManager() {
       {analysisResult && (
         <AnalysisResult 
           result={analysisResult} 
-          model="google/gemini-3-flash-preview" 
+          model={MODELS.GEMINI_3_FLASH}
           mode="optimized" 
           images={canvasRef.current ? [canvasRef.current.toDataURL('image/png')] : []}
         />

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
@@ -10,6 +10,9 @@ import PatientSelector from '@/components/PatientSelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import BillingErrorNotice from '@/components/BillingErrorNotice'
+import { getClientLocale } from '@/lib/i18n/client'
+import { ecgPageMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 import dynamic from 'next/dynamic'; const VoiceInput = dynamic(() => import('@/components/VoiceInput'), { ssr: false });
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
@@ -18,6 +21,8 @@ import { getAnalysisCacheKey, getFromCache, saveToCache } from '@/lib/analysis-c
 import { CLINICAL_TACTIC_PROMPT } from '@/lib/prompts'
 
 export default function ECGPage() {
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = ecgPageMessages[locale]
   const [file, setFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [result, setResult] = useState<string>('')
@@ -38,7 +43,7 @@ export default function ECGPage() {
 
   const analyzeImage = async (analysisMode: AnalysisMode, useStream: boolean = true) => {
     if (!file) {
-      setError('Please upload an ECG image first')
+      setError(t.uploadFirst)
       return
     }
 
@@ -60,7 +65,7 @@ export default function ECGPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo(analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4') : 'anthropic/claude-opus-4.6');
+                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5');
           return;
         }
         (window as any)._currentCacheKey = cacheKey;
@@ -77,10 +82,10 @@ export default function ECGPage() {
       formData.append('isAnonymous', isAnonymous.toString())
 
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-4.6');
+        formData.append('model', 'anthropic/claude-opus-5');
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3-flash-preview');
       }
@@ -101,9 +106,9 @@ export default function ECGPage() {
             throw new Error(`API error: ${response.status} - ${errorText}`)
           }
 
-          const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4';
+          const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
           const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                          analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-4.6';
+                          analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
           setModelInfo(modelUsed)
 
           await handleSSEStream(response, {
@@ -147,7 +152,7 @@ export default function ECGPage() {
               }
             },
             onError: (err) => {
-              setError(`Streaming error: ${err.message}`)
+              setError(`${t.streamingError}: ${err.message}`)
             }
           })
         } catch (err: any) {
@@ -172,7 +177,7 @@ export default function ECGPage() {
             saveToCache((window as any)._currentCacheKey, data.result, analysisMode);
           }
 
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-4.6')
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5')
           setModelInfo(modelUsed)
           
           const cost = data.cost || 1.0;
@@ -185,11 +190,11 @@ export default function ECGPage() {
             outputTokens: 1000,
           })
         } else {
-          setError(data.error || 'Analysis error')
+          setError(data.error || t.analysisError)
         }
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(err.message || t.genericError)
     } finally {
       setLoading(false)
     }
@@ -210,17 +215,21 @@ export default function ECGPage() {
 
   const EcgCaliper = dynamic(() => import('@/components/EcgCaliper'), { ssr: false })
 
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h1 className="text-3xl font-bold text-primary-900 mb-6">📈 ECG Analysis</h1>
+      <h1 className="text-3xl font-bold text-primary-900 mb-6">📈 {t.title}</h1>
       
       <AnalysisTips 
         content={{
           fast: "Two-stage ECG screening (detailed compact waveform description, then clinical interpretation). Provides a concise conclusion and risk assessment — ideal for quick initial review.",
-          optimized: "Recommended mode (Gemini JSON + Sonnet 4.6) — ideal balance of depth and quality for ECG waveform analysis.",
-          validated: "Most accurate expert analysis (Gemini JSON + Opus 4.6) — recommended for critical and complex cases.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of depth and quality for ECG waveform analysis.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 5) — recommended for critical and complex cases.",
           extra: [
-            "💡 GPT-5.4 is recommended for fast analyses; Opus for complex cases.",
+            "💡 GPT-5.6 Terra is recommended for fast analyses; Opus 5 for complex cases.",
             "⭐ Recommended mode: «Optimized» (Gemini + Sonnet) — best balance of accuracy and quality for ECG analysis.",
             "📸 You can upload an ECG file, take a photo with a camera, or use a URL.",
             "🔄 Streaming mode lets you see the model's reasoning in real time.",
@@ -230,7 +239,7 @@ export default function ECGPage() {
       />
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Upload ECG Image</h2>
+        <h2 className="text-xl font-semibold mb-4">{t.uploadTitle}</h2>
         
         <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} />
         
@@ -245,7 +254,7 @@ export default function ECGPage() {
               />
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-700">
-                  👤 Clinical Context (complaints, history, study objective)
+                  👤 {t.clinicalContext}
                 </label>
                 <VoiceInput 
                   onTranscript={(text) => setClinicalContext(prev => prev ? `${prev} ${text}` : text)}
@@ -253,8 +262,7 @@ export default function ECGPage() {
                 />
               </div>
               <div className="mb-2 p-2 bg-amber-50 border border-amber-100 rounded text-[10px] text-amber-800">
-                ⚠️ <strong>Important:</strong> Do not enter patient name, date of birth, or other identifying information. 
-                Use anonymized descriptions (e.g., "Male patient, 45 y.o.").
+                ⚠️ <strong>{t.importantNoPhi}</strong> {t.noPhiWarning}
               </div>
               <textarea
                 value={clinicalContext}
@@ -284,16 +292,16 @@ export default function ECGPage() {
                   />
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-blue-900">
-                      🛡️ One-time anonymous analysis
+                      🛡️ {t.anonymousTitle}
                     </span>
                     <span className="text-[10px] text-blue-700 font-normal">
-                      Result will not be saved to the patient database (maximum PHI protection).
+                      {t.anonymousHint}
                     </span>
                   </div>
                 </label>
               </div>
               <p className="text-xs text-gray-500 mb-4">
-                💡 Adding clinical context significantly improves the accuracy and relevance of the analysis.
+                💡 {t.contextHint}
               </p>
             </div>
 
@@ -314,7 +322,7 @@ export default function ECGPage() {
                   className="w-4 h-4 text-primary-600 rounded"
                 />
                 <span className="text-sm text-gray-700">
-                  📡 Streaming mode (progressive text output)
+                  📡 {t.streamingMode}
                 </span>
               </label>
             </div>
@@ -325,21 +333,21 @@ export default function ECGPage() {
                 disabled={loading}
                 className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⚡ Fast {useStreaming ? '(streaming)' : ''}
+                ⚡ {t.fast} {useStreaming ? t.streamingSuffix : ''}
               </button>
               <button
                 onClick={() => analyzeImage('optimized', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⭐ Optimized {useStreaming ? '(streaming)' : ''}
+                ⭐ {t.optimized} {useStreaming ? t.streamingSuffix : ''}
               </button>
               <button
                 onClick={() => analyzeImage('validated', useStreaming)}
                 disabled={loading}
                 className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
               >
-                🧠 Expert Validated {useStreaming ? '(streaming)' : ''}
+                🧠 {t.expert} {useStreaming ? t.streamingSuffix : ''}
               </button>
             </div>
             </div>
@@ -350,13 +358,13 @@ export default function ECGPage() {
       {file && imagePreview && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">📷 Uploaded ECG Image</h2>
+            <h2 className="text-xl font-semibold">📷 {t.uploadedImage}</h2>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowEditor(true)}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
               >
-                🎨 Redact Data
+                🎨 {t.redactData}
               </button>
               <button
                 onClick={() => setShowCaliper(!showCaliper)}
@@ -377,15 +385,15 @@ export default function ECGPage() {
             ) : (
               <img 
                 src={imagePreview} 
-                alt="Uploaded ECG image" 
+                alt={t.uploadedImage}
                 className="w-full max-h-[800px] rounded-lg shadow-md object-contain border border-gray-200"
               />
             )}
           </div>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600 border-t pt-4">
-            <p><strong>Name:</strong> {file.name}</p>
-            <p><strong>Size:</strong> {(file.size / 1024 / 1024).toFixed(2)} MB</p>
-            <p><strong>Type:</strong> {file.type || 'unknown'}</p>
+            <p><strong>{t.name}</strong> {file.name}</p>
+            <p><strong>{t.size}</strong> {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+            <p><strong>{t.type}</strong> {file.type || t.unknown}</p>
           </div>
         </div>
       )}

@@ -5,8 +5,13 @@ import { SUBSCRIPTION_PACKAGES, getBalance, isSubscriptionEnabled } from '@/lib/
 import type { SubscriptionBalance } from '@/lib/subscription-manager'
 import Link from 'next/link'
 import { isOnboardingCompleted } from '@/lib/onboarding'
+import { getClientLocale } from '@/lib/i18n/client'
+import { subscriptionPageMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 
 export default function SubscriptionPage() {
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = subscriptionPageMessages[locale]
   const [selectedPackage, setSelectedPackage] = useState<keyof typeof SUBSCRIPTION_PACKAGES | null>(null)
   const [currentBalance, setCurrentBalance] = useState<SubscriptionBalance | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -36,14 +41,17 @@ export default function SubscriptionPage() {
       document.removeEventListener('visibilitychange', refreshOnboardingStatus)
     }
   }, [])
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
 
   if (mounted && !isSubscriptionEnabled()) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="text-center bg-white p-8 rounded-xl shadow-lg max-w-md">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">💳 Payment System Temporarily Unavailable</h2>
-          <p className="text-gray-600">We are performing maintenance. Please try again later.</p>
-          <Link href="/" className="mt-6 inline-block bg-teal-600 text-white px-6 py-2 rounded-lg">Back to Home</Link>
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">💳 {t.maintenanceTitle}</h2>
+          <p className="text-gray-600">{t.maintenanceBody}</p>
+          <Link href="/" className="mt-6 inline-block bg-teal-600 text-white px-6 py-2 rounded-lg">{t.backHome}</Link>
         </div>
       </div>
     )
@@ -52,7 +60,7 @@ export default function SubscriptionPage() {
   const balanceContent = (mounted && currentBalance) ? (
     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
       <p className="text-blue-800">
-        ℹ️ Current balance: <strong>{currentBalance.currentCredits.toFixed(2)}</strong> credits
+        ℹ️ {t.currentBalance}: <strong>{currentBalance.currentCredits.toFixed(2)}</strong> credits
       </p>
     </div>
   ) : mounted ? null : (
@@ -86,10 +94,10 @@ export default function SubscriptionPage() {
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-emerald-50 p-6">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-4xl font-bold text-gray-800 mb-2">
-          💎 Credit Packages
+          💎 {t.title}
         </h1>
         <p className="text-gray-600 mb-4">
-          Credits are used to power AI analyses and consultations.
+          {t.subtitle}
           <Link href="/clinic/dashboard" className="ml-2 text-indigo-600 font-bold hover:underline">🏢 Clinic Dashboard →</Link>
         </p>
 
@@ -113,14 +121,14 @@ export default function SubscriptionPage() {
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-8 flex items-center gap-3">
           <span className="text-2xl">✅</span>
           <p className="text-green-800 text-sm">
-            <strong>Free — no credits required:</strong> Medical calculators and document scanning (processed locally in your browser)
+            <strong>{t.freeBlock}</strong>
           </p>
         </div>
 
         {/* Payment CTA */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 mb-10 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-gray-800 mb-1">💳 Ready to top up your balance?</h2>
+            <h2 className="text-xl font-bold text-gray-800 mb-1">💳 {t.paymentReady}</h2>
             <p className="text-sm text-gray-500">
               Choose payment method: card via ArsenalPay/Capitalist or crypto via NOWPayments. Credits are credited automatically.
             </p>
@@ -131,21 +139,21 @@ export default function SubscriptionPage() {
               onClick={() => startPayment('arsenalpay')}
               className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-4 rounded-xl font-bold text-base hover:from-cyan-600 hover:to-blue-700 transition shadow-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {selectedPackage ? '💳 Pay by Card (Visa/MC/MIR) →' : 'Select a package first'}
+              {selectedPackage ? `💳 ${t.cardPay} (Visa/MC/MIR) →` : t.selectPackageFirst}
             </button>
             <button
               disabled={!selectedPackage}
               onClick={() => startPayment('capitalist')}
               className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-4 rounded-xl font-bold text-base hover:from-emerald-600 hover:to-teal-700 transition shadow-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {selectedPackage ? '💳 Pay by Card (Visa/MC) →' : 'Select a package first'}
+              {selectedPackage ? `💳 ${t.cardPay} (Visa/MC) →` : t.selectPackageFirst}
             </button>
             <button
               disabled={!selectedPackage}
               onClick={() => startPayment('nowpayments')}
               className="bg-gradient-to-r from-indigo-500 to-blue-600 text-white px-6 py-4 rounded-xl font-bold text-base hover:from-indigo-600 hover:to-blue-700 transition shadow-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {selectedPackage ? '₿ Pay with Crypto →' : 'Select a package first'}
+              {selectedPackage ? `₿ ${t.cryptoPay} →` : t.selectPackageFirst}
             </button>
           </div>
         </div>
@@ -168,7 +176,7 @@ export default function SubscriptionPage() {
         </div>
 
         {/* Individual packages */}
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">For Individual Physicians</h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">{t.individual}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto mb-12">
           {Object.entries(SUBSCRIPTION_PACKAGES)
             .filter(([_, pkg]) => pkg.category === 'individual')
@@ -239,7 +247,7 @@ export default function SubscriptionPage() {
 
         {/* Team packages */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">For Clinics and Medical Centers</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">{t.clinics}</h2>
           <p className="text-sm text-gray-600 mb-6">
             Team packages include: shared credit pool for multiple physicians, per-specialist usage analytics,
             priority technical support, and invoicing for organizations.
@@ -310,12 +318,12 @@ export default function SubscriptionPage() {
               <p className="text-[10px] text-gray-500">Routine screening tasks</p>
             </div>
             <div className="border border-gray-200 rounded-lg p-4">
-              <p className="font-semibold text-gray-800 mb-1">⭐ Optimized (Sonnet 4.6)</p>
+              <p className="font-semibold text-gray-800 mb-1">⭐ Optimized (Sonnet 5)</p>
               <p className="text-teal-600 font-bold">~5 – 12 cr.</p>
               <p className="text-[10px] text-gray-500">Standard clinical analyses</p>
             </div>
             <div className="border border-gray-200 rounded-lg p-4">
-              <p className="font-semibold text-gray-800 mb-1">🧠 Expert (Opus 4.6)</p>
+              <p className="font-semibold text-gray-800 mb-1">🧠 Expert (Opus 5)</p>
               <p className="text-teal-600 font-bold">~10 – 20 cr.</p>
               <p className="text-[10px] text-gray-500">Complex cases, high-risk modalities</p>
             </div>

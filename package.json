@@ -5,10 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "dev:network": "next dev -H 0.0.0.0",
+    "prebuild": "npm run manual:prebuild",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "migrate": "bash scripts/migrate-db.sh"
+    "migrate": "bash scripts/migrate-db.sh",
+    "manual:prebuild": "node scripts/prebuild-manual-translations.mjs"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",

@@ -20,6 +20,12 @@ interface ImageWithPreview {
 }
 
 type ComparisonMode = 'temporal' | 'location' | 'general'
+type TriageLevel = 'normal' | 'attention' | 'urgent'
+type ComparativeTriage = {
+  level: TriageLevel
+  summary: string
+  deviations: string[]
+}
 
 export default function ComparativeAnalysisPage() {
   const [images, setImages] = useState<ImageWithPreview[]>([])
@@ -37,6 +43,42 @@ export default function ComparativeAnalysisPage() {
   const [accumulatedDescription, setAccumulatedDescription] = useState('')
   const [showEditor, setShowEditor] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [triage, setTriage] = useState<ComparativeTriage | null>(null)
+  const [triageLoading, setTriageLoading] = useState(false)
+  const [triageError, setTriageError] = useState<string | null>(null)
+
+  const getTriageUi = (level: TriageLevel) => {
+    if (level === 'urgent') return { label: 'Urgent', className: 'bg-red-100 text-red-700 border-red-200' }
+    if (level === 'attention') return { label: 'Attention', className: 'bg-amber-100 text-amber-700 border-amber-200' }
+    return { label: 'Normal', className: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
+  }
+
+  const runComparativeTriage = async (comparisonText: string) => {
+    const payloadText = comparisonText.trim()
+    if (!payloadText) return
+    setTriageLoading(true)
+    setTriageError(null)
+    try {
+      const response = await fetch('/api/analyze/comparative-triage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comparisonText: payloadText,
+          comparisonMode,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.success || !data?.triage) {
+        throw new Error(data?.error || 'Triage service unavailable')
+      }
+      setTriage(data.triage)
+    } catch (err: any) {
+      setTriage(null)
+      setTriageError(err?.message || 'Failed to evaluate triage')
+    } finally {
+      setTriageLoading(false)
+    }
+  }
 
   const handleImageUpload = (file: File) => {
     const reader = new FileReader()
@@ -75,6 +117,8 @@ export default function ComparativeAnalysisPage() {
       setResult('')
       setAccumulatedDescription('')
       setCurrentCost(0)
+      setTriage(null)
+      setTriageError(null)
     }
     setError(null)
 
@@ -93,8 +137,8 @@ export default function ComparativeAnalysisPage() {
       const modelToUse = mode === 'fast' 
         ? 'google/gemini-3-flash-preview' 
         : mode === 'optimized' 
-          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-4.6' : 'openai/gpt-5.4')
-          : 'anthropic/claude-opus-4.6'
+          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra')
+          : 'anthropic/claude-opus-5'
       
       const formData = new FormData()
       formData.append('file', images[0].file)
@@ -144,8 +188,10 @@ export default function ComparativeAnalysisPage() {
           if (targetStage === 'description') {
             setAccumulatedDescription(finalText)
             setResult(finalText)
+            void runComparativeTriage(finalText)
           } else {
             setResult(accumulatedDescription + "\n\n---\n\n" + finalText)
+            void runComparativeTriage(finalText)
           }
           setModelInfo({ model: modelToUse, mode: mode })
         }
@@ -167,7 +213,7 @@ export default function ComparativeAnalysisPage() {
         content={{
           fast: "Fast comparison of main findings across multiple images.",
           optimized: "Recommended mode: «Optimized» (Gemini JSON → Sonnet) — optimal for before/after comparison.",
-          validated: "Two-stage analysis (Gemini JSON → Opus 4.6) — most accurate assessment of HU dynamics and structural changes.",
+          validated: "Two-stage analysis (Gemini JSON → Opus 5) — most accurate assessment of HU dynamics and structural changes.",
           extra: [
             "⭐ Recommended mode: «Optimized» (Gemini JSON → Sonnet) — optimal for before/after comparison.",
             "⏰ Use 'Over Time' mode to analyze disease progression.",
@@ -223,7 +269,7 @@ export default function ComparativeAnalysisPage() {
           <h2 className="text-lg sm:text-xl font-semibold mb-3">
             📷 Images for Comparison <span className="text-red-500">*</span>
           </h2>
-          <ImageUpload onUpload={handleImageUpload} accept="image/*" maxSize={50} />
+          <ImageUpload onUpload={handleImageUpload} accept="image/*" maxSize={50} anonymizationMode="soft" />
         </div>
 
         {images.length > 0 && (
@@ -305,6 +351,34 @@ export default function ComparativeAnalysisPage() {
       </div>
 
       {error && <div className="bg-red-100 text-red-700 px-4 py-3 rounded mb-6">❌ {error}</div>}
+
+      {(triageLoading || triage || triageError) && (
+        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6 border border-indigo-100">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <h3 className="text-sm font-semibold text-indigo-900">Clinical triage</h3>
+            {triage?.level && (
+              <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${getTriageUi(triage.level).className}`}>
+                {getTriageUi(triage.level).label}
+              </span>
+            )}
+          </div>
+
+          {triageLoading && <p className="text-xs text-indigo-700">Running triage classification...</p>}
+          {triageError && <p className="text-xs text-red-700">{triageError}</p>}
+          {triage && !triageLoading && (
+            <div className="space-y-1">
+              <p className="text-sm text-gray-800">{triage.summary}</p>
+              {triage.deviations.length > 0 && (
+                <ul className="text-xs text-gray-700 list-disc ml-5 space-y-1">
+                  {triage.deviations.map((item, idx) => (
+                    <li key={`${item}-${idx}`}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <AnalysisResult 
         result={result} 

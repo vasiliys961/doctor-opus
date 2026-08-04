@@ -19,6 +19,9 @@ import { calculateCost } from '@/lib/cost-calculator'
 import { saveDocument, getDocumentChunks, searchLibraryLocal } from '@/lib/library-db'
 import { anonymizeText } from '@/lib/anonymization'
 import mammoth from 'mammoth'
+import { getClientLocale } from '@/lib/i18n/client'
+import { protocolMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 
 declare global {
   interface Window {
@@ -30,6 +33,16 @@ const PROTOCOL_DRAFT_KEY = 'protocol_draft'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
 const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
 const CYRILLIC_REGEX = /[А-Яа-яЁё]/
+
+type InteractionSeverity = 'minor' | 'moderate' | 'major'
+
+type DrugInteractionView = {
+  pair: [string, string]
+  severity: InteractionSeverity
+  mechanism: string
+  recommendation: string
+  explanation: string
+}
 
 function chunkTemplateForRag(content: string, maxChunkLength: number = 1200): string[] {
   const clean = content.replace(/\r\n/g, '\n').trim()
@@ -63,13 +76,21 @@ function chunkTemplateForRag(content: string, maxChunkLength: number = 1200): st
 }
 
 export default function ProtocolPage() {
+  const [locale, setLocale] = useState<Locale>('en')
   const [rawText, setRawText] = useState('')
   const [showAudioUpload, setShowAudioUpload] = useState(false)
   const [protocol, setProtocol] = useState('')
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
+  const [stabilityMode, setStabilityMode] = useState(false)
   const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini' | 'gpt52'>('sonnet')
   const [currentCost, setCurrentCost] = useState<number>(0)
+  const [interactionLoading, setInteractionLoading] = useState(false)
+  const [interactionError, setInteractionError] = useState('')
+  const [interactionDetectorModel, setInteractionDetectorModel] = useState<string | null>(null)
+  const [interactionExplainerModel, setInteractionExplainerModel] = useState<string | null>(null)
+  const [interactionResults, setInteractionResults] = useState<DrugInteractionView[]>([])
+  const [interactionChecked, setInteractionChecked] = useState(false)
   
   // Состояния для специалистов и шаблонов
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATES[0].id)
@@ -84,10 +105,12 @@ export default function ProtocolPage() {
   const [selectedUniversalKey, setSelectedUniversalKey] = useState<string>('')
   const [universalPrompt, setUniversalPrompt] = useState<string>('')
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
+  const t = protocolMessages[locale]
   
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    setLocale(getClientLocale())
     if (typeof window !== 'undefined' && !window.pdfjsLib) {
       const script = document.createElement('script')
       script.src = '/pdfjs/pdf.min.js'
@@ -103,6 +126,14 @@ export default function ProtocolPage() {
       document.head.appendChild(script)
     } else if (window.pdfjsLib) {
       setPdfJsLoaded(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return
+    if (/windows/i.test(navigator.userAgent)) {
+      setStabilityMode(true)
+      setUseStreaming(false)
     }
   }, [])
 
@@ -183,14 +214,14 @@ export default function ProtocolPage() {
       strictTemplateMode
     }
     localStorage.setItem('user_protocol_template', JSON.stringify(data))
-    alert('Template saved as your personal standard!')
+    alert(t.templateSaved)
   }
 
   const readTextFile = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (event) => resolve((event.target?.result as string) || '')
-      reader.onerror = () => reject(new Error('Failed to read text file'))
+      reader.onerror = () => reject(new Error(t.readTextError))
       reader.readAsText(file)
     })
 
@@ -299,13 +330,13 @@ export default function ProtocolPage() {
       return fallbackText.value?.trim() || ''
     } catch (error) {
       console.error('Word extract error:', error)
-      throw new Error('Failed to read Word file. For .doc, prefer .docx.')
+      throw new Error(t.readWordError)
     }
   }
 
   const extractPdfTemplate = async (file: File): Promise<string> => {
     if (!pdfJsLoaded || !window.pdfjsLib) {
-      throw new Error('PDF module is still loading. Wait 2-3 seconds and try again.')
+      throw new Error(t.pdfLoadingError)
     }
 
     const pdfjs = window.pdfjsLib
@@ -348,7 +379,7 @@ export default function ProtocolPage() {
       return extractPdfTemplate(file)
     }
 
-    throw new Error('Supported formats: .txt, .doc/.docx, .pdf')
+    throw new Error(t.supportedFormatsError)
   }
 
   const handleLoadFromFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -358,7 +389,7 @@ export default function ProtocolPage() {
     void (async () => {
       const content = (await extractTemplateContent(file)).trim()
       if (!content) {
-        throw new Error('File was read, but template content is empty.')
+        throw new Error(t.emptyTemplateError)
       }
 
       setCustomTemplate(content)
@@ -381,10 +412,10 @@ export default function ProtocolPage() {
       )
       setTemplateRagDocId(docId)
       localStorage.setItem(PROTOCOL_TEMPLATE_RAG_KEY, docId)
-      alert('Template loaded and saved to library as RAG sample.')
+      alert(t.templateLoaded)
     })().catch((error) => {
       console.error('Template load error:', error)
-      alert(error?.message || 'Failed to load template file.')
+      alert(error?.message || t.templateLoadError)
     }).finally(() => {
       e.target.value = ''
     })
@@ -396,10 +427,11 @@ export default function ProtocolPage() {
     setLoading(true)
     setProtocol('')
     setCurrentCost(0)
-
-    const modelUsed = model === 'opus' ? MODELS.OPUS : 
-                    model === 'gpt52' ? MODELS.GPT_5_2 :
-                    model === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET;
+    setInteractionResults([])
+    setInteractionError('')
+    setInteractionDetectorModel(null)
+    setInteractionExplainerModel(null)
+    setInteractionChecked(false)
 
     const modelsMap: Record<string, string> = {
       'opus': MODELS.OPUS,
@@ -410,18 +442,19 @@ export default function ProtocolPage() {
 
     const finalModel = modelsMap[model] || MODELS.SONNET;
     const safeRawText = anonymizeText(rawText.trim())
+    const effectiveUseStreaming = stabilityMode ? false : useStreaming
 
     try {
       let ragExamples: string[] = []
       if (templateRagDocId) {
-        ragExamples = await getDocumentChunks(templateRagDocId, 8)
+        ragExamples = await getDocumentChunks(templateRagDocId, stabilityMode ? 4 : 8)
       } else if (safeRawText) {
         ragExamples = await searchLibraryLocal(`${specialistName} ${safeRawText}`, 3)
       }
 
       const payload = {
         rawText: safeRawText,
-        useStreaming: useStreaming,
+        useStreaming: effectiveUseStreaming,
         model: model,
         templateId: selectedTemplateId,
         customTemplate: customTemplate,
@@ -430,9 +463,10 @@ export default function ProtocolPage() {
         universalPrompt: universalPrompt,
         ragExamples,
         strictTemplateMode,
+        speedProfile: stabilityMode ? 'fast' : 'standard',
       };
 
-      if (useStreaming) {
+      if (effectiveUseStreaming) {
         const response = await fetch('/api/protocol', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -457,7 +491,7 @@ export default function ProtocolPage() {
               specialty: specialistName // Передаем специальность для аудита
             });
           },
-          onComplete: (finalText) => {
+          onComplete: () => {
             console.log('✅ [PROTOCOL STREAMING] Протокол готов')
           }
         })
@@ -477,7 +511,7 @@ export default function ProtocolPage() {
 
           logUsage({
             section: 'protocols',
-            model: finalModel,
+            model: data.model || finalModel,
             inputTokens,
             outputTokens,
             specialty: specialistName // Передаем специальность для аудита
@@ -489,6 +523,53 @@ export default function ProtocolPage() {
       setProtocol(`Error: ${err.message}`)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const getSeverityUi = (severity: InteractionSeverity) => {
+    if (severity === 'major') {
+      return {
+        label: t.interactionRiskHigh,
+        badgeClass: 'bg-red-100 text-red-700 border-red-200'
+      }
+    }
+    if (severity === 'moderate') {
+      return {
+        label: t.interactionRiskModerate,
+        badgeClass: 'bg-amber-100 text-amber-700 border-amber-200'
+      }
+    }
+    return {
+      label: t.interactionRiskLow,
+      badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-200'
+    }
+  }
+
+  const handleAnalyzeInteractions = async () => {
+    if (!protocol.trim()) return
+    setInteractionLoading(true)
+    setInteractionChecked(true)
+    setInteractionError('')
+    setInteractionResults([])
+    setInteractionDetectorModel(null)
+    setInteractionExplainerModel(null)
+    try {
+      const response = await fetch('/api/drug-interactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ protocol })
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || t.interactionsUnavailable)
+      }
+      setInteractionResults(Array.isArray(data.interactions) ? data.interactions : [])
+      setInteractionDetectorModel(typeof data.detectorModel === 'string' ? data.detectorModel : null)
+      setInteractionExplainerModel(typeof data.explainerModel === 'string' ? data.explainerModel : null)
+    } catch (err: any) {
+      setInteractionError(err?.message || t.interactionsUnavailable)
+    } finally {
+      setInteractionLoading(false)
     }
   }
 
@@ -540,20 +621,20 @@ export default function ProtocolPage() {
       const filePrefix = selectedTemplateId === ECG_FUNCTIONAL_TEMPLATE_ID ? 'Protocol_ECG' : 'Protocol_Appointment'
       saveAs(blob, `${filePrefix}_${datePart}.docx`)
     } catch (err: any) {
-      alert('Export error: ' + err.message)
+      alert(`${t.exportError}: ${err.message}`)
     }
   }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">
-        {selectedTemplateId === ECG_FUNCTIONAL_TEMPLATE_ID ? '🫀 ECG Protocol' : '📝 Appointment Protocol'}
+        {selectedTemplateId === ECG_FUNCTIONAL_TEMPLATE_ID ? `🫀 ${t.ecgProtocol}` : `📝 ${t.appointmentProtocol}`}
       </h1>
       
       {showAudioUpload && (
         <div className="mb-4 bg-white rounded-lg shadow-lg p-4">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold">🎤 Audio Upload</h3>
+            <h3 className="font-semibold">🎤 {t.audioUpload}</h3>
             <button onClick={() => setShowAudioUpload(false)} className="text-gray-500 hover:text-gray-700">✕</button>
           </div>
           <AudioUpload onTranscribe={(transcript) => {
@@ -565,29 +646,29 @@ export default function ProtocolPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">Settings and Input</h2>
+          <h2 className="text-xl font-semibold mb-4">{t.settingsAndInput}</h2>
 
           {/* Специалист и Шаблоны */}
           <div className="mb-6 space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">👨‍⚕️ Who is performing the examination:</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">👨‍⚕️ {t.whoExamines}</label>
                 <input 
                   type="text"
                   value={specialistName}
                   onChange={(e) => setSpecialistName(e.target.value)}
-                  placeholder="Example: Neurologist"
+                  placeholder={t.whoExaminesPlaceholder}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">🏥 Specialty (template):</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">🏥 {t.specialtyTemplate}</label>
                 <select 
                   value={selectedUniversalKey}
                   onChange={(e) => handleUniversalSelect(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm bg-white"
                 >
-                  <option value="">-- Select specialty --</option>
+                  <option value="">{t.selectSpecialty}</option>
                   {Object.entries(UNIVERSAL_SPECIALIST_TEMPLATES).map(([key, tpl]) => (
                     <option key={key} value={key}>{tpl.name}</option>
                   ))}
@@ -598,20 +679,20 @@ export default function ProtocolPage() {
             {selectedUniversalKey && (
               <div className="animate-in fade-in slide-in-from-top-1">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest">AI Instructions (editable):</label>
-                  <span className="text-[10px] text-gray-400 italic">Focus: {UNIVERSAL_SPECIALIST_TEMPLATES[selectedUniversalKey].focus}</span>
+                  <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest">{t.aiInstructions}</label>
+                  <span className="text-[10px] text-gray-400 italic">{t.focusLabel}: {UNIVERSAL_SPECIALIST_TEMPLATES[selectedUniversalKey].focus}</span>
                 </div>
                 <textarea
                   value={universalPrompt}
                   onChange={(e) => setUniversalPrompt(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none min-h-[60px] bg-indigo-50/30 font-medium leading-relaxed"
-                  placeholder="Specific instructions for this clinician..."
+                  placeholder={t.clinicianHint}
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider italic">Quick formatting:</label>
+              <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider italic">{t.quickFormatting}</label>
               <div className="flex flex-wrap gap-2">
                 {DEFAULT_TEMPLATES.map((tpl) => (
                   <button
@@ -633,7 +714,7 @@ export default function ProtocolPage() {
               onClick={() => setIsEditingTemplate(!isEditingTemplate)}
               className="text-[10px] font-bold text-primary-600 hover:underline flex items-center gap-1 uppercase tracking-tighter"
             >
-              {isEditingTemplate ? '🔼 Hide document structure' : '⚙️ Configure document structure (H1, H2...)'}
+              {isEditingTemplate ? `🔼 ${t.hideStructure}` : `⚙️ ${t.showStructure}`}
             </button>
 
             {isEditingTemplate && (
@@ -653,7 +734,7 @@ export default function ProtocolPage() {
                     onChange={(e) => setIsTemplateLocked(e.target.checked)}
                     className="w-3.5 h-3.5"
                   />
-                  🔒 Pin my template (do not overwrite when changing specialist)
+                  🔒 {t.pinTemplate}
                 </label>
                 <label className="inline-flex items-center gap-2 text-[10px] font-semibold text-indigo-700">
                   <input
@@ -662,20 +743,20 @@ export default function ProtocolPage() {
                     onChange={(e) => setStrictTemplateMode(e.target.checked)}
                     className="w-3.5 h-3.5"
                   />
-                  🧷 Strictly preserve template structure
+                  🧷 {t.strictTemplate}
                 </label>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={handleSaveAsDefault}
                     className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-colors shadow-sm"
                   >
-                    💾 Save as my standard
+                    💾 {t.saveStandard}
                   </button>
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className="px-3 py-1.5 bg-gray-600 text-white rounded-lg text-[10px] font-bold hover:bg-gray-700 transition-colors shadow-sm"
                   >
-                    📁 Load from file (.txt/.docx/.pdf)
+                    📁 {t.loadFromFile}
                   </button>
                   <input 
                     type="file"
@@ -691,18 +772,18 @@ export default function ProtocolPage() {
           
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">Text to process:</label>
+              <label className="block text-sm font-medium text-gray-700">{t.textToProcess}</label>
               <VoiceInput 
                 onTranscript={(text) => setRawText(prev => prev ? prev + ' ' + text : text)}
                 disabled={loading}
                 className="!bg-indigo-600 !text-white hover:!bg-indigo-700"
-                placeholder="Dictate"
+                placeholder={t.dictate}
               />
             </div>
             <textarea
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
-              placeholder="Enter examination data or use 🎤..."
+              placeholder={t.textPlaceholder}
               data-tour="protocol-input"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none min-h-[300px]"
               disabled={loading}
@@ -711,44 +792,71 @@ export default function ProtocolPage() {
 
           <div className="flex gap-2 mb-4">
             <button onClick={() => setShowAudioUpload(!showAudioUpload)} className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors text-sm" disabled={loading}>
-              📁 Audio file
+              📁 {t.audioFile}
             </button>
             <button onClick={() => setRawText('')} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm" disabled={!rawText || loading}>
-              🗑️ Clear
+              🗑️ {t.clear}
             </button>
           </div>
 
-          <div className="mb-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-[auto_auto_minmax(220px,1fr)] gap-3 items-start md:items-center">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={useStreaming} onChange={(e) => setUseStreaming(e.target.checked)} className="w-4 h-4 text-primary-600" disabled={loading} />
-              <span className="text-sm">Streaming</span>
+              <input
+                type="checkbox"
+                checked={useStreaming}
+                onChange={(e) => setUseStreaming(e.target.checked)}
+                className="w-4 h-4 text-primary-600"
+                disabled={loading || stabilityMode}
+              />
+              <span className="text-sm">{t.streaming}</span>
             </label>
-            <select value={model} onChange={(e) => setModel(e.target.value as any)} className="px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
-              <option value="sonnet">🤖 Sonnet 4.6</option>
-              <option value="gpt52">🚀 GPT-5.4</option>
-              <option value="opus">🧠 Opus 4.6</option>
-              <option value="gemini">⚡ Gemini 3.1</option>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={stabilityMode}
+                onChange={(e) => {
+                  const enabled = e.target.checked
+                  setStabilityMode(enabled)
+                  if (enabled) setUseStreaming(false)
+                }}
+                className="w-4 h-4 text-amber-600"
+                disabled={loading}
+              />
+              <span className="text-sm text-amber-700 font-semibold leading-tight">🛟 Stability mode (Windows-friendly)</span>
+            </label>
+            <select value={model} onChange={(e) => setModel(e.target.value as any)} className="w-full md:w-auto px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
+              <option value="sonnet">🤖 Sonnet 5</option>
+              <option value="gpt52">🚀 GPT-5.6 Terra</option>
+              <option value="opus">🧠 Opus 5</option>
+              <option value="gemini">⚡ Gemini 3 Flash</option>
             </select>
           </div>
 
           <button onClick={handleGenerateProtocol} data-tour="protocol-generate-button" disabled={!rawText.trim() || loading} className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50 font-semibold shadow-md">
-            {loading ? '⏳ Generating...' : '📝 Generate Protocol'}
+            {loading ? `⏳ ${t.generating}` : `📝 ${t.generateProtocol}`}
           </button>
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <div>
-              <h2 className="text-xl font-semibold">Generated Protocol</h2>
+              <h2 className="text-xl font-semibold">{t.generatedProtocol}</h2>
               {currentCost > 0 && (
                 <div className="mt-1 bg-teal-50 text-teal-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-teal-200 inline-block shadow-sm">
-                  💰 Service cost: {currentCost.toFixed(2)} cr.
+                  💰 {t.serviceCost}: {currentCost.toFixed(2)} cr.
                 </div>
               )}
             </div>
             {protocol && (
               <div className="flex gap-2">
-                <button onClick={() => { navigator.clipboard.writeText(protocol); alert('Copied'); }} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm">📋</button>
+                <button onClick={() => { navigator.clipboard.writeText(protocol); alert(t.copied); }} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm">📋</button>
+                <button
+                  onClick={handleAnalyzeInteractions}
+                  disabled={interactionLoading}
+                  className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded text-sm disabled:opacity-60"
+                >
+                  {interactionLoading ? `⏳ ${t.checkingInteractions}` : `⚠️ ${t.checkInteractions}`}
+                </button>
                 <button onClick={handleExportToDocx} className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">📄 DOCX</button>
               </div>
             )}
@@ -761,7 +869,62 @@ export default function ProtocolPage() {
           ) : (
             <div className="text-center text-gray-500 py-20 border-2 border-dashed border-gray-100 rounded-lg">
               {loading ? <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div> : <p className="text-4xl mb-4 opacity-20">📄</p>}
-              <p>{loading ? 'AI is generating protocol...' : 'Result will appear here'}</p>
+              <p>{loading ? t.aiGenerating : t.resultWillAppear}</p>
+            </div>
+          )}
+
+          {protocol && (
+            <div className="mt-4 border border-orange-200 rounded-lg p-4 bg-orange-50/40">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <h3 className="text-sm font-semibold text-orange-900">{t.interactionsTitle}</h3>
+                {interactionDetectorModel && (
+                  <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border bg-white text-orange-700 border-orange-200">
+                    Detect: {interactionDetectorModel}
+                  </span>
+                )}
+                {interactionExplainerModel && (
+                  <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border bg-white text-orange-700 border-orange-200">
+                    Explain: {interactionExplainerModel}
+                  </span>
+                )}
+              </div>
+
+              {!interactionLoading && !interactionError && interactionResults.length === 0 && (
+                interactionChecked ? (
+                  <p className="text-xs text-gray-600">{t.interactionsNone}</p>
+                ) : (
+                  <p className="text-xs text-gray-600">{t.interactionsHint}</p>
+                )
+              )}
+
+              {interactionError && (
+                <p className="text-xs text-red-700">{interactionError}</p>
+              )}
+
+              {interactionLoading && (
+                <p className="text-xs text-orange-700">{t.interactionsChecking}</p>
+              )}
+
+              {interactionResults.length > 0 && (
+                <div className="space-y-2">
+                  {interactionResults.map((item, idx) => {
+                    const severityUi = getSeverityUi(item.severity)
+                    return (
+                      <div key={`${item.pair[0]}-${item.pair[1]}-${idx}`} className="bg-white border border-orange-100 rounded-md p-3">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <strong className="text-sm text-gray-900">{item.pair[0]} + {item.pair[1]}</strong>
+                          <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${severityUi.badgeClass}`}>
+                            {severityUi.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-700"><strong>{t.mechanismLabel}:</strong> {item.mechanism}</p>
+                        <p className="text-xs text-gray-700"><strong>{t.explanationLabel}:</strong> {item.explanation}</p>
+                        <p className="text-xs text-gray-700"><strong>{t.recommendationLabel}:</strong> {item.recommendation}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

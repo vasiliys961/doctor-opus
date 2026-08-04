@@ -16,11 +16,64 @@ import ImageEditor from '@/components/ImageEditor'
 import { anonymizeMedicalImage } from '@/lib/image-compression'
 import { anonymizeText } from '@/lib/anonymization'
 import mammoth from 'mammoth'
+import { getClientLocale } from '@/lib/i18n/client'
+import { chatMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
+import { MODELS } from '@/lib/openrouter'
 
-type ModelType = 'opus' | 'sonnet'
 type ResponseStyle = 'brief' | 'detailed'
+type ResponseLanguagePreference = 'auto' | 'en' | 'ru' | 'ar' | 'hi' | 'es' | 'fr' | 'zh' | 'ms' | 'id' | 'pt-br' | 'tr'
 const MAX_CHAT_FILES_PER_BATCH = 4;
 const MAX_CHAT_TOTAL_BYTES_PER_BATCH = 16 * 1024 * 1024;
+
+const extractTextFromNode = (node: unknown): string => {
+  if (typeof node === 'string') return node;
+  if (Array.isArray(node)) {
+    return node
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (!item || typeof item !== 'object') return '';
+        const record = item as Record<string, unknown>;
+        return typeof record.text === 'string' ? record.text : '';
+      })
+      .join('');
+  }
+  return '';
+};
+
+const extractStreamingContent = (json: any): string => {
+  const choice = json?.choices?.[0];
+  if (!choice) return '';
+
+  const delta = choice?.delta;
+  const fromDelta =
+    extractTextFromNode(delta?.content) ||
+    extractTextFromNode(delta?.text) ||
+    extractTextFromNode(delta?.output_text);
+  if (fromDelta) return fromDelta;
+
+  const fromMessage =
+    extractTextFromNode(choice?.message?.content) ||
+    extractTextFromNode(choice?.message?.text);
+  if (fromMessage) return fromMessage;
+
+  return extractTextFromNode(json?.content);
+};
+
+const responseLanguageOptions: Array<{ value: ResponseLanguagePreference; label: string }> = [
+  { value: 'auto', label: 'Auto (same as user message)' },
+  { value: 'en', label: 'English' },
+  { value: 'ru', label: 'Russian' },
+  { value: 'ar', label: 'Arabic' },
+  { value: 'hi', label: 'Hindi' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'fr', label: 'French' },
+  { value: 'zh', label: 'Chinese' },
+  { value: 'ms', label: 'Malay' },
+  { value: 'id', label: 'Indonesian' },
+  { value: 'pt-br', label: 'Portuguese (Brazil)' },
+  { value: 'tr', label: 'Turkish' },
+];
 
 const specialtyMap: Record<string, Specialty> = {
   'Cardiologist': 'cardiology',
@@ -38,7 +91,17 @@ const specialtyMap: Record<string, Specialty> = {
   'AI Expert': 'ai_assistant',
 };
 
+const getDisplayModelName = (model: 'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable') => {
+  if (model === 'gpt52') return MODELS.GPT_5_2;
+  if (model === 'sonnet') return MODELS.SONNET;
+  if (model === 'opus') return MODELS.OPUS;
+  if (model === 'gemini') return MODELS.GEMINI_3_FLASH;
+  if (model === 'fable') return MODELS.FABLE_5;
+  return model;
+};
+
 export default function ChatPage() {
+  const [locale, setLocale] = useState<Locale>('en')
   const { data: session } = useSession()
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<Array<{ 
@@ -54,8 +117,9 @@ export default function ChatPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
   const [useLibrary, setUseLibrary] = useState(false)
-  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini'>('gpt52')
+  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable'>('gpt52')
   const [responseStyle, setResponseStyle] = useState<ResponseStyle>('brief')
+  const [responseLanguage, setResponseLanguage] = useState<ResponseLanguagePreference>('auto')
   const [specialty, setSpecialty] = useState<Specialty>('universal')
   const [isCutOff, setIsCutOff] = useState(false)
   const [lastMessageIndex, setLastMessageIndex] = useState<number | null>(null)
@@ -66,9 +130,11 @@ export default function ChatPage() {
   const [isProcessingFiles, setIsProcessingFiles] = useState(false)
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
   const [convertingPDF, setConvertingPDF] = useState(false)
+  const t = chatMessages[locale]
 
   // Load PDF.js v3 from local files (public/pdfjs/)
   useEffect(() => {
+    setLocale(getClientLocale())
     if (typeof window !== 'undefined' && !window.pdfjsLib) {
       const script = document.createElement('script')
       script.src = '/pdfjs/pdf.min.js'
@@ -216,6 +282,7 @@ export default function ChatPage() {
           model: modelName,
           specialty: specialty,
           responseStyle,
+          responseLanguage,
         }),
       });
 
@@ -248,7 +315,7 @@ export default function ChatPage() {
                   setIsCutOff(true);
                 }
 
-                const content = json.choices?.[0]?.delta?.content || '';
+                const content = extractStreamingContent(json);
                 if (content) {
                   accumulatedText += content;
                   setMessages(prev => {
@@ -368,6 +435,7 @@ export default function ChatPage() {
 
     try {
       const modelName = model
+      const displayModelName = getDisplayModelName(model)
 
       if (filesToSend.length > 0) {
         const fileBatches = splitFilesIntoBatches(filesToSend);
@@ -395,6 +463,7 @@ export default function ChatPage() {
             batchFormData.append('model', modelName);
             batchFormData.append('specialty', specialty);
             batchFormData.append('responseStyle', responseStyle);
+            batchFormData.append('responseLanguage', responseLanguage);
             batch.forEach(file => batchFormData.append('files', file));
 
             const batchResponse = await fetch('/api/chat', {
@@ -419,7 +488,7 @@ export default function ChatPage() {
                     role: 'assistant',
                     content: aggregatedText,
                     cost: totalCost,
-                    model: batchData.model || modelName
+                            model: batchData.model || displayModelName
                   };
                 }
                 return newMessages;
@@ -432,7 +501,7 @@ export default function ChatPage() {
               role: 'assistant',
               content: aggregatedText,
               cost: totalCost,
-              model: modelName
+              model: displayModelName
             }]);
           }
 
@@ -446,6 +515,7 @@ export default function ChatPage() {
         formData.append('model', modelName)
         formData.append('specialty', specialty)
         formData.append('responseStyle', responseStyle)
+        formData.append('responseLanguage', responseLanguage)
         filesToSend.forEach(file => formData.append('files', file))
 
         if (useStreaming) {
@@ -518,7 +588,7 @@ export default function ChatPage() {
                           newMessages[assistantMessageIndex] = {
                             ...newMessages[assistantMessageIndex],
                             cost: json.usage.total_cost,
-                            model: json.model || modelName
+                            model: json.model || displayModelName
                           }
                         }
                         return newMessages
@@ -526,7 +596,7 @@ export default function ChatPage() {
                       
                       logUsage({
                         section: 'chat',
-                        model: json.model || modelName,
+                        model: json.model || displayModelName,
                         inputTokens: json.usage.prompt_tokens,
                         outputTokens: json.usage.completion_tokens,
                         specialty: specialty
@@ -534,7 +604,7 @@ export default function ChatPage() {
                       continue;
                     }
 
-                    const content = json.choices?.[0]?.delta?.content || ''
+                    const content = extractStreamingContent(json)
                     if (content) {
                       accumulatedText += content
                       
@@ -574,11 +644,11 @@ export default function ChatPage() {
               role: 'assistant', 
               content: data.result,
               cost: data.cost,
-              model: data.model || modelName
+              model: data.model || displayModelName
             }])
             logUsage({
               section: 'chat',
-              model: modelName,
+              model: displayModelName,
               inputTokens: 1500,
               outputTokens: 1200,
             })
@@ -600,6 +670,7 @@ export default function ChatPage() {
               model: modelName,
               specialty: specialty,
               responseStyle,
+              responseLanguage,
             }),
           })
 
@@ -666,7 +737,7 @@ export default function ChatPage() {
                           newMessages[assistantMessageIndex] = {
                             ...newMessages[assistantMessageIndex],
                             cost: json.usage.total_cost,
-                            model: json.model || modelName
+                            model: json.model || displayModelName
                           }
                         }
                         return newMessages
@@ -674,7 +745,7 @@ export default function ChatPage() {
                       
                       logUsage({
                         section: 'chat',
-                        model: json.model || modelName,
+                        model: json.model || displayModelName,
                         inputTokens: json.usage.prompt_tokens,
                         outputTokens: json.usage.completion_tokens,
                         specialty: specialty
@@ -682,7 +753,7 @@ export default function ChatPage() {
                       continue;
                     }
 
-                    const content = json.choices?.[0]?.delta?.content || ''
+                    const content = extractStreamingContent(json)
                     if (content) {
                       accumulatedText += content
                       
@@ -722,6 +793,7 @@ export default function ChatPage() {
               model: modelName,
               specialty: specialty,
               responseStyle,
+              responseLanguage,
             }),
           })
 
@@ -732,11 +804,11 @@ export default function ChatPage() {
               role: 'assistant', 
               content: data.result, 
               cost: data.cost,
-              model: data.model || modelName
+              model: data.model || displayModelName
             }])
             logUsage({
               section: 'chat',
-              model: modelName,
+              model: displayModelName,
               inputTokens: 1000,
               outputTokens: 1000,
               specialty: specialty // Передаем специальность
@@ -774,7 +846,7 @@ export default function ChatPage() {
         const context = `\n\n### LIBRARY CONTEXT:\n${results.join('\n---\n')}`
         setMessage(prev => prev + context)
       } else {
-        alert('No relevant materials found in the library.')
+        alert(t.noLibraryResults)
       }
     } catch (err) {
       console.error('Library search error:', err)
@@ -784,7 +856,7 @@ export default function ChatPage() {
   }
 
   const clearChat = () => {
-    if (confirm('Are you sure you want to clear the chat history?')) {
+    if (confirm(t.clearConfirm)) {
       setMessages([])
     }
   }
@@ -795,11 +867,11 @@ export default function ChatPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-2">
             <span className="bg-teal-600 text-white p-1.5 rounded-lg shadow-sm">🤖</span>
-            AI Assistant
+            {t.title}
           </h1>
           {session?.user && (
             <p className="text-xs text-slate-500 mt-1">
-              Session: {session.user.email}
+              {t.session}: {session.user.email}
             </p>
           )}
         </div>
@@ -808,16 +880,16 @@ export default function ChatPage() {
           <button
             onClick={clearChat}
             className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 border border-slate-200 shadow-sm"
-            title="Clear chat history"
+            title={t.clearConfirm}
           >
-            🗑️ Clear
+            🗑️ {t.clear}
           </button>
           
           <button
             onClick={() => signOut({ callbackUrl: '/auth/signin' })}
             className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 border border-slate-200 shadow-sm"
           >
-            🚪 Sign Out
+            🚪 {t.signOut}
           </button>
         </div>
       </div>
@@ -825,7 +897,7 @@ export default function ChatPage() {
       <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6 mb-4 sm:mb-6 h-[70vh] sm:h-[700px] overflow-y-auto">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-10 sm:mt-20 text-sm sm:text-base">
-            Start a dialogue with the AI Assistant
+            {t.emptyState}
           </div>
         ) : (
           <div className="space-y-3 sm:space-y-4">
@@ -839,7 +911,7 @@ export default function ChatPage() {
                 }`}
               >
                 <div className="font-semibold mb-2 text-sm sm:text-base flex items-center justify-between">
-                  <span>{msg.role === 'user' ? 'You' : `Analytical Response (${msg.model || 'AI Assistant'})`}</span>
+                  <span>{msg.role === 'user' ? t.you : `${t.analyticalResponse} (${msg.model || t.title})`}</span>
                   {msg.role === 'assistant' && msg.cost !== undefined && (
                     <span className="text-[10px] bg-teal-50 text-teal-700 px-2 py-0.5 rounded border border-teal-100 font-bold">
                       💰 {msg.cost.toFixed(2)} ед.
@@ -910,7 +982,7 @@ export default function ChatPage() {
                   onClick={handleContinue}
                   className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-full text-xs font-bold transition-all border border-amber-300 shadow-sm animate-pulse"
                 >
-                  ⏳ Response was cut off. Continue to end?
+                  ⏳ {t.responseCutOff} {t.continueToEnd}
                 </button>
               </div>
             )}
@@ -921,7 +993,7 @@ export default function ChatPage() {
       {showAudioUpload && (
         <div className="mb-3 sm:mb-4 bg-white rounded-lg shadow-lg p-3 sm:p-4">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold text-sm sm:text-base">🎤 Audio Upload</h3>
+            <h3 className="font-semibold text-sm sm:text-base">🎤 {t.audioUpload}</h3>
             <button
               onClick={() => setShowAudioUpload(false)}
               className="text-gray-500 hover:text-gray-700 p-2 touch-manipulation"
@@ -941,7 +1013,7 @@ export default function ChatPage() {
       {showFileUpload && (
         <div className="mb-3 sm:mb-4 bg-white rounded-lg shadow-lg p-3 sm:p-4">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold text-sm sm:text-base">📎 File Upload</h3>
+            <h3 className="font-semibold text-sm sm:text-base">📎 {t.fileUpload}</h3>
             <button
               onClick={() => {
                 setShowFileUpload(false)
@@ -962,9 +1034,9 @@ export default function ChatPage() {
           {selectedFiles.length > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-200">
               <div className="text-xs sm:text-sm font-medium mb-3 flex items-center justify-between">
-                <span>Selected files ({selectedFiles.length}):</span>
+                <span>{t.selectedFiles} ({selectedFiles.length}):</span>
                 <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                  💡 Press 🛡️ to remove PHI or 🎨 to redact manually
+                  💡 {t.removePhiHint}
                 </span>
               </div>
               <div className="flex flex-wrap gap-2 sm:gap-3">
@@ -989,7 +1061,7 @@ export default function ChatPage() {
                         <button
                           onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
                           className="p-1 hover:bg-red-50 rounded-full text-red-400 hover:text-red-600 transition-colors"
-                          title="Remove file"
+                          title={t.removeFile}
                         >
                           ✕
                         </button>
@@ -1021,7 +1093,7 @@ export default function ChatPage() {
                             title="Extract PDF pages for PHI redaction"
                           >
                             <span>{convertingPDF ? '⌛' : '🛡️'}</span>
-                            <span className="text-[9px] uppercase tracking-tighter">Anon.</span>
+                            <span className="text-[9px] uppercase tracking-tighter">{t.anonymize}</span>
                           </button>
                         )}
                         
@@ -1035,7 +1107,7 @@ export default function ChatPage() {
                             title="Manually redact data"
                           >
                             <span>🎨</span>
-                            <span className="text-[9px] uppercase tracking-tighter">Redact</span>
+                            <span className="text-[9px] uppercase tracking-tighter">{t.redact}</span>
                           </button>
                         )}
 
@@ -1070,7 +1142,7 @@ export default function ChatPage() {
                             title="Automatically strip PHI from text"
                           >
                             <span>🛡️</span>
-                            <span className="text-[9px] uppercase tracking-tighter">Anon.</span>
+                            <span className="text-[9px] uppercase tracking-tighter">{t.anonymize}</span>
                           </button>
                         )}
                       </div>
@@ -1099,7 +1171,7 @@ export default function ChatPage() {
               onChange={(e) => setUseStreaming(e.target.checked)}
               className="w-5 h-5 sm:w-4 sm:h-4 text-primary-600"
             />
-            <span className="text-xs sm:text-sm">Streaming</span>
+            <span className="text-xs sm:text-sm">{t.streaming}</span>
           </label>
 
           <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
@@ -1109,7 +1181,7 @@ export default function ChatPage() {
               onChange={(e) => setUseLibrary(e.target.checked)}
               className="w-5 h-5 sm:w-4 sm:h-4 text-teal-600"
             />
-            <span className="text-xs sm:text-sm font-medium text-teal-700">📚 Library (RAG)</span>
+            <span className="text-xs sm:text-sm font-medium text-teal-700">📚 {t.libraryRag}</span>
           </label>
 
           <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
@@ -1119,39 +1191,61 @@ export default function ChatPage() {
               onChange={(e) => setAutoAnonymize(e.target.checked)}
               className="w-5 h-5 sm:w-4 sm:h-4 text-blue-600"
             />
-            <span className="text-xs sm:text-sm font-medium text-blue-700">🛡️ Auto-Anonymize</span>
+            <span className="text-xs sm:text-sm font-medium text-blue-700">🛡️ {t.autoAnonymize}</span>
           </label>
           
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Model:</span>
+            <span className="text-xs sm:text-sm font-medium whitespace-nowrap">{t.model}:</span>
             <select
               value={model}
               onChange={(e) => setModel(e.target.value as any)}
               className="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
               disabled={loading}
             >
-              <option value="gpt52">🚀 GPT-5.4</option>
-              <option value="opus">🧠 Opus 4.6</option>
-              <option value="sonnet">🤖 Sonnet 4.6</option>
-              <option value="gemini">⚡ Gemini 3.1</option>
+              <option value="gpt52">🚀 GPT-5.6 Terra</option>
+              <option value="opus">🧠 Opus 5</option>
+              <option value="sonnet">🤖 Sonnet 5</option>
+              <option value="fable">🧪 Fable 5</option>
+              <option value="gemini">⚡ Gemini 3 Flash</option>
             </select>
           </div>
 
           <div className="w-full sm:w-auto rounded-lg border-2 border-teal-300 bg-teal-50 px-3 py-2">
             <div className="flex items-center gap-2">
-              <span className="text-xs sm:text-sm font-bold text-teal-800 whitespace-nowrap">For physician: response format</span>
+              <span className="text-xs sm:text-sm font-bold text-teal-800 whitespace-nowrap">{t.responseFormat}</span>
               <select
                 value={responseStyle}
                 onChange={(e) => setResponseStyle(e.target.value as ResponseStyle)}
                 className="flex-1 sm:flex-none px-3 py-2 border border-teal-300 rounded-lg text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 touch-manipulation"
                 disabled={loading}
               >
-                <option value="brief">Brief (default)</option>
-                <option value="detailed">Detailed</option>
+                <option value="brief">{t.brief}</option>
+                <option value="detailed">{t.detailed}</option>
               </select>
             </div>
             <p className="mt-1 text-[10px] sm:text-xs text-teal-700">
-              Affects all subsequent responses in this dialogue.
+              {t.affectsDialogue}
+            </p>
+          </div>
+
+          <div className="w-full sm:w-auto rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-sm font-bold text-indigo-800 whitespace-nowrap">{t.responseLanguage}</span>
+              <select
+                value={responseLanguage}
+                onChange={(e) => setResponseLanguage(e.target.value as ResponseLanguagePreference)}
+                className="flex-1 sm:flex-none px-3 py-2 border border-indigo-300 rounded-lg text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 touch-manipulation"
+                disabled={loading}
+              >
+                {responseLanguageOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="mt-1 text-[10px] sm:text-xs text-indigo-700">
+              {t.autoLanguageHint}
             </p>
           </div>
         </div>
@@ -1162,7 +1256,7 @@ export default function ChatPage() {
           <button
             onClick={() => setShowAudioUpload(!showAudioUpload)}
             className="px-4 py-3 sm:py-2 bg-secondary-500 hover:bg-secondary-600 active:bg-secondary-700 text-white rounded-lg transition-colors text-lg sm:text-base touch-manipulation"
-            title="Upload audio"
+            title={t.uploadAudioTitle}
           >
             🎤
           </button>
@@ -1173,7 +1267,7 @@ export default function ChatPage() {
                 ? 'bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white'
                 : 'bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-700'
             }`}
-            title="Upload files"
+            title={t.uploadFilesTitle}
           >
             📎 {selectedFiles.length > 0 && `(${selectedFiles.length})`}
           </button>
@@ -1187,7 +1281,7 @@ export default function ChatPage() {
                   ? 'bg-indigo-100 text-indigo-400' 
                   : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
             }`}
-            title={useLibrary ? "Auto library search is enabled" : "Find and insert context from your PDF library manually"}
+            title={useLibrary ? t.autoLibraryEnabled : t.libraryManualHint}
           >
             {searchingLibrary ? '⏳' : '📚'}
           </button>
@@ -1201,7 +1295,7 @@ export default function ChatPage() {
               handleSend();
             }
           }}
-          placeholder="Enter your question..."
+          placeholder={t.questionPlaceholder}
           data-tour="chat-question-input"
           className="flex-1 px-4 py-3 sm:py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base touch-manipulation min-h-[50px] max-h-[200px] resize-y"
           disabled={loading}
@@ -1216,10 +1310,10 @@ export default function ChatPage() {
           {isProcessingFiles ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              <span>🛡️ Processing...</span>
+              <span>🛡️ {t.processing}</span>
             </>
           ) : (
-            'Send'
+            t.send
           )}
         </button>
       </div>

@@ -1,19 +1,32 @@
 import fs from 'fs';
 import path from 'path';
 import ReactMarkdown from 'react-markdown';
+import { getRequestLocale } from '@/lib/i18n/server';
+import { manualMessages } from '@/lib/i18n/ui-client-messages';
+import { getManualContentForLocale } from '@/lib/i18n/manual-translator';
 
 export const dynamic = 'force-dynamic';
 
-export default function ManualPage() {
+function readPrebuiltManual(locale: string): string | null {
+  const prebuiltPath = path.join(process.cwd(), 'content', 'manual', `${locale}.md`);
+  if (!fs.existsSync(prebuiltPath)) return null;
+  return fs.readFileSync(prebuiltPath, 'utf8');
+}
+
+export default async function ManualPage() {
+  const locale = await getRequestLocale();
+  const t = manualMessages[locale];
   const filePath = path.join(process.cwd(), 'USER_MANUAL_FOR_DOCTORS.md');
-  const content = fs.readFileSync(filePath, 'utf8');
+  const englishContent = fs.readFileSync(filePath, 'utf8');
+  const prebuiltContent = readPrebuiltManual(locale);
+  const content = prebuiltContent || (await getManualContentForLocale(locale, englishContent));
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-100 prose prose-slate max-w-none prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-a:text-indigo-600 prose-img:rounded-2xl">
         <div className="mb-8 border-b pb-6">
           <h1 className="text-4xl font-black text-slate-900 mb-2 uppercase tracking-tight flex items-center gap-4">
-            📘 Physician Manual
+            📘 {t.title}
           </h1>
           <div className="h-1.5 w-24 bg-indigo-600 rounded-full"></div>
         </div>
