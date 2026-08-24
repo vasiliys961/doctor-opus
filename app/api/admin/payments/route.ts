@@ -117,47 +117,14 @@ export async function GET(request: NextRequest) {
 
     const paidUsersCountResult = fromDate
       ? await sql`
-          WITH paid_emails AS (
-            SELECT p.email
-            FROM payments p
-            WHERE p.status = 'completed' AND p.updated_at >= ${fromDate}
-            GROUP BY p.email
-
-            UNION
-
-            SELECT ct.email
-            FROM credit_transactions ct
-            WHERE (
-              ct.operation ILIKE 'Invite access %'
-              OR ct.operation ILIKE 'Admin invite topup %'
-            )
-              AND ct.created_at >= ${fromDate}
-              AND ct.email NOT LIKE 'guest:%'
-            GROUP BY ct.email
-          )
-          SELECT COUNT(*)::int AS paid_users
-          FROM paid_emails
+          SELECT COUNT(DISTINCT email)::int AS paid_users
+          FROM payments
+          WHERE status = 'completed' AND updated_at >= ${fromDate}
         `
       : await sql`
-          WITH paid_emails AS (
-            SELECT p.email
-            FROM payments p
-            WHERE p.status = 'completed'
-            GROUP BY p.email
-
-            UNION
-
-            SELECT ct.email
-            FROM credit_transactions ct
-            WHERE (
-              ct.operation ILIKE 'Invite access %'
-              OR ct.operation ILIKE 'Admin invite topup %'
-            )
-              AND ct.email NOT LIKE 'guest:%'
-            GROUP BY ct.email
-          )
-          SELECT COUNT(*)::int AS paid_users
-          FROM paid_emails
+          SELECT COUNT(DISTINCT email)::int AS paid_users
+          FROM payments
+          WHERE status = 'completed'
         `;
 
     const completedPaymentsCountResult = fromDate
@@ -174,75 +141,26 @@ export async function GET(request: NextRequest) {
 
     const paidUsersResult = fromDate
       ? await sql`
-          WITH user_events AS (
-            SELECT
-              p.email,
-              COUNT(*)::int AS event_count,
-              COALESCE(SUM(p.units), 0)::numeric AS units_total,
-              MAX(p.updated_at) AS event_at
-            FROM payments p
-            WHERE p.status = 'completed' AND p.updated_at >= ${fromDate}
-            GROUP BY p.email
-
-            UNION ALL
-
-            SELECT
-              ct.email,
-              COUNT(*)::int AS event_count,
-              COALESCE(SUM(ct.amount), 0)::numeric AS units_total,
-              MAX(ct.created_at) AS event_at
-            FROM credit_transactions ct
-            WHERE (
-              ct.operation ILIKE 'Invite access %'
-              OR ct.operation ILIKE 'Admin invite topup %'
-            )
-              AND ct.created_at >= ${fromDate}
-              AND ct.email NOT LIKE 'guest:%'
-            GROUP BY ct.email
-          )
           SELECT
-            email,
-            SUM(event_count)::int AS paid_count,
-            COALESCE(SUM(units_total), 0)::numeric AS total_units,
-            MAX(event_at) AS last_paid_at
-          FROM user_events
-          GROUP BY email
+            p.email,
+            COUNT(*)::int AS paid_count,
+            COALESCE(SUM(p.units), 0)::numeric AS total_units,
+            MAX(p.updated_at) AS last_paid_at
+          FROM payments p
+          WHERE p.status = 'completed' AND p.updated_at >= ${fromDate}
+          GROUP BY p.email
           ORDER BY last_paid_at DESC
           LIMIT 200
         `
       : await sql`
-          WITH user_events AS (
-            SELECT
-              p.email,
-              COUNT(*)::int AS event_count,
-              COALESCE(SUM(p.units), 0)::numeric AS units_total,
-              MAX(p.updated_at) AS event_at
-            FROM payments p
-            WHERE p.status = 'completed'
-            GROUP BY p.email
-
-            UNION ALL
-
-            SELECT
-              ct.email,
-              COUNT(*)::int AS event_count,
-              COALESCE(SUM(ct.amount), 0)::numeric AS units_total,
-              MAX(ct.created_at) AS event_at
-            FROM credit_transactions ct
-            WHERE (
-              ct.operation ILIKE 'Invite access %'
-              OR ct.operation ILIKE 'Admin invite topup %'
-            )
-              AND ct.email NOT LIKE 'guest:%'
-            GROUP BY ct.email
-          )
           SELECT
-            email,
-            SUM(event_count)::int AS paid_count,
-            COALESCE(SUM(units_total), 0)::numeric AS total_units,
-            MAX(event_at) AS last_paid_at
-          FROM user_events
-          GROUP BY email
+            p.email,
+            COUNT(*)::int AS paid_count,
+            COALESCE(SUM(p.units), 0)::numeric AS total_units,
+            MAX(p.updated_at) AS last_paid_at
+          FROM payments p
+          WHERE p.status = 'completed'
+          GROUP BY p.email
           ORDER BY last_paid_at DESC
           LIMIT 200
         `;
