@@ -43,10 +43,19 @@ jobs:
 
             PREV_APP_IMAGE=$(docker inspect -f '{{.Config.Image}}' doctor-opus-app-main95 2>/dev/null || true)
 
+            pull_if_missing() {
+              image="$1"
+              if docker image inspect "$image" >/dev/null 2>&1; then
+                echo "✅ Image already cached locally, skipping pull: $image"
+                return 0
+              fi
+              retry_cmd 5 30 docker pull "$image"
+            }
+
             echo "=== Docker build RU ==="
             docker network inspect doctor-opus_default >/dev/null 2>&1 || docker network create doctor-opus_default
-            retry_cmd 5 20 docker pull node:20-bookworm
-            retry_cmd 5 20 docker pull postgres:15-alpine
+            pull_if_missing node:20-bookworm
+            pull_if_missing postgres:15-alpine
             retry_cmd 3 30 docker build -t doctor-opus-app-ru .
 
             echo "=== Ensure dedicated RU database container ==="
