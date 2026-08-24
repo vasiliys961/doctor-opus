@@ -20,6 +20,23 @@ jobs:
             set -e
             cd /home/doctor-opus
 
+            retry_cmd() {
+              attempts="$1"
+              delay="$2"
+              shift 2
+              n=1
+              while true; do
+                "$@" && return 0
+                if [ "$n" -ge "$attempts" ]; then
+                  echo "❌ Command failed after $attempts attempts: $*"
+                  return 1
+                fi
+                echo "⚠️ Attempt $n/$attempts failed. Retrying in ${delay}s: $*"
+                n=$((n + 1))
+                sleep "$delay"
+              done
+            }
+
             echo "=== Git pull RU ==="
             git fetch origin main
             git reset --hard origin/main
@@ -28,7 +45,9 @@ jobs:
 
             echo "=== Docker build RU ==="
             docker network inspect doctor-opus_default >/dev/null 2>&1 || docker network create doctor-opus_default
-            docker build -t doctor-opus-app-ru .
+            retry_cmd 5 20 docker pull node:20-bookworm
+            retry_cmd 5 20 docker pull postgres:15-alpine
+            retry_cmd 3 30 docker build -t doctor-opus-app-ru .
 
             echo "=== Ensure dedicated RU database container ==="
             POSTGRES_USER_VALUE=$(grep -E '^POSTGRES_USER=' /home/doctor-opus/.env 2>/dev/null | cut -d= -f2- || true)
