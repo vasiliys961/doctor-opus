@@ -1,6 +1,6 @@
 # 📘 Doctor Opus — Physician User Guide
 
-> **Important:** Doctor Opus is a Clinical Decision Support System (CDSS) for **licensed healthcare professionals only**. It is not FDA-approved and does not constitute a medical diagnosis. All AI-generated outputs require independent clinical verification. You bear full responsibility for all clinical decisions.
+> **Important:** Doctor Opus is beta Clinical Decision Support Software (CDSS) for **licensed healthcare professionals only**. It is not a medical device and does not provide final diagnosis or treatment orders. AI outputs depend on third-party LLM capabilities and may be incomplete or inaccurate. All AI-generated outputs require independent physician verification. Intended-use restriction: not for regulated clinical deployment in EU/US/UK jurisdictions. You bear full responsibility for all clinical decisions.
 
 Doctor Opus accelerates your clinical workflow by providing AI-assisted interpretation of medical imaging, lab data, genetic reports, and clinical notes. Each section contains contextual tips — review them on first use.
 
@@ -33,6 +33,17 @@ Once installed, the app opens full-screen, is accessible via icon, and works eve
 ## 🏠 Home
 
 Overview dashboard with quick navigation to all sections.
+
+---
+
+## ⚖️ Mandatory Legal Workflow
+
+After first login (or after legal version update), you must confirm legal acceptance before using clinical modules.
+
+When saving an AI result to a patient record:
+- A physician verification modal appears
+- You must confirm personal review and clinical responsibility
+- Audit log stores only case identifier + confirmation/hash metadata (no patient personal details are sent)
 
 ---
 
@@ -335,9 +346,17 @@ Credits are consumed when using advanced AI models. Simple reference lookups and
 | Local copier / calculators | Free |
 
 **Packages:**
-- **Starter:** 50 credits — $9.99
-- **Standard:** 150 credits — $24.99
-- **Pro:** 500 credits — $69.99
+- **Starter:** 50 credits — $6.99
+- **Standard:** 180 credits — $19.99
+- **Pro:** 600 credits — $59.99
+
+**Payment flow (current):**
+- Select package on the Subscription page
+- Send exact USDT amount via **TRON (TRC20)** to the wallet shown in the invoice
+- Paste transaction hash (`txHash`) to confirm payment automatically
+- Credits are added after transaction validation
+
+There are no trial credits for AI features.
 
 Exact cost of each request is shown in the result block immediately after analysis completes. Full transaction history is available in **Balance & History**.
 

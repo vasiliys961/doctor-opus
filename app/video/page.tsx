@@ -532,6 +532,7 @@ export default function VideoPage() {
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🎬 {t.title}</h1>
       
       <AnalysisTips 
+        recommendationProfile="video"
         content={{
           fast: t.tipFast,
           validated: t.tipValidated,

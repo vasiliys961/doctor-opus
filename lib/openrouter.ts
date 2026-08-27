@@ -5,49 +5,33 @@
  */
 
 import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
-import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
+import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, prepareVisionDataForTextPrompt, resolvePromptRuntimeVars } from './prompts';
 import { safeLog, safeError, safeWarn } from './logger';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
+import { getValidatedOpusModel } from './validated-opus-model';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
+import { appendClinicalDraftDisclaimer } from './clinical-disclaimer';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const RESPONSE_STOP_SEQUENCES = ['Defined by', 'defined by', '---', '###'];
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
+const DEFAULT_OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // В Next.js 14 используется встроенный fetch из Node.js 18+
 // fetch доступен глобально на сервере
 
-const resolveModel = (envName: string, fallback: string): string => {
-  const value = process.env[envName]?.trim();
-  return value || fallback;
-};
-
-// Модельный реестр (можно переопределить через .env без правок кода)
+// Актуальные модели (последние флагманы 2025-2026)
 export const MODELS = {
-  OPUS: resolveModel('MODEL_OPUS', 'anthropic/claude-opus-5'),
-  SONNET: resolveModel('MODEL_SONNET', 'anthropic/claude-sonnet-5'),
-  GPT_5_2: resolveModel('MODEL_GPT', 'openai/gpt-5.6-terra'),
-  HAIKU: resolveModel('MODEL_HAIKU', 'anthropic/claude-haiku-4.5'),
-  LLAMA: resolveModel('MODEL_LLAMA', 'meta-llama/llama-3.2-90b-vision-instruct'),
-  GEMINI_3_FLASH: resolveModel('MODEL_GEMINI_FLASH', 'google/gemini-3-flash-preview'),
-  GEMINI_3_PRO: resolveModel('MODEL_GEMINI_PRO', 'google/gemini-3.1-pro-preview'),
-  FABLE_5: resolveModel('MODEL_FABLE', 'anthropic/claude-fable-5'),
+  OPUS: 'anthropic/claude-opus-5',                         // Claude Opus 5
+  OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 5, rollback: VALIDATED_OPUS_MODEL=4.7
+  SONNET: 'anthropic/claude-sonnet-5',                   // Claude Sonnet 5
+  GPT_5_2: 'openai/gpt-5.6-terra',                  // GPT-5.6 Terra (legacy key name kept for compatibility)
+  GROK_4_5: 'x-ai/grok-4.5',                         // xAI Grok 4.5
+  HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
+  LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
+  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
+  GEMINI_3_PRO: 'google/gemini-3.1-pro-preview',           // Gemini 3.1 Pro Preview
+  FABLE_5: 'anthropic/claude-fable-5',                   // Claude Fable 5 — глубина рассуждений (HealthBench Professional)
+  FUGU_ULTRA: 'sakana/fugu-ultra',                       // Sakana Fugu Ultra — резервная модель без прямых мед. бенчмарков
 };
-
-const LEGACY_MODEL_ALIASES: Record<string, string> = {
-  'anthropic/claude-opus-4.6': MODELS.OPUS,
-  'anthropic/claude-sonnet-4.6': MODELS.SONNET,
-  'anthropic/claude-sonnet-4.5': MODELS.SONNET,
-  'openai/gpt-5.2': MODELS.GPT_5_2,
-  'openai/gpt-5.4': MODELS.GPT_5_2,
-  'google/gemini-3-flash-preview': MODELS.GEMINI_3_FLASH,
-  'google/gemini-3-flash': MODELS.GEMINI_3_FLASH,
-  'google/gemini-3.1-pro-preview': MODELS.GEMINI_3_PRO,
-  'google/gemini-3-pro': MODELS.GEMINI_3_PRO,
-};
-
-export function resolveModelId(model: string): string {
-  const normalized = model.trim();
-  return LEGACY_MODEL_ALIASES[normalized] || normalized;
-}
 
 const MODELS_LIST = [
   MODELS.OPUS,
@@ -127,6 +111,18 @@ function getChatFallbackModel(primaryModel: string): string | null {
   return null;
 }
 
+function shouldUsePermissionFallback(primaryModel: string, status: number, errorText: string): boolean {
+  if (primaryModel !== MODELS.GPT_5_2) return false;
+  const normalized = (errorText || '').toLowerCase();
+  return (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes('permission_denied') ||
+    normalized.includes('provider returned error') ||
+    normalized.includes('azure')
+  );
+}
+
 type RoutingImageQuality = 'good' | 'moderate' | 'poor';
 
 interface RoutingMetadata {
@@ -180,36 +176,41 @@ function shouldUseProByRouting(modality: string, routing: RoutingMetadata): { es
  */
 export async function analyzeImage(options: VisionRequestOptions): Promise<string> {
   // В Next.js API routes переменные окружения доступны через process.env
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    safeError('OPENROUTER_API_KEY не найден в переменных окружения');
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
+    safeError('LLM_API_KEY / OPENROUTER_API_KEY not found in environment');
+    throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured. Check environment variables.');
   }
 
   // Выбираем модель в зависимости от режима
-  let model = options.model ? resolveModelId(options.model) : undefined;
+  let model = options.model;
   if (!model) {
     if (options.mode === 'fast') {
       model = MODELS.GEMINI_3_FLASH; // Gemini Flash 1.5 для быстрого анализа
     } else {
       // Проверяем, является ли это сканированием документа
-      const isDocumentScan = options.prompt?.toLowerCase().includes('отсканируйте') || 
+      const isDocumentScan = options.prompt?.toLowerCase().includes('scan') ||
+                            options.prompt?.toLowerCase().includes('scanning') ||
+                            options.prompt?.toLowerCase().includes('extract text') ||
+                            options.prompt?.toLowerCase().includes('отсканируйте') || 
                             options.prompt?.toLowerCase().includes('сканирование') ||
                             options.prompt?.toLowerCase().includes('извлеките текст') ||
                             options.prompt?.toLowerCase().includes('ocr');
       if (isDocumentScan) {
         model = MODELS.GEMINI_3_FLASH; // Gemini 3 Flash — дешевле и лучше для сканирования
       } else {
-        model = MODELS.OPUS; // Opus 4.6 для точного анализа
+        model = MODELS.OPUS; // Opus 5 для точного анализа
       }
     }
   }
-  const prompt = options.prompt || 'Проанализируйте медицинское изображение.';
+  const prompt = options.prompt || 'Analyze this medical image.';
   
   // Определяем, является ли это сканированием документа (для OCR system prompt не нужен)
-  const isDocumentScan = prompt.toLowerCase().includes('отсканируйте') || 
+  const isDocumentScan = prompt.toLowerCase().includes('scan') ||
+                        prompt.toLowerCase().includes('scanning') ||
+                        prompt.toLowerCase().includes('extract text') ||
+                        prompt.toLowerCase().includes('отсканируйте') || 
                         prompt.toLowerCase().includes('сканирование') ||
                         prompt.toLowerCase().includes('извлеките текст') ||
                         prompt.toLowerCase().includes('ocr');
@@ -225,7 +226,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   // Добавляем клинический контекст в промпт, если он есть
   let fullPrompt = directiveCriteria;
   if (options.clinicalContext) {
-    fullPrompt = `${directiveCriteria}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${options.clinicalContext}`;
+    fullPrompt = `${directiveCriteria}\n\n=== PATIENT CLINICAL CONTEXT ===\n${options.clinicalContext}`;
   }
   
   // Формируем messages для OpenRouter API
@@ -249,7 +250,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
   ] : [
     {
       role: 'system' as const,
-      content: SYSTEM_PROMPT
+      content: resolvePromptRuntimeVars(SYSTEM_PROMPT)
     },
     {
       role: 'user' as const,
@@ -273,14 +274,13 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     messages,
     max_tokens: options.maxTokens || 10000, // Оптимизированный базовый лимит для стандартных отчетов
     temperature: 0.1,
-    stop: RESPONSE_STOP_SEQUENCES,
   };
 
   try {
     // Логируем для отладки (с маскировкой ключа через safeLog)
     safeLog('Calling OpenRouter API:', {
       url: OPENROUTER_API_URL,
-      model: resolveModelId(model),
+      model: model,
       hasApiKey: !!apiKey,
       mimeType,
       imageSize: options.imageBase64.length
@@ -307,7 +307,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       safeError('Invalid response format:', JSON.stringify(data).substring(0, 500));
-      throw new Error('Неверный формат ответа от OpenRouter API');
+      throw new Error('Invalid response format from OpenRouter API');
     }
 
     // Логирование токенов и стоимости
@@ -320,7 +320,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
       safeLog(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
     }
 
-    return data.choices[0].message.content || '';
+    return appendClinicalDraftDisclaimer(data.choices[0].message.content || '');
   } catch (error: any) {
     safeError('Error calling OpenRouter API:', {
       name: error.name,
@@ -330,11 +330,11 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
     
     // Обработка разных типов ошибок
     if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      throw new Error('Превышено время ожидания ответа от OpenRouter API. Попробуйте позже.');
+      throw new Error('OpenRouter API request timed out. Please try again later.');
     }
     
     if (error.message.includes('fetch failed') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
-      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки сервера.');
+      throw new Error('Network error while calling OpenRouter API. Check internet connection and server configuration.');
     }
     
     throw new Error(`Ошибка анализа изображения: ${error.message}`);
@@ -354,11 +354,10 @@ export async function analyzeImageFast(options: {
   clinicalContext?: string;
   isComparative?: boolean;
 }): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+    throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
   }
 
   const imageType = options.imageType || 'universal';
@@ -386,18 +385,18 @@ export async function analyzeImageFast(options: {
       MODELS.SONNET
     ];
     
-    const contextPrompt = `Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. На основе этих данных и своей экспертизы дай клиническую директиву. ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
+    const contextPrompt = `You are an expert medical assistant with professor-level clinical competence. Based on these data and your expertise, provide a clinical directive. RESPOND STRICTLY IN ENGLISH.
 
-=== СТРУКТУРИРОВАННЫЕ ДАННЫЕ (GEMINI 3.0) ===
-${JSON.stringify(jsonExtraction, null, 2)}
-\n=== ИНСТРУКЦИЯ ===
+=== STRUCTURED DATA (GEMINI 3.0) ===
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
+\n=== INSTRUCTION ===
 ${directivePrompt}
-${options.clinicalContext ? `\nКонтекст пациента: ${options.clinicalContext}` : ''}
+${options.clinicalContext ? `\nPatient context: ${options.clinicalContext}` : ''}
 
-ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.`;
+RESPOND STRICTLY IN ENGLISH.`;
     
     const messages = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: resolvePromptRuntimeVars(SYSTEM_PROMPT) },
       { role: 'user', content: contextPrompt }
     ];
 
@@ -418,13 +417,12 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
             messages: messages,
             max_tokens: 10000, // Оптимизировано: текстовый анализ
             temperature: 0.1,
-            stop: RESPONSE_STOP_SEQUENCES,
           })
         });
 
         if (textResponse.ok) {
           const textData = await textResponse.json();
-          return textData.choices[0].message.content || '';
+          return appendClinicalDraftDisclaimer(textData.choices[0].message.content || '');
         }
 
         const errorText = await textResponse.text();
@@ -439,7 +437,7 @@ ${options.clinicalContext ? `\nКонтекст пациента: ${options.clin
       }
     }
 
-    throw new Error('Не удалось завершить быстрый анализ ни через одну модель');
+    throw new Error('Fast analysis failed on all available models');
     
   } catch (error: any) {
     safeError('❌ [FAST] Ошибка:', error);
@@ -461,14 +459,13 @@ export async function analyzeImageOpusTwoStage(options: {
   targetModel?: string; 
   isRadiologyOnly?: boolean;
 }): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+    throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
   }
 
-  const prompt = options.prompt || 'Проанализируйте медицинское изображение.';
+  const prompt = options.prompt || 'Analyze this medical image.';
   const imageType = options.imageType || 'universal';
   const specialty = options.specialty;
   const isRadiologyOnly = options.isRadiologyOnly || false;
@@ -491,21 +488,21 @@ export async function analyzeImageOpusTwoStage(options: {
     const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
     const directiveCriteria = getDirectivePrompt(imageType, prompt, specialty);
     
-    // Шаг 2: Целевая модель (Opus, Sonnet или GPT-5.4)
-    const textModel = resolveModelId(options.targetModel || MODELS.SONNET);
+    // Шаг 2: Целевая модель (Opus, Sonnet или GPT-5.6 Terra)
+    const textModel = options.targetModel || MODELS.SONNET;
     let stage2ModelUsed = textModel;
     const fallbackModel = getStage2FallbackModel(textModel);
     
-    const mainPrompt = `ИНСТРУКЦИЯ: ${directiveCriteria}
+    const mainPrompt = `INSTRUCTION: ${directiveCriteria}
 
-### ТЕХНИЧЕСКИЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЯ (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+### TECHNICAL DATA FROM IMAGE (JSON):
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
-${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ НА РУССКОМ ЯЗЫКЕ.`;
+${options.clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${options.clinicalContext}\n\n` : ''}ANALYZE THE DATA AND PRODUCE A COMPLETE REPORT IN ENGLISH.`;
 
     const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
     const messages = [
-      { role: 'system' as const, content: basePrompt },
+      { role: 'system' as const, content: resolvePromptRuntimeVars(basePrompt) },
       { role: 'user' as const, content: mainPrompt }
     ];
 
@@ -521,11 +518,10 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
           'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify({
-          model: resolveModelId(targetModel),
+          model: targetModel,
           messages: messages,
           max_tokens: 10000, // Оптимизировано: двухэтапный анализ
           temperature: 0.1,
-          stop: RESPONSE_STOP_SEQUENCES,
         })
       });
     };
@@ -533,7 +529,11 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
     let textResponse = await runStage2Request(textModel);
     if (!textResponse.ok) {
       const errorText = await textResponse.text();
-      const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(textModel, textResponse.status, errorText);
+      const shouldFallback = !!fallbackModel && (
+        shouldUseStage2GeoFallback(textModel, textResponse.status, errorText) ||
+        shouldUsePermissionFallback(textModel, textResponse.status, errorText)
+      );
+      safeWarn(`[GEO-DEBUG] model=${textModel} status=${textResponse.status} shouldFallback=${shouldFallback} errorSnippet=${errorText.substring(0, 300)}`);
       if (shouldFallback) {
         safeWarn(`⚠️ [TWO-STAGE] Региональная недоступность ${textModel}, переключение на ${fallbackModel}`);
         stage2ModelUsed = fallbackModel!;
@@ -574,7 +574,7 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
       safeLog(`   📊 ИТОГО (комбинированно): ${combinedCost.totalTokens.toLocaleString('ru-RU')} токенов, ${combinedCost.totalCostUnits.toFixed(2)} ед. ($${combinedCost.totalCostUsd.toFixed(4)})`);
     }
     
-    return result;
+    return appendClinicalDraftDisclaimer(result);
   } catch (error: any) {
     safeError('Error in analyzeImageOpusTwoStage:', error);
     throw new Error(`Ошибка анализа: ${error.message}`);
@@ -594,11 +594,10 @@ export async function extractImageJSON(options: {
   preferModel?: string;
   isComparative?: boolean;
 }): Promise<any> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY is not configured');
+    throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
   }
 
   const modality = options.modality || 'unknown';
@@ -643,7 +642,6 @@ export async function extractImageJSON(options: {
       messages: [{ role: 'user', content }],
       max_tokens: 16000,
       temperature: 0.1,
-      stop: ['Defined by', 'defined by'],
     };
 
     const response = await fetchWithTimeout(OPENROUTER_API_URL, {
@@ -814,9 +812,8 @@ export async function analyzeMultipleImagesTwoStage(options: {
   isRadiologyOnly?: boolean;
   isComparative?: boolean;
 }): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
 
   const imageType = options.imageType || 'universal';
   const specialty = options.specialty;
@@ -837,20 +834,20 @@ export async function analyzeMultipleImagesTwoStage(options: {
     const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
     const directiveCriteria = getDirectivePrompt(imageType, options.prompt, specialty);
     
-    const textModel = resolveModelId(options.targetModel || MODELS.SONNET);
+    const textModel = options.targetModel || MODELS.SONNET;
     let stage2ModelUsed = textModel;
     const fallbackModel = getStage2FallbackModel(textModel);
     
     const contextPrompt = `${options.isComparative
-      ? 'Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. Проведи сравнительную клиническую интерпретацию данных по НЕСКОЛЬКИМ изображениям, полученных от Специалиста.'
-      : 'Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. Проведи единый клинический анализ набора изображений одного исследования, без трактовки динамики во времени.'} ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.
+      ? 'You are an expert medical assistant with professor-level competence. Provide a comparative clinical interpretation of data from MULTIPLE images supplied by the specialist.'
+      : 'You are an expert medical assistant with professor-level competence. Provide one integrated clinical analysis of images from a single study, without temporal trend interpretation.'} RESPOND STRICTLY IN ENGLISH.
 
-### ДАННЫЕ ОТ СПЕЦИАЛИСТА (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+### SPECIALIST DATA (JSON):
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
-${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ НА РУССКОМ ЯЗЫКЕ.
+${options.clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${options.clinicalContext}\n\n` : ''}ANALYZE THE DATA AND PRODUCE A COMPLETE REPORT IN ENGLISH.
 
-ИНСТРУКЦИЯ К КЛИНИЧЕСКОЙ ДИРЕКТИВЕ:
+CLINICAL DIRECTIVE INSTRUCTION:
 ${directiveCriteria}`;
     
     const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
@@ -866,14 +863,13 @@ ${directiveCriteria}`;
           'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify({
-          model: resolveModelId(targetModel),
+          model: targetModel,
           messages: [
-            { role: 'system' as const, content: basePrompt },
+            { role: 'system' as const, content: resolvePromptRuntimeVars(basePrompt) },
             { role: 'user' as const, content: contextPrompt }
           ],
           max_tokens: 12000, // Оптимизировано: множественные изображения
           temperature: 0.1,
-          stop: RESPONSE_STOP_SEQUENCES,
         })
       });
     };
@@ -881,7 +877,10 @@ ${directiveCriteria}`;
     let textResponse = await runStage2Request(textModel);
     if (!textResponse.ok) {
       const errorText = await textResponse.text();
-      const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(textModel, textResponse.status, errorText);
+      const shouldFallback = !!fallbackModel && (
+        shouldUseStage2GeoFallback(textModel, textResponse.status, errorText) ||
+        shouldUsePermissionFallback(textModel, textResponse.status, errorText)
+      );
       if (shouldFallback) {
         safeWarn(`⚠️ [MULTI-TWO-STAGE] Региональная недоступность ${textModel}, переключение на ${fallbackModel}`);
         stage2ModelUsed = fallbackModel!;
@@ -918,7 +917,7 @@ ${directiveCriteria}`;
       safeLog(`   📊 ИТОГО (комбинированно): ${combinedCost.totalTokens.toLocaleString('ru-RU')} токенов, ${combinedCost.totalCostUnits.toFixed(2)} ед. ($${combinedCost.totalCostUsd.toFixed(4)})`);
     }
 
-    return result;
+    return appendClinicalDraftDisclaimer(result);
     
   } catch (error: any) {
     safeError('Error in analyzeMultipleImagesTwoStage:', error);
@@ -939,19 +938,18 @@ export async function analyzeMultipleImages(options: {
   imageType?: ImageType;
   specialty?: Specialty;
 }): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    safeError('OPENROUTER_API_KEY не найден в переменных окружения');
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
+    safeError('LLM_API_KEY / OPENROUTER_API_KEY не найден в переменных окружения');
+    throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured. Check environment variables.');
   }
 
   if (options.imagesBase64.length === 0) {
-    throw new Error('Необходимо предоставить минимум одно изображение');
+    throw new Error('At least one image must be provided');
   }
 
-  const model = resolveModelId(options.model || MODELS.OPUS); // Используем Opus для точного сравнительного анализа
+  const model = options.model || MODELS.OPUS; // Используем Opus для точного сравнительного анализа
   const imageType = options.imageType || 'universal';
   const specialty = options.specialty;
   
@@ -962,7 +960,7 @@ export async function analyzeMultipleImages(options: {
   // Добавляем клинический контекст в промпт, если он есть
   let fullPrompt = directiveCriteria;
   if (options.clinicalContext) {
-    fullPrompt = `${directiveCriteria}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${options.clinicalContext}`;
+    fullPrompt = `${directiveCriteria}\n\n=== PATIENT CLINICAL CONTEXT ===\n${options.clinicalContext}`;
   }
   
   // Формируем content с текстом и всеми изображениями
@@ -987,7 +985,7 @@ export async function analyzeMultipleImages(options: {
   const messages = [
     {
       role: 'system' as const,
-      content: SYSTEM_PROMPT
+      content: resolvePromptRuntimeVars(SYSTEM_PROMPT)
     },
     {
       role: 'user' as const,
@@ -1000,13 +998,12 @@ export async function analyzeMultipleImages(options: {
     messages,
     max_tokens: options.maxTokens || 12000, // Оптимизировано для сравнительного анализа
     temperature: 0.1,
-    stop: RESPONSE_STOP_SEQUENCES,
   };
 
   try {
     safeLog(`Calling OpenRouter API with ${options.imagesBase64.length} images for comparative analysis:`, {
       url: OPENROUTER_API_URL,
-      model: resolveModelId(model),
+      model: model,
       hasApiKey: !!apiKey,
       imageCount: options.imagesBase64.length,
       imageSizes: options.imagesBase64.map(img => img.length)
@@ -1035,7 +1032,7 @@ export async function analyzeMultipleImages(options: {
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       safeError('Invalid response format:', JSON.stringify(data).substring(0, 500));
-      throw new Error('Неверный формат ответа от OpenRouter API');
+      throw new Error('Invalid response format from OpenRouter API');
     }
 
     // Логирование токенов и стоимости
@@ -1048,7 +1045,7 @@ export async function analyzeMultipleImages(options: {
       safeLog(`   📊 ${formatCostLog(model, inputTokens, outputTokens, tokensUsed)}`);
     }
 
-    return data.choices[0].message.content || '';
+    return appendClinicalDraftDisclaimer(data.choices[0].message.content || '');
   } catch (error: any) {
     safeError('Error calling OpenRouter API for multiple images:', {
       name: error.name,
@@ -1057,11 +1054,11 @@ export async function analyzeMultipleImages(options: {
     });
     
     if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      throw new Error('Превышено время ожидания ответа от OpenRouter API (180 сек). Попробуйте уменьшить количество изображений.');
+      throw new Error('OpenRouter API timed out (180s). Try reducing the number of images.');
     }
     
     if (error.message.includes('fetch failed') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
-      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки сервера.');
+      throw new Error('Network error while calling OpenRouter API. Check internet connection and server configuration.');
     }
     
     throw new Error(`Ошибка анализа множественных изображений: ${error.message}`);
@@ -1071,35 +1068,48 @@ export async function analyzeMultipleImages(options: {
 /**
  * Текстовый запрос к OpenRouter API (для чата)
  */
-export async function sendTextRequest(
+export interface TextRequestUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  total_cost: number;
+}
+
+export interface TextRequestResult {
+  content: string;
+  modelUsed: string;
+  usage: TextRequestUsage;
+}
+
+export async function sendTextRequestWithUsage(
   prompt: string, 
   history: Array<{role: string, content: string}> = [],
   model: string = MODELS.OPUS,
-  specialty?: Specialty
-): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
+  specialty?: Specialty,
+  customSystemPrompt?: string
+): Promise<TextRequestResult> {
+  const apiKey = getLlmApiKey();
   
   if (!apiKey) {
-    safeError('OPENROUTER_API_KEY не найден в переменных окружения');
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
+    safeError('LLM_API_KEY / OPENROUTER_API_KEY не найден в переменных окружения');
+    throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured. Check environment variables.');
   }
 
-  let selectedModel = resolveModelId(model);
+  let selectedModel = model;
   const { TITAN_CONTEXTS } = await import('./prompts');
   
   // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
   const basePrompt = specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT;
-  let systemPrompt = history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt;
+  let systemPrompt = customSystemPrompt || (history.length > 0 ? DIALOGUE_SYSTEM_PROMPT : basePrompt);
   
-  if (specialty && TITAN_CONTEXTS[specialty]) {
+  if (!customSystemPrompt && specialty && TITAN_CONTEXTS[specialty]) {
     systemPrompt = `${systemPrompt}\n\n${TITAN_CONTEXTS[specialty]}`;
   }
   
   const messages = [
     {
       role: 'system' as const,
-      content: systemPrompt
+      content: resolvePromptRuntimeVars(systemPrompt)
     },
     ...history.map(msg => ({
       role: msg.role as 'user' | 'assistant',
@@ -1124,47 +1134,54 @@ export async function sendTextRequest(
     let response: Response | null = null;
     const sendWithRetries = async (targetModel: string): Promise<Response> => {
       let attemptResponse: Response | null = null;
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        const payload = {
-          model: resolveModelId(targetModel),
-          messages,
-          max_tokens: 10000, // Оптимизировано: текстовый запрос
-          temperature: 0.1,
-          stop: RESPONSE_STOP_SEQUENCES,
-        };
-        try {
-          attemptResponse = await fetchWithTimeout(OPENROUTER_API_URL, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-          }, REQUEST_TIMEOUT_MS);
-          return attemptResponse;
-        } catch (err: any) {
-          const message = String(err?.message || '').toLowerCase();
-          const isTransientNetworkError =
-            err?.name === 'AbortError' ||
-            err?.name === 'TimeoutError' ||
-            message.includes('fetch failed') ||
-            message.includes('und_err_connect_timeout') ||
-            message.includes('etimedout') ||
-            message.includes('econnreset') ||
-            message.includes('econnrefused') ||
-            message.includes('enotfound') ||
-            message.includes('network');
+      const urlsToTry = OPENROUTER_API_URL === DEFAULT_OPENROUTER_API_URL
+        ? [OPENROUTER_API_URL]
+        : [OPENROUTER_API_URL, DEFAULT_OPENROUTER_API_URL];
 
-          if (!isTransientNetworkError || attempt === MAX_RETRIES) {
-            throw err;
+      let lastError: any = null;
+      for (const apiUrl of urlsToTry) {
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          const payload = {
+            model: targetModel,
+            messages,
+            max_tokens: 10000, // Оптимизировано: текстовый запрос
+            temperature: 0.1,
+          };
+          try {
+            attemptResponse = await fetchWithTimeout(apiUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(payload)
+            }, REQUEST_TIMEOUT_MS);
+            return attemptResponse;
+          } catch (err: any) {
+            lastError = err;
+            const message = String(err?.message || '').toLowerCase();
+            const isTransientNetworkError =
+              err?.name === 'AbortError' ||
+              err?.name === 'TimeoutError' ||
+              message.includes('fetch failed') ||
+              message.includes('und_err_connect_timeout') ||
+              message.includes('etimedout') ||
+              message.includes('econnreset') ||
+              message.includes('econnrefused') ||
+              message.includes('enotfound') ||
+              message.includes('network');
+
+            if (!isTransientNetworkError || attempt === MAX_RETRIES) {
+              break;
+            }
+
+            const backoffMs = 1200 * (attempt + 1);
+            safeWarn(`OpenRouter text request transient network error (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms`);
+            await sleep(backoffMs);
           }
-
-          const backoffMs = 1200 * (attempt + 1);
-          safeWarn(`OpenRouter text request transient network error (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms`);
-          await sleep(backoffMs);
         }
       }
-      throw new Error('OpenRouter text request failed: no response received');
+      throw lastError || new Error('OpenRouter text request failed: no response received');
     };
 
     response = await sendWithRetries(selectedModel);
@@ -1178,9 +1195,12 @@ export async function sendTextRequest(
     if (!response.ok) {
       const errorText = await response.text();
       const fallbackModel = getChatFallbackModel(selectedModel);
-      const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
+      const shouldFallback = !!fallbackModel && (
+        (isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText)) ||
+        shouldUsePermissionFallback(selectedModel, response.status, errorText)
+      );
       if (shouldFallback) {
-        safeWarn(`⚠️ [CHAT FALLBACK] Модель ${selectedModel} недоступна по региону, переключаемся на ${fallbackModel}`);
+        safeWarn(`⚠️ [CHAT FALLBACK] Модель ${selectedModel} временно недоступна у провайдера, переключаемся на ${fallbackModel}`);
         selectedModel = fallbackModel!;
         response = await sendWithRetries(selectedModel);
       } else {
@@ -1199,7 +1219,7 @@ export async function sendTextRequest(
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       safeError('Invalid response format:', JSON.stringify(data).substring(0, 500));
-      throw new Error('Неверный формат ответа от OpenRouter API');
+      throw new Error('Invalid response format from OpenRouter API');
     }
 
     // Логирование токенов и стоимости
@@ -1211,8 +1231,18 @@ export async function sendTextRequest(
       safeLog(`✅ [${selectedModel}] Запрос завершен`);
       safeLog(`   📊 ${formatCostLog(selectedModel, inputTokens, outputTokens, tokensUsed)}`);
     }
+    const usageCost = calculateCost(inputTokens, outputTokens, selectedModel).totalCostUnits;
 
-    return data.choices[0].message.content || '';
+    return {
+      content: appendClinicalDraftDisclaimer(data.choices[0].message.content || ''),
+      modelUsed: selectedModel,
+      usage: {
+        prompt_tokens: inputTokens,
+        completion_tokens: outputTokens,
+        total_tokens: tokensUsed || (inputTokens + outputTokens),
+        total_cost: Number(data?.usage?.total_cost) > 0 ? Number(data.usage.total_cost) : usageCost,
+      },
+    };
   } catch (error: any) {
     safeError('Error calling OpenRouter API:', {
       name: error.name,
@@ -1221,7 +1251,7 @@ export async function sendTextRequest(
     });
     
     if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      throw new Error('Превышено время ожидания ответа от OpenRouter API. Попробуйте позже.');
+      throw new Error('OpenRouter API request timed out. Please try again later.');
     }
     
     if (
@@ -1233,9 +1263,20 @@ export async function sendTextRequest(
       error.message.includes('ETIMEDOUT') ||
       error.message.includes('ECONNRESET')
     ) {
-      throw new Error('Ошибка сети при обращении к OpenRouter API. Проверьте подключение к интернету и настройки сервера.');
+      throw new Error('Network error while calling OpenRouter API. Check internet connection and server configuration.');
     }
     
     throw new Error(`Ошибка запроса: ${error.message}`);
   }
+}
+
+export async function sendTextRequest(
+  prompt: string, 
+  history: Array<{role: string, content: string}> = [],
+  model: string = MODELS.OPUS,
+  specialty?: Specialty,
+  customSystemPrompt?: string
+): Promise<string> {
+  const result = await sendTextRequestWithUsage(prompt, history, model, specialty, customSystemPrompt);
+  return result.content;
 }

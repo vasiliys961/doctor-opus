@@ -4,6 +4,7 @@ import { calculateCost } from '@/lib/cost-calculator';
 import { anonymizeText } from '@/lib/anonymization';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { checkAndDeductBalance } from '@/lib/server-billing';
 
 // Максимальное время выполнения для тяжелых видео (5 минут)
 export const maxDuration = 300;
@@ -17,6 +18,14 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+
     // ... (код проверки API ключа и файла остается прежним)
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
@@ -24,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: 'OPENROUTER_API_KEY is not configured. Check .env.local.',
+          error: 'OPENROUTER_API_KEY не настроен. Проверьте .env.local.',
         },
         { status: 500 },
       );
@@ -46,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json(
-        { success: false, error: 'Video file not provided' },
+        { success: false, error: 'Видео-файл не передан' },
         { status: 400 },
       );
     }
@@ -62,6 +71,23 @@ export async function POST(request: NextRequest) {
           )}MB)`,
         },
         { status: 400 },
+      );
+    }
+
+    // Обязательная серверная проверка баланса перед запуском тяжелого анализа видео.
+    const estimatedCost = Number(
+      Math.min(20, Math.max(4, 4 + (file.size / (20 * 1024 * 1024)) * 2)).toFixed(2)
+    );
+    const billing = await checkAndDeductBalance(
+      session.user.email,
+      estimatedCost,
+      'Video analysis',
+      { mode: 'video', fileSize: file.size, mimeType: file.type || null }
+    );
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Insufficient balance' },
+        { status: 402 }
       );
     }
 

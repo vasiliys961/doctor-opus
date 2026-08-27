@@ -1,18 +1,78 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compression'
 import ImageEditor from './ImageEditor'
+import MobileBridgeInboxPicker from './MobileBridgeInboxPicker'
 import { getClientLocale } from '@/lib/i18n/client'
-import { uploadComponentMessages } from '@/lib/i18n/ui-client-messages'
 import type { Locale } from '@/lib/i18n/config'
+
+const FILE_UPLOAD_TEXT = {
+  en: {
+    fileTooLarge: (name: string, maxSize: number) => `File ${name} is too large. Maximum size: ${maxSize}MB`,
+    duplicateFile: (name: string) => `File ${name} is already added`,
+    processingError: 'Error while processing files',
+    editTitle: 'Open editor for precise anonymization',
+    editButton: 'Edit',
+    deleteTitle: 'Remove file',
+    anonymizeTitle: 'Black out areas with personal data on all images',
+    anonymizeButton: 'Anonymize all images',
+    anonymizeHint: 'Automatically hides zones with personal data on all uploaded images.',
+    optimizing: 'Optimizing files...',
+    chooseFiles: 'Choose files',
+    chooseFolder: 'Choose folder',
+    takePhoto: 'Take photo',
+    dragHint: 'or drag a folder with images here',
+    supported: 'Supported: DICOM series (.dcm), images (JPG, PNG), PDF, documents',
+    maxFileSize: 'Maximum file size:',
+    multipleAllowed: '• You can upload multiple files',
+    saveError: 'Error saving file in FileUpload:',
+  },
+  ru: {
+    fileTooLarge: (name: string, maxSize: number) => `Файл ${name} слишком большой. Максимальный размер: ${maxSize}MB`,
+    duplicateFile: (name: string) => `Файл ${name} уже добавлен`,
+    processingError: 'Ошибка при обработке файлов',
+    editTitle: 'Открыть редактор для точной анонимизации',
+    editButton: 'Редактировать',
+    deleteTitle: 'Удалить файл',
+    anonymizeTitle: 'Закрасить черным области с персональными данными на всех изображениях',
+    anonymizeButton: 'Анонимизировать все изображения',
+    anonymizeHint: 'Автоматически скроет зоны с ФИО и персональными данными на всех загруженных снимках.',
+    optimizing: 'Оптимизация файлов...',
+    chooseFiles: 'Выбрать файлы',
+    chooseFolder: 'Выбрать папку',
+    takePhoto: 'Сделать фото',
+    dragHint: 'или перетащите папку со снимками сюда',
+    supported: 'Поддерживаются: DICOM серии (.dcm), изображения (JPG, PNG), PDF, документы',
+    maxFileSize: 'Максимальный размер файла:',
+    multipleAllowed: '• Можно загрузить несколько файлов',
+    saveError: 'Ошибка сохранения файла в FileUpload:',
+  },
+} as const;
 
 interface FileUploadProps {
   onUpload: (files: File[]) => void
   accept?: string
   maxSize?: number // в MB
   multiple?: boolean
+  bridgePullTarget?: string
   anonymizationMode?: 'strict' | 'soft'
+}
+
+const BRIDGE_DRAFT_KEYS: Record<string, string> = {
+  chat: 'mobile_bridge_chat_draft',
+  protocol: 'protocol_draft',
+  library: 'mobile_bridge_library_draft',
+  clinical_context: 'mobile_bridge_clinical_context_draft',
+  image_analysis: 'mobile_bridge_image_analysis_draft',
+  ecg_analysis: 'mobile_bridge_ecg_analysis_draft',
+  xray_analysis: 'mobile_bridge_xray_analysis_draft',
+  ct_analysis: 'mobile_bridge_ct_analysis_draft',
+  mri_analysis: 'mobile_bridge_mri_analysis_draft',
+  ultrasound_analysis: 'mobile_bridge_ultrasound_analysis_draft',
+  lab_analysis: 'mobile_bridge_lab_analysis_draft',
+  video_analysis: 'mobile_bridge_video_analysis_draft',
+  document_scan: 'mobile_bridge_document_scan_draft',
 }
 
 export default function FileUpload({ 
@@ -20,25 +80,92 @@ export default function FileUpload({
   accept = 'image/*,application/pdf,.doc,.docx,.txt,.csv', 
   maxSize = 50,
   multiple = true,
+  bridgePullTarget = '',
   anonymizationMode = 'strict',
 }: FileUploadProps) {
-  const [locale, setLocale] = useState<Locale>('en')
-  const t = uploadComponentMessages[locale]
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewFiles, setPreviewFiles] = useState<Array<{ file: File; preview?: string }>>([])
   const [isCompressing, setIsCompressing] = useState(false)
   const [editingFileIndex, setEditingFileIndex] = useState<number | null>(null)
+  const [locale, setLocale] = useState<Locale>('en')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+  const bridgeDraftConsumedRef = useRef(false)
 
   useEffect(() => {
     setLocale(getClientLocale())
   }, [])
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!bridgePullTarget) return
+    if (bridgeDraftConsumedRef.current) return
+    bridgeDraftConsumedRef.current = true
+
+    const storageKey = BRIDGE_DRAFT_KEYS[bridgePullTarget]
+    if (!storageKey || storageKey === 'protocol_draft') return
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return
+
+    const inferExt = (mime: string): string => {
+      const lower = mime.toLowerCase()
+      if (lower.includes('jpeg')) return 'jpg'
+      if (lower.includes('png')) return 'png'
+      if (lower.includes('webp')) return 'webp'
+      if (lower.includes('pdf')) return 'pdf'
+      if (lower.startsWith('video/')) return lower.split('/')[1] || 'mp4'
+      if (lower.startsWith('text/')) return 'txt'
+      return 'bin'
+    }
+
+    const makeSafeName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'mobile-bridge'
+
+    void (async () => {
+      try {
+        const payload = JSON.parse(raw) as {
+          title?: string
+          dataUrl?: string
+          mimeType?: string
+          text?: string
+        }
+
+        let file: File | null = null
+        const title = makeSafeName(payload.title || 'mobile-bridge')
+        const mime = (payload.mimeType || '').trim()
+
+        if (payload.dataUrl?.startsWith('data:')) {
+          const match = payload.dataUrl.match(/^data:(.+?);base64,(.+)$/)
+          if (match) {
+            const dataMime = match[1] || mime || 'application/octet-stream'
+            const binary = atob(match[2])
+            const bytes = new Uint8Array(binary.length)
+            for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+            file = new File([bytes], `${title}.${inferExt(dataMime)}`, { type: dataMime })
+          }
+        } else if ((payload.text || '').trim()) {
+          const finalMime = mime || 'text/plain'
+          file = new File([payload.text.trim()], `${title}.${inferExt(finalMime)}`, { type: finalMime })
+        }
+
+        if (file) {
+          await handleFiles([file])
+        }
+      } catch {
+        // ignore corrupted bridge payload
+      } finally {
+        localStorage.removeItem(storageKey)
+      }
+    })()
+  }, [bridgePullTarget])
+
+  const t = locale === 'ru' ? FILE_UPLOAD_TEXT.ru : FILE_UPLOAD_TEXT.en
+
+  const handleFiles = async (filesInput: FileList | File[] | null) => {
+    if (!filesInput) return
+    const files = Array.isArray(filesInput) ? filesInput : Array.from(filesInput)
+    if (files.length === 0) return
 
     setError(null)
     const validFiles: File[] = []
@@ -46,10 +173,10 @@ export default function FileUpload({
     setIsCompressing(true)
 
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         // Проверка размера
         if (file.size > maxSize * 1024 * 1024) {
-          setError(`File ${file.name} ${t.fileTooLarge} ${maxSize}MB`)
+          setError(t.fileTooLarge(file.name, maxSize))
           continue
         }
 
@@ -61,7 +188,7 @@ export default function FileUpload({
         )
         
         if (isDuplicate) {
-          setError(`File ${file.name} ${t.fileAlreadyAdded}`)
+          setError(t.duplicateFile(file.name))
           continue
         }
 
@@ -217,6 +344,16 @@ export default function FileUpload({
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   }
 
+  const openBridgeForSection = () => {
+    const params = new URLSearchParams()
+    if (bridgePullTarget) {
+      params.set('pullTarget', bridgePullTarget)
+    }
+    params.set('focusInbox', '1')
+    const suffix = params.toString()
+    window.open(`/mobile-bridge${suffix ? `?${suffix}` : ''}`, '_blank')
+  }
+
   return (
     <div className="w-full">
       {previewFiles.length > 0 && (
@@ -246,15 +383,15 @@ export default function FileUpload({
                   <button
                     onClick={() => setEditingFileIndex(idx)}
                     className="text-blue-600 hover:text-blue-800 text-sm font-medium px-2"
-                    title="Open editor for precise anonymization"
+                    title={t.editTitle}
                   >
-                    🎨 Редактировать
+                    🎨 {t.editButton}
                   </button>
                 )}
                 <button
                   onClick={() => removeFile(item.file)}
                   className="text-red-500 hover:text-red-700 text-xl"
-                  title="Remove file"
+                  title={t.deleteTitle}
                 >
                   ✕
                 </button>
@@ -269,13 +406,12 @@ export default function FileUpload({
                 onClick={anonymizeAllImages}
                 disabled={isCompressing}
                 className="w-full flex items-center justify-center space-x-2 py-2 px-4 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Redact personal data areas on all images"
+                title={t.anonymizeTitle}
               >
-                <span>🛡️ {t.quickAnonymize}</span>
+                <span>🛡️ {t.anonymizeButton}</span>
               </button>
               <p className="text-xs text-gray-500 mt-2 italic text-center">
-                Automatically hides areas with names and personal data on all uploaded scans. 
-                PHI protection.
+                {t.anonymizeHint}
               </p>
             </div>
           )}
@@ -329,7 +465,7 @@ export default function FileUpload({
           {isCompressing ? (
             <div className="flex flex-col items-center space-y-2">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
-              <p className="text-primary-600 font-medium">{t.processingData}</p>
+              <p className="text-primary-600 font-medium">{t.optimizing}</p>
             </div>
           ) : (
             <>
@@ -350,24 +486,39 @@ export default function FileUpload({
                 >
                   📂 {t.chooseFolder}
                 </button>
-                
                 <button
                   onClick={() => cameraInputRef.current?.click()}
                   className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-semibold"
                 >
                   📷 {t.takePhoto}
                 </button>
+                <MobileBridgeInboxPicker
+                  onImport={(filesFromInbox) => {
+                    void handleFiles(filesFromInbox)
+                  }}
+                  accept={accept}
+                  multiple={multiple}
+                  preferredTarget={bridgePullTarget}
+                  buttonClassName="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors font-semibold"
+                />
+                <button
+                  type="button"
+                  onClick={openBridgeForSection}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors font-semibold"
+                >
+                  {locale === 'ru' ? '📲 Камера телефона (этот раздел)' : '📲 Phone camera (this section)'}
+                </button>
               </div>
               
-              <span className="text-gray-600">{t.dragFolder}</span>
+              <span className="text-gray-600">{t.dragHint}</span>
             </>
           )}
           
           <p className="text-sm text-gray-500">
-            {t.supportedExtended}
+            {t.supported}
             <br />
-            Max file size: {maxSize}MB
-            {multiple && ` • ${t.multipleFilesHint}`}
+            {t.maxFileSize} {maxSize}MB
+            {multiple && ` ${t.multipleAllowed}`}
           </p>
         </div>
       </div>
@@ -411,7 +562,7 @@ export default function FileUpload({
                   return updated;
                 });
               })
-              .catch(err => console.error('Ошибка сохранения файла в FileUpload:', err));
+              .catch(err => console.error(t.saveError, err));
           }}
           onCancel={() => setEditingFileIndex(null)}
         />

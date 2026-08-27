@@ -7,10 +7,10 @@ import { calculateCost } from './cost-calculator';
 
 // Глобальный флаг включения системы (Всегда включено для учета, блокировка зависит от env)
 const SUBSCRIPTION_ENABLED = true;
-const SUBSCRIPTION_STRICT_MODE = process.env.NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE === 'true';
+const SUBSCRIPTION_STRICT_MODE = process.env.NEXT_PUBLIC_SUBSCRIPTION_STRICT_MODE !== 'false';
 
 // Настройки стартового баланса
-export const ANONYMOUS_BALANCE = 10; // 10 ед. анонимно
+export const ANONYMOUS_BALANCE = 0; // Пробный баланс отключен
 export const REGISTERED_BONUS = 0;   // Дополнительного бонуса за регистрацию нет
 export const SOFT_LIMIT = 0;         // Овердрафт отключен
 
@@ -44,7 +44,7 @@ export const SUBSCRIPTION_PACKAGES = {
   starter: { 
     name: 'Starter', 
     credits: 50,
-    priceUsd: 9.99,
+    priceUsd: 6.99,
     bonusPercent: 0,
     description: 'Try the full capabilities of AI-powered medical analysis',
     recommended: false,
@@ -53,7 +53,7 @@ export const SUBSCRIPTION_PACKAGES = {
   standard: { 
     name: 'Standard', 
     credits: 180,
-    priceUsd: 29.99,
+    priceUsd: 19.99,
     bonusPercent: 0,
     description: 'For regular clinical use — covers weeks of active practice',
     recommended: false,
@@ -62,39 +62,11 @@ export const SUBSCRIPTION_PACKAGES = {
   pro: { 
     name: 'Pro', 
     credits: 600,
-    priceUsd: 79.99,
+    priceUsd: 59.99,
     bonusPercent: 0,
     description: 'The working tool for the practicing physician',
     recommended: true,
     category: 'individual'
-  },
-  // === TEAM PACKAGES (for clinics) ===
-  department: { 
-    name: 'Department', 
-    credits: 2200,
-    priceUsd: 299.00,
-    bonusPercent: 0,
-    description: 'Shared pool for 2–5 physicians with usage analytics',
-    recommended: false,
-    category: 'team'
-  },
-  clinic: { 
-    name: 'Clinic', 
-    credits: 6000,
-    priceUsd: 699.00,
-    bonusPercent: 0,
-    description: 'For teams up to 10 physicians with priority support',
-    recommended: false,
-    category: 'team'
-  },
-  center: { 
-    name: 'Medical Center', 
-    credits: 14000,
-    priceUsd: 1299.00,
-    bonusPercent: 0,
-    description: 'For large centers up to 20 physicians',
-    recommended: false,
-    category: 'team'
   },
 } as const;
 
@@ -147,7 +119,7 @@ export function getBalance(): SubscriptionBalance | null {
         initialCredits: ANONYMOUS_BALANCE,
         currentCredits: ANONYMOUS_BALANCE,
         totalSpent: 0,
-        packageName: 'Пробный (Анонимный)',
+        packageName: 'No active package',
         packagePriceUsd: 0,
         purchaseDate: new Date().toISOString(),
         expiryDate: null,
@@ -196,26 +168,16 @@ export function upgradeBalanceToRegistered(email?: string | null): void {
 
     const targetTotal = ANONYMOUS_BALANCE + REGISTERED_BONUS;
 
-    // Единый стартовый бонус: 10 ед. без дополнительной надбавки после регистрации.
-    if (balance.packageName.includes('Анонимный') || balance.packageName.includes('Free')) {
-      if (balance.initialCredits < targetTotal) {
-        const diff = targetTotal - balance.initialCredits;
-        balance.currentCredits += diff;
-        balance.initialCredits = targetTotal;
-      } else if (balance.initialCredits > targetTotal && balance.packageName.includes('Free')) {
-        balance.initialCredits = targetTotal;
-        balance.currentCredits = Math.min(balance.currentCredits, targetTotal);
-      }
-      
-      balance.packageName = 'Стартовый (Зарегистрирован)';
-      localStorage.setItem(BALANCE_KEY, JSON.stringify(balance));
-      
-      // Вызываем событие обновления баланса для UI
+    // Пробный баланс отключен: для не-VIP оставляем нулевой старт.
+    if (balance.initialCredits !== targetTotal || balance.currentCredits < 0) {
+      balance.initialCredits = targetTotal
+      balance.currentCredits = Math.max(0, Math.min(balance.currentCredits, targetTotal))
+      balance.packageName = targetTotal > 0 ? 'Registered' : 'No active package'
+      localStorage.setItem(BALANCE_KEY, JSON.stringify(balance))
+
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('balanceUpdated'));
+        window.dispatchEvent(new Event('balanceUpdated'))
       }
-      
-      console.log(`🎁 [SUBSCRIPTION] Баланс обновлен до стартового: ${targetTotal} ед.`);
     }
   } catch (error) {
     console.error('❌ [SUBSCRIPTION] Error upgrading balance:', error);

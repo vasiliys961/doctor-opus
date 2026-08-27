@@ -91,6 +91,9 @@ export const RATE_LIMIT_AUTH: RateLimitConfig = { limit: 10, windowSec: 300 };
 /** Upload файлов: 15 запросов / 60 сек */
 export const RATE_LIMIT_UPLOAD: RateLimitConfig = { limit: 15, windowSec: 60 };
 
+/** Consilium: дорогой pipeline, ограничиваем отдельно */
+export const RATE_LIMIT_CONSILIUM: RateLimitConfig = { limit: 12, windowSec: 60 };
+
 /** Общий (по умолчанию): 60 запросов / 60 сек */
 export const RATE_LIMIT_DEFAULT: RateLimitConfig = { limit: 60, windowSec: 60 };
 

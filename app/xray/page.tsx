@@ -233,6 +233,7 @@ export default function XRayPage() {
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🩻 {t.title}</h1>
       
       <AnalysisTips 
+        recommendationProfile="imaging"
         content={{
           fast: "Two-stage X-Ray screening (structured image description then clinical interpretation). Provides a concise conclusion and risk signal — ideal for initial review and triage.",
           optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and quality for X-Ray analysis.",
@@ -272,13 +273,25 @@ export default function XRayPage() {
         <div className={`grid grid-cols-1 ${isComparisonMode ? 'lg:grid-cols-2' : ''} gap-6`}>
           <div>
             <p className="text-sm font-medium text-gray-700 mb-2">{isComparisonMode ? `🔵 🔵 ${t.currentImage}` : t.chooseImage}</p>
-            <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} anonymizationMode="soft" />
+            <ImageUpload
+              onUpload={handleUpload}
+              accept="image/*,.dcm,.dicom"
+              maxSize={500}
+              anonymizationMode="soft"
+              bridgePullTarget="xray_analysis"
+            />
           </div>
           
           {isComparisonMode && (
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2 text-blue-600">⚪ ⚪ {t.archiveImage}</p>
-              <ImageUpload onUpload={handleArchiveUpload} accept="image/*,.dcm,.dicom" maxSize={500} anonymizationMode="soft" />
+              <ImageUpload
+                onUpload={handleArchiveUpload}
+                accept="image/*,.dcm,.dicom"
+                maxSize={500}
+                anonymizationMode="soft"
+                bridgePullTarget="xray_analysis"
+              />
             </div>
           )}
         </div>

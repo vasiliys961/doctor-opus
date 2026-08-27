@@ -27,6 +27,7 @@ type HomeMessages = {
     document: string;
     library: string;
     video: string;
+    sync: string;
     calculators: string;
   };
   modules: {
@@ -76,6 +77,7 @@ export const homeMessages: Record<Locale, HomeMessages> = {
       document: 'Document Scan',
       library: 'Library',
       video: 'Video Case Review',
+      sync: 'Smartphone Sync',
       calculators: 'Calculators',
     },
     modules: {
@@ -123,6 +125,7 @@ export const homeMessages: Record<Locale, HomeMessages> = {
       document: 'Escaneo de documentos',
       library: 'Biblioteca',
       video: 'Revisión de video',
+      sync: 'Sincronización móvil',
       calculators: 'Calculadoras',
     },
     modules: {
@@ -170,6 +173,7 @@ export const homeMessages: Record<Locale, HomeMessages> = {
       document: 'Scan documents',
       library: 'Bibliothèque',
       video: 'Revue vidéo',
+      sync: 'Synchronisation mobile',
       calculators: 'Calculateurs',
     },
     modules: {
@@ -217,6 +221,7 @@ export const homeMessages: Record<Locale, HomeMessages> = {
       document: 'مسح المستندات',
       library: 'المكتبة',
       video: 'مراجعة الفيديو',
+      sync: 'مزامنة الهاتف',
       calculators: 'الحاسبات',
     },
     modules: {
@@ -264,6 +269,7 @@ export const homeMessages: Record<Locale, HomeMessages> = {
       document: 'डॉक्यूमेंट स्कैन',
       library: 'लाइब्रेरी',
       video: 'वीडियो केस रिव्यू',
+      sync: 'स्मार्टफोन सिंक',
       calculators: 'कैलकुलेटर्स',
     },
     modules: {
@@ -311,6 +317,7 @@ export const homeMessages: Record<Locale, HomeMessages> = {
       document: 'Escanear documento',
       library: 'Biblioteca',
       video: 'Revisão de vídeo',
+      sync: 'Sincronização móvel',
       calculators: 'Calculadoras',
     },
     modules: {
@@ -358,6 +365,7 @@ export const homeMessages: Record<Locale, HomeMessages> = {
       document: 'Pindai dokumen',
       library: 'Perpustakaan',
       video: 'Tinjauan video',
+      sync: 'Sinkronisasi ponsel',
       calculators: 'Kalkulator',
     },
     modules: {
@@ -405,6 +413,7 @@ export const homeMessages: Record<Locale, HomeMessages> = {
       document: 'Imbas dokumen',
       library: 'Perpustakaan',
       video: 'Semakan video',
+      sync: 'Penyegerakan telefon',
       calculators: 'Kalkulator',
     },
     modules: {
@@ -452,6 +461,7 @@ export const homeMessages: Record<Locale, HomeMessages> = {
       document: 'Belge tarama',
       library: 'Kütüphane',
       video: 'Video vaka inceleme',
+      sync: 'Akıllı telefon senkronizasyonu',
       calculators: 'Hesaplayıcılar',
     },
     modules: {
@@ -499,6 +509,7 @@ export const homeMessages: Record<Locale, HomeMessages> = {
       document: '文档扫描',
       library: '资料库',
       video: '视频病例分析',
+      sync: '手机同步',
       calculators: '医学计算器',
     },
     modules: {

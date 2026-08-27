@@ -230,6 +230,23 @@ export const SCENARIOS: AgentScenario[] = [
     },
   },
   {
+    id: 'spirometry',
+    title: 'Spirometry Module',
+    icon: '🫁',
+    keywords: ['spirometry', 'spiro', 'pulmonary function', 'fev1', 'fvc', 'lung function', 'спирометр', 'спирометрия', 'фвд', 'тиффно'],
+    start: 'open',
+    steps: {
+      open: {
+        id: 'open',
+        message:
+          'I will open the dedicated Spirometry module. You can connect a USB spirometer or enter metrics manually, then run AI interpretation.',
+        onEnter: [{ type: 'navigate', href: '/spirometry' }],
+        options: [{ label: 'Done', next: 'done' }],
+      },
+      done: DONE,
+    },
+  },
+  {
     id: 'devices',
     title: 'Connect Medical Device',
     icon: '🔌',

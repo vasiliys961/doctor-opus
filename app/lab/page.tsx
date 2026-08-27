@@ -400,6 +400,7 @@ export default function LabPage() {
         <h1 className="text-3xl font-bold text-primary-900 mb-6">🔬 {t.title}</h1>
         
         <AnalysisTips 
+          recommendationProfile="lab"
           content={{
             fast: "Fast analysis via Gemini 3 Flash — ideal for instant extraction of data from lab reports.",
             optimized: "Balanced mode (Gemini JSON + Sonnet 5) — deep clinical interpretation of extracted data.",
@@ -493,7 +494,12 @@ export default function LabPage() {
           <p className="text-sm text-gray-600 mb-4">
             {t.formats}
           </p>
-          <ImageUpload onUpload={handleUpload} accept=".pdf,.xlsx,.xls,.csv,image/*" maxSize={50} />
+          <ImageUpload
+            onUpload={handleUpload}
+            accept=".pdf,.xlsx,.xls,.csv,image/*"
+            maxSize={50}
+            bridgePullTarget="lab_analysis"
+          />
 
           {file && processedImages.length > 0 && (
             <div className="mt-6 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">

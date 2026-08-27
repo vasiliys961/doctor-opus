@@ -53,6 +53,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Закрашивание краёв каждой страницы — по умолчанию (если поле не прислано)
+    // включено. Врач мог уже отредактировать страницы вручную через ImageEditor,
+    // повторное наложение чёрных плашек на уже закрашенные зоны безвредно.
     const maskImage = maskImageInput === undefined ? true : Boolean(maskImageInput);
     const images = maskImage
       ? await Promise.all(
@@ -86,11 +89,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Определение модели на основе режима или прямого указания
+    // Определение модели на основе режима или прямого указания.
+    // Для validated-режима legacy-модель Opus 4.6 принудительно маппим на validated-модель.
     let modelToUse = model || MODELS.GEMINI_3_FLASH;
     if (!model) {
       if (mode === 'optimized') modelToUse = MODELS.SONNET;
-      else if (mode === 'validated') modelToUse = MODELS.OPUS;
+      else if (mode === 'validated') modelToUse = MODELS.OPUS_VALIDATED;
+    } else if (mode === 'validated' && (model === MODELS.OPUS || model === 'opus')) {
+      modelToUse = MODELS.OPUS_VALIDATED;
     }
 
     console.log(`🔬 [LAB IMAGES] Получено ${images.length} изображений для анализа, режим: ${mode}, модель: ${modelToUse}, streaming: ${useStreaming}`);

@@ -1,6 +1,6 @@
 # 📘 Doctor Opus — Guia do Usuário Médico
 
-> **Importante:** O Doctor Opus é um Sistema de Apoio à Decisão Clínica (SADC) destinado **apenas a profissionais de saúde licenciados**. Ele não é aprovado pela FDA e não constitui um diagnóstico médico. Todos os resultados gerados por IA exigem verificação clínica independente. Você assume total responsabilidade por todas as decisões clínicas.
+> **Importante:** O Doctor Opus é um software beta de apoio à decisão clínica (SADC), destinado **apenas a profissionais de saúde licenciados**. Não é um dispositivo médico e não fornece diagnóstico final nem ordem terapêutica. A qualidade dos resultados de IA depende de capacidades de LLM de terceiros e pode ser incompleta ou imprecisa. Todos os resultados gerados por IA exigem verificação médica independente. Restrição de uso: não destinado a implantação clínica regulada em jurisdições da UE/EUA/Reino Unido. Você assume total responsabilidade por todas as decisões clínicas.
 
 O Doctor Opus acelera seu fluxo de trabalho clínico fornecendo interpretação assistida por IA de imagens médicas, dados laboratoriais, relatórios genéticos e notas clínicas. Cada seção contém dicas contextuais — revise-as no primeiro uso.
 
@@ -33,6 +33,17 @@ Uma vez instalado, o aplicativo abre em tela cheia, é acessível via ícone e f
 ## 🏠 Início (Home)
 
 Painel de visão geral com navegação rápida para todas as seções.
+
+---
+
+## ⚖️ Fluxo jurídico obrigatório
+
+Após o primeiro login (ou após atualização da versão legal), é obrigatório confirmar a aceitação legal antes de usar os módulos clínicos.
+
+Ao salvar um resultado de IA no prontuário do paciente:
+- Uma janela de verificação médica é exibida
+- Você deve confirmar revisão pessoal e responsabilidade clínica
+- O log de auditoria armazena apenas o identificador do caso e metadados de confirmação/hash (nenhum dado pessoal do paciente é enviado)
 
 ---
 
@@ -335,9 +346,17 @@ Créditos são consumidos ao usar modelos de IA avançados. Consultas de referê
 | Copiadora local / calculadoras | Grátis |
 
 **Pacotes:**
-- **Starter:** 50 créditos — $9.99
-- **Standard:** 150 créditos — $24.99
-- **Pro:** 500 créditos — $69.99
+- **Starter:** 50 créditos — $6.99
+- **Standard:** 180 créditos — $19.99
+- **Pro:** 600 créditos — $59.99
+
+**Fluxo de pagamento (atual):**
+- Selecione um pacote na página de Assinatura
+- Envie o valor exato em USDT via **TRON (TRC20)** para a carteira exibida na fatura
+- Cole o hash da transação (`txHash`) para confirmar o pagamento automaticamente
+- Os créditos são adicionados após validação da transação
+
+Não há créditos de teste para os recursos de IA.
 
 O custo exato de cada solicitação é mostrado no bloco de resultados imediatamente após a conclusão da análise. O histórico completo de transações está disponível em **Saldo e Histórico**.
 

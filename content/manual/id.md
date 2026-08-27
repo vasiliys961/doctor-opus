@@ -1,6 +1,6 @@
 # 📘 Doctor Opus — Panduan Pengguna Dokter
 
-> **Penting:** Doctor Opus adalah Sistem Pendukung Keputusan Klinis (CDSS) **hanya untuk tenaga kesehatan berlisensi**. Sistem ini tidak disetujui oleh FDA dan tidak merupakan diagnosis medis. Semua hasil yang dihasilkan AI memerlukan verifikasi klinis independen. Anda memegang tanggung jawab penuh atas semua keputusan klinis.
+> **Penting:** Doctor Opus adalah perangkat lunak beta Pendukung Keputusan Klinis (CDSS) **hanya untuk tenaga kesehatan berlisensi**. Sistem ini bukan perangkat medis dan tidak memberikan diagnosis akhir atau instruksi terapi. Kualitas keluaran AI bergantung pada kemampuan LLM pihak ketiga dan dapat tidak lengkap atau kurang akurat. Semua hasil AI memerlukan verifikasi medis independen oleh dokter. Batasan penggunaan: tidak ditujukan untuk penerapan klinis teregulasi di yurisdiksi UE/AS/Inggris. Anda memegang tanggung jawab penuh atas semua keputusan klinis.
 
 Doctor Opus mempercepat alur kerja klinis Anda dengan menyediakan interpretasi berbantuan AI untuk pencitraan medis, data laboratorium, laporan genetik, dan catatan klinis. Setiap bagian berisi tips kontekstual — tinjau kembali pada penggunaan pertama.
 
@@ -33,6 +33,17 @@ Setelah diinstal, aplikasi terbuka layar penuh, dapat diakses melalui ikon, dan 
 ## 🏠 Beranda (Home)
 
 Dasbor ringkasan dengan navigasi cepat ke semua bagian.
+
+---
+
+## ⚖️ Alur hukum wajib
+
+Setelah login pertama (atau setelah versi dokumen hukum diperbarui), Anda wajib mengonfirmasi persetujuan hukum sebelum menggunakan modul klinis.
+
+Saat menyimpan hasil AI ke rekam pasien:
+- Muncul jendela verifikasi dokter
+- Anda harus mengonfirmasi telaah pribadi dan tanggung jawab klinis
+- Log audit hanya menyimpan pengenal kasus dan metadata konfirmasi/hash (tanpa mengirim data pribadi pasien)
 
 ---
 
@@ -335,9 +346,17 @@ Kredit dikonsumsi saat menggunakan model AI tingkat lanjut. Pencarian referensi 
 | Penyalin lokal / kalkulator | Gratis |
 
 **Paket:**
-- **Starter:** 50 kredit — $9.99
-- **Standard:** 150 kredit — $24.99
-- **Pro:** 500 kredit — $69.99
+- **Starter:** 50 kredit — $6.99
+- **Standard:** 180 kredit — $19.99
+- **Pro:** 600 kredit — $59.99
+
+**Alur pembayaran (saat ini):**
+- Pilih paket di halaman Langganan
+- Kirim jumlah USDT yang tepat melalui **TRON (TRC20)** ke dompet yang ditampilkan pada invoice
+- Tempel hash transaksi (`txHash`) untuk konfirmasi pembayaran otomatis
+- Kredit akan ditambahkan setelah transaksi tervalidasi
+
+Tidak ada kredit percobaan untuk fitur AI.
 
 Biaya pasti dari setiap permintaan ditampilkan di blok hasil segera setelah analisis selesai. Riwayat transaksi lengkap tersedia di **Saldo & Riwayat**.
 

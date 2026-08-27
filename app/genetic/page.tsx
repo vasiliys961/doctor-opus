@@ -621,6 +621,7 @@ export default function GeneticPage() {
       
       <AnalysisTips 
         title={t.howWorks}
+        recommendationProfile="genetic"
         content={{
           fast: "First stage: data extraction from complex genetic reports and VCF files.",
           validated: "Second stage: expert genetics interpretation.",
@@ -639,7 +640,12 @@ export default function GeneticPage() {
         <p className="text-sm text-gray-600 mb-4">
           {t.supportedFormats}
         </p>
-        <ImageUpload onUpload={handleUpload} accept=".vcf,.pdf,.txt,image/*" maxSize={50} />
+        <ImageUpload
+          onUpload={handleUpload}
+          accept=".vcf,.pdf,.txt,image/*"
+          maxSize={50}
+          bridgePullTarget="document_scan"
+        />
         
         {/* PDF обрабатывается сервером через Gemini Vision API */}
       </div>

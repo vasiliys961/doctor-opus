@@ -39,6 +39,8 @@ export default function Navigation({ locale }: Props) {
     dermatoscopy: { en: '🔬 Dermoscopy Analysis', es: '🔬 Análisis dermatoscopia', fr: '🔬 Analyse dermoscopie', ar: '🔬 تحليل الديرموسكوبي', hi: '🔬 डर्मोस्कोपी विश्लेषण', 'pt-BR': '🔬 Análise dermatoscopia', id: '🔬 Analisis dermoskopi', ms: '🔬 Analisis dermoskopi', tr: '🔬 Dermoskopi analizi', 'zh-CN': '🔬 皮肤镜分析' },
     lab: { en: '🔬 Lab Data Interpretation', es: '🔬 Interpretación de laboratorio', fr: '🔬 Interprétation labo', ar: '🔬 تفسير بيانات المختبر', hi: '🔬 लैब डेटा व्याख्या', 'pt-BR': '🔬 Interpretação laboratorial', id: '🔬 Interpretasi data lab', ms: '🔬 Tafsiran data makmal', tr: '🔬 Laboratuvar veri yorumu', 'zh-CN': '🔬 检验数据解读' },
     video: { en: '🎬 Video Case Review', es: '🎬 Revisión de video', fr: '🎬 Revue vidéo', ar: '🎬 مراجعة فيديو', hi: '🎬 वीडियो केस रिव्यू', 'pt-BR': '🎬 Revisão de vídeo', id: '🎬 Tinjauan video', ms: '🎬 Semakan video', tr: '🎬 Video vaka inceleme', 'zh-CN': '🎬 视频病例分析' },
+    sync: { en: '📲 Smartphone Sync', es: '📲 Sincronización móvil', fr: '📲 Synchronisation mobile', ar: '📲 مزامنة الهاتف', hi: '📲 स्मार्टफोन सिंक', 'pt-BR': '📲 Sincronização móvel', id: '📲 Sinkronisasi ponsel', ms: '📲 Penyegerakan telefon', tr: '📲 Akıllı telefon senkronizasyonu', 'zh-CN': '📲 手机同步' },
+    links: { en: '🔗 Link Collection', es: '🔗 Colección de enlaces', fr: '🔗 Collection de liens', ar: '🔗 مجموعة الروابط', hi: '🔗 लिंक कलेक्शन', 'pt-BR': '🔗 Coleção de links', id: '🔗 Koleksi tautan', ms: '🔗 Koleksi pautan', tr: '🔗 Bağlantı koleksiyonu', 'zh-CN': '🔗 链接收藏' },
     document: { en: '📄 Document Scan', es: '📄 Escaneo de documentos', fr: '📄 Scan documents', ar: '📄 مسح المستندات', hi: '📄 डॉक्यूमेंट स्कैन', 'pt-BR': '📄 Escanear documento', id: '📄 Pindai dokumen', ms: '📄 Imbas dokumen', tr: '📄 Belge tarama', 'zh-CN': '📄 文档扫描' },
     genetic: { en: '🧬 Genetic Profile', es: '🧬 Perfil genético', fr: '🧬 Profil génétique', ar: '🧬 ملف جيني', hi: '🧬 जेनेटिक प्रोफाइल', 'pt-BR': '🧬 Perfil genético', id: '🧬 Profil genetik', ms: '🧬 Profil genetik', tr: '🧬 Genetik profil', 'zh-CN': '🧬 遗传档案' },
     devices: { en: '🧪 Lab Devices (USB)', es: '🧪 Dispositivos de laboratorio', fr: '🧪 Appareils labo', ar: '🧪 أجهزة مختبر (USB)', hi: '🧪 लैब डिवाइस', 'pt-BR': '🧪 Dispositivos de laboratório', id: '🧪 Perangkat lab (USB)', ms: '🧪 Peranti makmal', tr: '🧪 Lab cihazları (USB)', 'zh-CN': '🧪 实验室设备' },
@@ -50,6 +52,8 @@ export default function Navigation({ locale }: Props) {
     { key: 'home', href: '/' },
     { key: 'manual', href: '/manual' },
     { key: 'chat', href: '/chat' },
+    { key: 'sync', href: '/sync' },
+    { key: 'links', href: '/links' },
     { key: 'library', href: '/library' },
     { key: 'protocol', href: '/protocol' },
     { key: 'calculators', href: '/calculators' },
@@ -233,10 +237,11 @@ export default function Navigation({ locale }: Props) {
             <p className="font-semibold mb-1">Clinical Assistant v3.50</p>
             <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">{ui.clinicalEdition}</p>
             <ul className="space-y-1 text-xs opacity-70">
-              <li>• Opus 5 + Gemini 3 Flash</li>
+              <li>• Opus 5 + Fable 5 + Gemini 3 Flash</li>
               <li>• DICOM Viewer + Measure</li>
               <li>• Multi-modal (Images + Labs)</li>
               <li>• Trend Analysis & RAG</li>
+              <li>• Consilium: Fable 5 for complex debate rounds</li>
               <li className="text-teal-400 font-bold mt-2">🛡️ Clinical Decision Support</li>
             </ul>
           </div>

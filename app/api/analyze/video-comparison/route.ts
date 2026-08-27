@@ -1,16 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeTwoVideosTwoStage } from '@/lib/video';
 import { calculateCost } from '@/lib/cost-calculator';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { checkAndDeductBalance } from '@/lib/server-billing';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { success: false, error: 'Необходима авторизация' },
+        { status: 401 }
+      );
+    }
+
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
+        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
         { status: 500 }
       );
     }
@@ -22,7 +33,7 @@ export async function POST(request: NextRequest) {
 
     if (!video1 || !video2) {
       return NextResponse.json(
-        { success: false, error: 'Two video files are required for comparison' },
+        { success: false, error: 'Необходимо два видео-файла для сравнения' },
         { status: 400 }
       );
     }
@@ -31,8 +42,26 @@ export async function POST(request: NextRequest) {
     const maxSizeBytes = 50 * 1024 * 1024;
     if (video1.size > maxSizeBytes || video2.size > maxSizeBytes) {
       return NextResponse.json(
-        { success: false, error: 'Each video must be <= 50MB' },
+        { success: false, error: 'Каждое видео не должно превышать 50MB' },
         { status: 400 }
+      );
+    }
+
+    // Обязательная серверная проверка баланса перед сравнительным видео-анализом.
+    const totalBytes = video1.size + video2.size;
+    const estimatedCost = Number(
+      Math.min(28, Math.max(6, 6 + (totalBytes / (30 * 1024 * 1024)) * 2.5)).toFixed(2)
+    );
+    const billing = await checkAndDeductBalance(
+      session.user.email,
+      estimatedCost,
+      'Video comparison analysis',
+      { mode: 'video_comparison', totalBytes, mime1: video1.type || null, mime2: video2.type || null }
+    );
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Insufficient balance' },
+        { status: 402 }
       );
     }
 
@@ -63,9 +92,9 @@ export async function POST(request: NextRequest) {
       model,
     });
   } catch (error: any) {
-    console.error('❌ [VIDEO COMPARISON API] Error:', error);
+    console.error('❌ [VIDEO COMPARISON API] Ошибка:', error);
     return NextResponse.json(
-      { success: false, error: 'Video comparison analysis error' },
+      { success: false, error: 'Ошибка сравнительного анализа видео' },
       { status: 500 }
     );
   }

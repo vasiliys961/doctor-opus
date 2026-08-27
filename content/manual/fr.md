@@ -1,6 +1,6 @@
 # 📘 Doctor Opus — Guide de l'utilisateur (Médecin)
 
-> **Important :** Doctor Opus est un système d'aide à la décision clinique (SADC) destiné **exclusivement aux professionnels de santé agréés**. Il n'est pas approuvé par la FDA et ne constitue pas un diagnostic médical. Tous les résultats générés par l'IA nécessitent une vérification clinique indépendante. Vous assumez l'entière responsabilité de toutes les décisions cliniques.
+> **Important :** Doctor Opus est un logiciel bêta d'aide à la décision clinique (SADC), destiné **exclusivement aux professionnels de santé agréés**. Ce n'est pas un dispositif médical et il ne fournit ni diagnostic final ni ordre thérapeutique. La qualité des sorties IA dépend des capacités de LLM tiers et peut être incomplète ou inexacte. Tous les résultats générés par l'IA nécessitent une vérification médicale indépendante. Restriction d'usage : non destiné à un déploiement clinique réglementé dans les juridictions UE/États-Unis/Royaume-Uni. Vous assumez l'entière responsabilité de toutes les décisions cliniques.
 
 Doctor Opus accélère votre flux de travail clinique en fournissant une interprétation assistée par IA de l'imagerie médicale, des données de laboratoire, des rapports génétiques et des notes cliniques. Chaque section contient des conseils contextuels — consultez-les lors de la première utilisation.
 
@@ -33,6 +33,17 @@ Une fois installée, l'application s'ouvre en plein écran, est accessible via l
 ## 🏠 Accueil
 
 Tableau de bord général avec navigation rapide vers toutes les sections.
+
+---
+
+## ⚖️ Parcours juridique obligatoire
+
+Après la première connexion (ou après une mise à jour de la version juridique), vous devez confirmer l'acceptation légale avant d'utiliser les modules cliniques.
+
+Lors de l'enregistrement d'un résultat IA dans le dossier patient :
+- Une fenêtre de vérification médicale s'affiche
+- Vous devez confirmer la relecture personnelle et la responsabilité clinique
+- Le journal d'audit enregistre uniquement l'identifiant du cas et des métadonnées de confirmation/hash (aucune donnée personnelle patient n'est envoyée)
 
 ---
 
@@ -335,9 +346,17 @@ Les crédits sont consommés lors de l'utilisation de modèles d'IA avancés. Le
 | Copieur local / calculateurs | Gratuit |
 
 **Forfaits :**
-- **Starter :** 50 crédits — 9,99 $
-- **Standard :** 150 crédits — 24,99 $
-- **Pro :** 500 crédits — 69,99 $
+- **Starter :** 50 crédits — 6,99 $
+- **Standard :** 180 crédits — 19,99 $
+- **Pro :** 600 crédits — 59,99 $
+
+**Parcours de paiement (actuel) :**
+- Sélectionnez un forfait sur la page Abonnement
+- Envoyez le montant exact en USDT via **TRON (TRC20)** vers le portefeuille affiché dans la facture
+- Collez le hash de transaction (`txHash`) pour confirmer automatiquement le paiement
+- Les crédits sont ajoutés après validation de la transaction
+
+Il n'y a pas de crédits d'essai pour les fonctionnalités IA.
 
 Le coût exact de chaque requête est affiché dans le bloc de résultat immédiatement après la fin de l'analyse. L'historique complet des transactions est disponible dans **Solde & Historique**.
 

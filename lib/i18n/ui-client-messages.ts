@@ -83,6 +83,28 @@ type ChatMessages = {
   autoLibraryEnabled: string;
   libraryManualHint: string;
   loadingLibrary: string;
+  consiliumTitle: string;
+  consiliumPremium: string;
+  consiliumDeepAnalysis: string;
+  consiliumIntro: string;
+  consiliumToggleAria: string;
+  consiliumToggleTitle: string;
+  consiliumModeEnabledHint: string;
+  consiliumRunButton: string;
+  consiliumFableHint: string;
+  consiliumRunning: string;
+  consiliumPlaceholder: string;
+  consiliumPreparingCase: string;
+  consiliumStartFailed: string;
+  consiliumRunFailed: string;
+  continuePrompt: string;
+  analyzeAttachedFilesFallback: string;
+  largeUploadDetected: string;
+  batchAttachmentInstruction: string;
+  batchHeader: string;
+  batchFailed: string;
+  httpErrorWithStatus: string;
+  genericErrorPrefix: string;
 };
 
 export const libraryMessages: Record<Locale, LibraryMessages> = {
@@ -143,7 +165,7 @@ export const legalFooterMessages: Record<Locale, LegalFooterMessages> = {
     legal: 'Legal', subscription: 'Subscription Agreement', paymentRefund: 'Payment & Refund Policy', terms: 'Terms of Service', privacy: 'Privacy Policy', cdss: 'CDSS Acknowledgment', compliance: 'Compliance',
     community: 'Community', followChannel: 'Follow our channel', communityText: 'Latest news, updates, and AI in medicine use cases.',
     medicalDisclaimer: 'Medical Disclaimer',
-    medicalBody: 'Doctor Opus is an AI-powered analytical tool for licensed healthcare professionals. Outputs are drafts and must be verified by a physician. AI may be inaccurate or incomplete.',
+    medicalBody: 'Doctor Opus is beta AI-powered clinical support software for licensed healthcare professionals. Outputs are drafts and must be independently verified by a physician. AI quality depends on third-party LLM capabilities and may be inaccurate or incomplete. Not intended for direct patient self-diagnosis or regulated clinical deployment in EU/US/UK jurisdictions.',
     rightsReserved: 'All rights reserved.',
     whiteLabelWarning: 'White-labeling, resale, or reproduction without written authorization is prohibited.',
     builtForMedical: 'Built for professional medical use'
@@ -209,6 +231,28 @@ const chatFallback: ChatMessages = {
   autoLibraryEnabled: 'Auto library search is enabled',
   libraryManualHint: 'Find and insert context from your PDF library manually',
   loadingLibrary: 'Loading...',
+  consiliumTitle: 'Consilium',
+  consiliumPremium: 'premium',
+  consiliumDeepAnalysis: 'deep analysis',
+  consiliumIntro: 'Multiple specialties review your case first. If they disagree, a full role-based debate is started automatically.',
+  consiliumToggleAria: 'Toggle Consilium mode',
+  consiliumToggleTitle: 'Enable Consilium mode',
+  consiliumModeEnabledHint: 'Consilium mode is enabled. Enter case details and attach files, then press',
+  consiliumRunButton: 'Run Consilium',
+  consiliumFableHint: 'Complex cases are escalated to a multi-role debate where core debating agents run on Claude Fable 5.',
+  consiliumRunning: 'Running Consilium...',
+  consiliumPlaceholder: 'Describe the case for Consilium (complaints, history, uploaded findings)...',
+  consiliumPreparingCase: 'Preparing case...',
+  consiliumStartFailed: 'Failed to start Consilium',
+  consiliumRunFailed: 'Failed to run Consilium',
+  continuePrompt: 'Continue your previous answer from where you left off. Start directly from the interrupted sentence, without any preamble.',
+  analyzeAttachedFilesFallback: 'Please analyze the attached files.',
+  largeUploadDetected: 'Large upload detected. Processing {{files}} files in {{batches}} batches for stable delivery.',
+  batchAttachmentInstruction: '[Attachment batch {{current}}/{{total}}] Analyze files in this batch and provide findings.',
+  batchHeader: 'Batch {{current}}/{{total}}',
+  batchFailed: 'Batch {{current}}/{{total}} failed: {{details}}',
+  httpErrorWithStatus: 'HTTP error! status: {{status}}',
+  genericErrorPrefix: 'Error:',
 };
 
 export const chatMessages: Record<Locale, ChatMessages> = {
@@ -460,6 +504,34 @@ type ImagingCommonMessages = {
 type ImageAnalysisPageMessages = ImagingCommonMessages & {
   title: string;
   uploadTitle: string;
+  syncTitle: string;
+  syncReset: string;
+  syncDesktopModeTitle: string;
+  syncDesktopModeHint: string;
+  syncSmartphoneModeTitle: string;
+  syncSmartphoneModeHint: string;
+  syncWaitingForConnection: string;
+  syncInitError: string;
+  syncPreparingImage: string;
+  syncConvertingImage: string;
+  syncSending: string;
+  syncSentSuccess: string;
+  syncSendNetworkError: string;
+  syncReceivedSuccess: string;
+  syncEnterCodeOnPhone: string;
+  syncScanQrCaption: string;
+  syncOpenLink: string;
+  syncCopyLink: string;
+  syncLinkCopied: string;
+  syncOrEnterCode: string;
+  syncCodeFromDesktop: string;
+  syncCodePlaceholder: string;
+  syncAutoModeReady: string;
+  syncAutoModeWaitingImage: string;
+  syncAutoModeSending: string;
+  syncSendingButton: string;
+  syncSendButton: string;
+  syncUploadFirstWarning: string;
   supportedTypes: string;
   qualityCheckTitle: string;
   labsTitle: string;
@@ -566,13 +638,41 @@ const imageAnalysisFallback: ImageAnalysisPageMessages = {
   ...imagingCommonFallback,
   title: 'Medical Image Analysis',
   uploadTitle: 'Upload Medical Image',
+  syncTitle: 'Connect Smartphone',
+  syncReset: 'Reset',
+  syncDesktopModeTitle: "I'm on desktop",
+  syncDesktopModeHint: '(scan QR from smartphone)',
+  syncSmartphoneModeTitle: "I'm on smartphone",
+  syncSmartphoneModeHint: '(send current photo)',
+  syncWaitingForConnection: 'Waiting for smartphone connection...',
+  syncInitError: 'Sync initialization error',
+  syncPreparingImage: 'Preparing image...',
+  syncConvertingImage: 'Converting to JPEG...',
+  syncSending: 'Sending...',
+  syncSentSuccess: '✅ Image successfully transferred to desktop!',
+  syncSendNetworkError: 'Network error during sending',
+  syncReceivedSuccess: '✅ Image received!',
+  syncEnterCodeOnPhone: 'Scan QR with smartphone:',
+  syncScanQrCaption: 'Open this page on smartphone with prefilled code',
+  syncOpenLink: 'Open link',
+  syncCopyLink: 'Copy link',
+  syncLinkCopied: 'Link copied',
+  syncOrEnterCode: 'Manual code entry:',
+  syncCodeFromDesktop: 'Code from desktop screen:',
+  syncCodePlaceholder: 'E.g.: 452 981',
+  syncAutoModeReady: '✅ QR connected. Photos will be sent automatically.',
+  syncAutoModeWaitingImage: 'Take or upload a photo below — it will sync automatically.',
+  syncAutoModeSending: 'Auto-sending new photo...',
+  syncSendingButton: '⌛ Sending...',
+  syncSendButton: '📤 Send current photo to desktop',
+  syncUploadFirstWarning: '⚠️ First take or upload a photo below',
   supportedTypes: 'Supported types: ECG, X-Ray, MRI, CT, Ultrasound, Dermatoscopy, Histology, Ophthalmology, Mammography, DICOM (.dcm)',
   qualityCheckTitle: 'Preliminary image quality assessment:',
   labsTitle: 'Add Laboratory Results (Multi-modal Analysis)',
   chooseLabFile: 'Choose lab photo/PDF',
   digitizeLabs: 'Digitize Lab Results',
-  digitizing: 'Digitizing with Gemini 3.1...',
-  autoExtractHint: 'AI will auto-extract lab values (Gemini 3.1)',
+  digitizing: 'Digitizing with Gemini 3 Flash...',
+  autoExtractHint: 'AI will auto-extract lab values (Gemini 3 Flash)',
   labsPlaceholder: 'Lab results will appear here...',
   screening: 'Screening',
   consultation: 'Get Consultation',
@@ -930,6 +1030,11 @@ type SubscriptionPageMessages = {
   selectPackageFirst: string;
   individual: string;
   clinics: string;
+  modelUsageTitle: string;
+  modelUsageFast: string;
+  modelUsageOptimized: string;
+  modelUsageExpert: string;
+  modelUsageConsilium: string;
 };
 
 const videoFallback: VideoPageMessages = {
@@ -1089,9 +1194,9 @@ const documentFallback: DocumentPageMessages = {
   anonymousActive: 'Anonymous analysis active',
   anonymousHint: 'Data above has been anonymized by you or will be hidden automatically.',
   scanningTipsTitle: 'Document Scanning Tips',
-  aiTipFast: 'Uses Gemini 3.1 Flash — ideal for fast and accurate text extraction.',
+  aiTipFast: 'Uses Gemini 3 Flash — ideal for fast and accurate text extraction.',
   localTipFast: 'Local mode instantly creates a quality digital scan without sending data online.',
-  aiTip1: 'Recommended mode: Gemini 3.1 Flash — best balance of text recognition speed and cost.',
+  aiTip1: 'Recommended mode: Gemini 3 Flash — best balance of text recognition speed and cost.',
   aiTip2: 'In AI mode, always use the anonymization toggle to protect personal data.',
   aiTip3: 'The system preserves document structure: tables are converted to Markdown.',
   localTip1: 'Use filters to improve readability (contrast, brightness).',
@@ -1114,13 +1219,18 @@ const subscriptionFallback: SubscriptionPageMessages = {
   maintenanceBody: 'We are performing maintenance. Please try again later.',
   backHome: 'Back to Home',
   currentBalance: 'Current balance',
-  freeBlock: 'Free — no credits required: Medical calculators and document scanning (processed locally in your browser)',
+  freeBlock: 'Access to AI features is available after package payment and balance top-up.',
   paymentReady: 'Ready to top up your balance?',
   cardPay: 'Pay by Card',
   cryptoPay: 'Pay with Crypto',
   selectPackageFirst: 'Select a package first',
   individual: 'For Individual Physicians',
   clinics: 'For Clinics and Medical Centers',
+  modelUsageTitle: 'How models affect cost',
+  modelUsageFast: 'Fast Analysis uses Gemini 3 Flash for routine screening and lowest cost.',
+  modelUsageOptimized: 'Optimized mode uses Sonnet 5 or GPT-5.6 Terra for balanced quality/cost.',
+  modelUsageExpert: 'Expert Validated mode uses Opus 5 for high-risk and complex interpretation.',
+  modelUsageConsilium: 'Consilium escalates difficult disagreement cases to Fable 5 debate rounds, which increases total credit usage only for those complex branches.',
 };
 
 export const videoPageMessages: Record<Locale, VideoPageMessages> = {
@@ -1245,6 +1355,17 @@ type AnalysisResultComponentMessages = {
   copiedToClipboard: string;
   transferTruncated: string;
   notAvailable: string;
+  draftDisclaimerTitle?: string;
+  draftDisclaimerLine1?: string;
+  draftDisclaimerLine2?: string;
+  draftDisclaimerLine3?: string;
+  consentVersionLabel?: string;
+  verificationModalTitle?: string;
+  verificationModalPrivacyNote?: string;
+  verificationModalCheckReviewed?: string;
+  verificationModalCheckResponsibility?: string;
+  verificationModalConfirmSave?: string;
+  verificationModalSaving?: string;
 };
 
 const uploadComponentFallback: UploadComponentMessages = {
@@ -1304,6 +1425,17 @@ const analysisResultComponentFallback: AnalysisResultComponentMessages = {
   copiedToClipboard: 'Text copied to clipboard!',
   transferTruncated: '[...result truncated for transfer]',
   notAvailable: 'N/A',
+  draftDisclaimerTitle: 'Draft Clinical Output (Beta)',
+  draftDisclaimerLine1: 'This AI output may be incomplete or inaccurate.',
+  draftDisclaimerLine2: 'Independent physician verification is required before clinical use.',
+  draftDisclaimerLine3: 'Not for patient self-diagnosis.',
+  consentVersionLabel: 'Consent version',
+  verificationModalTitle: 'Physician verification before saving',
+  verificationModalPrivacyNote: 'Only the case ID and confirmation fact are saved for audit. Patient personal details are not sent.',
+  verificationModalCheckReviewed: 'I confirm that I personally reviewed and verified this draft before saving.',
+  verificationModalCheckResponsibility: 'I understand that final clinical responsibility remains with the physician.',
+  verificationModalConfirmSave: 'Confirm and Save',
+  verificationModalSaving: 'Saving...',
 };
 
 export const uploadComponentMessages: Record<Locale, UploadComponentMessages> = {
@@ -1321,11 +1453,11 @@ export const uploadComponentMessages: Record<Locale, UploadComponentMessages> = 
 
 export const analysisResultComponentMessages: Record<Locale, AnalysisResultComponentMessages> = {
   en: analysisResultComponentFallback,
-  es: { loading: 'Análisis en curso...', reportTitle: 'Informe consultivo', modelUsed: 'Modelo usado', copied: 'Copiado', copy: 'Copiar', saveToPatient: 'Guardar en historial del paciente', selectPatient: 'Seleccionar paciente', emptyPatients: 'La base de pacientes está vacía', cancel: 'Cancelar', searchLibrary: 'Buscar en biblioteca', hideLibrary: 'Ocultar biblioteca', ecgProtocol: 'Protocolo ECG', toProtocol: 'Al protocolo', downloadDocx: 'Descargar .docx', downloading: 'Descargando...', print: 'Imprimir', share: 'Compartir', discussManagement: 'Discutir manejo', goCreatePatient: 'Ir a crear paciente', noDiagnosis: 'Sin diagnóstico', modeFast: 'rápido', modeOptimized: 'optimizado', modeValidated: 'experto validado', discussClinicalManagement: 'Discutir manejo clínico', verificationRequired: 'Verificación requerida: este informe debe ser revisado y firmado por el médico tratante.', pricingInfo: 'Precios: el costo en créditos refleja modelos IA e infraestructura.', sessionId: 'ID de sesión', coreVersion: 'Versión core', saveSuccess: '¡Resultado guardado en el paciente!', saveFailed: 'No se pudo guardar el resultado.', downloadError: 'Error de descarga', unknownError: 'Error desconocido', shareTitle: 'Resultado del análisis médico', copiedToClipboard: '¡Texto copiado al portapapeles!', transferTruncated: '[...resultado truncado para transferencia]', notAvailable: 'N/D' },
-  fr: { loading: 'Analyse en cours...', reportTitle: 'Rapport consultatif', modelUsed: 'Modèle utilisé', copied: 'Copié', copy: 'Copier', saveToPatient: 'Enregistrer dans le dossier patient', selectPatient: 'Sélectionner un patient', emptyPatients: 'La base patients est vide', cancel: 'Annuler', searchLibrary: 'Rechercher dans la bibliothèque', hideLibrary: 'Masquer la bibliothèque', ecgProtocol: 'Protocole ECG', toProtocol: 'Vers protocole', downloadDocx: 'Télécharger .docx', downloading: 'Téléchargement...', print: 'Imprimer', share: 'Partager', discussManagement: 'Discuter la prise en charge', goCreatePatient: 'Créer un patient', noDiagnosis: 'Aucun diagnostic', modeFast: 'rapide', modeOptimized: 'optimisé', modeValidated: 'expert validé', discussClinicalManagement: 'Discuter la prise en charge clinique', verificationRequired: 'Vérification requise : ce rapport doit être revu et signé par le médecin traitant.', pricingInfo: 'Tarification : le coût en crédits couvre modèles IA et infrastructure.', sessionId: 'ID session', coreVersion: 'Version core', saveSuccess: 'Résultat enregistré dans le dossier patient !', saveFailed: 'Échec de l’enregistrement du résultat.', downloadError: 'Erreur de téléchargement', unknownError: 'Erreur inconnue', shareTitle: 'Résultat d’analyse médicale', copiedToClipboard: 'Texte copié dans le presse-papiers !', transferTruncated: '[...résultat tronqué pour transfert]', notAvailable: 'N/D' },
-  ar: { loading: 'جارٍ التحليل...', reportTitle: 'تقرير استشاري', modelUsed: 'النموذج المستخدم', copied: 'تم النسخ', copy: 'نسخ', saveToPatient: 'حفظ في سجل المريض', selectPatient: 'اختر مريضًا', emptyPatients: 'قاعدة بيانات المرضى فارغة', cancel: 'إلغاء', searchLibrary: 'بحث في المكتبة', hideLibrary: 'إخفاء المكتبة', ecgProtocol: 'بروتوكول ECG', toProtocol: 'إلى البروتوكول', downloadDocx: 'تنزيل .docx', downloading: 'جارٍ التنزيل...', print: 'طباعة', share: 'مشاركة', discussManagement: 'مناقشة الخطة', goCreatePatient: 'إنشاء مريض', noDiagnosis: 'لا يوجد تشخيص', modeFast: 'سريع', modeOptimized: 'محسّن', modeValidated: 'خبير معتمد', discussClinicalManagement: 'مناقشة الإدارة السريرية', verificationRequired: 'التحقق مطلوب: يجب مراجعة هذا التقرير وتوقيعه من الطبيب المعالج.', pricingInfo: 'التسعير: تكلفة الرصيد تشمل نماذج الذكاء والبنية التحتية.', sessionId: 'معرف الجلسة', coreVersion: 'إصدار النواة', saveSuccess: 'تم حفظ النتيجة في سجل المريض!', saveFailed: 'فشل حفظ النتيجة.', downloadError: 'خطأ في التنزيل', unknownError: 'خطأ غير معروف', shareTitle: 'نتيجة التحليل الطبي', copiedToClipboard: 'تم نسخ النص إلى الحافظة!', transferTruncated: '[...تم تقصير النتيجة للنقل]', notAvailable: 'غير متاح' },
-  hi: { loading: 'विश्लेषण जारी है...', reportTitle: 'परामर्श रिपोर्ट', modelUsed: 'उपयोग किया गया मॉडल', copied: 'कॉपी किया गया', copy: 'कॉपी करें', saveToPatient: 'रोगी रिकॉर्ड में सहेजें', selectPatient: 'रोगी चुनें', emptyPatients: 'रोगी डेटाबेस खाली है', cancel: 'रद्द करें', searchLibrary: 'लाइब्रेरी खोजें', hideLibrary: 'लाइब्रेरी छुपाएँ', ecgProtocol: 'ECG प्रोटोकॉल', toProtocol: 'प्रोटोकॉल में भेजें', downloadDocx: '.docx डाउनलोड करें', downloading: 'डाउनलोड हो रहा है...', print: 'प्रिंट', share: 'शेयर', discussManagement: 'प्रबंधन पर चर्चा करें', goCreatePatient: 'रोगी बनाएं', noDiagnosis: 'कोई निदान नहीं', modeFast: 'तेज़', modeOptimized: 'अनुकूलित', modeValidated: 'विशेषज्ञ मान्य', discussClinicalManagement: 'क्लिनिकल प्रबंधन पर चर्चा', verificationRequired: 'सत्यापन आवश्यक: इस रिपोर्ट की चिकित्सक द्वारा समीक्षा और हस्ताक्षर आवश्यक हैं।', pricingInfo: 'मूल्य: क्रेडिट लागत में AI मॉडल और इंफ्रास्ट्रक्चर शामिल है।', sessionId: 'सेशन आईडी', coreVersion: 'कोर संस्करण', saveSuccess: 'परिणाम रोगी रिकॉर्ड में सहेज दिया गया!', saveFailed: 'परिणाम सहेजने में विफल।', downloadError: 'डाउनलोड त्रुटि', unknownError: 'अज्ञात त्रुटि', shareTitle: 'मेडिकल विश्लेषण परिणाम', copiedToClipboard: 'टेक्स्ट क्लिपबोर्ड में कॉपी हो गया!', transferTruncated: '[...ट्रांसफ़र के लिए परिणाम संक्षिप्त]', notAvailable: 'उपलब्ध नहीं' },
-  'pt-BR': { loading: 'Análise em andamento...', reportTitle: 'Relatório consultivo', modelUsed: 'Modelo usado', copied: 'Copiado', copy: 'Copiar', saveToPatient: 'Salvar no prontuário do paciente', selectPatient: 'Selecionar paciente', emptyPatients: 'Base de pacientes vazia', cancel: 'Cancelar', searchLibrary: 'Pesquisar biblioteca', hideLibrary: 'Ocultar biblioteca', ecgProtocol: 'Protocolo ECG', toProtocol: 'Para protocolo', downloadDocx: 'Baixar .docx', downloading: 'Baixando...', print: 'Imprimir', share: 'Compartilhar', discussManagement: 'Discutir conduta', goCreatePatient: 'Criar paciente', noDiagnosis: 'Sem diagnóstico', modeFast: 'rápido', modeOptimized: 'otimizado', modeValidated: 'especialista validado', discussClinicalManagement: 'Discutir manejo clínico', verificationRequired: 'Verificação obrigatória: este relatório deve ser revisado e assinado pelo médico assistente.', pricingInfo: 'Preço: custo em créditos cobre modelos IA e infraestrutura.', sessionId: 'ID da sessão', coreVersion: 'Versão do core', saveSuccess: 'Resultado salvo no prontuário do paciente!', saveFailed: 'Falha ao salvar resultado.', downloadError: 'Erro de download', unknownError: 'Erro desconhecido', shareTitle: 'Resultado da análise médica', copiedToClipboard: 'Texto copiado para a área de transferência!', transferTruncated: '[...resultado truncado para transferência]', notAvailable: 'N/D' },
+  es: { loading: 'Análisis en curso...', reportTitle: 'Informe consultivo', modelUsed: 'Modelo usado', copied: 'Copiado', copy: 'Copiar', saveToPatient: 'Guardar en historial del paciente', selectPatient: 'Seleccionar paciente', emptyPatients: 'La base de pacientes está vacía', cancel: 'Cancelar', searchLibrary: 'Buscar en biblioteca', hideLibrary: 'Ocultar biblioteca', ecgProtocol: 'Protocolo ECG', toProtocol: 'Al protocolo', downloadDocx: 'Descargar .docx', downloading: 'Descargando...', print: 'Imprimir', share: 'Compartir', discussManagement: 'Discutir manejo', goCreatePatient: 'Ir a crear paciente', noDiagnosis: 'Sin diagnóstico', modeFast: 'rápido', modeOptimized: 'optimizado', modeValidated: 'experto validado', discussClinicalManagement: 'Discutir manejo clínico', verificationRequired: 'Verificación requerida: este informe debe ser revisado y firmado por el médico tratante.', pricingInfo: 'Precios: el costo en créditos refleja modelos IA e infraestructura.', sessionId: 'ID de sesión', coreVersion: 'Versión core', saveSuccess: '¡Resultado guardado en el paciente!', saveFailed: 'No se pudo guardar el resultado.', downloadError: 'Error de descarga', unknownError: 'Error desconocido', shareTitle: 'Resultado del análisis médico', copiedToClipboard: '¡Texto copiado al portapapeles!', transferTruncated: '[...resultado truncado para transferencia]', notAvailable: 'N/D', draftDisclaimerTitle: 'Borrador clínico (Beta)', draftDisclaimerLine1: 'Este resultado de IA puede ser incompleto o inexacto.', draftDisclaimerLine2: 'Se requiere verificación independiente por un médico antes del uso clínico.', draftDisclaimerLine3: 'No usar para autodiagnóstico del paciente.', consentVersionLabel: 'Versión de consentimiento', verificationModalTitle: 'Verificación médica antes de guardar', verificationModalPrivacyNote: 'Para auditoría solo se guardan el ID del caso y el hecho de confirmación. No se envían datos personales del paciente.', verificationModalCheckReviewed: 'Confirmo que revisé y validé personalmente este borrador antes de guardarlo.', verificationModalCheckResponsibility: 'Entiendo que la responsabilidad clínica final recae en el médico.', verificationModalConfirmSave: 'Confirmar y guardar', verificationModalSaving: 'Guardando...' },
+  fr: { loading: 'Analyse en cours...', reportTitle: 'Rapport consultatif', modelUsed: 'Modèle utilisé', copied: 'Copié', copy: 'Copier', saveToPatient: 'Enregistrer dans le dossier patient', selectPatient: 'Sélectionner un patient', emptyPatients: 'La base patients est vide', cancel: 'Annuler', searchLibrary: 'Rechercher dans la bibliothèque', hideLibrary: 'Masquer la bibliothèque', ecgProtocol: 'Protocole ECG', toProtocol: 'Vers protocole', downloadDocx: 'Télécharger .docx', downloading: 'Téléchargement...', print: 'Imprimer', share: 'Partager', discussManagement: 'Discuter la prise en charge', goCreatePatient: 'Créer un patient', noDiagnosis: 'Aucun diagnostic', modeFast: 'rapide', modeOptimized: 'optimisé', modeValidated: 'expert validé', discussClinicalManagement: 'Discuter la prise en charge clinique', verificationRequired: 'Vérification requise : ce rapport doit être revu et signé par le médecin traitant.', pricingInfo: 'Tarification : le coût en crédits couvre modèles IA et infrastructure.', sessionId: 'ID session', coreVersion: 'Version core', saveSuccess: 'Résultat enregistré dans le dossier patient !', saveFailed: 'Échec de l’enregistrement du résultat.', downloadError: 'Erreur de téléchargement', unknownError: 'Erreur inconnue', shareTitle: 'Résultat d’analyse médicale', copiedToClipboard: 'Texte copié dans le presse-papiers !', transferTruncated: '[...résultat tronqué pour transfert]', notAvailable: 'N/D', draftDisclaimerTitle: 'Brouillon clinique (Bêta)', draftDisclaimerLine1: 'Ce résultat IA peut être incomplet ou inexact.', draftDisclaimerLine2: 'Une vérification indépendante par un médecin est requise avant tout usage clinique.', draftDisclaimerLine3: 'Ne pas utiliser pour l’auto-diagnostic du patient.', consentVersionLabel: 'Version du consentement', verificationModalTitle: 'Vérification médicale avant enregistrement', verificationModalPrivacyNote: 'Pour l’audit, seuls l’ID du cas et la confirmation sont enregistrés. Aucune donnée personnelle du patient n’est envoyée.', verificationModalCheckReviewed: 'Je confirme avoir personnellement vérifié et validé ce brouillon avant enregistrement.', verificationModalCheckResponsibility: 'Je comprends que la responsabilité clinique finale revient au médecin.', verificationModalConfirmSave: 'Confirmer et enregistrer', verificationModalSaving: 'Enregistrement...' },
+  ar: { loading: 'جارٍ التحليل...', reportTitle: 'تقرير استشاري', modelUsed: 'النموذج المستخدم', copied: 'تم النسخ', copy: 'نسخ', saveToPatient: 'حفظ في سجل المريض', selectPatient: 'اختر مريضًا', emptyPatients: 'قاعدة بيانات المرضى فارغة', cancel: 'إلغاء', searchLibrary: 'بحث في المكتبة', hideLibrary: 'إخفاء المكتبة', ecgProtocol: 'بروتوكول ECG', toProtocol: 'إلى البروتوكول', downloadDocx: 'تنزيل .docx', downloading: 'جارٍ التنزيل...', print: 'طباعة', share: 'مشاركة', discussManagement: 'مناقشة الخطة', goCreatePatient: 'إنشاء مريض', noDiagnosis: 'لا يوجد تشخيص', modeFast: 'سريع', modeOptimized: 'محسّن', modeValidated: 'خبير معتمد', discussClinicalManagement: 'مناقشة الإدارة السريرية', verificationRequired: 'التحقق مطلوب: يجب مراجعة هذا التقرير وتوقيعه من الطبيب المعالج.', pricingInfo: 'التسعير: تكلفة الرصيد تشمل نماذج الذكاء والبنية التحتية.', sessionId: 'معرف الجلسة', coreVersion: 'إصدار النواة', saveSuccess: 'تم حفظ النتيجة في سجل المريض!', saveFailed: 'فشل حفظ النتيجة.', downloadError: 'خطأ في التنزيل', unknownError: 'خطأ غير معروف', shareTitle: 'نتيجة التحليل الطبي', copiedToClipboard: 'تم نسخ النص إلى الحافظة!', transferTruncated: '[...تم تقصير النتيجة للنقل]', notAvailable: 'غير متاح', draftDisclaimerTitle: 'مسودة سريرية (بيتا)', draftDisclaimerLine1: 'قد تكون نتيجة الذكاء الاصطناعي غير مكتملة أو غير دقيقة.', draftDisclaimerLine2: 'يلزم التحقق المستقل من طبيب قبل أي استخدام سريري.', draftDisclaimerLine3: 'غير مخصص للتشخيص الذاتي للمريض.', consentVersionLabel: 'إصدار الموافقة', verificationModalTitle: 'تحقق الطبيب قبل الحفظ', verificationModalPrivacyNote: 'لأغراض التدقيق نحفظ فقط رقم الحالة وتأكيد الطبيب. لا يتم إرسال بيانات المريض الشخصية.', verificationModalCheckReviewed: 'أؤكد أنني راجعت هذه المسودة وتحققت منها بنفسي قبل الحفظ.', verificationModalCheckResponsibility: 'أفهم أن المسؤولية السريرية النهائية تقع على الطبيب.', verificationModalConfirmSave: 'تأكيد وحفظ', verificationModalSaving: 'جارٍ الحفظ...' },
+  hi: { loading: 'विश्लेषण जारी है...', reportTitle: 'परामर्श रिपोर्ट', modelUsed: 'उपयोग किया गया मॉडल', copied: 'कॉपी किया गया', copy: 'कॉपी करें', saveToPatient: 'रोगी रिकॉर्ड में सहेजें', selectPatient: 'रोगी चुनें', emptyPatients: 'रोगी डेटाबेस खाली है', cancel: 'रद्द करें', searchLibrary: 'लाइब्रेरी खोजें', hideLibrary: 'लाइब्रेरी छुपाएँ', ecgProtocol: 'ECG प्रोटोकॉल', toProtocol: 'प्रोटोकॉल में भेजें', downloadDocx: '.docx डाउनलोड करें', downloading: 'डाउनलोड हो रहा है...', print: 'प्रिंट', share: 'शेयर', discussManagement: 'प्रबंधन पर चर्चा करें', goCreatePatient: 'रोगी बनाएं', noDiagnosis: 'कोई निदान नहीं', modeFast: 'तेज़', modeOptimized: 'अनुकूलित', modeValidated: 'विशेषज्ञ मान्य', discussClinicalManagement: 'क्लिनिकल प्रबंधन पर चर्चा', verificationRequired: 'सत्यापन आवश्यक: इस रिपोर्ट की चिकित्सक द्वारा समीक्षा और हस्ताक्षर आवश्यक हैं।', pricingInfo: 'मूल्य: क्रेडिट लागत में AI मॉडल और इंफ्रास्ट्रक्चर शामिल है।', sessionId: 'सेशन आईडी', coreVersion: 'कोर संस्करण', saveSuccess: 'परिणाम रोगी रिकॉर्ड में सहेज दिया गया!', saveFailed: 'परिणाम सहेजने में विफल।', downloadError: 'डाउनलोड त्रुटि', unknownError: 'अज्ञात त्रुटि', shareTitle: 'मेडिकल विश्लेषण परिणाम', copiedToClipboard: 'टेक्स्ट क्लिपबोर्ड में कॉपी हो गया!', transferTruncated: '[...ट्रांसफ़र के लिए परिणाम संक्षिप्त]', notAvailable: 'उपलब्ध नहीं', draftDisclaimerTitle: 'क्लिनिकल ड्राफ्ट (बीटा)', draftDisclaimerLine1: 'यह AI आउटपुट अधूरा या गलत हो सकता है।', draftDisclaimerLine2: 'क्लिनिकल उपयोग से पहले डॉक्टर द्वारा स्वतंत्र सत्यापन आवश्यक है।', draftDisclaimerLine3: 'रोगी के स्व-निदान के लिए उपयोग न करें।', consentVersionLabel: 'सहमति संस्करण', verificationModalTitle: 'सहेजने से पहले डॉक्टर सत्यापन', verificationModalPrivacyNote: 'ऑडिट के लिए केवल केस ID और पुष्टि सहेजी जाती है। रोगी की व्यक्तिगत जानकारी भेजी नहीं जाती।', verificationModalCheckReviewed: 'मैं पुष्टि करता/करती हूँ कि सहेजने से पहले मैंने इस ड्राफ्ट की स्वयं समीक्षा और पुष्टि की है।', verificationModalCheckResponsibility: 'मैं समझता/समझती हूँ कि अंतिम क्लिनिकल जिम्मेदारी डॉक्टर की है।', verificationModalConfirmSave: 'पुष्टि करें और सहेजें', verificationModalSaving: 'सहेजा जा रहा है...' },
+  'pt-BR': { loading: 'Análise em andamento...', reportTitle: 'Relatório consultivo', modelUsed: 'Modelo usado', copied: 'Copiado', copy: 'Copiar', saveToPatient: 'Salvar no prontuário do paciente', selectPatient: 'Selecionar paciente', emptyPatients: 'Base de pacientes vazia', cancel: 'Cancelar', searchLibrary: 'Pesquisar biblioteca', hideLibrary: 'Ocultar biblioteca', ecgProtocol: 'Protocolo ECG', toProtocol: 'Para protocolo', downloadDocx: 'Baixar .docx', downloading: 'Baixando...', print: 'Imprimir', share: 'Compartilhar', discussManagement: 'Discutir conduta', goCreatePatient: 'Criar paciente', noDiagnosis: 'Sem diagnóstico', modeFast: 'rápido', modeOptimized: 'otimizado', modeValidated: 'especialista validado', discussClinicalManagement: 'Discutir manejo clínico', verificationRequired: 'Verificação obrigatória: este relatório deve ser revisado e assinado pelo médico assistente.', pricingInfo: 'Preço: custo em créditos cobre modelos IA e infraestrutura.', sessionId: 'ID da sessão', coreVersion: 'Versão do core', saveSuccess: 'Resultado salvo no prontuário do paciente!', saveFailed: 'Falha ao salvar resultado.', downloadError: 'Erro de download', unknownError: 'Erro desconhecido', shareTitle: 'Resultado da análise médica', copiedToClipboard: 'Texto copiado para a área de transferência!', transferTruncated: '[...resultado truncado para transferência]', notAvailable: 'N/D', draftDisclaimerTitle: 'Rascunho clínico (Beta)', draftDisclaimerLine1: 'Este resultado de IA pode estar incompleto ou impreciso.', draftDisclaimerLine2: 'É necessária verificação independente por um médico antes do uso clínico.', draftDisclaimerLine3: 'Não usar para autodiagnóstico do paciente.', consentVersionLabel: 'Versão do consentimento', verificationModalTitle: 'Verificação médica antes de salvar', verificationModalPrivacyNote: 'Para auditoria, salvamos apenas o ID do caso e a confirmação. Dados pessoais do paciente não são enviados.', verificationModalCheckReviewed: 'Confirmo que revisei e validei pessoalmente este rascunho antes de salvar.', verificationModalCheckResponsibility: 'Entendo que a responsabilidade clínica final permanece com o médico.', verificationModalConfirmSave: 'Confirmar e salvar', verificationModalSaving: 'Salvando...' },
   id: { loading: 'Analisis sedang berlangsung...', reportTitle: 'Laporan konsultatif', modelUsed: 'Model yang digunakan', copied: 'Disalin', copy: 'Salin', saveToPatient: 'Simpan ke rekam pasien', selectPatient: 'Pilih pasien', emptyPatients: 'Basis data pasien kosong', cancel: 'Batal', searchLibrary: 'Cari pustaka', hideLibrary: 'Sembunyikan pustaka', ecgProtocol: 'Protokol ECG', toProtocol: 'Ke protokol', downloadDocx: 'Unduh .docx', downloading: 'Mengunduh...', print: 'Cetak', share: 'Bagikan', discussManagement: 'Diskusikan tata laksana', goCreatePatient: 'Buat pasien', noDiagnosis: 'Tanpa diagnosis', modeFast: 'cepat', modeOptimized: 'optimal', modeValidated: 'ahli tervalidasi', discussClinicalManagement: 'Diskusikan manajemen klinis', verificationRequired: 'Verifikasi diperlukan: laporan ini harus ditinjau dan ditandatangani dokter penanggung jawab.', pricingInfo: 'Harga: biaya kredit mencakup model AI dan infrastruktur.', sessionId: 'ID sesi', coreVersion: 'Versi inti', saveSuccess: 'Hasil berhasil disimpan ke rekam pasien!', saveFailed: 'Gagal menyimpan hasil.', downloadError: 'Kesalahan unduh', unknownError: 'Kesalahan tidak dikenal', shareTitle: 'Hasil analisis medis', copiedToClipboard: 'Teks disalin ke clipboard!', transferTruncated: '[...hasil dipotong untuk transfer]', notAvailable: 'T/A' },
   ms: { loading: 'Analisis sedang berjalan...', reportTitle: 'Laporan konsultatif', modelUsed: 'Model digunakan', copied: 'Disalin', copy: 'Salin', saveToPatient: 'Simpan ke rekod pesakit', selectPatient: 'Pilih pesakit', emptyPatients: 'Pangkalan data pesakit kosong', cancel: 'Batal', searchLibrary: 'Cari pustaka', hideLibrary: 'Sembunyikan pustaka', ecgProtocol: 'Protokol ECG', toProtocol: 'Ke protokol', downloadDocx: 'Muat turun .docx', downloading: 'Memuat turun...', print: 'Cetak', share: 'Kongsi', discussManagement: 'Bincang pengurusan', goCreatePatient: 'Cipta pesakit', noDiagnosis: 'Tiada diagnosis', modeFast: 'pantas', modeOptimized: 'dioptimumkan', modeValidated: 'pakar disahkan', discussClinicalManagement: 'Bincang pengurusan klinikal', verificationRequired: 'Pengesahan diperlukan: laporan ini mesti disemak dan ditandatangani oleh doktor merawat.', pricingInfo: 'Harga: kos kredit meliputi model AI dan infrastruktur.', sessionId: 'ID sesi', coreVersion: 'Versi teras', saveSuccess: 'Keputusan berjaya disimpan ke rekod pesakit!', saveFailed: 'Gagal menyimpan keputusan.', downloadError: 'Ralat muat turun', unknownError: 'Ralat tidak diketahui', shareTitle: 'Keputusan analisis perubatan', copiedToClipboard: 'Teks disalin ke papan klip!', transferTruncated: '[...keputusan dipendekkan untuk pemindahan]', notAvailable: 'T/A' },
   tr: { loading: 'Analiz sürüyor...', reportTitle: 'Konsültatif rapor', modelUsed: 'Kullanılan model', copied: 'Kopyalandı', copy: 'Kopyala', saveToPatient: 'Hasta kaydına kaydet', selectPatient: 'Hasta seç', emptyPatients: 'Hasta veritabanı boş', cancel: 'İptal', searchLibrary: 'Kütüphanede ara', hideLibrary: 'Kütüphaneyi gizle', ecgProtocol: 'EKG protokolü', toProtocol: 'Protokole aktar', downloadDocx: '.docx indir', downloading: 'İndiriliyor...', print: 'Yazdır', share: 'Paylaş', discussManagement: 'Yönetimi tartış', goCreatePatient: 'Hasta oluştur', noDiagnosis: 'Tanı yok', modeFast: 'hızlı', modeOptimized: 'optimize', modeValidated: 'uzman doğrulamalı', discussClinicalManagement: 'Klinik yönetimi tartış', verificationRequired: 'Doğrulama gerekli: bu rapor sorumlu hekim tarafından incelenip imzalanmalıdır.', pricingInfo: 'Fiyatlandırma: kredi ücreti AI modelleri ve altyapıyı kapsar.', sessionId: 'Oturum ID', coreVersion: 'Çekirdek sürümü', saveSuccess: 'Sonuç hasta kaydına başarıyla kaydedildi!', saveFailed: 'Sonuç kaydedilemedi.', downloadError: 'İndirme hatası', unknownError: 'Bilinmeyen hata', shareTitle: 'Tıbbi analiz sonucu', copiedToClipboard: 'Metin panoya kopyalandı!', transferTruncated: '[...aktarım için sonuç kısaltıldı]', notAvailable: 'Yok' },

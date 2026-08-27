@@ -1,8 +1,8 @@
 # 🏥 Doctor Opus — AI Clinical Decision Support Platform
 
-**Version:** 4.6.x | **Updated:** February 2026 | **Status:** 🌍 Global Edition
+**Version:** 4.6.x | **Updated:** August 2026 | **Status:** 🌍 Global Edition (Beta)
 
-> **Disclaimer:** Doctor Opus is a Clinical Decision Support System (CDSS) intended exclusively for use by licensed healthcare professionals. It is **not FDA-approved**, does not constitute a medical diagnosis, and does not replace clinical judgment. All AI-generated outputs require physician verification and sign-off. The clinician bears full responsibility for any clinical decisions made.
+> **Disclaimer:** Doctor Opus is beta Clinical Decision Support Software (CDSS) intended exclusively for licensed healthcare professionals. It is not a medical device, does not provide final diagnosis/treatment orders, and does not replace physician judgment. AI output quality depends on third-party LLM capabilities and may be incomplete or inaccurate. All AI outputs require independent physician verification and sign-off. Intended-use restriction: not for regulated clinical deployment in EU/US/UK jurisdictions.
 
 A comprehensive web application for physicians and expert clinics, built on **Next.js 14 App Router**. It accelerates clinical workflows through agentic AI chains (via OpenRouter), supporting DICOM imaging, laboratory data, genetic reports, voice-dictated protocols, and three-level PHI anonymization.
 
@@ -38,9 +38,10 @@ A comprehensive web application for physicians and expert clinics, built on **Ne
 - **Templates:** 22 specialty-specific templates (Cardiology, Neurology, Orthopedics, etc.) following SOAP / H&P structure.
 
 ### 💰 Credit-Based Billing
-- **Payment:** NOWPayments gateway (crypto + fiat, USD).
-- **Packages:** Starter (50 cr. / $9.99), Standard (150 cr. / $24.99), Pro (500 cr. / $69.99).
-- **Transparent pricing:** Exact credit cost displayed after every analysis.
+- **Payment:** Direct USDT TRC20 (Trust Wallet), no payment aggregator dependency.
+- **Packages:** Starter (50 cr. / $6.99), Standard (180 cr. / $19.99), Pro (600 cr. / $59.99).
+- **No trial credits:** AI features are available after package payment and balance top-up.
+- **Transparent pricing:** Exact credit cost is shown after every analysis.
 
 ---
 
@@ -52,7 +53,7 @@ A comprehensive web application for physicians and expert clinics, built on **Ne
 | Database | PostgreSQL (Neon) — balances, consents, statistics |
 | AI Integration | OpenRouter SDK, Streaming API (SSE) |
 | Auth | NextAuth v4 (JWT Strategy) |
-| Payments | NOWPayments (crypto/fiat) |
+| Payments | Direct USDT TRC20 flow (Trust Wallet + txHash confirmation) |
 | Voice | AssemblyAI |
 | Deployment | VPS + Docker Compose + Nginx |
 
@@ -85,8 +86,7 @@ NEXTAUTH_URL=https://doctor-opus.online
 ASSEMBLYAI_API_KEY=your_key
 MIGRATION_SECRET=random_32_char_string
 ENCRYPTION_SALT=random_32_char_string
-NOWPAYMENTS_API_KEY=your_key
-NOWPAYMENTS_IPN_SECRET=your_ipn_secret
+TRUST_WALLET_TRC20_ADDRESS=your_trust_wallet_trc20_address
 ```
 
 ### 3. Run development server
@@ -97,6 +97,39 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ---
 
+## 🧪 Local Dev Database (No Neon)
+
+If you want stable local development without external PostgreSQL availability, use the built-in Docker Postgres profile.
+
+### 1) Start local PostgreSQL
+```bash
+npm run dev:db:up
+```
+
+### 2) Point app to local DB
+Copy `.env.local-db.example` values into your local env (for example, `.env.local`):
+```env
+POSTGRES_URL=postgresql://doctoropus:doctoropus_local_dev@localhost:54329/doctoropus_dev
+DATABASE_URL=postgresql://doctoropus:doctoropus_local_dev@localhost:54329/doctoropus_dev
+NEXTAUTH_URL=http://localhost:3000
+```
+
+### 3) Run app
+```bash
+WATCHPACK_POLLING=true npm run dev
+```
+
+Or start DB + app in one command:
+```bash
+npm run dev:auto
+```
+
+Helpful commands:
+- `npm run dev:db:logs` — follow Postgres logs
+- `npm run dev:db:down` — stop local DB
+
+---
+
 ## 🔐 Security
 
 ### Built-in Protections
@@ -104,6 +137,8 @@ Open [http://localhost:3000](http://localhost:3000)
 - **Server-side billing:** PostgreSQL transactions with `FOR UPDATE` — race condition safe
 - **Safe logs:** Automatic masking of API keys, tokens, and email addresses
 - **PHI anonymization:** Names, dates, IDs, phones, addresses stripped from all data before AI submission
+- **Mandatory legal consent gate:** First login requires explicit legal acceptance with timestamped DB record
+- **Mandatory physician verification on save:** Clinical result save to patient record requires physician confirmation with strict no-PHI audit log (`patient_id` + content hash only)
 
 ### Privacy by Design
 - Patient cards and analysis history stored **locally in the browser** (IndexedDB) — not on server
@@ -172,6 +207,6 @@ doctor-opus/
 
 ## ⚖️ Legal
 
-Doctor Opus is a **Clinical Decision Support System (CDSS)**, not a medical device. It is not FDA-approved, CE-marked, or registered as a medical device in any jurisdiction. All outputs are informational and require independent clinical verification by a licensed practitioner. The developer assumes no liability for clinical decisions made using this tool.
+Doctor Opus is beta **Clinical Decision Support Software (CDSS)**, not a medical device. It is not FDA-approved, CE-marked, or registered as a medical device in any jurisdiction. AI output quality depends on third-party LLM availability/performance and may be inaccurate or incomplete. All outputs are informational drafts and require independent clinical verification by a licensed physician. Intended-use restriction: not for regulated clinical deployment in EU/US/UK jurisdictions. The developer assumes no liability for clinical decisions made using this tool.
 
 **For licensed healthcare professionals only.**

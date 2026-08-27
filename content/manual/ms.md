@@ -1,6 +1,6 @@
 # 📘 Doctor Opus — Panduan Pengguna Pakar Perubatan
 
-> **Penting:** Doctor Opus ialah Sistem Sokongan Keputusan Klinikal (CDSS) untuk **profesional penjagaan kesihatan berlesen sahaja**. Ia bukan diluluskan oleh FDA dan tidak membentuk diagnosis perubatan. Semua output yang dihasilkan oleh AI memerlukan pengesahan klinikal bebas. Anda memikul tanggungjawab penuh untuk semua keputusan klinikal.
+> **Penting:** Doctor Opus ialah perisian beta Sokongan Keputusan Klinikal (CDSS) untuk **profesional penjagaan kesihatan berlesen sahaja**. Ia bukan peranti perubatan dan tidak memberikan diagnosis akhir atau arahan rawatan. Kualiti output AI bergantung pada keupayaan LLM pihak ketiga dan mungkin tidak lengkap atau kurang tepat. Semua output AI memerlukan pengesahan perubatan bebas oleh doktor. Had penggunaan: tidak bertujuan untuk penggunaan klinikal terkawal di bidang kuasa EU/AS/UK. Anda memikul tanggungjawab penuh untuk semua keputusan klinikal.
 
 Doctor Opus mempercepatkan aliran kerja klinikal anda dengan menyediakan tafsiran berbantu AI untuk pengimejan perubatan, data makmal, laporan genetik dan nota klinikal. Setiap bahagian mengandungi petua kontekstual — semak petua tersebut pada penggunaan pertama.
 
@@ -33,6 +33,17 @@ Setelah dipasang, aplikasi dibuka dalam skrin penuh, boleh diakses melalui ikon,
 ## 🏠 Laman Utama
 
 Papan pemuka gambaran keseluruhan dengan navigasi pantas ke semua bahagian.
+
+---
+
+## ⚖️ Aliran undang-undang wajib
+
+Selepas log masuk pertama (atau selepas versi dokumen undang-undang dikemas kini), anda wajib mengesahkan penerimaan undang-undang sebelum menggunakan modul klinikal.
+
+Semasa menyimpan hasil AI ke rekod pesakit:
+- Tetingkap pengesahan doktor akan dipaparkan
+- Anda perlu mengesahkan semakan peribadi dan tanggungjawab klinikal
+- Log audit hanya menyimpan pengecam kes serta metadata pengesahan/hash (tiada data peribadi pesakit dihantar)
 
 ---
 
@@ -335,9 +346,17 @@ Kredit digunakan apabila menggunakan model AI lanjutan. Carian rujukan mudah dan
 | Penyalin tempatan / kalkulator | Percuma |
 
 **Pakej:**
-- **Starter:** 50 kredit — $9.99
-- **Standard:** 150 kredit — $24.99
-- **Pro:** 500 kredit — $69.99
+- **Starter:** 50 kredit — $6.99
+- **Standard:** 180 kredit — $19.99
+- **Pro:** 600 kredit — $59.99
+
+**Aliran pembayaran (semasa):**
+- Pilih pakej di halaman Langganan
+- Hantar jumlah USDT yang tepat melalui **TRON (TRC20)** ke dompet yang dipaparkan pada invois
+- Tampal hash transaksi (`txHash`) untuk pengesahan pembayaran automatik
+- Kredit akan ditambah selepas transaksi disahkan
+
+Tiada kredit percubaan untuk ciri AI.
 
 Kos tepat bagi setiap permintaan ditunjukkan dalam blok keputusan sejurus selepas analisis selesai. Sejarah transaksi penuh tersedia dalam **Balance & History**.
 

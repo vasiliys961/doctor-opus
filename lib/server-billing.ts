@@ -12,6 +12,8 @@
 import { getDbClient } from '@/lib/database';
 import { BILLING_CONFIG } from '@/lib/config';
 
+const BILLING_FAIL_OPEN = process.env.BILLING_FAIL_OPEN === 'true';
+
 /**
  * VIP-пользователи — из env (через запятую)
  */
@@ -35,19 +37,30 @@ export function isVipEmail(email?: string | null): boolean {
  * @returns { allowed, balanceAfter, error? }
  */
 export async function checkAndDeductBalance(
-  email: string,
+  email: string | null,
   amount: number,
   operation: string,
   metadata: Record<string, any> = {}
 ): Promise<{ allowed: boolean; balanceAfter?: number; error?: string }> {
+  if (!email) {
+    return { allowed: false, error: 'Missing user email for billing' };
+  }
+
   // VIP — пропускаем без списания
   if (isVipEmail(email)) {
     return { allowed: true, balanceAfter: Infinity };
   }
 
-  // Если БД не подключена — пропускаем (graceful degradation)
+  // Если БД не подключена — по умолчанию блокируем (fail-closed).
+  // Для экстренного отката можно включить BILLING_FAIL_OPEN=true.
   if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
-    return { allowed: true };
+    if (BILLING_FAIL_OPEN) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      error: 'Billing service is not configured. Access is available only after payment verification.',
+    };
   }
 
   const SOFT_LIMIT = BILLING_CONFIG.softLimit;
@@ -104,8 +117,13 @@ export async function checkAndDeductBalance(
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     console.error('❌ [SERVER-BILLING] Error:', error);
-    // При ошибке биллинга — пропускаем (не блокируем врача)
-    return { allowed: true };
+    if (BILLING_FAIL_OPEN) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      error: 'Billing service is temporarily unavailable. Please try again in a moment.',
+    };
   } finally {
     client.release();
   }
@@ -116,7 +134,7 @@ export async function checkAndDeductBalance(
  * Используется для "хука" без регистрации.
  */
 export async function checkAndDeductGuestBalance(
-  guestKey: string,
+  guestKey: string | null,
   amount: number,
   operation: string,
   metadata: Record<string, any> = {}
@@ -125,9 +143,15 @@ export async function checkAndDeductGuestBalance(
     return { allowed: false, error: 'Guest key is missing' };
   }
 
-  // Если БД недоступна — не блокируем врача.
+  // Если БД недоступна — по умолчанию блокируем (fail-closed).
   if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
-    return { allowed: true };
+    if (BILLING_FAIL_OPEN) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      error: 'Billing service is not configured. Access is available only after payment verification.',
+    };
   }
 
   const SOFT_LIMIT = BILLING_CONFIG.softLimit;
@@ -140,7 +164,7 @@ export async function checkAndDeductGuestBalance(
       CREATE TABLE IF NOT EXISTS guest_balances (
         id SERIAL PRIMARY KEY,
         guest_key VARCHAR(255) UNIQUE NOT NULL,
-        balance DECIMAL(10,2) DEFAULT 10.00 CHECK (balance >= -5.00),
+        balance DECIMAL(10,2) DEFAULT 0.00 CHECK (balance >= 0.00),
         total_spent DECIMAL(10,2) DEFAULT 0.00,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -169,8 +193,7 @@ export async function checkAndDeductGuestBalance(
       return {
         allowed: false,
         balanceAfter: currentBalance,
-        error: `Your free trial is over. Sign up to get +20 credits and continue. Available: ${currentBalance.toFixed(2)} units, required: ${amount.toFixed(2)} units.`,
-        error: `Free trial limit reached. To continue, activate a subscription or top up your balance. Available: ${currentBalance.toFixed(2)} units, required: ${amount.toFixed(2)} units.`,
+        error: `Insufficient balance. Access is available after package payment. Available: ${currentBalance.toFixed(2)} units, required: ${amount.toFixed(2)} units.`,
       };
     }
 
@@ -194,9 +217,61 @@ export async function checkAndDeductGuestBalance(
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     console.error('❌ [SERVER-BILLING] Guest adjustment error:', error);
-    return { allowed: true };
+    if (BILLING_FAIL_OPEN) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      error: 'Billing service is temporarily unavailable. Please try again in a moment.',
+    };
   } finally {
     client.release();
+  }
+}
+
+export async function refundChargedBalanceOnFailure(params: {
+  email?: string | null;
+  guestKey?: string | null;
+  amount: number;
+  operation: string;
+  metadata?: Record<string, any>;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const amount = Math.abs(Number(params.amount || 0));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return { success: false, error: 'Invalid refund amount' };
+    }
+
+    const refundOperation = `${params.operation} [refund]`;
+    const refundMetadata = { ...(params.metadata || {}), refund: true };
+
+    if (params.email) {
+      const result = await checkAndDeductBalance(
+        params.email,
+        -amount,
+        refundOperation,
+        refundMetadata
+      );
+      return result.allowed
+        ? { success: true }
+        : { success: false, error: result.error || 'Failed to refund user balance' };
+    }
+
+    if (params.guestKey) {
+      const result = await checkAndDeductGuestBalance(
+        params.guestKey,
+        -amount,
+        refundOperation,
+        refundMetadata
+      );
+      return result.allowed
+        ? { success: true }
+        : { success: false, error: result.error || 'Failed to refund guest balance' };
+    }
+
+    return { success: false, error: 'No billing target provided for refund' };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Refund failed' };
   }
 }
 

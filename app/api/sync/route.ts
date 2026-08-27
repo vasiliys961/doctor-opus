@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 type SyncSession = { image: string | null; timestamp: number };
+type BridgeEntry = { id: string; image: string; timestamp: number };
 
 function normalizeCode(raw: unknown): string {
   // Пользователи часто вводят код с пробелами ("123 456") или вставляют с мусором.
@@ -14,6 +15,30 @@ function normalizeCode(raw: unknown): string {
 const globalForSync = globalThis as unknown as { __doctorOpusSyncSessions?: Record<string, SyncSession>; __doctorOpusSyncCleaner?: NodeJS.Timeout };
 const syncSessions: Record<string, SyncSession> = globalForSync.__doctorOpusSyncSessions || {};
 globalForSync.__doctorOpusSyncSessions = syncSessions;
+const globalForBridge = globalThis as unknown as { __doctorOpusSyncBridge?: BridgeEntry[] };
+const bridgeEntries: BridgeEntry[] = globalForBridge.__doctorOpusSyncBridge || [];
+globalForBridge.__doctorOpusSyncBridge = bridgeEntries;
+
+function createBridgeId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function addToBridge(image: string): BridgeEntry {
+  const entry: BridgeEntry = {
+    id: createBridgeId(),
+    image,
+    timestamp: Date.now(),
+  };
+  bridgeEntries.unshift(entry);
+  // Держим ограниченный буфер, чтобы не раздувать память процесса.
+  if (bridgeEntries.length > 50) {
+    bridgeEntries.length = 50;
+  }
+  return entry;
+}
 
 // Очистка старых сессий (защищаемся от повторной установки таймера при HMR)
 if (!globalForSync.__doctorOpusSyncCleaner) {
@@ -55,6 +80,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, hasImage: false });
   }
 
+  if (action === 'bridge-list') {
+    return NextResponse.json({ success: true, entries: bridgeEntries });
+  }
+
   return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
 }
 
@@ -71,7 +100,13 @@ export async function POST(request: NextRequest) {
       
       syncSessions[code].image = image;
       syncSessions[code].timestamp = Date.now();
+      const bridgeEntry = addToBridge(image);
       
+      return NextResponse.json({ success: true, bridgeId: bridgeEntry.id, timestamp: bridgeEntry.timestamp });
+    }
+
+    if (action === 'bridge-clear') {
+      bridgeEntries.length = 0;
       return NextResponse.json({ success: true });
     }
 

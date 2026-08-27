@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 interface AnalysisTipsProps {
   title?: string
+  recommendationProfile?: 'imaging' | 'lab' | 'video' | 'genetic' | 'document' | 'consilium' | 'general'
   content?: {
     fast?: string
     optimized?: string
@@ -12,11 +13,82 @@ interface AnalysisTipsProps {
   }
 }
 
+const RECOMMENDATION_TEXT: Record<
+  NonNullable<AnalysisTipsProps['recommendationProfile']>,
+  { title: string; lines: string[] }
+> = {
+  imaging: {
+    title: 'Model recommendation',
+    lines: [
+      'Use Optimized mode (Gemini JSON + Claude Sonnet 5) as the default for most studies.',
+      'Use Fast mode for quick triage and initial screening.',
+      'Use Expert Validated (Gemini JSON + Claude Opus 5) for critical or complex cases.',
+      'If Claude is unavailable in your region, switch to GPT-5.6 Terra in Optimized mode.',
+    ],
+  },
+  lab: {
+    title: 'Model recommendation',
+    lines: [
+      'Use Fast mode (Gemini 3 Flash) for reliable extraction from tables and lab forms.',
+      'Use Optimized mode for balanced interpretation of abnormal values.',
+      'Use Expert Validated when nuanced differential interpretation is required.',
+      'If Claude is unavailable in your region, use GPT-5.6 Terra as fallback.',
+    ],
+  },
+  video: {
+    title: 'Model recommendation',
+    lines: [
+      'Use Fast mode for routine frame-based comparison and quick dynamic assessment.',
+      'Use Optimized mode for balanced depth/cost in repeated video studies.',
+      'Use Expert Validated for difficult temporal patterns and high-risk cases.',
+      'If Claude is unavailable in your region, use GPT-5.6 Terra as fallback.',
+    ],
+  },
+  genetic: {
+    title: 'Model recommendation',
+    lines: [
+      'Use Fast mode for initial extraction from VCF and report text.',
+      'Use Optimized mode for most day-to-day clinical interpretation workflows.',
+      'Use Expert Validated for complex variants and high-stakes genetics consults.',
+      'If Claude is unavailable in your region, use GPT-5.6 Terra as fallback.',
+    ],
+  },
+  document: {
+    title: 'Model recommendation',
+    lines: [
+      'Use Fast mode for rapid OCR and structural extraction from documents.',
+      'Use Optimized mode when medical context interpretation is needed.',
+      'Use Expert Validated for complex medical reports with ambiguity.',
+      'If Claude is unavailable in your region, use GPT-5.6 Terra as fallback.',
+    ],
+  },
+  consilium: {
+    title: 'Model recommendation',
+    lines: [
+      'Consilium starts with a multi-specialty round for broad clinical coverage.',
+      'For complex or conflicting cases, the system escalates to role-based debate on Claude Fable 5.',
+      'Use Consilium when you need disagreement analysis and safer consensus building.',
+      'If escalation is blocked by balance, a round-0 clinical summary is still returned for manual review.',
+    ],
+  },
+  general: {
+    title: 'Model recommendation',
+    lines: [
+      'Use Optimized mode by default for best quality/cost balance.',
+      'Use Fast mode for quick screening and short turnaround.',
+      'Use Expert Validated for critical decisions and complex evidence.',
+      'If Claude is unavailable in your region, use GPT-5.6 Terra as fallback.',
+    ],
+  },
+}
+
 export default function AnalysisTips({ 
   title = 'Tips on Using Analysis Modes',
+  recommendationProfile = 'general',
   content 
 }: AnalysisTipsProps) {
   const [isOpen, setIsOpen] = useState(true)
+  const recommendation = RECOMMENDATION_TEXT[recommendationProfile]
 
   return (
     <div className="mb-8 bg-primary-50/30 border-l-4 border-primary-600 p-6 rounded-r-xl shadow-sm transition-all duration-300">
@@ -73,6 +145,15 @@ export default function AnalysisTips({
               ))}
             </div>
           )}
+
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+            <p className="font-semibold mb-1">🧭 {recommendation.title}</p>
+            <ul className="list-disc pl-4 space-y-1">
+              {recommendation.lines.map((line, index) => (
+                <li key={index}>{line}</li>
+              ))}
+            </ul>
+          </div>
 
           <div className="mt-4 pt-4 border-t border-amber-200 bg-amber-50 rounded-lg p-3 text-xs text-amber-900">
             <p className="font-semibold mb-1">⚠️ Service availability notice</p>

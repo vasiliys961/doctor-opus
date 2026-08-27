@@ -301,7 +301,7 @@ export default function Dicom3DViewer({ files, onClose, presentation = 'modal' }
       }
 
       if (pixelDataArrays.length < 2) {
-        throw new Error('Недостаточно данных для построения 3D срезов. Загрузите серию снимков.');
+        throw new Error('Not enough data to build 3D slices. Upload a full image series.');
       }
 
       // Создаем vtkImageData

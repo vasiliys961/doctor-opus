@@ -7,6 +7,8 @@ import fs from 'fs/promises';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
+import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const gunzipAsync = promisify(gunzip);
@@ -14,6 +16,14 @@ const gunzipAsync = promisify(gunzip);
 // Примерные стоимости моделей в единицах за 1000 токенов
 const PRICE_UNITS_PER_1K_TOKENS_SONNET = 2.0;
 const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4;
+const MIN_GENETIC_EXTRACTION_COST = 1.5;
+const MAX_GENETIC_EXTRACTION_COST = 12;
+
+function estimateGeneticExtractionCost(fileSizeBytes: number): number {
+  const sizeMb = fileSizeBytes / (1024 * 1024);
+  const estimated = 1.5 + sizeMb * 0.35;
+  return Number(Math.min(MAX_GENETIC_EXTRACTION_COST, Math.max(MIN_GENETIC_EXTRACTION_COST, estimated)).toFixed(2));
+}
 
 /**
  * ЭТАП 1. API endpoint для ГЕНЕТИЧЕСКОГО АНАЛИЗА
@@ -21,37 +31,56 @@ const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4;
  * НИКАКОЙ клинической трактовки здесь нет — она выполняется в /api/analyze/genetic/consult.
  */
 export async function POST(request: NextRequest) {
+  let billedAmount = 0;
+  let billingEmail: string | null = null;
+  let billingGuestKey: string | null = null;
   try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
     const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Authorization required' },
-        { status: 401 }
-      );
-    }
-    */
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
+    billingEmail = userEmail;
+    billingGuestKey = guestKey;
 
     console.log('🧬 [GENETIC] Этап 1: начало обработки запроса (только извлечение)...');
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const isAnonymous = formData.get('isAnonymous') === 'true';
 
     if (!file) {
-      console.error('❌ [GENETIC] File not provided');
+      console.error('❌ [GENETIC] Файл не предоставлен');
       return NextResponse.json(
-        { success: false, error: 'File not provided' },
+        { success: false, error: 'Файл не предоставлен' },
         { status: 400 }
       );
     }
 
+    const estimatedCost = estimateGeneticExtractionCost(file.size);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Genetic extraction', {
+          fileName: file.name,
+          fileType: file.type || 'unknown',
+          fileSize: file.size,
+          source: 'genetic_extract_file',
+        })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: genetic extraction', {
+          fileName: file.name,
+          fileType: file.type || 'unknown',
+          fileSize: file.size,
+          source: 'genetic_extract_file',
+        });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Недостаточно единиц для генетического извлечения' },
+        { status: 402 }
+      );
+    }
+    billedAmount = estimatedCost;
+
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      console.error('❌ [GENETIC] OPENROUTER_API_KEY is not configured');
+      console.error('❌ [GENETIC] OPENROUTER_API_KEY не настроен');
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
+        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
         { status: 500 }
       );
     }
@@ -133,7 +162,7 @@ APOE;rs429358;CC;высокий риск болезни Альцгеймера`;
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://doctor-opus.online',
+            'HTTP-Referer': 'https://doctor-opus.ru',
             'X-Title': 'Doctor Opus',
           },
           body: JSON.stringify(extractionPayload),
@@ -236,7 +265,7 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.online',
+          'HTTP-Referer': 'https://doctor-opus.ru',
           'X-Title': 'Doctor Opus',
         },
         body: JSON.stringify(extractionPayload),
@@ -299,15 +328,17 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
       return NextResponse.json(
         {
           success: false,
-          error: 'Failed to extract data from file',
+          error: 'Не удалось извлечь данные из файла',
         },
         { status: 400 }
       );
     }
 
-    if (isAnonymous) {
-      extractedData = anonymizeText(extractedData);
-    }
+    // Текстовая анонимизация применяется всегда (как во всех остальных модулях),
+    // а не только при включённом чекбоксе "Разовый анонимный анализ" — иначе
+    // ФИО/даты, случайно попавшие в OCR из шапки лабораторного отчёта, могли
+    // уйти во внешнюю модель без маскировки.
+    extractedData = anonymizeText(extractedData);
 
     return NextResponse.json({
       success: true,
@@ -318,10 +349,22 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
     });
   } catch (error: any) {
     console.error('❌ [GENETIC] Критическая ошибка на этапе извлечения:', error);
+    if (billedAmount > 0) {
+      const refundResult = await refundChargedBalanceOnFailure({
+        email: billingEmail,
+        guestKey: billingGuestKey,
+        amount: billedAmount,
+        operation: 'Genetic extraction (auto refund on failure)',
+        metadata: { source: 'genetic_extract_file', billedAmount },
+      });
+      if (!refundResult.success) {
+        console.error('❌ [GENETIC] Не удалось выполнить авто-возврат:', refundResult.error);
+      }
+    }
     return NextResponse.json(
       {
         success: false,
-        error: 'Genetic analysis error',
+        error: 'Ошибка генетического анализа',
       },
       { status: 500 }
     );

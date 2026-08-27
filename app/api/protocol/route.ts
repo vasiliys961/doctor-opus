@@ -1,33 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendTextRequest, MODELS } from '@/lib/openrouter';
 import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
+import { formatCostLog } from '@/lib/cost-calculator';
 import { anonymizeText } from '@/lib/anonymization';
-import { buildStrictOutputLanguageRule } from '@/lib/language-policy';
-
-const INTERNATIONAL_RX_POLICY = `INTERNATIONAL PRESCRIPTION STANDARD (MANDATORY):
-- Use INN/generic names only (English or Latin script).
-- Do NOT use Russian/Cyrillic drug names and do NOT use local trade names by default.
-- If a trade name is clinically necessary, add only one globally known brand in parentheses after INN.
-- Format each medication line as: "INN - dose, route, frequency, duration".`;
-
-const STRICT_FAST_RAWTEXT_THRESHOLD = 12000;
-const STRICT_FAST_TEMPLATE_THRESHOLD = 6000;
-const STRICT_CORRECTION_TIMEOUT_MS = Number(process.env.PROTOCOL_STRICT_CORRECTION_TIMEOUT_MS || 55000);
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-    promise
-      .then((value) => {
-        clearTimeout(timer);
-        resolve(value);
-      })
-      .catch((error) => {
-        clearTimeout(timer);
-        reject(error);
-      });
-  });
-}
 
 function buildProtocolCorrectionPrompt(params: {
   rawText: string;
@@ -55,69 +30,19 @@ DRAFT TO CORRECT:
 ${draft}`;
 }
 
-function trimToTemplateStart(text: string, template: string): string {
-  const safeText = String(text ?? '').trim();
-  if (!safeText) return '';
-  const firstTemplateLine = String(template ?? '')
-    .split('\n')
-    .map((line) => line.trim())
-    .find(Boolean);
-  if (!firstTemplateLine) return safeText;
-
-  const index = safeText.toLowerCase().indexOf(firstTemplateLine.toLowerCase());
-  if (index <= 0) return safeText;
-  return safeText.slice(index).trim();
-}
-
-function isStructuredProtocolOutputValid(text: string, template: string): boolean {
-  const candidate = String(text ?? '').trim();
-  if (!candidate) return false;
-
-  const templateLines = String(template ?? '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (templateLines.length === 0) return candidate.length > 80;
-
-  const firstLine = templateLines[0];
-  if (firstLine && !candidate.toLowerCase().includes(firstLine.toLowerCase())) {
-    return false;
-  }
-
-  const headingCount = templateLines.filter((line) => /[:#]/.test(line)).length;
-  if (headingCount >= 2) {
-    const foundHeadings = templateLines
-      .filter((line) => /[:#]/.test(line))
-      .slice(0, 6)
-      .filter((line) => candidate.toLowerCase().includes(line.toLowerCase()))
-      .length;
-    if (foundHeadings < Math.max(2, Math.floor(Math.min(headingCount, 6) / 2))) {
-      return false;
-    }
-  }
-
-  return candidate.length > 120;
-}
-
 function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let buffer = '';
-  let streamCompleted = false;
 
-  const sanitizeEventBlock = (block: string): { text: string; hasDone: boolean } => {
+  const sanitizeEventBlock = (block: string): string => {
     const lines = block.split('\n');
-    let hasDone = false;
     const sanitizedLines = lines.map((line) => {
       if (!line.startsWith('data: ')) return line;
 
       const payload = line.slice(6).trim();
-      if (payload === '[DONE]') {
-        hasDone = true;
-        return '';
-      }
+      if (payload === '[DONE]') return line;
 
       try {
         const parsed = JSON.parse(payload);
@@ -130,10 +55,7 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
         return line;
       }
     });
-    return {
-      text: sanitizedLines.filter(Boolean).join('\n'),
-      hasDone,
-    };
+    return sanitizedLines.join('\n');
   };
 
   return new ReadableStream<Uint8Array>({
@@ -149,26 +71,14 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
             const eventBlock = buffer.slice(0, delimiterIndex);
             buffer = buffer.slice(delimiterIndex + 2);
             const sanitized = sanitizeEventBlock(eventBlock);
-            if (sanitized.text) {
-              controller.enqueue(encoder.encode(`${sanitized.text}\n\n`));
-            }
-            if (sanitized.hasDone && !streamCompleted) {
-              streamCompleted = true;
-              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            }
+            controller.enqueue(encoder.encode(`${sanitized}\n\n`));
             delimiterIndex = buffer.indexOf('\n\n');
           }
         }
 
         if (buffer.length > 0) {
           const sanitized = sanitizeEventBlock(buffer);
-          if (sanitized.text) {
-            controller.enqueue(encoder.encode(`${sanitized.text}\n\n`));
-          }
-          if (sanitized.hasDone && !streamCompleted) {
-            streamCompleted = true;
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          }
+          controller.enqueue(encoder.encode(sanitized));
         }
         controller.close();
       } catch (error) {
@@ -178,144 +88,6 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
       }
     },
   });
-}
-
-function buildDeferredStrictProtocolSse(params: {
-  initialModel: string;
-  generate: () => Promise<{ text: string; model: string }>;
-}): ReadableStream<Uint8Array> {
-  const { initialModel, generate } = params;
-  const encoder = new TextEncoder();
-
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      let closed = false;
-      const safeEnqueue = (payload: string) => {
-        if (closed) return;
-        controller.enqueue(encoder.encode(payload));
-      };
-      const closeStream = () => {
-        if (closed) return;
-        closed = true;
-        controller.close();
-      };
-
-      const keepAliveInterval = setInterval(() => {
-        safeEnqueue(': keep-alive\n\n');
-      }, 10000);
-
-      void (async () => {
-        try {
-          safeEnqueue(': strict-protocol-processing\n\n');
-          const result = await generate();
-          const now = Math.floor(Date.now() / 1000);
-          const chunk = {
-            id: 'protocol-strict-final',
-            object: 'chat.completion.chunk',
-            created: now,
-            model: result.model || initialModel,
-            choices: [
-              {
-                index: 0,
-                delta: { content: result.text },
-                finish_reason: null,
-              },
-            ],
-          };
-          const doneChunk = {
-            id: 'protocol-strict-final',
-            object: 'chat.completion.chunk',
-            created: now,
-            model: result.model || initialModel,
-            choices: [
-              {
-                index: 0,
-                delta: {},
-                finish_reason: 'stop',
-              },
-            ],
-          };
-
-          safeEnqueue(`data: ${JSON.stringify(chunk)}\n\n`);
-          safeEnqueue(`data: ${JSON.stringify(doneChunk)}\n\n`);
-          safeEnqueue('data: [DONE]\n\n');
-        } catch (error: any) {
-          const message = typeof error?.message === 'string' && error.message.trim()
-            ? error.message
-            : 'Protocol generation error';
-          safeEnqueue(`data: ${JSON.stringify({ error: { message } })}\n\n`);
-          safeEnqueue('data: [DONE]\n\n');
-        } finally {
-          clearInterval(keepAliveInterval);
-          closeStream();
-        }
-      })();
-    },
-  });
-}
-
-async function enforceStrictTemplateOutput(params: {
-  rawText: string;
-  template: string;
-  draft: string;
-  primaryModel: string;
-  primaryPrompt: string;
-  useFastStrict: boolean;
-}): Promise<{ text: string; model: string }> {
-  const { rawText, template, draft, primaryModel, primaryPrompt, useFastStrict } = params;
-  let bestEffortText = trimToTemplateStart(draft, template);
-
-  const primaryCorrectionPrompt = buildProtocolCorrectionPrompt({
-    rawText,
-    template,
-    draft,
-  });
-  try {
-    let corrected = await withTimeout(
-      sendTextRequest(primaryCorrectionPrompt, [], primaryModel),
-      STRICT_CORRECTION_TIMEOUT_MS,
-      'Strict correction timeout'
-    );
-    corrected = trimToTemplateStart(corrected, template);
-    bestEffortText = corrected;
-    if (isStructuredProtocolOutputValid(corrected, template)) {
-      return { text: corrected, model: primaryModel };
-    }
-
-    if (useFastStrict) {
-      return { text: corrected, model: primaryModel };
-    }
-  } catch (error: any) {
-    if (useFastStrict) {
-      console.warn(`[PROTOCOL] Fast strict correction timeout/error on ${primaryModel}: ${String(error?.message || error)}`);
-      return { text: bestEffortText, model: primaryModel };
-    }
-  }
-
-  const fallbackModel = MODELS.SONNET;
-  console.warn(`[PROTOCOL] Strict template guard: output invalid on ${primaryModel}, retry on ${fallbackModel}`);
-  try {
-    const fallbackDraft = await withTimeout(
-      sendTextRequest(primaryPrompt, [], fallbackModel),
-      STRICT_CORRECTION_TIMEOUT_MS,
-      'Strict fallback draft timeout'
-    );
-    const fallbackCorrectionPrompt = buildProtocolCorrectionPrompt({
-      rawText,
-      template,
-      draft: fallbackDraft,
-    });
-    let fallbackCorrected = await withTimeout(
-      sendTextRequest(fallbackCorrectionPrompt, [], fallbackModel),
-      STRICT_CORRECTION_TIMEOUT_MS,
-      'Strict fallback correction timeout'
-    );
-    fallbackCorrected = trimToTemplateStart(fallbackCorrected, template);
-    return { text: fallbackCorrected, model: fallbackModel };
-  } catch (error: any) {
-    console.warn(`[PROTOCOL] Strict fallback timeout/error on ${fallbackModel}: ${String(error?.message || error)}`);
-    return { text: bestEffortText, model: primaryModel };
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -330,8 +102,7 @@ export async function POST(request: NextRequest) {
       specialistName,
       universalPrompt = '',
       ragExamples = [],
-      strictTemplateMode = true,
-      speedProfile = 'standard'
+      strictTemplateMode = true
     } = body;
     const rawText = anonymizeText(String(rawIncomingText ?? ''));
     const safeTemplate = anonymizeText(String(customTemplate ?? '')).trim();
@@ -348,12 +119,11 @@ export async function POST(request: NextRequest) {
     const specialistDirective = universalPrompt
       ? `PROFILE-SPECIFIC INSTRUCTION (${specialistName}): ${universalPrompt}\n\n`
       : '';
-    const forceFastProfile = speedProfile === 'fast';
     const safeRagExamples = Array.isArray(ragExamples)
       ? ragExamples
           .map((chunk: unknown) => anonymizeText(String(chunk ?? '')).trim())
           .filter(Boolean)
-          .slice(0, forceFastProfile ? 4 : 8)
+          .slice(0, 8)
       : [];
     const ragDirective = safeRagExamples.length > 0
       ? `EXAMPLES FROM PERSONAL RAG LIBRARY (use as structure/style reference only; medical facts must come ONLY from current case):
@@ -363,14 +133,6 @@ ${safeRagExamples.map((chunk: string, index: number) => `--- EXAMPLE #${index + 
       : '';
 
     const isEcgFunctionalConclusion = templateId === 'ecg-functional-conclusion';
-    const useFastStrict =
-      (isStrictTemplateMode || forceFastProfile) &&
-      !isEcgFunctionalConclusion &&
-      (
-        forceFastProfile ||
-        rawText.length >= STRICT_FAST_RAWTEXT_THRESHOLD ||
-        safeTemplate.length >= STRICT_FAST_TEMPLATE_THRESHOLD
-      );
     const hasDiagnosisSection = /(diagnosis|assessment|icd|conclusion)/i.test(safeTemplate);
     const hasTreatmentSection = /(treatment|therapy|recommendation|plan|management)/i.test(safeTemplate);
     const templateHasMarkdownTable = /\|.+\|\s*\n\|[\s:-]+\|/m.test(safeTemplate);
@@ -428,7 +190,6 @@ Never substitute current facts with template/RAG content.`;
 
     // ECG mode: concise formal conclusion only.
     // This prevents clinical hypotheses and management reasoning.
-    const englishOnlyPolicy = buildStrictOutputLanguageRule('english');
     const prompt = isEcgFunctionalConclusion
       ? `You are a physician specialized in functional diagnostics (ECG). Create a SHORT formal ECG conclusion based on the input text.
 ${specialistDirective}INPUT DATA (from ECG analysis):
@@ -443,9 +204,10 @@ MANDATORY CONSTRAINTS:
 3. Do not invent parameters. Include values (PQ/QRS/QTc, ST in mm) only if explicitly present in the input text. If absent, write "no data".
 4. Preserve ST direction exactly: if the input says "depression", do not output "elevation", and vice versa.
 5. Do not diagnose ACS/MI and do not add phrases like "no ACS" unless explicitly present in the input.
-6. ${englishOnlyPolicy}
+6. Output language is STRICTLY English-only, regardless of the input language.
+7. If any non-English text appears, rewrite it to English before finalizing the answer.
 ${refreshFromCurrentCaseDirective}
-Language policy: strict English-only.`
+Language: English-only.`
       : `You are an experienced physician (${specialistName || 'Internal Medicine Physician'}), an expert clinical assistant with the competence of a professor of clinical medicine and broad academic-hospital experience.
 ${specialistDirective}You combine clinical rigor and responsibility, transforming unstructured information into a standard encounter protocol with evidence-based diagnostic and treatment recommendations.
 
@@ -466,8 +228,9 @@ MANDATORY STYLE AND CONTENT RULES:
 7. Length: keep the protocol compact and practical (about up to 2 A4 pages equivalent).
 8. Footer note: include a brief informed-consent acknowledgment at the end (can be plain text).
 9. References: cite trusted international sources (UpToDate, PubMed, Cochrane, NCCN, ESC, WHO, etc.), preferably recent (<=5 years), for key management decisions.
-10. ${englishOnlyPolicy}
-11. ${INTERNATIONAL_RX_POLICY}
+10. Output language is STRICTLY English-only, regardless of the input language.
+11. Ignore non-English wording in user input and RAG examples for output language choice.
+12. If any non-English text appears, rewrite it to English before finalizing the answer.
 ${requiredClinicalBlockDirective}
 ${strictTemplateDirective}
 ${tableDirective}
@@ -477,57 +240,12 @@ ${clinicalDefaultsDirective}
 ${clinicalReasoningDirective}
 ${evidencePriorityDirective}
 
-Style: strictly professional, clinically and technically accurate. Language policy: strict English-only.`;
+Style: strictly professional, clinically and technically accurate. Language: English-only.`;
 
-    const allowGpt52Protocol = process.env.ALLOW_GPT52_PROTOCOL === 'true';
-    const effectiveModel = model === 'gpt52' && !allowGpt52Protocol ? 'sonnet' : model;
-    const MODEL = effectiveModel === 'opus' ? MODELS.OPUS : 
-                 effectiveModel === 'gpt52' ? MODELS.GPT_5_2 : 
-                 (effectiveModel === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
+    const MODEL = model === 'opus' ? MODELS.OPUS : 
+                 model === 'gpt52' ? MODELS.GPT_5_2 : 
+                 (model === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
     
-    const protocolFallbackModel = MODEL !== MODELS.SONNET ? MODELS.SONNET : null;
-
-    if (useStreaming && isStrictTemplateMode && !isEcgFunctionalConclusion) {
-      const deferredStrictStream = buildDeferredStrictProtocolSse({
-        initialModel: MODEL,
-        generate: async () => {
-          let resolvedModel = MODEL;
-          let draft: string;
-          try {
-            draft = await sendTextRequest(prompt, [], MODEL);
-          } catch (primaryError) {
-            if (!protocolFallbackModel) throw primaryError;
-            console.warn(`[PROTOCOL] Primary model ${MODEL} failed, fallback to ${protocolFallbackModel}`);
-            resolvedModel = protocolFallbackModel;
-            draft = await sendTextRequest(prompt, [], resolvedModel);
-          }
-
-          const strictResult = await enforceStrictTemplateOutput({
-            rawText,
-            template: safeTemplate,
-            draft,
-            primaryModel: resolvedModel,
-            primaryPrompt: prompt,
-            useFastStrict,
-          });
-
-          return {
-            text: anonymizeText(strictResult.text),
-            model: strictResult.model,
-          };
-        },
-      });
-
-      return new Response(deferredStrictStream, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-          'X-Resolved-Model': MODEL,
-        },
-      });
-    }
-
     if (useStreaming) {
       const stream = await sendTextRequestStreaming(prompt, [], MODEL);
       const sanitizedStream = sanitizeProtocolSse(stream);
@@ -540,31 +258,17 @@ Style: strictly professional, clinically and technically accurate. Language poli
       });
     }
 
-    let resolvedModel = MODEL;
-    let result = '';
-    try {
-      result = await sendTextRequest(prompt, [], MODEL);
-    } catch (primaryError) {
-      if (!protocolFallbackModel) throw primaryError;
-      console.warn(`[PROTOCOL] Primary model ${MODEL} failed, fallback to ${protocolFallbackModel}`);
-      resolvedModel = protocolFallbackModel;
-      result = await sendTextRequest(prompt, [], resolvedModel);
-    }
-
+    let result = await sendTextRequest(prompt, []);
     if (!isEcgFunctionalConclusion && isStrictTemplateMode) {
-      const strictResult = await enforceStrictTemplateOutput({
+      const correctionPrompt = buildProtocolCorrectionPrompt({
         rawText,
         template: safeTemplate,
         draft: result,
-        primaryModel: resolvedModel,
-        primaryPrompt: prompt,
-        useFastStrict,
       });
-      result = strictResult.text;
-      resolvedModel = strictResult.model;
+      result = await sendTextRequest(correctionPrompt, []);
     }
     result = anonymizeText(result);
-    return NextResponse.json({ success: true, protocol: result, model: resolvedModel });
+    return NextResponse.json({ success: true, protocol: result });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: 'Protocol generation error' }, { status: 500 });
   }

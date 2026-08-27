@@ -223,6 +223,7 @@ export default function UltrasoundPage() {
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🔊 {t.title}</h1>
       
       <AnalysisTips 
+        recommendationProfile="imaging"
         content={{
           fast: t.tipsFast,
           optimized: t.tipsOptimized,
@@ -237,7 +238,13 @@ export default function UltrasoundPage() {
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6 text-center">
         <h2 className="text-xl font-semibold mb-4 text-left">{t.uploadTitle}</h2>
-        <ImageUpload onUpload={handleUpload} accept="image/*,video/*,.dcm,.dicom" maxSize={100} anonymizationMode="soft" />
+        <ImageUpload
+          onUpload={handleUpload}
+          accept="image/*,video/*,.dcm,.dicom"
+          maxSize={100}
+          anonymizationMode="soft"
+          bridgePullTarget="ultrasound_analysis"
+        />
       </div>
 
       {isVideo && videoUrl && (

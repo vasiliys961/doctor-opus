@@ -1,6 +1,6 @@
 # 📘 Doctor Opus — Hekim Kullanım Kılavuzu
 
-> **Önemli:** Doctor Opus, **yalnızca lisanslı sağlık profesyonelleri** için tasarlanmış bir Klinik Karar Destek Sistemi'dir (CDSS). FDA onaylı değildir ve tıbbi bir teşhis teşkil etmez. Yapay zeka tarafından üretilen tüm çıktılar bağımsız klinik doğrulama gerektirir. Tüm klinik kararların sorumluluğu tamamen size aittir.
+> **Önemli:** Doctor Opus, **yalnızca lisanslı sağlık profesyonelleri** için tasarlanmış beta bir Klinik Karar Destek Yazılımıdır (CDSS). Tıbbi cihaz değildir ve nihai tanı ya da tedavi emri vermez. Yapay zeka çıktılarının kalitesi üçüncü taraf LLM yeteneklerine bağlıdır ve eksik veya hatalı olabilir. Tüm yapay zeka çıktıları bağımsız hekim doğrulaması gerektirir. Kullanım kısıtı: AB/ABD/BK yargı alanlarında düzenlemeye tabi klinik kullanım için tasarlanmamıştır. Tüm klinik kararların sorumluluğu tamamen size aittir.
 
 Doctor Opus; tıbbi görüntüleme, laboratuvar verileri, genetik raporlar ve klinik notların yapay zeka destekli yorumlanmasını sağlayarak klinik iş akışınızı hızlandırır. Her bölüm bağlamsal ipuçları içerir — ilk kullanımda bunları gözden geçirin.
 
@@ -33,6 +33,17 @@ Yüklendikten sonra uygulama tam ekran açılır, simge üzerinden erişilebilir
 ## 🏠 Ana Sayfa
 
 Tüm bölümlere hızlı navigasyon sağlayan genel bakış paneli.
+
+---
+
+## ⚖️ Zorunlu yasal akış
+
+İlk girişten sonra (veya yasal sürüm güncellendiğinde), klinik modülleri kullanmadan önce yasal onayı onaylamanız zorunludur.
+
+Bir yapay zeka sonucunu hasta kaydına kaydederken:
+- Hekim doğrulama penceresi açılır
+- Kişisel inceleme ve klinik sorumluluğu onaylamanız gerekir
+- Denetim günlüğü yalnızca vaka kimliği ve onay/hash meta verisini saklar (hasta kişisel verisi gönderilmez)
 
 ---
 
@@ -335,9 +346,17 @@ Gelişmiş yapay zeka modelleri kullanıldığında krediler tüketilir. Basit r
 | Yerel kopyalayıcı / hesaplayıcılar | Ücretsiz |
 
 **Paketler:**
-- **Başlangıç:** 50 kredi — 9.99$
-- **Standart:** 150 kredi — 24.99$
-- **Pro:** 500 kredi — 69.99$
+- **Başlangıç:** 50 kredi — $6.99
+- **Standart:** 180 kredi — $19.99
+- **Pro:** 600 kredi — $59.99
+
+**Ödeme akışı (güncel):**
+- Abonelik sayfasında paket seçin
+- Faturada görünen cüzdana **TRON (TRC20)** üzerinden tam USDT tutarını gönderin
+- Ödemeyi otomatik doğrulamak için işlem hash'ini (`txHash`) yapıştırın
+- İşlem doğrulandıktan sonra krediler eklenir
+
+Yapay zeka özellikleri için deneme kredisi yoktur.
 
 Her isteğin tam maliyeti, analiz tamamlandıktan hemen sonra sonuç bloğunda gösterilir. Tam işlem geçmişi **Bakiye ve Geçmiş** bölümünde mevcuttur.
 

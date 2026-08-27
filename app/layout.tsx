@@ -10,6 +10,8 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import OnboardingTour from '@/components/OnboardingTour'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import AgentNavigator from '@/components/AgentNavigator'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer'
+import LegalConsentGate from '@/components/LegalConsentGate'
 import { getRequestLocale } from '@/lib/i18n/server'
 import { RTL_LOCALES } from '@/lib/i18n/config'
 import { uiMessages } from '@/lib/i18n/messages'
@@ -21,19 +23,21 @@ const inter = Inter({
   variable: '--font-inter',
 })
 
+const LOCAL_APP_ICON = '/vrachirf-icon.png?v=2'
+
 export const metadata: Metadata = {
   title: 'Doctor Opus — AI Medical Assistant',
   description: 'AI-powered Clinical Decision Support System for medical imaging analysis, ECG, lab data, and genomics',
   icons: {
     icon: [
       {
-        url: 'https://vrachirf.ru/apple-touch-icon.png',
+        url: LOCAL_APP_ICON,
         type: 'image/png',
-        sizes: '180x180',
+        sizes: '512x512',
       },
     ],
-    shortcut: 'https://vrachirf.ru/apple-touch-icon.png',
-    apple: 'https://vrachirf.ru/apple-touch-icon.png',
+    shortcut: LOCAL_APP_ICON,
+    apple: LOCAL_APP_ICON,
   },
   appleWebApp: {
     capable: true,
@@ -72,20 +76,24 @@ export default async function RootLayout({
         </div>
         <div className="fixed left-0 right-0 top-14 lg:top-0 z-40 pointer-events-none bg-amber-50 border-b border-amber-100 py-1 px-4 text-[10px] sm:text-xs text-amber-800 text-center leading-tight">
           <span className="sm:hidden">
-            ⚠️ {ui.bannerMobile}
+            ⚠️ {ui.bannerMobile} Beta: LLM-dependent, verify clinically.
           </span>
           <span className="hidden sm:inline">
-            ⚠️ <strong>doctor-opus.online</strong> — {ui.bannerDesktopBody}
+            ⚠️ <strong>doctor-opus.online</strong> — {ui.bannerDesktopBody} Beta software; mandatory physician verification. LLM-dependent accuracy.
           </span>
         </div>
         <Providers>
           <OnboardingTour />
+          <LegalConsentGate />
           <AgentNavigator locale={locale} />
           <div className="flex min-h-screen">
             <Navigation locale={locale} />
             <main className="flex-1 flex flex-col pt-24 sm:pt-20 lg:pt-0 p-4 sm:p-6 lg:p-8">
               <ErrorBoundary componentName="Main content">
                 <div className="flex-1">
+                  <div className="mb-4">
+                    <MedicalDisclaimer compact />
+                  </div>
                   {children}
                 </div>
               </ErrorBoundary>

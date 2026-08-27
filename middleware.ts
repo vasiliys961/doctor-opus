@@ -45,8 +45,15 @@ export async function middleware(request: NextRequest) {
     '/api/webhooks/nowpayments', // Совместимость со старым NOWPayments webhook URL
     '/api/webhooks/capitalist',  // Capitalist webhook URL
     '/api/webhooks/arsenalpay',  // ArsenalPay webhook URL
-    '/api/analyze/image',     // Публичный анализ изображений с optional session/billing
     '/api/protocols/search',  // Публичный поиск международных протоколов
+    '/api/links/search',      // Публичный поиск разрешённых источников для Link Collection
+    '/api/links/oa',          // Публичная проверка open-access копии статьи
+    '/api/mobile-bridge/session', // Публичная связка смартфона с desktop bridge
+    '/api/mobile-bridge/upload',  // Публичная отправка файлов со смартфона
+    '/api/mobile-bridge/events',  // Публичное чтение bridge inbox по токену сессии
+    '/api/mobile-bridge/clear',   // Публичная очистка bridge inbox по токену сессии
+    '/api/devices/hot-folder',    // Публичный ingest hot-folder (защита токеном x-hot-folder-token)
+    '/api/devices/hot-folder/setup', // Публичная проверка конфигурации hot-folder канала
   ];
   
   // Проверка публичных путей

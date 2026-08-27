@@ -1,22 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { formatCostLog } from '@/lib/cost-calculator';
 import { MODELS } from '@/lib/openrouter';
-import { buildStrictOutputLanguageRule } from '@/lib/language-policy';
-import { isGeoRestrictionStatus, isOpenAIGeoRestrictionError } from '@/lib/geo-restriction';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-
-function shouldFallbackFromGpt54(status: number, errorText: string): boolean {
-  const normalized = (errorText || '').toLowerCase();
-  return (
-    status === 401 ||
-    status === 403 ||
-    (isGeoRestrictionStatus(status) && isOpenAIGeoRestrictionError(errorText)) ||
-    normalized.includes('permission_denied') ||
-    normalized.includes('provider returned error') ||
-    normalized.includes('azure')
-  );
-}
 
 /**
  * API endpoint for searching current international clinical guidelines
@@ -44,7 +30,6 @@ export async function POST(request: NextRequest) {
     }
 
     // EXPANDED PROMPT: focus on management tactics, differential analysis, and clinical scales
-    const englishOnlyRule = buildStrictOutputLanguageRule('english');
     const searchPrompt = `CRITICAL: Your response MUST START IMMEDIATELY with section "1. GUIDELINE NAMES". Do NOT write anything before it.
 
 Find current international clinical guidelines on: ${query}
@@ -82,11 +67,10 @@ Provide a comprehensive expert review in English using the following structure:
    - Red flag signs requiring immediate escalation or hospitalization.
 
 CRITICAL REQUIREMENTS:
-- ${englishOnlyRule}
+- Respond exclusively in English.
 - Be academically rigorous and clinically detailed.
 - Do NOT fabricate references.
 - Base all recommendations on international guidelines only (ESC, AHA, WHO, NICE, KDIGO, NCCN, IDSA, etc.)
-- For medications use INN/generic names only (English/Latin script), no Russian/Cyrillic drug naming.
 - If no specific scales or management algorithm exists for this topic, state so explicitly.`;
 
     // Model selection based on mode: standard (Gemini), detailed (GPT), or online (Perplexity)
@@ -97,19 +81,18 @@ CRITICAL REQUIREMENTS:
       MODEL = 'perplexity/sonar';
       MAX_TOKENS = 4000;
     } else if (modelMode === 'detailed') {
-      const allowGpt52ProtocolsSearch = process.env.ALLOW_GPT52_PROTOCOLS_SEARCH === 'true';
-      MODEL = allowGpt52ProtocolsSearch ? MODELS.GPT_5_2 : MODELS.SONNET;
+      MODEL = MODELS.GPT_5_2;
       MAX_TOKENS = 12000;
     }
 
     // Dynamic system prompt
     let systemPrompt = '';
     if (modelMode === 'online') {
-      systemPrompt = `You are a leading medical expert. Your task is to find the most current international clinical guidelines (2024-2025) and provide a deep review of patient management tactics. Focus on diagnostic criteria, required clinical scores, and step-by-step management algorithms. Use INN/generic medication naming only (English/Latin script). Do NOT write introductions — start immediately with the sections. ${englishOnlyRule}`;
+      systemPrompt = 'You are a leading medical expert. Your task is to find the most current international clinical guidelines (2024-2025) and provide a deep review of patient management tactics. Focus on diagnostic criteria, required clinical scores, and step-by-step management algorithms. Do NOT write introductions — start immediately with the sections. Respond in English only.';
     } else if (modelMode === 'detailed') {
-      systemPrompt = `You are an expert medical AI assistant with the competence of a professor of medicine. Your task is to provide a comprehensive, academically rigorous review of the topic. Always include a detailed differential diagnosis analysis, prognostic scores, step-by-step patient management, and evidence-based treatment regimens with levels of evidence. Use INN/generic medication naming only (English/Latin script). Your answer should be detailed and clinically deep. Do NOT write introductions — start immediately with the sections. ${englishOnlyRule}`;
+      systemPrompt = 'You are an expert medical AI assistant with the competence of a professor of medicine. Your task is to provide a comprehensive, academically rigorous review of the topic. Always include a detailed differential diagnosis analysis, prognostic scores, step-by-step patient management, and evidence-based treatment regimens with levels of evidence. Your answer should be detailed and clinically deep. Do NOT write introductions — start immediately with the sections. Respond in English only.';
     } else {
-      systemPrompt = `You are an expert physician assistant. You search for current international clinical guidelines. Focus on management tactics and diagnostic criteria. Use INN/generic medication naming only (English/Latin script). ALWAYS start your answer IMMEDIATELY with section "1. GUIDELINE NAMES". Do NOT write introductions. ${englishOnlyRule}`;
+      systemPrompt = 'You are an expert physician assistant. You search for current international clinical guidelines. Focus on management tactics and diagnostic criteria. ALWAYS start your answer IMMEDIATELY with section "1. GUIDELINE NAMES". Do NOT write introductions. Respond in English only.';
     }
     
     console.log('');
@@ -141,21 +124,16 @@ CRITICAL REQUIREMENTS:
       stream_options: { include_usage: true }
     };
 
-    const runRequest = async (modelOverride?: string) => {
-      const targetPayload = modelOverride ? { ...payload, model: modelOverride } : payload;
-      return fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.online',
-          'X-Title': 'Doctor Opus'
-        },
-        body: JSON.stringify(targetPayload)
-      });
-    };
-
-    let response = await runRequest();
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://doctor-opus.online',
+        'X-Title': 'Doctor Opus'
+      },
+      body: JSON.stringify(payload)
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -168,25 +146,6 @@ CRITICAL REQUIREMENTS:
         }, { status: 402 });
       }
       
-      const shouldFallbackToSonnet =
-        MODEL === MODELS.GPT_5_2 &&
-        shouldFallbackFromGpt54(response.status, errorText);
-
-      if (shouldFallbackToSonnet) {
-        console.warn(`⚠️ [CLINICAL RECS] GPT fallback: status=${response.status}, switching to Sonnet`);
-        MODEL = MODELS.SONNET;
-        response = await runRequest(MODEL);
-      } else {
-        return NextResponse.json({
-          success: false,
-          error: `API error: ${response.status} - ${errorText.substring(0, 200)}`
-        }, { status: response.status });
-      }
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ [AI] Fallback request error: ${response.status}`, errorText);
       return NextResponse.json({
         success: false,
         error: `API error: ${response.status} - ${errorText.substring(0, 200)}`
@@ -334,7 +293,9 @@ CRITICAL REQUIREMENTS:
       success: true,
       content: content,
       tokensUsed: tokensUsed,
-      model: MODEL
+      model: modelMode === 'online' ? 'Perplexity Sonar (Online Search)' :
+             modelMode === 'detailed' ? 'GPT-5.4 (Detailed)' :
+             'Gemini 3.0 Flash (Standard)'
     });
 
   } catch (error: any) {

@@ -1,6 +1,11 @@
 import type { OpenAccessLink } from './unpaywall';
 import { translateToEnglishForPubMed } from './medical-query-translator';
 
+// Источник данных — Europe PMC REST API вместо "сырого" PubMed E-utilities.
+// Europe PMC зеркалирует MEDLINE/PubMed (фильтр SRC:MED ниже — строго те же
+// записи, что и в PubMed) и дополнительно одним запросом отдаёт DOI, флаг
+// open-access, готовую ссылку на PDF полного текста и число цитирований —
+// то, что раньше требовало отдельных esearch+esummary+Unpaywall вызовов.
 type PubMedArticle = {
   pmid: string;
   doi: string | null;
@@ -10,6 +15,7 @@ type PubMedArticle = {
   url: string;
   snippet: string;
   citedByCount?: number;
+  /** Предзаполнено из Europe PMC, если там уже есть открытая копия полного текста. */
   openAccessUrl?: string | null;
 };
 
@@ -28,8 +34,20 @@ const EUROPEPMC_SEARCH_URL = 'https://www.ebi.ac.uk/europepmc/webservices/rest/s
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const cache = new Map<string, CacheRecord>();
 
-function normalizeQuery(rawQuery: string): string {
-  return rawQuery.replace(/\s+/g, ' ').trim();
+function normalizeQuery(query: string): string {
+  return query.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function compactQueryForPubMed(query: string): string {
+  const cleaned = query
+    .replace(/#+\s*/g, ' ')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  const words = cleaned.split(' ').filter(Boolean);
+  const limitedWords = words.slice(0, 36).join(' ');
+  return limitedWords.slice(0, 260).trim();
 }
 
 async function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<any> {
@@ -37,7 +55,9 @@ async function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<any
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
     return await response.json();
   } finally {
     clearTimeout(timer);
@@ -45,7 +65,7 @@ async function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<any
 }
 
 function toSnippet(title: string, journal: string, year: string): string {
-  return `${title} - ${journal}${year !== 'n/a' ? ` (${year})` : ''}`;
+  return `${title} — ${journal}${year !== 'n/a' ? ` (${year})` : ''}`;
 }
 
 function extractOpenAccessPdfUrl(fullTextUrlList: { fullTextUrl?: Array<Record<string, string>> } | undefined): string | null {
@@ -56,18 +76,32 @@ function extractOpenAccessPdfUrl(fullTextUrlList: { fullTextUrl?: Array<Record<s
   return anyOpen?.url ?? null;
 }
 
-export async function searchPubMedEvidence(rawQuery: string, options: SearchOptions = {}): Promise<PubMedArticle[]> {
-  const compact = normalizeQuery(rawQuery);
-  if (!compact) return [];
+export async function searchPubMedEvidence(
+  rawQuery: string,
+  options: SearchOptions = {}
+): Promise<PubMedArticle[]> {
+  const compact = compactQueryForPubMed(rawQuery);
+  const query = normalizeQuery(compact);
+  if (!query) return [];
 
-  const maxResults = Math.max(1, Math.min(options.maxResults ?? 5, 10));
+  const maxResults = Math.min(Math.max(options.maxResults ?? 5, 1), 10);
   const timeoutMs = Math.max(options.timeoutMs ?? 3500, 1000);
-  const cacheKey = `${compact}::${maxResults}`;
+  const cacheKey = `${query}|${maxResults}`;
   const now = Date.now();
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expiresAt > now) return cached.articles;
 
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.articles;
+  }
+
+  // PubMed/Europe PMC индексируют статьи на английском и молча игнорируют
+  // кириллицу в запросе (вместо ошибки — нерелевантная выдача по всему
+  // корпусу), поэтому русскоязычные запросы сперва переводим в англоязычные
+  // медицинские термины. Латиница переводом не трогается (см. hasCyrillic внутри).
   const englishQuery = await translateToEnglishForPubMed(compact, options.translationTimeoutMs);
+
+  // SRC:MED — строго MEDLINE/PubMed записи (без препринтов и патентов).
+  // resultType=core — в ответе сразу DOI, isOpenAccess, fullTextUrlList, citedByCount.
   const searchTerm = `${englishQuery} AND SRC:MED AND LANG:"eng"`;
   const searchUrl = `${EUROPEPMC_SEARCH_URL}?query=${encodeURIComponent(searchTerm)}&format=json&pageSize=${maxResults}&resultType=core`;
   const searchData = await fetchJsonWithTimeout(searchUrl, timeoutMs);
@@ -112,29 +146,28 @@ export function buildPubMedContextBlock(
     const oaUrl = article.openAccessUrl || (article.doi ? openAccessLinks?.get(article.doi)?.url : undefined);
     const oaLine = oaUrl ? (() => {
       hasOpenAccessLinks = true;
-      return `\nOpen-access full text: ${oaUrl}`;
+      return `\nПолный текст (open access, легально): ${oaUrl}`;
     })() : '';
     const citedLine = typeof article.citedByCount === 'number' && article.citedByCount > 0
-      ? `\nCitations: ${article.citedByCount}`
+      ? `\nЦитирований: ${article.citedByCount}`
       : '';
-
     return `${index + 1}. PMID: ${article.pmid}
-Title: ${article.title}
-Journal: ${article.journal}
-Year: ${article.year}
-Link: ${article.url}${citedLine}${oaLine}`;
+Название: ${article.title}
+Журнал: ${article.journal}
+Год: ${article.year}
+Ссылка: ${article.url}${citedLine}${oaLine}`;
   });
 
   const openAccessInstruction = hasOpenAccessLinks
-    ? '\n- If open-access full text is present, you may cite this direct legal full-text link.'
+    ? '\n- Если для источника указан "Полный текст (open access)", можешь упомянуть, что доступна легальная бесплатная полнотекстовая версия, и дать эту ссылку.'
     : '';
 
-  return `### PUBMED CONTEXT (ONLINE, INTERNATIONAL)
-Use only these sources as external evidence support. Do not invent PMID/DOI.
+  return `### КОНТЕКСТ ИЗ PUBMED (ONLINE, GLOBAL)
+Используй только эти источники как внешнюю доказательную опору. Не выдумывай PMID/DOI.
 
 ${lines.join('\n\n')}
 
-Response requirement:
-- Add a final section: "Sources (PubMed)".
-- For each evidence-based claim, include PMID.${openAccessInstruction}`;
+Требование к ответу:
+- В конце добавь раздел "Источники (PubMed)".
+- Для каждого утверждения, опирающегося на литературу, укажи PMID.${openAccessInstruction}`;
 }

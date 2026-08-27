@@ -268,6 +268,7 @@ export default function CTPage() {
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🩻 {t.title}</h1>
       
       <AnalysisTips 
+        recommendationProfile="imaging"
         content={{
           fast: "Two-stage CT screening (structured HU density and structure description, then clinical interpretation). Provides a concise conclusion and overall risk signal.",
           optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and quality for CT studies.",
@@ -285,7 +286,13 @@ export default function CTPage() {
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">{t.uploadTitle}</h2>
-        <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} anonymizationMode="soft" />
+        <ImageUpload
+          onUpload={handleUpload}
+          accept="image/*,.dcm,.dicom"
+          maxSize={500}
+          anonymizationMode="soft"
+          bridgePullTarget="ct_analysis"
+        />
       </div>
 
       {file && imagePreview && (

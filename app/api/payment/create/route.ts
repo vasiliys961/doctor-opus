@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { paymentService } from "@/lib/payment/payment-service";
-import type { PaymentProviderType } from "@/lib/payment/types";
 import { SUBSCRIPTION_PACKAGES } from "@/lib/subscription-manager";
 import { initDatabase, createPayment } from "@/lib/database";
+
+const TRUST_WALLET_TRC20_ADDRESS =
+  process.env.TRUST_WALLET_TRC20_ADDRESS?.trim() ||
+  'TMvGdELxrB8vgREjGPcwg8JDStMM7LT9Zs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,23 +45,33 @@ export async function POST(request: NextRequest) {
 
     const invId = paymentResult.paymentId;
 
-    const providerName: PaymentProviderType =
-      provider === 'capitalist' || provider === 'nowpayments' || provider === 'arsenalpay'
-        ? provider
-        : (paymentService.getActiveProviderName() as PaymentProviderType);
+    if (provider !== 'trust_wallet') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'This payment provider is disabled. Use Trust Wallet (USDT TRC20).',
+          disabledProvider: provider || 'unknown',
+        },
+        { status: 410 }
+      );
+    }
 
-    const paymentProvider = paymentService.getProviderByName(providerName);
-    const paymentUrl = await paymentProvider.generatePaymentUrl({
-      amount: priceUsd,
-      orderId: invId,
-      description: `Doctor Opus — ${pkg.name} package (${pkg.credits} credits) for ${session.user.email}`,
-      email: session.user.email || undefined,
-    });
+    const amountUsdt = Number(priceUsd.toFixed(2));
 
     return NextResponse.json({
       success: true,
-      paymentUrl,
-      provider: providerName,
+      provider: 'trust_wallet',
+      payment: {
+        invoiceId: String(invId),
+        packageId,
+        units: pkg.credits,
+        network: 'TRON (TRC20)',
+        asset: 'USDT',
+        amountUsdt,
+        walletAddress: TRUST_WALLET_TRC20_ADDRESS,
+        memo: `DO-${invId}`,
+        note: 'Send exact amount in USDT TRC20 only. Credits are applied after manual tx confirmation.',
+      },
     });
 
   } catch (error: any) {

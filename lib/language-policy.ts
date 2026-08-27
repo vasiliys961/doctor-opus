@@ -30,7 +30,7 @@ export function buildAutoResponseLanguageInstruction(detectedLanguage?: string):
 - Reply in the same language as the user's latest message.
 - If the user explicitly asks for a specific language, follow that request.
 - If the message is mixed-language, use the dominant language of the user's latest message.
-- Keep wording professional and concise.
+- Keep wording professional, clinically precise, and sufficiently detailed for medical decision support.
 - Preserve standard international medical terminology where appropriate.`;
 
   return detectedLanguage ? `${base}\n- Current message appears to be in ${detectedLanguage}.` : base;
@@ -41,7 +41,7 @@ export function buildForcedResponseLanguageInstruction(language: ResponseLanguag
   return `RESPONSE LANGUAGE:
 - Reply strictly in ${label}.
 - If the user asks for another language, still keep the final answer in ${label} unless they explicitly change the response language setting.
-- Keep wording professional and concise.
+- Keep wording professional, clinically precise, and sufficiently detailed for medical decision support.
 - Preserve standard international medical terminology where appropriate.`;
 }
 

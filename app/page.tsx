@@ -44,7 +44,7 @@ export default async function HomePage() {
         <div className="flex items-center gap-2 rounded-lg border border-primary-100 bg-white px-2 py-1">
           <img
             src="/vrachirf-logo.png"
-            alt="Врачи РФ"
+            alt="Vrachi RF"
             className="h-8 w-auto"
           />
         </div>
@@ -143,6 +143,12 @@ export default async function HomePage() {
             className="bg-white hover:bg-primary-50 active:bg-primary-100 border-2 border-primary-200 hover:border-primary-400 text-primary-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
           >
             🤖 {home.quickActions.chat}
+          </Link>
+          <Link
+            href="/sync"
+            className="bg-white hover:bg-cyan-50 active:bg-cyan-100 border-2 border-cyan-200 hover:border-cyan-400 text-cyan-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
+          >
+            📲 {home.quickActions.sync}
           </Link>
           <Link
             href="/protocol"

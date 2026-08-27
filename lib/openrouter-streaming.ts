@@ -4,12 +4,26 @@
  */
 
 import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
-import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
+import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, prepareVisionDataForTextPrompt, resolvePromptRuntimeVars } from './prompts';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
-import { MODELS, resolveModelId } from './openrouter';
+import { getValidatedOpusModel } from './validated-opus-model';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
+import { CLINICAL_DRAFT_DISCLAIMER } from './clinical-disclaimer';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const RESPONSE_STOP_SEQUENCES = ['Defined by', 'defined by', '---', '###'];
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
+const DEFAULT_OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+// Актуальные модели (последние флагманы 2025-2026)
+const MODELS = {
+  OPUS: 'anthropic/claude-opus-5',                         // Claude Opus 5
+  OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 5, rollback: VALIDATED_OPUS_MODEL=4.7
+  SONNET: 'anthropic/claude-sonnet-5',                   // Claude Sonnet 5
+  GPT_5_2: 'openai/gpt-5.6-terra',                  // GPT-5.6 Terra (legacy key name kept for compatibility)
+  HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
+  LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
+  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
+  GEMINI_3_PRO: 'google/gemini-3.1-pro-preview'          // Gemini 3.1 Pro Preview
+};
 
 function isNetworkStage2Error(error: any): boolean {
   const message = String(error?.message || '').toLowerCase();
@@ -39,6 +53,18 @@ function getChatFallbackModel(primaryModel: string): string | null {
     return MODELS.SONNET;
   }
   return null;
+}
+
+function shouldUsePermissionFallback(primaryModel: string, status: number, errorText: string): boolean {
+  if (primaryModel !== MODELS.GPT_5_2) return false;
+  const normalized = (errorText || '').toLowerCase();
+  return (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes('permission_denied') ||
+    normalized.includes('provider returned error') ||
+    normalized.includes('azure')
+  );
 }
 
 /**
@@ -111,7 +137,17 @@ function createTransformWithUsage(
                 console.error('[USAGE FALLBACK] Ошибка расчёта:', e);
               }
             }
-            // Отдаем [DONE] только после отправки usage/fallback
+            if (!totalContent.includes('Draft Clinical Output (Beta)')) {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    choices: [{ delta: { content: `\n\n${CLINICAL_DRAFT_DISCLAIMER}` } }],
+                  })}\n\n`
+                )
+              );
+            }
+
+            // Отдаем [DONE] только после отправки usage/fallback и юридического постфикса
             controller.enqueue(encoder.encode('data: [DONE]\n\n'));
             break; // Выходим из цикла
           }
@@ -220,9 +256,8 @@ export async function analyzeImageFastStreaming(
   isRadiologyOnly: boolean = false,
   isComparative: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
 
   const allImages = Array.isArray(imagesBase64) ? imagesBase64 : [imagesBase64];
 
@@ -271,7 +306,7 @@ export async function analyzeImageFastStreaming(
       const mainPrompt = `Below are the extracted image data. As an expert medical AI assistant with professor-level competency, analyze them.
     
 === STRUCTURED DATA FROM GEMINI 3.0 ===
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 === CONTEXT ===
 ${clinicalContext || 'None'}
@@ -292,12 +327,11 @@ ${directivePrompt}`;
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
             { role: 'user', content: mainPrompt }
           ],
           max_tokens: 8000, // Оптимизировано: быстрый режим Gemini, достаточно для базового протокола
           temperature: 0.1,
-          stop: RESPONSE_STOP_SEQUENCES,
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -343,9 +377,8 @@ export async function analyzeImageOpusTwoStageStreaming(
   isRadiologyOnly: boolean = false,
   mimeType: string = 'image/png'
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -418,7 +451,7 @@ export async function analyzeImageOpusTwoStageStreaming(
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
       // Обновляем статус перед запуском второй модели
-      const stage2Header = `\n> *Stage 2: Clinical analysis via ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
+      const stage2Header = `\n> *Stage 2: Clinical analysis via ${model.includes('opus') ? 'Opus' : 'Sonnet 5'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
@@ -428,7 +461,7 @@ export async function analyzeImageOpusTwoStageStreaming(
       const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
 ### TECHNICAL IMAGE DATA (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.`;
 
@@ -455,9 +488,9 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
             'X-Title': 'Doctor Opus'
           },
           body: JSON.stringify({
-            model: resolveModelId(targetModel),
+            model: targetModel,
             messages: [
-              { role: 'system', content: systemPrompt },
+              { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
               {
                 role: 'user',
                 content: [
@@ -468,7 +501,6 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
             ],
             max_tokens: 8000, // Оптимизировано: одно изображение, достаточно для экспертного протокола
             temperature: 0.1,
-            stop: RESPONSE_STOP_SEQUENCES,
             stream: true,
             stream_options: { include_usage: true }
           })
@@ -571,9 +603,8 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
   isRadiologyOnly: boolean = false,
   isComparative: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -652,8 +683,8 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
       const stage2Header = isComparative
-        ? `\n> *Stage 2: Detailed clinical comparison via ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`
-        : `\n> *Stage 2: Detailed series analysis via ${model.includes('opus') ? 'Opus 4.6' : 'Sonnet 4.6'}...*\n\n---\n\n`;
+        ? `\n> *Stage 2: Detailed clinical comparison via ${model.includes('opus') ? 'Opus' : 'Sonnet 5'}...*\n\n---\n\n`
+        : `\n> *Stage 2: Detailed series analysis via ${model.includes('opus') ? 'Opus' : 'Sonnet 5'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');
@@ -662,7 +693,7 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
 ### ${isComparative ? 'COMPARATIVE IMAGE DATA' : 'DATA FROM MULTIPLE IMAGES OF A SINGLE STUDY'} (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.`;
 
@@ -721,14 +752,13 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
               'X-Title': 'Doctor Opus'
             },
             body: JSON.stringify({
-              model: resolveModelId(targetModel),
+              model: targetModel,
               messages: [
-                { role: 'system', content: systemPrompt },
+                { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
                 { role: 'user', content: contentItems }
               ],
               max_tokens: 12000, // Оптимизировано: множественные изображения, сравнительный анализ
               temperature: 0.1,
-              stop: RESPONSE_STOP_SEQUENCES,
               stream: true,
               stream_options: { include_usage: true }
             }),
@@ -810,9 +840,8 @@ export async function analyzeMultipleImagesWithJSONStreaming(
   model: string = MODELS.OPUS,
   history: any[] = []
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -880,7 +909,7 @@ export async function analyzeMultipleImagesWithJSONStreaming(
       const summaryLine = `\n\n✅ **Data verified:** ${findingsCount} findings, ${metricsCount} metrics from ${imagesBase64.length} images\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
-      const stage2Header = `\n> *Stage 2: Expert analysis via Opus 4.6 (maximum precision)...*\n\n---\n\n`;
+      const stage2Header = `\n> *Stage 2: Expert analysis via Opus (maximum precision)...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt } = await import('./prompts');
@@ -889,7 +918,7 @@ export async function analyzeMultipleImagesWithJSONStreaming(
       const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
 ### СТРУКТУРИРОВАННЫЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЙ (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE EXPERT REPORT.`;
 
@@ -947,14 +976,13 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
               'X-Title': 'Doctor Opus'
             },
             body: JSON.stringify({
-              model: resolveModelId(targetModel),
+              model: targetModel,
               messages: [
-                { role: 'system', content: systemPrompt },
+                { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
                 { role: 'user', content: contentItems }
               ],
               max_tokens: 10000, // Оптимизировано: validated режим с JSON-контекстом
               temperature: 0.1,
-              stop: RESPONSE_STOP_SEQUENCES,
               stream: true,
               stream_options: { include_usage: true }
             }),
@@ -1035,9 +1063,8 @@ export async function analyzeImageWithJSONStreaming(
   model: string = MODELS.OPUS,
   history: any[] = []
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
 
   const jsonExtraction = jsonExtractionWrapper.data || jsonExtractionWrapper;
   const initialUsage = jsonExtractionWrapper.usage;
@@ -1048,7 +1075,7 @@ export async function analyzeImageWithJSONStreaming(
   const mainPrompt = `INSTRUCTION: ${directivePrompt}
 
 ### TECHNICAL IMAGE DATA (JSON):
-${JSON.stringify(jsonExtraction, null, 2)}
+${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.`;
 
@@ -1062,7 +1089,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
   }
 
   const fallbackModel = getStage2FallbackModel(model);
-  let modelUsed = resolveModelId(model);
+  let modelUsed = model;
 
   const runRequest = async (targetModel: string) => {
     return fetch(OPENROUTER_API_URL, {
@@ -1074,9 +1101,9 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
         'X-Title': 'Doctor Opus'
       },
       body: JSON.stringify({
-        model: resolveModelId(targetModel),
+        model: targetModel,
         messages: [
-          { role: 'system', content: systemPrompt },
+          { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
           { 
             role: 'user', 
             content: [
@@ -1087,7 +1114,6 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
         ],
         max_tokens: 8000, // Оптимизировано: одно изображение, базовый протокол
         temperature: 0.1,
-        stop: RESPONSE_STOP_SEQUENCES,
         stream: true,
         stream_options: { include_usage: true }
       })
@@ -1098,6 +1124,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
   if (!response.ok) {
     const errorText = await response.text();
     const shouldFallback = !!fallbackModel && shouldUseStage2GeoFallback(model, response.status, errorText);
+    console.warn(`[GEO-DEBUG] stream model=${model} status=${response.status} shouldFallback=${shouldFallback} err=${errorText.substring(0, 300)}`);
     if (shouldFallback) {
       modelUsed = fallbackModel!;
       response = await runRequest(modelUsed);
@@ -1124,9 +1151,8 @@ export async function sendTextRequestStreaming(
   specialty?: Specialty,
   customSystemPrompt?: string
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -1166,7 +1192,7 @@ export async function sendTextRequestStreaming(
       }
 
       const messages = [
-        { role: 'system' as const, content: systemPrompt },
+        { role: 'system' as const, content: resolvePromptRuntimeVars(systemPrompt) },
         ...history.map(msg => ({ role: msg.role as 'user' | 'assistant', content: msg.content })),
         { role: 'user' as const, content: prompt }
       ];
@@ -1182,59 +1208,67 @@ export async function sendTextRequestStreaming(
       const REQUEST_TIMEOUT_MS = 45000;
       const MAX_RETRIES = 2;
       let response: Response | null = null;
-      let modelUsed = resolveModelId(model);
+      let modelUsed = model;
 
       const runStreamingRequest = async (targetModel: string): Promise<Response> => {
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+        const urlsToTry = OPENROUTER_API_URL === DEFAULT_OPENROUTER_API_URL
+          ? [OPENROUTER_API_URL]
+          : [OPENROUTER_API_URL, DEFAULT_OPENROUTER_API_URL];
 
-          try {
-            const attemptResponse = await fetch(OPENROUTER_API_URL, {
-              method: 'POST',
-              headers: {
-                  'Authorization': `Bearer ${apiKey}`,
-                  'Content-Type': 'application/json',
-                  'HTTP-Referer': 'https://openrouter.ai',
-                  'X-Title': 'Medical AI'
-                },
-              body: JSON.stringify({
-                model: resolveModelId(targetModel),
-                messages,
-                max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от длины диалога
-                temperature: 0.1,
-                stop: RESPONSE_STOP_SEQUENCES,
-                stream: true,
-                stream_options: { include_usage: true }
-              }),
-              signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            return attemptResponse;
-          } catch (err: any) {
-            clearTimeout(timeoutId);
-            const message = String(err?.message || '').toLowerCase();
-            const isTransientNetworkError =
-              err?.name === 'AbortError' ||
-              err?.name === 'TimeoutError' ||
-              message.includes('fetch failed') ||
-              message.includes('und_err_connect_timeout') ||
-              message.includes('etimedout') ||
-              message.includes('econnreset') ||
-              message.includes('econnrefused') ||
-              message.includes('enotfound') ||
-              message.includes('network');
+        let lastError: any = null;
+        for (const apiUrl of urlsToTry) {
+          for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-            if (!isTransientNetworkError || attempt === MAX_RETRIES) {
-              throw err;
+            try {
+              const attemptResponse = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': 'https://openrouter.ai',
+                    'X-Title': 'Medical AI'
+                  },
+                body: JSON.stringify({
+                  model: targetModel,
+                  messages,
+                  max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от длины диалога
+                  temperature: 0.1,
+                  stream: true,
+                  stream_options: { include_usage: true }
+                }),
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+              return attemptResponse;
+            } catch (err: any) {
+              clearTimeout(timeoutId);
+              lastError = err;
+              const message = String(err?.message || '').toLowerCase();
+              const isTransientNetworkError =
+                err?.name === 'AbortError' ||
+                err?.name === 'TimeoutError' ||
+                message.includes('fetch failed') ||
+                message.includes('und_err_connect_timeout') ||
+                message.includes('etimedout') ||
+                message.includes('econnreset') ||
+                message.includes('econnrefused') ||
+                message.includes('enotfound') ||
+                message.includes('network');
+
+              if (!isTransientNetworkError || attempt === MAX_RETRIES) {
+                break;
+              }
+
+              const backoffMs = 1200 * (attempt + 1);
+              console.warn(`⚠️ [TEXT STREAM RETRY] transient network error (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms`);
+              await new Promise(resolve => setTimeout(resolve, backoffMs));
             }
-
-            const backoffMs = 1200 * (attempt + 1);
-            console.warn(`⚠️ [TEXT STREAM RETRY] transient network error (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms`);
-            await new Promise(resolve => setTimeout(resolve, backoffMs));
           }
+          console.warn(`⚠️ [TEXT STREAM RETRY] switching API endpoint to ${apiUrl === DEFAULT_OPENROUTER_API_URL ? 'default openrouter.ai' : 'configured provider'} failed`);
         }
-        throw new Error('OpenRouter streaming request failed: no response received');
+        throw lastError || new Error('OpenRouter streaming request failed: no response received');
       };
 
       response = await runStreamingRequest(modelUsed);
@@ -1250,7 +1284,10 @@ export async function sendTextRequestStreaming(
       if (!response.ok) {
         const errorText = await response.text();
         const fallbackModel = getChatFallbackModel(modelUsed);
-        const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && (
+          (isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText)) ||
+          shouldUsePermissionFallback(modelUsed, response.status, errorText)
+        );
         if (shouldFallback) {
           console.warn(`⚠️ [TEXT STREAM FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
           modelUsed = fallbackModel!;
@@ -1299,9 +1336,8 @@ export async function analyzeImageStreaming(
   history: Array<{role: string, content: string}> = [],
   isRadiologyOnly: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
 
   const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
   
@@ -1349,7 +1385,7 @@ export async function analyzeImageStreaming(
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
             { 
               role: 'user', 
               content: [
@@ -1360,7 +1396,6 @@ export async function analyzeImageStreaming(
           ],
           max_tokens: 8000, // Оптимизировано: одно изображение, базовый протокол
           temperature: 0.1,
-          stop: RESPONSE_STOP_SEQUENCES,
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -1409,9 +1444,8 @@ export async function analyzeMultipleImagesStreaming(
   history: Array<{role: string, content: string}> = [],
   isRadiologyOnly: boolean = false
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = getLlmApiKey();
+  if (!apiKey) throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
 
   const { TITAN_CONTEXTS, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
   
@@ -1464,12 +1498,11 @@ export async function analyzeMultipleImagesStreaming(
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
             { role: 'user', content: contentItems }
           ],
           max_tokens: 12000, // Оптимизировано: множественные изображения
           temperature: 0.1,
-          stop: RESPONSE_STOP_SEQUENCES,
           stream: true,
           stream_options: { include_usage: true }
         })

@@ -9,7 +9,6 @@ import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
 import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import PatientSelector from '@/components/PatientSelector'
-import DeviceSync from '@/components/DeviceSync'
 import AnalysisTips from '@/components/AnalysisTips'
 import FeedbackForm from '@/components/FeedbackForm'
 import BillingErrorNotice from '@/components/BillingErrorNotice'
@@ -405,6 +404,27 @@ export default function ImageAnalysisPage() {
   }, [])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    const pendingImage = window.localStorage.getItem('doctorOpusSyncInboxImage')
+    if (!pendingImage) return
+    try {
+      const syncedFile = dataUrlToFile(pendingImage, 'synced_bridge_photo')
+      setIsDicom(false)
+      setDicomAnalysisImage(null)
+      setValidation(null)
+      setAdditionalFiles([])
+      setFile(syncedFile)
+      setImagePreview(pendingImage)
+      setResult('')
+      setError(null)
+    } catch (_e) {
+      setError(t.invalidSync)
+    } finally {
+      window.localStorage.removeItem('doctorOpusSyncInboxImage')
+    }
+  }, [t.invalidSync])
+
+  useEffect(() => {
     if (loading || !result.trim()) return
     if (isOnboardingCompleted()) return
     if (getOnboardingStatus() !== 'image_uploaded') return
@@ -480,33 +500,9 @@ export default function ImageAnalysisPage() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🔍 {t.title}</h1>
-      
-      <DeviceSync 
-        currentImage={imagePreview}
-        onImageReceived={(base64) => {
-          try {
-            const syncedFile = dataUrlToFile(base64, 'synced_mobile_photo')
-            // Важно: если до этого пользователь открывал DICOM, UI мог остаться в DICOM-режиме
-            // и не показать обычный preview. При синхронизации со смартфона ожидаем обычное фото.
-            setIsDicom(false)
-            setDicomAnalysisImage(null)
-            setValidation(null)
-            setAdditionalFiles([])
-            setFile(syncedFile)
-            setImagePreview(base64)
-            setResult('')
-            setError(null)
-            // Подсказываем глазами, где появилось изображение.
-            window.setTimeout(() => {
-              document.getElementById('synced-image-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }, 50)
-          } catch (_e) {
-            setError(t.invalidSync)
-          }
-        }}
-      />
 
       <AnalysisTips 
+        recommendationProfile="imaging"
         content={{
           fast: "Two-stage screening (structured image description then clinical interpretation). Provides a concise conclusion and risk signal — convenient for initial review and triage.",
           optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and cost for most medical studies.",
@@ -533,6 +529,7 @@ export default function ImageAnalysisPage() {
             accept="image/*,.dcm,.dicom"
             maxSize={500}
             anonymizationMode={imageAnonymizationMode}
+            bridgePullTarget="image_analysis"
           />
         </div>
 

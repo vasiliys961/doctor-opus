@@ -1,6 +1,35 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { getClientLocale } from '@/lib/i18n/client'
+import type { Locale } from '@/lib/i18n/config'
+
+const UI_TEXT = {
+  en: {
+    subtitle: 'Paint over areas containing personal data with a black brush.',
+    batchHint: 'Batch mode is available: redact one frame and click "Apply to all".',
+    brushSize: 'Brush size:',
+    undo: '↶ Undo',
+    cancel: 'Cancel',
+    saving: 'Saving...',
+    applying: 'Applying...',
+    apply: '✓ Apply',
+    applyAll: '🔗 Apply to all',
+    saveError: 'Failed to save changes. Try reducing the redacted area.',
+  },
+  ru: {
+    subtitle: 'Закрасьте черной кистью области с персональными данными',
+    batchHint: 'Доступна пакетная обработка — закрасьте один кадр и нажмите «Применить ко всем»',
+    brushSize: 'Размер кисти:',
+    undo: '↶ Отменить',
+    cancel: 'Отмена',
+    saving: 'Сохранение...',
+    applying: 'Применяю...',
+    apply: '✓ Применить',
+    applyAll: '🔗 Применить ко всем',
+    saveError: 'Не удалось сохранить изменения. Попробуйте уменьшить область закраски.',
+  },
+} as const
 
 export interface DrawingPath {
   points: Array<{ x: number; y: number }>
@@ -22,7 +51,13 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
   const [isSaving, setIsSaving] = useState(false)
   const [drawingPaths, setDrawingPaths] = useState<DrawingPath[]>([])
   const [currentPath, setCurrentPath] = useState<Array<{ x: number; y: number }>>([])
+  const [locale, setLocale] = useState<Locale>('en')
   const imageRef = useRef<HTMLImageElement | null>(null)
+  const t = locale === 'ru' ? UI_TEXT.ru : UI_TEXT.en
+
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -139,7 +174,7 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
         }
       } catch (err) {
         console.error('Ошибка сохранения изображения:', err)
-        alert('Failed to save changes. Try reducing the redacted area.')
+        alert(t.saveError)
         setIsSaving(false)
       }
     }, 100)
@@ -151,11 +186,11 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
         <div className="p-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Precision anonymization</h3>
           <p className="text-sm text-gray-600 mt-1">
-            Закрасьте черной кистью области с персональными данными
+            {t.subtitle}
           </p>
           {hasAdditionalFiles && (
             <p className="text-xs text-blue-600 mt-1">
-              Доступна пакетная обработка — закрасьте один кадр и нажмите «Применить ко всем»
+              {t.batchHint}
             </p>
           )}
         </div>
@@ -165,7 +200,7 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
           <div className="mb-4 flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium text-gray-700">
-                Размер кисти:
+                {t.brushSize}
               </label>
               <input
                 type="range"
@@ -183,7 +218,7 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
               disabled={history.length <= 1}
               className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
             >
-              ↶ Отменить
+              {t.undo}
             </button>
           </div>
 
@@ -208,7 +243,7 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
                 disabled={isSaving}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium disabled:opacity-50"
               >
-                Отмена
+                {t.cancel}
               </button>
               <button
                 onClick={handleSave}
@@ -218,10 +253,10 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
                 {isSaving ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Сохранение...
+                    {t.saving}
                   </>
                 ) : (
-                  '✓ Apply'
+                  t.apply
                 )}
               </button>
             </div>
@@ -235,10 +270,10 @@ export default function ImageEditor({ image, onSave, onCancel, hasAdditionalFile
                 {isSaving ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Применяю...
+                    {t.applying}
                   </>
                 ) : (
-                  '🔗 Apply to all'
+                  t.applyAll
                 )}
               </button>
             )}

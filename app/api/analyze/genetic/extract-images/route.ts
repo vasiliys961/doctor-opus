@@ -2,25 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
+import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4;
+const MIN_EXTRACT_IMAGES_COST = 1.5;
+const MAX_EXTRACT_IMAGES_COST = 15;
+
+function estimateExtractImagesCost(imagesCount: number): number {
+  const estimated = 1.0 + imagesCount * 1.25;
+  return Number(Math.min(MAX_EXTRACT_IMAGES_COST, Math.max(MIN_EXTRACT_IMAGES_COST, estimated)).toFixed(2));
+}
 
 /**
  * API endpoint для извлечения генетических данных из изображений (конвертированных на клиенте)
  */
 export async function POST(request: NextRequest) {
+  let billedAmount = 0;
+  let billingEmail: string | null = null;
+  let billingGuestKey: string | null = null;
   try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
     const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Authorization required' },
-        { status: 401 }
-      );
-    }
-    */
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
+    billingEmail = userEmail;
+    billingGuestKey = guestKey;
 
     console.log('🧬 [GENETIC IMAGES] Начало обработки изображений...');
 
@@ -29,15 +36,35 @@ export async function POST(request: NextRequest) {
 
     if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Images were not provided' },
+        { success: false, error: 'Изображения не предоставлены' },
         { status: 400 }
       );
     }
 
+    const estimatedCost = estimateExtractImagesCost(images.length);
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Genetic extraction (images)', {
+          fileName: fileName || null,
+          imagesCount: images.length,
+          source: 'genetic_extract_images',
+        })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: genetic extraction (images)', {
+          fileName: fileName || null,
+          imagesCount: images.length,
+          source: 'genetic_extract_images',
+        });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Недостаточно единиц для генетического извлечения' },
+        { status: 402 }
+      );
+    }
+    billedAmount = estimatedCost;
+
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
+        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
         { status: 500 }
       );
     }
@@ -50,39 +77,40 @@ export async function POST(request: NextRequest) {
       console.log(`🧬 [GENETIC IMAGES] Первое изображение: длина base64 = ${firstImage?.length || 0} символов`);
       if (!firstImage || firstImage.length < 100) {
         return NextResponse.json(
-          { success: false, error: 'Images have an invalid format or are empty' },
+          { success: false, error: 'Изображения имеют некорректный формат или пусты' },
           { status: 400 }
         );
       }
     }
 
-    const extractionPrompt = `You are a specialized OCR engine for extracting genetic data from medical report tables.
+    const extractionPrompt = `Ты — специализированный OCR-движок для извлечения генетических данных из таблиц медицинских отчетов.
 
-TASK: Extract ALL genetic records from the table(s) on this image.
+ТВОЯ ЗАДАЧА: Извлечь ВСЕ генетические данные из таблиц на этом изображении.
 
-OUTPUT FORMAT (MANDATORY):
-- ONLY data lines in the format: GENE;rsID;GENOTYPE;COMMENT
-- ONE LINE = ONE GENETIC VARIANT
-- NO table headers, introductions, or explanations
-- NO comments like "no data on this page" or "data not found"
-- If there are no genetic table records on this page, return an EMPTY string
+ФОРМАТ ВЫВОДА (ОБЯЗАТЕЛЬНО):
+- ТОЛЬКО строки с данными в формате: ГЕН;rsID;ГЕНОТИП;КОММЕНТАРИЙ
+- ОДНА СТРОКА = ОДИН ГЕНЕТИЧЕСКИЙ ВАРИАНТ
+- БЕЗ заголовков таблиц, описаний, вступлений
+- БЕЗ комментариев типа "на этой странице нет данных", "данные не найдены"
+- БЕЗ объяснений, только фактические данные
+- Если данных нет - верни ПУСТУЮ строку (ничего не пиши, даже пустую строку)
 
-WHAT TO EXTRACT:
-- Gene symbol (MTHFR, APOE, COMT, CYP2D6, CYP2C19, VDR, FTO, etc.)
-- rsID (rs1801133, rs4680, rs699, rs429358, rs7412, etc.)
-- Genotype (AA, AG, GG, TT, CT, CC, AT, GT, etc.)
-- Comment/value/phenotype (if present)
+ЧТО ИЗВЛЕКАТЬ:
+- Название гена (MTHFR, APOE, COMT, CYP2D6, CYP2C19, VDR, FTO и т.д.)
+- rsID (rs1801133, rs4680, rs699, rs429358, rs7412 и т.д.)
+- Генотип (AA, AG, GG, TT, CT, CC, AT, GT и т.д.)
+- Комментарий/значение/фенотип (если есть в таблице)
 
-VALID EXAMPLES:
-MTHFR;rs1801133;CT;reduced enzyme activity
-APOE;rs429358;CC;genotype E4/E4
-COMT;rs4680;GG;normal activity
-CYP2D6;rs1065852;AA;normal metabolism
+ПРИМЕРЫ ПРАВИЛЬНОГО ФОРМАТА:
+MTHFR;rs1801133;CT;сниженная активность фермента
+APOE;rs429358;CC;генотип E4/E4
+COMT;rs4680;GG;нормальная активность
+CYP2D6;rs1065852;AA;нормальный метаболизм
 
-IMPORTANT:
-- If no genetic table data exists on the page, return an EMPTY STRING
-- Do not output any extra text
-- Extract values exactly as shown in the table`;
+ВАЖНО: 
+- Если на странице НЕТ таблиц с генетическими данными - верни ПУСТУЮ СТРОКУ
+- НЕ пиши никаких комментариев, объяснений или сообщений об отсутствии данных
+- Извлекай данные ТОЧНО как они указаны в таблице`;
 
     // Используем Gemini 3.0 Flash для извлечения JSON
     let extractionModel = 'google/gemini-3-flash-preview';
@@ -146,7 +174,7 @@ IMPORTANT:
             headers: {
               Authorization: `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://doctor-opus.online',
+              'HTTP-Referer': 'https://doctor-opus.ru',
               'X-Title': 'Doctor Opus',
             },
             body: JSON.stringify(extractionPayload),
@@ -270,6 +298,7 @@ IMPORTANT:
       .filter(data => data.trim().length > 0)
       .join('\n');
     
+    // Текстовая анонимизация применяется всегда (как во всех остальных модулях).
     extractedData = anonymizeText(extractedData);
 
     const ocrApproxCostUnits = Number(((totalTokens / 1000) * PRICE_UNITS_PER_1K_TOKENS_GEMINI).toFixed(2));
@@ -331,10 +360,22 @@ IMPORTANT:
 
   } catch (error: any) {
     console.error('❌ [GENETIC IMAGES] Критическая ошибка:', error);
+    if (billedAmount > 0) {
+      const refundResult = await refundChargedBalanceOnFailure({
+        email: billingEmail,
+        guestKey: billingGuestKey,
+        amount: billedAmount,
+        operation: 'Genetic extraction (images) auto refund on failure',
+        metadata: { source: 'genetic_extract_images', billedAmount },
+      });
+      if (!refundResult.success) {
+        console.error('❌ [GENETIC IMAGES] Не удалось выполнить авто-возврат:', refundResult.error);
+      }
+    }
     return NextResponse.json(
       {
         success: false,
-        error: 'Genetic data extraction error',
+        error: 'Ошибка извлечения генетических данных',
       },
       { status: 500 }
     );

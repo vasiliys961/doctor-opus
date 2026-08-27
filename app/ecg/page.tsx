@@ -224,6 +224,7 @@ export default function ECGPage() {
       <h1 className="text-3xl font-bold text-primary-900 mb-6">📈 {t.title}</h1>
       
       <AnalysisTips 
+        recommendationProfile="imaging"
         content={{
           fast: "Two-stage ECG screening (detailed compact waveform description, then clinical interpretation). Provides a concise conclusion and risk assessment — ideal for quick initial review.",
           optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of depth and quality for ECG waveform analysis.",
@@ -241,7 +242,12 @@ export default function ECGPage() {
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">{t.uploadTitle}</h2>
         
-        <ImageUpload onUpload={handleUpload} accept="image/*" maxSize={50} />
+        <ImageUpload
+          onUpload={handleUpload}
+          accept="image/*"
+          maxSize={50}
+          bridgePullTarget="ecg_analysis"
+        />
         
         {file && imagePreview && (
           <div className="mt-6">

@@ -5,6 +5,8 @@ export interface ChatSpecialist {
   label: string;
   icon: string;
   description: string;
+  /** Visually highlight button in selector. */
+  highlight?: boolean;
 }
 
 export const CHAT_SPECIALISTS: ChatSpecialist[] = [
@@ -12,67 +14,67 @@ export const CHAT_SPECIALISTS: ChatSpecialist[] = [
     id: 'universal',
     label: 'Universal Expert Consultation',
     icon: '👨‍⚕️',
-    description: 'General clinical case review with an interdisciplinary approach.'
+    description: 'General clinical assessment with an interdisciplinary approach.'
   },
   {
     id: 'cardiology',
     label: 'Cardiology Consultation (Braunwald School)',
     icon: '❤️',
-    description: 'Expert in hemodynamics, ECG interpretation, and cardiac disease.'
+    description: 'Expert in hemodynamics, ECG, and cardiovascular disease.'
   },
   {
     id: 'neurology',
-    label: 'Neurology Consultation (Ann Osborn School)',
+    label: 'Neurology Consultation (Anne Osborn School)',
     icon: '🧠',
     description: 'Specialist in CNS disorders and neuroimaging.'
   },
   {
     id: 'endocrinology',
-    label: 'Endocrinology Consultation (Academic Expert)',
+    label: 'Endocrinology Consultation (Academic School)',
     icon: '🦋',
-    description: 'Academic approach to hormonal disorders and diabetes management.'
+    description: 'Academic approach to hormonal disorders and diabetes.'
   },
   {
     id: 'radiology',
     label: 'Radiology Consultation (Felson School)',
     icon: '☢️',
-    description: 'Master of structural analysis: X-Ray, CT, and MRI interpretation.'
+    description: 'Expert in structural interpretation of X-ray, CT, and MRI.'
   },
   {
     id: 'oncology',
     label: 'Oncology Consultation (DeVita Criteria)',
     icon: '🧬',
-    description: 'Expert in staging and modern treatment protocol selection.'
+    description: 'Expert in staging and modern oncology treatment protocols.'
   },
   {
     id: 'hematology',
     label: 'Hematology Consultation (Wintrobe School)',
     icon: '🩸',
-    description: 'Specialist in blood and bone marrow pathology.'
+    description: 'Specialist in blood and bone marrow disorders.'
   },
   {
     id: 'gynecology',
     label: 'Gynecology Consultation (Williams School)',
     icon: '🌸',
-    description: "Expert in women's health and obstetrics."
+    description: 'Expert in women health and obstetrics.'
   },
   {
     id: 'rheumatology',
-    label: 'Rheumatology Consultation (Kelly School)',
+    label: 'Rheumatology Consultation (Kelley School)',
     icon: '🦴',
     description: 'Specialist in systemic autoimmune diseases.'
   },
   {
     id: 'traumatology',
-    label: 'Orthopedic/Trauma Consultation (Campbell School)',
+    label: 'Traumatology Consultation (Campbell School)',
     icon: '🦾',
-    description: 'Expert in musculoskeletal injuries and orthopedic conditions.'
+    description: 'Expert in musculoskeletal injuries.'
   },
   {
     id: 'gastroenterology',
     label: 'Gastroenterology Consultation (Sleisenger School)',
     icon: '🧪',
-    description: 'Expert in GI tract and hepatobiliary disease.'
+    description: 'Expert in GI and liver disorders.'
   },
   {
     id: 'dermatology',
@@ -84,24 +86,33 @@ export const CHAT_SPECIALISTS: ChatSpecialist[] = [
     id: 'pediatrics',
     label: 'Pediatrics Consultation (Nelson School)',
     icon: '👶',
-    description: 'Expert in childhood diseases and developmental medicine.'
+    description: 'Expert in pediatric diseases and development.'
   },
   {
     id: 'openevidence',
-    label: 'Academic Evidence Search',
+    label: 'Academic Search',
     icon: '🌐',
-    description: 'Search across medical databases and academic literature.'
+    description: 'Live PubMed search with query translation and legal open-access full-text links via Unpaywall.',
+    highlight: true
   },
   {
     id: 'ai_consultant',
-    label: 'AI in Medicine Consultant',
+    label: 'AI Assistant (Medicine)',
     icon: '🦾',
-    description: 'Expert in AI tool implementation in clinical practice: tool selection and training.'
+    description: 'Expert in integrating AI into clinical practice: tooling and training.'
   },
   {
     id: 'longevai',
     label: 'Dr. LongevAI',
     icon: '🧬',
-    description: 'A4M + IHS + 5P medicine: anti-aging, hormone optimization, and longevity biomarkers.'
+    description: 'A4M + IHS + 5P медицина: anti-aging, гормональная оптимизация, longevity-биомаркеры.'
+  },
+  {
+    id: 'hua_tuo_master',
+    label: 'Titan: Master Hua Tuo',
+    icon: '☯️',
+    description: 'Classical TCM: acupuncture, qi, yin-yang, five phases, zang-fu, herbal medicine, and Daoist medical tradition.',
+    highlight: true
   }
 ];
+

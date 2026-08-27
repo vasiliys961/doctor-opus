@@ -210,6 +210,7 @@ export default function ComparativeAnalysisPage() {
       </h1>
 
       <AnalysisTips 
+        recommendationProfile="imaging"
         content={{
           fast: "Fast comparison of main findings across multiple images.",
           optimized: "Recommended mode: «Optimized» (Gemini JSON → Sonnet) — optimal for before/after comparison.",
@@ -269,7 +270,13 @@ export default function ComparativeAnalysisPage() {
           <h2 className="text-lg sm:text-xl font-semibold mb-3">
             📷 Images for Comparison <span className="text-red-500">*</span>
           </h2>
-          <ImageUpload onUpload={handleImageUpload} accept="image/*" maxSize={50} anonymizationMode="soft" />
+          <ImageUpload
+            onUpload={handleImageUpload}
+            accept="image/*"
+            maxSize={50}
+            anonymizationMode="soft"
+            bridgePullTarget="image_analysis"
+          />
         </div>
 
         {images.length > 0 && (
@@ -289,7 +296,7 @@ export default function ComparativeAnalysisPage() {
                     }}
                     className="w-full mb-2 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
                   >
-                    🎨 Закрасить данные
+                    🎨 Redact personal data
                   </button>
                   <input
                     type="text"

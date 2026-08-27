@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import JSZip from 'jszip'
 import { compressMedicalImage, anonymizeMedicalImage } from '@/lib/image-compression'
 import ImageEditor from './ImageEditor'
+import MobileBridgeInboxPicker from './MobileBridgeInboxPicker'
 import { getClientLocale } from '@/lib/i18n/client'
 import { uploadComponentMessages } from '@/lib/i18n/ui-client-messages'
 import type { Locale } from '@/lib/i18n/config'
@@ -18,6 +19,23 @@ interface ImageUploadProps {
   accept?: string
   maxSize?: number // in MB
   anonymizationMode?: 'strict' | 'soft'
+  bridgePullTarget?: string
+}
+
+const BRIDGE_DRAFT_KEYS: Record<string, string> = {
+  chat: 'mobile_bridge_chat_draft',
+  protocol: 'protocol_draft',
+  library: 'mobile_bridge_library_draft',
+  clinical_context: 'mobile_bridge_clinical_context_draft',
+  image_analysis: 'mobile_bridge_image_analysis_draft',
+  ecg_analysis: 'mobile_bridge_ecg_analysis_draft',
+  xray_analysis: 'mobile_bridge_xray_analysis_draft',
+  ct_analysis: 'mobile_bridge_ct_analysis_draft',
+  mri_analysis: 'mobile_bridge_mri_analysis_draft',
+  ultrasound_analysis: 'mobile_bridge_ultrasound_analysis_draft',
+  lab_analysis: 'mobile_bridge_lab_analysis_draft',
+  video_analysis: 'mobile_bridge_video_analysis_draft',
+  document_scan: 'mobile_bridge_document_scan_draft',
 }
 
 export default function ImageUpload({
@@ -25,6 +43,7 @@ export default function ImageUpload({
   accept = 'image/*,.dcm,.dicom',
   maxSize = 500,
   anonymizationMode = 'strict',
+  bridgePullTarget = '',
 }: ImageUploadProps) {
   const [locale, setLocale] = useState<Locale>('en')
   const t = uploadComponentMessages[locale]
@@ -36,6 +55,7 @@ export default function ImageUpload({
   const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([]) // Дополнительные файлы для пакетной анонимизации
   const additionalFilesRef = useRef<File[]>([]) // Ref для немедленного доступа
+  const bridgeDraftConsumedRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const acceptedRules = accept
@@ -98,6 +118,68 @@ export default function ImageUpload({
   useEffect(() => {
     setLocale(getClientLocale())
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!bridgePullTarget) return
+    if (bridgeDraftConsumedRef.current) return
+    bridgeDraftConsumedRef.current = true
+
+    const storageKey = BRIDGE_DRAFT_KEYS[bridgePullTarget]
+    if (!storageKey || storageKey === 'protocol_draft') return
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return
+
+    const inferExt = (mime: string): string => {
+      const lower = mime.toLowerCase()
+      if (lower.includes('jpeg')) return 'jpg'
+      if (lower.includes('png')) return 'png'
+      if (lower.includes('webp')) return 'webp'
+      if (lower.includes('pdf')) return 'pdf'
+      if (lower.startsWith('video/')) return lower.split('/')[1] || 'mp4'
+      if (lower.startsWith('text/')) return 'txt'
+      return 'bin'
+    }
+
+    const makeSafeName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'mobile-bridge'
+
+    void (async () => {
+      try {
+        const payload = JSON.parse(raw) as {
+          title?: string
+          dataUrl?: string
+          mimeType?: string
+          text?: string
+        }
+
+        let file: File | null = null
+        const title = makeSafeName(payload.title || 'mobile-bridge')
+        const mime = (payload.mimeType || '').trim()
+
+        if (payload.dataUrl?.startsWith('data:')) {
+          const match = payload.dataUrl.match(/^data:(.+?);base64,(.+)$/)
+          if (match) {
+            const dataMime = match[1] || mime || 'application/octet-stream'
+            const binary = atob(match[2])
+            const bytes = new Uint8Array(binary.length)
+            for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+            file = new File([bytes], `${title}.${inferExt(dataMime)}`, { type: dataMime })
+          }
+        } else if ((payload.text || '').trim()) {
+          const finalMime = mime || 'text/plain'
+          file = new File([payload.text.trim()], `${title}.${inferExt(finalMime)}`, { type: finalMime })
+        }
+
+        if (file) {
+          await handleFile(file)
+        }
+      } catch {
+        // ignore corrupted bridge payload
+      } finally {
+        localStorage.removeItem(storageKey)
+      }
+    })()
+  }, [bridgePullTarget])
 
   const handleAnonymize = async () => {
     if (!currentFile) return;
@@ -429,6 +511,16 @@ export default function ImageUpload({
     }
   }
 
+  const openBridgeForSection = () => {
+    const params = new URLSearchParams()
+    if (bridgePullTarget) {
+      params.set('pullTarget', bridgePullTarget)
+    }
+    params.set('focusInbox', '1')
+    const suffix = params.toString()
+    window.open(`/mobile-bridge${suffix ? `?${suffix}` : ''}`, '_blank')
+  }
+
   return (
     <div className="w-full" data-tour="upload-zone">
       {preview && (
@@ -518,6 +610,26 @@ export default function ImageUpload({
                     className="text-primary-600 hover:text-primary-700 font-semibold underline"
                   >
                     {t.chooseFolder}
+                  </button>
+                </div>
+                <div>
+                  <MobileBridgeInboxPicker
+                    onImport={(filesFromInbox) => {
+                      void handleFile(filesFromInbox)
+                    }}
+                    accept={accept}
+                    multiple
+                    preferredTarget={bridgePullTarget}
+                    buttonClassName="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md transition-colors font-semibold text-sm"
+                  />
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={openBridgeForSection}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors font-semibold text-sm"
+                  >
+                    {locale === 'ru' ? '📲 Камера телефона (этот раздел)' : '📲 Phone camera (this section)'}
                   </button>
                 </div>
                 <div className="text-gray-500 text-sm italic">{t.dragDrop}</div>

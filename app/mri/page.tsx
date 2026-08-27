@@ -269,6 +269,7 @@ export default function MRIPage() {
       <h1 className="text-3xl font-bold text-primary-900 mb-6">🧠 {t.title}</h1>
       
       <AnalysisTips 
+        recommendationProfile="imaging"
         content={{
           fast: "Two-stage MRI screening (structured sequence description then clinical interpretation). Provides a concise conclusion and risk signal.",
           optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and quality for MRI studies.",
@@ -286,7 +287,13 @@ export default function MRIPage() {
       
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">{t.uploadTitle}</h2>
-        <ImageUpload onUpload={handleUpload} accept="image/*,.dcm,.dicom" maxSize={500} anonymizationMode="soft" />
+        <ImageUpload
+          onUpload={handleUpload}
+          accept="image/*,.dcm,.dicom"
+          maxSize={500}
+          anonymizationMode="soft"
+          bridgePullTarget="mri_analysis"
+        />
       </div>
 
       {file && imagePreview && (

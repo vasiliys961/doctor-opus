@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import AudioUpload from '@/components/AudioUpload'
 import FileUpload from '@/components/FileUpload'
@@ -11,69 +11,24 @@ import rehypeSanitize from 'rehype-sanitize'
 import { logUsage } from '@/lib/simple-logger'
 import { ChatSpecialistSelector } from '@/components/ChatSpecialistSelector'
 import { Specialty } from '@/lib/prompts'
-import { searchLibraryLocal } from '@/lib/library-db'
+import { getDocumentChunksByPage, searchImagesByVector, searchLibraryLocalWithMeta } from '@/lib/library-db'
 import ImageEditor from '@/components/ImageEditor'
 import { anonymizeMedicalImage } from '@/lib/image-compression'
 import { anonymizeText } from '@/lib/anonymization'
+import { embedImage } from '@/lib/embeddings'
 import mammoth from 'mammoth'
+import ConsiliumProgress, { ConsiliumProgressItem, ConsiliumSpecialtyItem } from '@/components/advanced/ConsiliumProgress'
+import ConsiliumAuditView from '@/components/advanced/ConsiliumAuditView'
+import { ConsiliumProgressEvent, DiagnosticResult } from '@/lib/diagnostics/types'
 import { getClientLocale } from '@/lib/i18n/client'
-import { chatMessages } from '@/lib/i18n/ui-client-messages'
 import type { Locale } from '@/lib/i18n/config'
-import { MODELS } from '@/lib/openrouter'
+import { chatMessages } from '@/lib/i18n/ui-client-messages'
+import { BRIDGE_CHAT_KEY } from '@/lib/mobile-bridge-inbox'
 
+type ModelType = 'opus' | 'sonnet'
 type ResponseStyle = 'brief' | 'detailed'
-type ResponseLanguagePreference = 'auto' | 'en' | 'ru' | 'ar' | 'hi' | 'es' | 'fr' | 'zh' | 'ms' | 'id' | 'pt-br' | 'tr'
 const MAX_CHAT_FILES_PER_BATCH = 4;
 const MAX_CHAT_TOTAL_BYTES_PER_BATCH = 16 * 1024 * 1024;
-
-const extractTextFromNode = (node: unknown): string => {
-  if (typeof node === 'string') return node;
-  if (Array.isArray(node)) {
-    return node
-      .map((item) => {
-        if (typeof item === 'string') return item;
-        if (!item || typeof item !== 'object') return '';
-        const record = item as Record<string, unknown>;
-        return typeof record.text === 'string' ? record.text : '';
-      })
-      .join('');
-  }
-  return '';
-};
-
-const extractStreamingContent = (json: any): string => {
-  const choice = json?.choices?.[0];
-  if (!choice) return '';
-
-  const delta = choice?.delta;
-  const fromDelta =
-    extractTextFromNode(delta?.content) ||
-    extractTextFromNode(delta?.text) ||
-    extractTextFromNode(delta?.output_text);
-  if (fromDelta) return fromDelta;
-
-  const fromMessage =
-    extractTextFromNode(choice?.message?.content) ||
-    extractTextFromNode(choice?.message?.text);
-  if (fromMessage) return fromMessage;
-
-  return extractTextFromNode(json?.content);
-};
-
-const responseLanguageOptions: Array<{ value: ResponseLanguagePreference; label: string }> = [
-  { value: 'auto', label: 'Auto (same as user message)' },
-  { value: 'en', label: 'English' },
-  { value: 'ru', label: 'Russian' },
-  { value: 'ar', label: 'Arabic' },
-  { value: 'hi', label: 'Hindi' },
-  { value: 'es', label: 'Spanish' },
-  { value: 'fr', label: 'French' },
-  { value: 'zh', label: 'Chinese' },
-  { value: 'ms', label: 'Malay' },
-  { value: 'id', label: 'Indonesian' },
-  { value: 'pt-br', label: 'Portuguese (Brazil)' },
-  { value: 'tr', label: 'Turkish' },
-];
 
 const specialtyMap: Record<string, Specialty> = {
   'Cardiologist': 'cardiology',
@@ -91,18 +46,9 @@ const specialtyMap: Record<string, Specialty> = {
   'AI Expert': 'ai_assistant',
 };
 
-const getDisplayModelName = (model: 'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable') => {
-  if (model === 'gpt52') return MODELS.GPT_5_2;
-  if (model === 'sonnet') return MODELS.SONNET;
-  if (model === 'opus') return MODELS.OPUS;
-  if (model === 'gemini') return MODELS.GEMINI_3_FLASH;
-  if (model === 'fable') return MODELS.FABLE_5;
-  return model;
-};
-
 export default function ChatPage() {
-  const [locale, setLocale] = useState<Locale>('en')
   const { data: session } = useSession()
+  const [locale, setLocale] = useState<Locale>('en')
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<Array<{ 
     role: 'user' | 'assistant'; 
@@ -117,9 +63,8 @@ export default function ChatPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [useStreaming, setUseStreaming] = useState(true)
   const [useLibrary, setUseLibrary] = useState(false)
-  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable'>('gpt52')
+  const [model, setModel] = useState<'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable'>('sonnet')
   const [responseStyle, setResponseStyle] = useState<ResponseStyle>('brief')
-  const [responseLanguage, setResponseLanguage] = useState<ResponseLanguagePreference>('auto')
   const [specialty, setSpecialty] = useState<Specialty>('universal')
   const [isCutOff, setIsCutOff] = useState(false)
   const [lastMessageIndex, setLastMessageIndex] = useState<number | null>(null)
@@ -130,11 +75,77 @@ export default function ChatPage() {
   const [isProcessingFiles, setIsProcessingFiles] = useState(false)
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
   const [convertingPDF, setConvertingPDF] = useState(false)
-  const t = chatMessages[locale]
+  const [consiliumMode, setConsiliumMode] = useState(false)
+  const [consiliumLoading, setConsiliumLoading] = useState(false)
+  const [consiliumEvents, setConsiliumEvents] = useState<ConsiliumProgressItem[]>([])
+  const [consiliumCurrentRound, setConsiliumCurrentRound] = useState(0)
+  const [consiliumStageMessage, setConsiliumStageMessage] = useState<string | null>(null)
+  const [consiliumResult, setConsiliumResult] = useState<DiagnosticResult | null>(null)
+  const [consiliumError, setConsiliumError] = useState<string | null>(null)
+  const [consiliumSpecialtyEvents, setConsiliumSpecialtyEvents] = useState<ConsiliumSpecialtyItem[]>([])
+  const [consiliumAmscDecision, setConsiliumAmscDecision] = useState<{ escalated: boolean; disagreementScore: number } | null>(null)
+  const t = useMemo(() => chatMessages[locale] || chatMessages.en, [locale])
+  const formatTemplate = (template: string, params: Record<string, string | number>) =>
+    Object.entries(params).reduce((acc, [key, value]) => acc.replaceAll(`{{${key}}}`, String(value)), template)
+
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const raw = localStorage.getItem(BRIDGE_CHAT_KEY)
+    if (!raw) return
+
+    const inferExt = (mime: string): string => {
+      const lower = mime.toLowerCase()
+      if (lower.includes('jpeg')) return 'jpg'
+      if (lower.includes('png')) return 'png'
+      if (lower.includes('webp')) return 'webp'
+      if (lower.includes('pdf')) return 'pdf'
+      if (lower.startsWith('video/')) return lower.split('/')[1] || 'mp4'
+      if (lower.startsWith('text/')) return 'txt'
+      return 'bin'
+    }
+
+    const safeName = (name: string): string =>
+      name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'mobile-bridge'
+
+    try {
+      const payload = JSON.parse(raw) as {
+        title?: string
+        text?: string
+        dataUrl?: string
+        mimeType?: string
+      }
+
+      const text = payload.text?.trim()
+      if (text && !message.trim()) {
+        setMessage(text)
+      }
+
+      if (payload.dataUrl?.startsWith('data:')) {
+        const match = payload.dataUrl.match(/^data:(.+?);base64,(.+)$/)
+        if (match) {
+          const dataMime = match[1] || payload.mimeType || 'application/octet-stream'
+          const binary = atob(match[2])
+          const bytes = new Uint8Array(binary.length)
+          for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+          const fileName = `${safeName(payload.title || 'mobile-bridge')}.${inferExt(dataMime)}`
+          const file = new File([bytes], fileName, { type: dataMime })
+          setSelectedFiles((prev) => [...prev, file])
+          setShowFileUpload(true)
+        }
+      }
+    } catch {
+      // ignore invalid mobile bridge payload
+    } finally {
+      localStorage.removeItem(BRIDGE_CHAT_KEY)
+    }
+  }, [])
 
   // Load PDF.js v3 from local files (public/pdfjs/)
   useEffect(() => {
-    setLocale(getClientLocale())
     if (typeof window !== 'undefined' && !window.pdfjsLib) {
       const script = document.createElement('script')
       script.src = '/pdfjs/pdf.min.js'
@@ -263,7 +274,7 @@ export default function ChatPage() {
     setLoading(true);
     
     const lastAssistantMessage = messages[lastMessageIndex];
-    const continuePrompt = "Continue your previous answer from where you left off. Start directly from the interrupted sentence, without any preamble.";
+    const continuePrompt = t.continuePrompt;
     
     // Добавляем сообщение ассистента, которое будем дополнять
     const assistantMessageIndex = lastMessageIndex;
@@ -282,11 +293,10 @@ export default function ChatPage() {
           model: modelName,
           specialty: specialty,
           responseStyle,
-          responseLanguage,
         }),
       });
 
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok) throw new Error(formatTemplate(t.httpErrorWithStatus, { status: response.status }));
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -315,7 +325,7 @@ export default function ChatPage() {
                   setIsCutOff(true);
                 }
 
-                const content = extractStreamingContent(json);
+                const content = json.choices?.[0]?.delta?.content || '';
                 if (content) {
                   accumulatedText += content;
                   setMessages(prev => {
@@ -363,20 +373,79 @@ export default function ChatPage() {
     return batches;
   };
 
+  const shouldAutoUseLibraryByIntent = (text: string): boolean => {
+    const normalized = text.toLowerCase();
+    return /(по\s*книг|из\s*книг|по\s*библиотек|из\s*библиотек|в\s*книг|library|book|pdf|source)/i.test(normalized);
+  };
+
+  const buildLibraryContextBlock = (hits: Array<{
+    content: string;
+    documentName?: string;
+    pageId?: number;
+    score?: number;
+  }>): string => {
+    const chunks = hits.map((hit, idx) => {
+      const source = [
+        hit.documentName ? `Doc: ${hit.documentName}` : null,
+        Number.isFinite(hit.pageId) ? `Page: ${hit.pageId}` : null,
+        Number.isFinite(hit.score) ? `Score: ${(hit.score as number).toFixed(3)}` : null,
+      ].filter(Boolean).join(' | ');
+
+      return `[#${idx + 1}${source ? ` | ${source}` : ''}]\n${hit.content}`;
+    });
+
+    return `\n\n### LIBRARY CONTEXT:\n${chunks.join('\n---\n')}`;
+  };
+
+  const buildLibraryImageContextBlock = async (images: File[]): Promise<string> => {
+    const rows: string[] = []
+    const seen = new Set<string>()
+    const imageList = images.slice(0, 2) // avoid heavy latency
+
+    for (const [imageIndex, imageFile] of imageList.entries()) {
+      try {
+        const vector = await embedImage(imageFile)
+        const hits = await searchImagesByVector(vector, 4)
+        for (const hit of hits) {
+          const key = `${hit.documentId}_${hit.pageId}`
+          if (seen.has(key)) continue
+          seen.add(key)
+
+          const pageChunks = await getDocumentChunksByPage(hit.documentId, hit.pageId, 2)
+          const excerpt = pageChunks.join(' ').replace(/\s+/g, ' ').trim().slice(0, 900)
+          if (!excerpt) continue
+
+          const scoreText = Number.isFinite(hit.score) ? hit.score.toFixed(3) : 'n/a'
+          rows.push(
+            `[IMG ${imageIndex + 1} | Doc: ${hit.documentName || hit.documentId} | Page: ${hit.pageId} | Score: ${scoreText}]\n${excerpt}`
+          )
+          if (rows.length >= 4) break
+        }
+      } catch (err) {
+        console.warn('Visual library search error:', err)
+      }
+      if (rows.length >= 4) break
+    }
+
+    return rows.length > 0 ? `\n\n### LIBRARY IMAGE MATCHES:\n${rows.join('\n---\n')}` : ''
+  }
+
+
   const handleSend = async () => {
     if (!message.trim() && selectedFiles.length === 0) return
 
     setIsCutOff(false)
     setLoading(true)
 
-    let userMessage = message || (selectedFiles.length > 0 ? 'Please analyze the attached files.' : '')
+    let userMessage = message || (selectedFiles.length > 0 ? t.analyzeAttachedFilesFallback : '')
     
-    if (useLibrary && message.trim()) {
+    const shouldUseLibraryForThisMessage = useLibrary || shouldAutoUseLibraryByIntent(message);
+    if (shouldUseLibraryForThisMessage && message.trim()) {
       setSearchingLibrary(true)
       try {
-        const results = await searchLibraryLocal(message, 3)
+        const results = await searchLibraryLocalWithMeta(message, 3)
         if (results.length > 0) {
-          userMessage += `\n\n### LIBRARY CONTEXT:\n${results.join('\n---\n')}`
+          userMessage += buildLibraryContextBlock(results)
         }
       } catch (err) {
         console.error('Auto library search error:', err)
@@ -422,6 +491,23 @@ export default function ChatPage() {
       }
     }
 
+    if (shouldUseLibraryForThisMessage) {
+      const imageFiles = filesToSend.filter((f) => f.type.startsWith('image/'))
+      if (imageFiles.length > 0) {
+        setSearchingLibrary(true)
+        try {
+          const imageContext = await buildLibraryImageContextBlock(imageFiles)
+          if (imageContext) {
+            userMessage += imageContext
+          }
+        } catch (err) {
+          console.error('Auto visual library search error:', err)
+        } finally {
+          setSearchingLibrary(false)
+        }
+      }
+    }
+
     setMessages(prev => [...prev, { 
       role: 'user', 
       content: userMessage,
@@ -435,12 +521,14 @@ export default function ChatPage() {
 
     try {
       const modelName = model
-      const displayModelName = getDisplayModelName(model)
 
       if (filesToSend.length > 0) {
         const fileBatches = splitFilesIntoBatches(filesToSend);
         if (fileBatches.length > 1) {
-          let aggregatedText = `⚙️ Large upload detected. Processing ${filesToSend.length} files in ${fileBatches.length} batches for stable delivery.\n`;
+          let aggregatedText = `⚙️ ${formatTemplate(t.largeUploadDetected, {
+            files: filesToSend.length,
+            batches: fileBatches.length,
+          })}\n`;
           let totalCost = 0;
 
           if (useStreaming) {
@@ -455,7 +543,10 @@ export default function ChatPage() {
 
           for (let batchIndex = 0; batchIndex < fileBatches.length; batchIndex++) {
             const batch = fileBatches[batchIndex];
-            const batchPrompt = `${userMessage}\n\n[Attachment batch ${batchIndex + 1}/${fileBatches.length}] Analyze files in this batch and provide findings.`;
+            const batchPrompt = `${userMessage}\n\n${formatTemplate(t.batchAttachmentInstruction, {
+              current: batchIndex + 1,
+              total: fileBatches.length,
+            })}`;
             const batchFormData = new FormData();
             batchFormData.append('message', batchPrompt);
             batchFormData.append('history', JSON.stringify(messages));
@@ -463,7 +554,6 @@ export default function ChatPage() {
             batchFormData.append('model', modelName);
             batchFormData.append('specialty', specialty);
             batchFormData.append('responseStyle', responseStyle);
-            batchFormData.append('responseLanguage', responseLanguage);
             batch.forEach(file => batchFormData.append('files', file));
 
             const batchResponse = await fetch('/api/chat', {
@@ -473,12 +563,21 @@ export default function ChatPage() {
 
             const batchData = await batchResponse.json().catch(() => ({ success: false, error: `HTTP ${batchResponse.status}` }));
             if (!batchResponse.ok || !batchData.success) {
-              const details = batchData?.error || `HTTP error! status: ${batchResponse.status}`;
-              throw new Error(`Batch ${batchIndex + 1}/${fileBatches.length} failed: ${details}`);
+              const details = batchData?.error || formatTemplate(t.httpErrorWithStatus, { status: batchResponse.status });
+              throw new Error(
+                formatTemplate(t.batchFailed, {
+                  current: batchIndex + 1,
+                  total: fileBatches.length,
+                  details,
+                })
+              );
             }
 
             totalCost += Number(batchData.cost || 0);
-            aggregatedText += `\n\n### Batch ${batchIndex + 1}/${fileBatches.length}\n${batchData.result || ''}`;
+            aggregatedText += `\n\n### ${formatTemplate(t.batchHeader, {
+              current: batchIndex + 1,
+              total: fileBatches.length,
+            })}\n${batchData.result || ''}`;
 
             if (useStreaming) {
               setMessages(prev => {
@@ -488,7 +587,7 @@ export default function ChatPage() {
                     role: 'assistant',
                     content: aggregatedText,
                     cost: totalCost,
-                            model: batchData.model || displayModelName
+                    model: batchData.model || modelName
                   };
                 }
                 return newMessages;
@@ -501,7 +600,7 @@ export default function ChatPage() {
               role: 'assistant',
               content: aggregatedText,
               cost: totalCost,
-              model: displayModelName
+              model: modelName
             }]);
           }
 
@@ -515,7 +614,6 @@ export default function ChatPage() {
         formData.append('model', modelName)
         formData.append('specialty', specialty)
         formData.append('responseStyle', responseStyle)
-        formData.append('responseLanguage', responseLanguage)
         filesToSend.forEach(file => formData.append('files', file))
 
         if (useStreaming) {
@@ -526,7 +624,7 @@ export default function ChatPage() {
           })
 
           if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`)
+            throw new Error(formatTemplate(t.httpErrorWithStatus, { status: response.status }))
           }
 
           const reader = response.body?.getReader()
@@ -572,7 +670,7 @@ export default function ChatPage() {
                         if (newMessages[assistantMessageIndex]) {
                           newMessages[assistantMessageIndex] = {
                             role: 'assistant',
-                            content: `❌ Error: ${json.error}`
+                            content: `❌ ${t.genericErrorPrefix} ${json.error}`
                           }
                         }
                         return newMessages
@@ -588,7 +686,7 @@ export default function ChatPage() {
                           newMessages[assistantMessageIndex] = {
                             ...newMessages[assistantMessageIndex],
                             cost: json.usage.total_cost,
-                            model: json.model || displayModelName
+                            model: json.model || modelName
                           }
                         }
                         return newMessages
@@ -596,7 +694,7 @@ export default function ChatPage() {
                       
                       logUsage({
                         section: 'chat',
-                        model: json.model || displayModelName,
+                        model: json.model || modelName,
                         inputTokens: json.usage.prompt_tokens,
                         outputTokens: json.usage.completion_tokens,
                         specialty: specialty
@@ -604,7 +702,7 @@ export default function ChatPage() {
                       continue;
                     }
 
-                    const content = extractStreamingContent(json)
+                    const content = json.choices?.[0]?.delta?.content || ''
                     if (content) {
                       accumulatedText += content
                       
@@ -644,16 +742,16 @@ export default function ChatPage() {
               role: 'assistant', 
               content: data.result,
               cost: data.cost,
-              model: data.model || displayModelName
+              model: data.model || modelName
             }])
             logUsage({
               section: 'chat',
-              model: displayModelName,
+              model: modelName,
               inputTokens: 1500,
               outputTokens: 1200,
             })
           } else {
-            setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${data.error}` }])
+            setMessages(prev => [...prev, { role: 'assistant', content: `${t.genericErrorPrefix} ${data.error}` }])
           }
         }
       } else {
@@ -670,12 +768,11 @@ export default function ChatPage() {
               model: modelName,
               specialty: specialty,
               responseStyle,
-              responseLanguage,
             }),
           })
 
           if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`)
+            throw new Error(formatTemplate(t.httpErrorWithStatus, { status: response.status }))
           }
 
           const reader = response.body?.getReader()
@@ -721,7 +818,7 @@ export default function ChatPage() {
                         if (newMessages[assistantMessageIndex]) {
                           newMessages[assistantMessageIndex] = {
                             role: 'assistant',
-                            content: `❌ Error: ${json.error}`
+                            content: `❌ ${t.genericErrorPrefix} ${json.error}`
                           }
                         }
                         return newMessages
@@ -737,7 +834,7 @@ export default function ChatPage() {
                           newMessages[assistantMessageIndex] = {
                             ...newMessages[assistantMessageIndex],
                             cost: json.usage.total_cost,
-                            model: json.model || displayModelName
+                            model: json.model || modelName
                           }
                         }
                         return newMessages
@@ -745,7 +842,7 @@ export default function ChatPage() {
                       
                       logUsage({
                         section: 'chat',
-                        model: json.model || displayModelName,
+                        model: json.model || modelName,
                         inputTokens: json.usage.prompt_tokens,
                         outputTokens: json.usage.completion_tokens,
                         specialty: specialty
@@ -753,7 +850,7 @@ export default function ChatPage() {
                       continue;
                     }
 
-                    const content = extractStreamingContent(json)
+                    const content = json.choices?.[0]?.delta?.content || ''
                     if (content) {
                       accumulatedText += content
                       
@@ -793,7 +890,6 @@ export default function ChatPage() {
               model: modelName,
               specialty: specialty,
               responseStyle,
-              responseLanguage,
             }),
           })
 
@@ -804,17 +900,17 @@ export default function ChatPage() {
               role: 'assistant', 
               content: data.result, 
               cost: data.cost,
-              model: data.model || displayModelName
+              model: data.model || modelName
             }])
             logUsage({
               section: 'chat',
-              model: displayModelName,
+              model: modelName,
               inputTokens: 1000,
               outputTokens: 1000,
               specialty: specialty // Передаем специальность
             })
           } else {
-            setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${data.error}` }])
+            setMessages(prev => [...prev, { role: 'assistant', content: `${t.genericErrorPrefix} ${data.error}` }])
           }
         }
       }
@@ -824,10 +920,10 @@ export default function ChatPage() {
         if (useStreaming && newMessages[assistantMessageIndex]) {
           newMessages[assistantMessageIndex] = {
             role: 'assistant',
-            content: `Error: ${err.message}`
+            content: `${t.genericErrorPrefix} ${err.message}`
           }
         } else {
-          newMessages.push({ role: 'assistant', content: `Error: ${err.message}` })
+          newMessages.push({ role: 'assistant', content: `${t.genericErrorPrefix} ${err.message}` })
         }
         return newMessages
       })
@@ -841,9 +937,9 @@ export default function ChatPage() {
     
     setSearchingLibrary(true)
     try {
-      const results = await searchLibraryLocal(message, 3)
+      const results = await searchLibraryLocalWithMeta(message, 3)
       if (results.length > 0) {
-        const context = `\n\n### LIBRARY CONTEXT:\n${results.join('\n---\n')}`
+        const context = buildLibraryContextBlock(results)
         setMessage(prev => prev + context)
       } else {
         alert(t.noLibraryResults)
@@ -852,6 +948,94 @@ export default function ChatPage() {
       console.error('Library search error:', err)
     } finally {
       setSearchingLibrary(false)
+    }
+  }
+
+  const handleConsiliumSend = async () => {
+    if (!message.trim() && selectedFiles.length === 0) return
+
+    setConsiliumLoading(true)
+    setConsiliumEvents([])
+    setConsiliumSpecialtyEvents([])
+    setConsiliumAmscDecision(null)
+    setConsiliumResult(null)
+    setConsiliumError(null)
+    setConsiliumCurrentRound(0)
+    setConsiliumStageMessage(t.consiliumPreparingCase)
+
+    try {
+      const formData = new FormData()
+      formData.append('message', message)
+      formData.append('patientId', 'not specified')
+      selectedFiles.forEach((file) => formData.append('files', file))
+
+      const response = await fetch('/api/consilium', { method: 'POST', body: formData })
+      if (!response.ok || !response.body) {
+        let serverError = t.consiliumStartFailed
+        try {
+          const payload = await response.json()
+          serverError = payload?.error || serverError
+        } catch {
+          // ignore JSON parse errors for non-JSON responses
+        }
+        throw new Error(serverError)
+      }
+
+      setMessage('')
+      setSelectedFiles([])
+      setShowFileUpload(false)
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const chunks = buffer.split('\n\n')
+        buffer = chunks.pop() || ''
+
+        for (const chunk of chunks) {
+          if (!chunk.startsWith('data: ')) continue
+          try {
+            const event: ConsiliumProgressEvent = JSON.parse(chunk.slice(6))
+            if (event.type === 'stage') {
+              setConsiliumStageMessage(event.message || null)
+            } else if (event.type === 'specialty' && event.specialty && event.status) {
+              setConsiliumSpecialtyEvents((prev) => {
+                const next = [...prev]
+                const existingIdx = next.findIndex((item) => item.specialty === event.specialty)
+                const payload: ConsiliumSpecialtyItem = { specialty: event.specialty!, status: event.status! }
+                if (existingIdx >= 0) next[existingIdx] = payload
+                else next.push(payload)
+                return next
+              })
+            } else if (event.type === 'amsc-decision' && typeof event.escalated === 'boolean') {
+              setConsiliumAmscDecision({ escalated: event.escalated, disagreementScore: event.disagreementScore || 0 })
+              if (!event.escalated) {
+                setConsiliumEvents((prev) => [...prev, { round: 0, role: 'hypothesis', status: 'done' }])
+              }
+            } else if (event.type === 'round' && typeof event.round === 'number') {
+              setConsiliumCurrentRound(event.round)
+              setConsiliumStageMessage(null)
+            } else if (event.type === 'role' && typeof event.round === 'number' && event.role && event.status) {
+              setConsiliumEvents((prev) => [...prev, { round: event.round!, role: event.role!, status: event.status! }])
+            } else if (event.type === 'final' && event.result) {
+              setConsiliumResult(event.result)
+            } else if (event.type === 'error') {
+              setConsiliumError(event.message || t.consiliumRunFailed)
+            }
+          } catch (error) {
+            console.warn('Consilium SSE parse error:', error)
+          }
+        }
+      }
+    } catch (error: any) {
+      setConsiliumError(error?.message || t.consiliumRunFailed)
+    } finally {
+      setConsiliumLoading(false)
+      setConsiliumStageMessage(null)
     }
   }
 
@@ -880,7 +1064,7 @@ export default function ChatPage() {
           <button
             onClick={clearChat}
             className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 border border-slate-200 shadow-sm"
-            title={t.clearConfirm}
+            title={t.clear}
           >
             🗑️ {t.clear}
           </button>
@@ -893,6 +1077,84 @@ export default function ChatPage() {
           </button>
         </div>
       </div>
+
+      <div
+        className={`mb-4 rounded-xl border p-3 sm:p-4 transition-all ${
+          consiliumMode ? 'border-indigo-400 bg-gradient-to-br from-indigo-50 to-white' : 'border-indigo-200 bg-white hover:border-indigo-300'
+        }`}
+      >
+        <div className="flex items-start sm:items-center justify-between gap-3">
+          <div>
+            <div className="text-sm sm:text-base font-bold text-indigo-900 flex items-center gap-2">
+              🩺 {t.consiliumTitle}
+              <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                {t.consiliumPremium}
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-white border border-indigo-200 text-indigo-600">
+                {t.consiliumDeepAnalysis}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-600 max-w-4xl">
+              {t.consiliumIntro}
+            </p>
+          </div>
+          <button
+            onClick={() => setConsiliumMode((prev) => !prev)}
+            disabled={loading || consiliumLoading}
+            className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+              consiliumMode ? 'bg-indigo-600' : 'bg-slate-300'
+            } ${(loading || consiliumLoading) ? 'opacity-60 cursor-not-allowed' : ''}`}
+            aria-label={t.consiliumToggleAria}
+            title={t.consiliumToggleTitle}
+            type="button"
+          >
+            <span
+              className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                consiliumMode ? 'translate-x-7' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {consiliumMode && (
+        <div className="mb-4">
+          <AnalysisTips
+            title="Consilium Model Guide"
+            recommendationProfile="consilium"
+            content={{
+              validated: 'For complex disagreements, core debate agents escalate to Claude Fable 5 before the final synthesis.',
+              extra: [
+                '🧠 Fable 5 is activated only for difficult, high-disagreement branches (not for every case).',
+                '💰 Billing remains fail-closed: if escalation balance is insufficient, full debate does not start.',
+              ],
+            }}
+          />
+          {consiliumError && (
+            <div className="bg-red-100 text-red-700 px-4 py-3 rounded mb-4">❌ {consiliumError}</div>
+          )}
+          {(consiliumLoading || consiliumEvents.length > 0 || consiliumSpecialtyEvents.length > 0) && !consiliumResult && (
+            <ConsiliumProgress
+              stageMessage={consiliumStageMessage || undefined}
+              items={consiliumEvents}
+              currentRound={consiliumCurrentRound}
+              specialtyItems={consiliumSpecialtyEvents}
+              amscDecision={consiliumAmscDecision}
+            />
+          )}
+          {consiliumResult && <ConsiliumAuditView result={consiliumResult} />}
+          {!consiliumLoading && !consiliumResult && !consiliumError && consiliumEvents.length === 0 && consiliumSpecialtyEvents.length === 0 && (
+            <div className="space-y-2">
+              <div className="bg-indigo-50 text-indigo-800 px-4 py-3 rounded border border-indigo-200 text-sm">
+                {t.consiliumModeEnabledHint} <strong>{t.consiliumRunButton}</strong>.
+              </div>
+              <div className="bg-violet-50 text-violet-900 px-4 py-3 rounded border border-violet-200 text-xs">
+                🧠 <strong>Fable 5:</strong> {t.consiliumFableHint}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       
       <div className="bg-white rounded-lg shadow-lg p-3 sm:p-6 mb-4 sm:mb-6 h-[70vh] sm:h-[700px] overflow-y-auto">
         {messages.length === 0 ? (
@@ -1205,7 +1467,7 @@ export default function ChatPage() {
               <option value="gpt52">🚀 GPT-5.6 Terra</option>
               <option value="opus">🧠 Opus 5</option>
               <option value="sonnet">🤖 Sonnet 5</option>
-              <option value="fable">🧪 Fable 5</option>
+              <option value="fable">🧩 Fable 5</option>
               <option value="gemini">⚡ Gemini 3 Flash</option>
             </select>
           </div>
@@ -1225,27 +1487,6 @@ export default function ChatPage() {
             </div>
             <p className="mt-1 text-[10px] sm:text-xs text-teal-700">
               {t.affectsDialogue}
-            </p>
-          </div>
-
-          <div className="w-full sm:w-auto rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs sm:text-sm font-bold text-indigo-800 whitespace-nowrap">{t.responseLanguage}</span>
-              <select
-                value={responseLanguage}
-                onChange={(e) => setResponseLanguage(e.target.value as ResponseLanguagePreference)}
-                className="flex-1 sm:flex-none px-3 py-2 border border-indigo-300 rounded-lg text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 touch-manipulation"
-                disabled={loading}
-              >
-                {responseLanguageOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <p className="mt-1 text-[10px] sm:text-xs text-indigo-700">
-              {t.autoLanguageHint}
             </p>
           </div>
         </div>
@@ -1292,19 +1533,27 @@ export default function ChatPage() {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              handleSend();
+              if (consiliumMode) {
+                handleConsiliumSend();
+              } else {
+                handleSend();
+              }
             }
           }}
-          placeholder={t.questionPlaceholder}
+          placeholder={consiliumMode ? t.consiliumPlaceholder : t.questionPlaceholder}
           data-tour="chat-question-input"
           className="flex-1 px-4 py-3 sm:py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base touch-manipulation min-h-[50px] max-h-[200px] resize-y"
-          disabled={loading}
+          disabled={loading || consiliumLoading}
           rows={1}
         />
         <button
-          onClick={handleSend}
+          onClick={consiliumMode ? handleConsiliumSend : handleSend}
           data-tour="chat-send-button"
-          disabled={loading || isProcessingFiles || (!message.trim() && selectedFiles.length === 0)}
+          disabled={
+            consiliumMode
+              ? consiliumLoading || isProcessingFiles || (!message.trim() && selectedFiles.length === 0)
+              : loading || isProcessingFiles || (!message.trim() && selectedFiles.length === 0)
+          }
           className="px-6 py-3 sm:py-2 bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-medium touch-manipulation flex items-center justify-center gap-2"
         >
           {isProcessingFiles ? (
@@ -1312,8 +1561,13 @@ export default function ChatPage() {
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
               <span>🛡️ {t.processing}</span>
             </>
+          ) : consiliumLoading ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              <span>{t.consiliumRunning}</span>
+            </>
           ) : (
-            t.send
+            consiliumMode ? t.consiliumRunButton : t.send
           )}
         </button>
       </div>

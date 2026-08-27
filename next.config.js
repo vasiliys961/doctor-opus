@@ -6,6 +6,9 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   swcMinify: true,
   disable: process.env.NODE_ENV === 'development' || process.env.NEXT_DISABLE_PWA === 'true',
   workboxOptions: {
+    // Локальный обход нестабильного terser-хука в некоторых окружениях сборки.
+    // Для диагностического локального прогона можно включить NEXT_PWA_SAFE_BUILD=true.
+    mode: process.env.NEXT_PWA_SAFE_BUILD === 'true' ? 'development' : 'production',
     disableDevLogs: true,
     runtimeCaching: [
       {
@@ -42,14 +45,29 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '200mb',
     },
+    // transformers.js используется только в браузере: не бандлим его на сервере,
+    // иначе webpack пытается разобрать нативные .node-бинарники onnxruntime-node.
+    serverComponentsExternalPackages: ['@xenova/transformers'],
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
       path: false,
       crypto: false,
     };
+    // В браузере используется onnxruntime-web, нативный onnxruntime-node не нужен.
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'onnxruntime-node$': false,
+    };
+    // sharp — Node-only зависимость transformers.js, в клиентском бандле не нужна.
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        sharp$: false,
+      };
+    }
     return config;
   },
   async headers() {
@@ -70,7 +88,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com",
               "img-src 'self' data: blob:",
               "font-src 'self' data: https://fonts.gstatic.com",
-              "connect-src 'self' https://openrouter.ai https://api.assemblyai.com https://api.cloud.yandex.net https://cdn.tailwindcss.com",
+              "connect-src 'self' blob: data: https://openrouter.ai https://api.assemblyai.com https://api.cloud.yandex.net https://cdn.tailwindcss.com",
               "media-src 'self' blob:",
               "worker-src 'self' blob:",
               "frame-ancestors 'self'",

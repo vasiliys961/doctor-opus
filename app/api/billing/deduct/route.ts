@@ -68,7 +68,30 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     const { safeError } = await import('@/lib/logger');
+    const message = String(error?.message || '').toLowerCase();
+    const isTransientDbFailure =
+      message.includes('enotfound') ||
+      message.includes('getaddrinfo') ||
+      message.includes('etimedout') ||
+      message.includes('timeout') ||
+      message.includes('econnreset') ||
+      message.includes('connection');
+
     safeError('❌ [BILLING] Error getting balance:', error?.message);
+
+    if (isTransientDbFailure) {
+      // Keep UI stable during temporary DB/network failures.
+      return NextResponse.json(
+        {
+          success: true,
+          balance: 0,
+          totalSpent: 0,
+          stale: true,
+        },
+        { status: 200 }
+      );
+    }
+
     return NextResponse.json(
       { error: 'Failed to get balance' },
       { status: 500 }
@@ -234,7 +257,28 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     const { safeError } = await import('@/lib/logger');
+    const message = String(error?.message || '').toLowerCase();
+    const isTransientDbFailure =
+      message.includes('enotfound') ||
+      message.includes('getaddrinfo') ||
+      message.includes('etimedout') ||
+      message.includes('timeout') ||
+      message.includes('econnreset') ||
+      message.includes('connection');
+
     safeError('❌ [BILLING] Deduction error:', error?.message);
+
+    if (isTransientDbFailure) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Billing service temporarily unavailable',
+          degraded: true,
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { 
         error: 'Failed to deduct credits'

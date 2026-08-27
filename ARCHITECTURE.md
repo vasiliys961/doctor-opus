@@ -1,6 +1,6 @@
 # 🏗️ Doctor Opus — System Architecture
 
-**Stack:** Next.js 14 App Router · TypeScript · PostgreSQL · OpenRouter · AssemblyAI · NOWPayments
+**Stack:** Next.js 14 App Router · TypeScript · PostgreSQL · OpenRouter · AssemblyAI · Direct USDT TRC20 billing
 
 ---
 
@@ -55,8 +55,8 @@ doctor-opus/
 │       │   ├── scan/             # Document OCR
 │       │   └── patient-summary/  # AI patient case summary
 │       ├── payment/
-│       │   ├── create/route.ts   # Create NOWPayments invoice
-│       │   └── webhook/route.ts  # IPN webhook (HMAC verified)
+│       │   ├── create/route.ts            # Create direct crypto invoice (USDT TRC20)
+│       │   └── crypto/confirm/route.ts    # Validate txHash and apply credits
 │       ├── protocols/search/     # Clinical guidelines search
 │       ├── feedback/             # Analysis feedback collection
 │       ├── balance/              # Balance read / deduct
@@ -99,8 +99,8 @@ doctor-opus/
 │   └── payment/
 │       ├── types.ts              # Payment provider types
 │       ├── payment-service.ts    # Payment provider registry
-│       └── providers/
-│           └── nowpayments.ts    # NOWPayments API integration
+│       ├── tron-verifier.ts      # TRONSCAN-based USDT transfer verification
+│       └── providers/            # Legacy provider adapters (disabled)
 │
 ├── public/                       # Static assets
 │   ├── manifest.json             # PWA manifest
@@ -158,14 +158,14 @@ Structured clinical note (.docx export)
 User selects package → /api/payment/create
        │
        ▼
-NOWPayments invoice created (crypto / fiat)
+Invoice with USDT TRC20 amount + wallet address
        │
-       ▼ Payment confirmed
-NOWPayments IPN webhook → /api/payment/webhook
-  ├─ HMAC signature verification
-  ├─ getPaymentByOrderId (PostgreSQL)
-  ├─ updatePaymentStatus
-  └─ addCredits to user balance
+       ▼ User sends transfer and submits txHash
+/api/payment/crypto/confirm
+  ├─ Validate txHash format
+  ├─ Verify transfer via TRONSCAN API
+  ├─ Match recipient wallet + expected amount
+  └─ Mark payment completed and add credits
 ```
 
 ### 4. PHI Anonymization Chain
@@ -235,7 +235,7 @@ feedback (id, user_id, analysis_type, specialty, correctness,
 ### API Protection
 - Rate limiting at Nginx level
 - PostgreSQL `SELECT ... FOR UPDATE` on all balance deductions (no race conditions)
-- HMAC verification on all payment webhooks
+- Server-side transaction verification for crypto confirmations (`txHash` + TRONSCAN checks)
 
 ### Data Isolation
 - **Patient data:** IndexedDB (browser-local only) — never leaves the device
@@ -259,7 +259,7 @@ Next.js App (Docker container, port 3000)
    ├─► PostgreSQL (Neon cloud or self-hosted)
    ├─► OpenRouter API (AI models)
    ├─► AssemblyAI API (voice transcription)
-   └─► NOWPayments API (billing)
+   └─► TRONSCAN API (transaction verification)
 ```
 
 ### Docker Compose Services
@@ -273,8 +273,7 @@ POSTGRES_URL
 NEXTAUTH_SECRET
 NEXTAUTH_URL=https://doctor-opus.online
 ASSEMBLYAI_API_KEY
-NOWPAYMENTS_API_KEY
-NOWPAYMENTS_IPN_SECRET
+TRUST_WALLET_TRC20_ADDRESS
 MIGRATION_SECRET
 ENCRYPTION_SALT
 ```

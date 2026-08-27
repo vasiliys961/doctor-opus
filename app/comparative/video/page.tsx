@@ -523,6 +523,7 @@ export default function VideoComparisonPage() {
       <h1 className="text-3xl font-bold text-primary-900 mb-6">📊 Comparative Video Analysis</h1>
       
       <AnalysisTips 
+        recommendationProfile="video"
         content={{
           fast: "Compares two videos by extracting synchronized frames. Each frame is anonymized automatically.",
           extra: [

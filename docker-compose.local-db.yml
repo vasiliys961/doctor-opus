@@ -1,0 +1,21 @@
+services:
+  postgres-local:
+    image: postgres:15-alpine
+    container_name: doctor-opus-local-db
+    restart: unless-stopped
+    ports:
+      - "54329:5432"
+    environment:
+      POSTGRES_USER: doctoropus
+      POSTGRES_PASSWORD: doctoropus_local_dev
+      POSTGRES_DB: doctoropus_dev
+    volumes:
+      - doctor_opus_local_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U doctoropus -d doctoropus_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  doctor_opus_local_pgdata:

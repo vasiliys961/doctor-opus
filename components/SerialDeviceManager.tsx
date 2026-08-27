@@ -1,15 +1,15 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { AnalysisMode } from './AnalysisModeSelector'
 import AnalysisResult from './AnalysisResult'
 import { MODELS } from '@/lib/openrouter'
+import type { DeviceStatus } from '@/lib/device-hub'
 
 interface SerialDeviceManagerProps {
-  onDataCaptured?: (dataUrl: string) => void
+  onStatusChange?: (status: DeviceStatus) => void
 }
 
-export default function SerialDeviceManager() {
+export default function SerialDeviceManager({ onStatusChange }: SerialDeviceManagerProps) {
   const [port, setPort] = useState<any>(null)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
@@ -26,8 +26,11 @@ export default function SerialDeviceManager() {
   useEffect(() => {
     if (typeof window !== 'undefined' && !('serial' in navigator)) {
       setSupported(false)
+      onStatusChange?.('error')
+    } else {
+      onStatusChange?.('idle')
     }
-  }, [])
+  }, [onStatusChange])
 
   // Отрисовка графика
   useEffect(() => {
@@ -86,10 +89,12 @@ export default function SerialDeviceManager() {
       await port.open({ baudRate })
       setPort(port)
       setIsConnected(true)
+      onStatusChange?.('connected')
       readFromPort(port)
     } catch (err) {
       console.error('Connection error:', err)
       alert('Failed to connect to device. Make sure it is connected and permission has been granted.')
+      onStatusChange?.('error')
     } finally {
       setIsConnecting(false)
     }
@@ -104,6 +109,7 @@ export default function SerialDeviceManager() {
     }
     setPort(null)
     setIsConnected(false)
+    onStatusChange?.('idle')
   }
 
   const readFromPort = async (port: any) => {
@@ -113,6 +119,7 @@ export default function SerialDeviceManager() {
     readerRef.current = reader
 
     try {
+      onStatusChange?.('streaming')
       let buffer = ''
       while (true) {
         const { value, done } = await reader.read()
@@ -131,6 +138,7 @@ export default function SerialDeviceManager() {
       }
     } catch (err) {
       console.error('Read error:', err)
+      onStatusChange?.('error')
     } finally {
       reader.releaseLock()
     }

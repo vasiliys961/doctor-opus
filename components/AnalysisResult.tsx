@@ -1,15 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import { saveAnalysisResult, getAllPatients, Patient } from '@/lib/patient-db'
+import { suggestDermnetLinks, buildDermnetSearchUrl } from '@/lib/dermnet-links'
+import { suggestEcgReferenceLinks, buildEcgGeneralLinks } from '@/lib/ecg-reference-links'
+import { suggestXrayReferenceLinks, buildXrayGeneralLinks } from '@/lib/xray-reference-links'
+import { suggestRadiologyReferenceLinks, buildRadiologyGeneralLinks } from '@/lib/radiology-reference-links'
+import { suggestUltrasoundReferenceLinks, buildUltrasoundGeneralLinks } from '@/lib/ultrasound-reference-links'
 import LibrarySearch from './LibrarySearch'
 import { getClientLocale } from '@/lib/i18n/client'
 import { analysisResultComponentMessages } from '@/lib/i18n/ui-client-messages'
 import type { Locale } from '@/lib/i18n/config'
+import { CURRENT_LEGAL_CONSENT_VERSION } from '@/lib/legal-consent'
 
 interface AnalysisResultProps {
   result: string
@@ -22,10 +28,35 @@ interface AnalysisResultProps {
   images?: string[] // Новое поле для передачи снимков в отчет
 }
 
+type ReferenceLinkUi = {
+  id: string
+  title: string
+  titleEn?: string
+  source: string
+  url: string
+}
+
 export default function AnalysisResult({ result, loading = false, model, mode, imageType, cost, isAnonymous, images }: AnalysisResultProps) {
   const router = useRouter()
   const [locale, setLocale] = useState<Locale>('en')
   const t = analysisResultComponentMessages[locale]
+  const draftDisclaimerTitle = t.draftDisclaimerTitle || 'Draft Clinical Output (Beta)'
+  const draftDisclaimerLine1 = t.draftDisclaimerLine1 || 'This AI output may be incomplete or inaccurate.'
+  const draftDisclaimerLine2 = t.draftDisclaimerLine2 || 'Independent physician verification is required before clinical use.'
+  const draftDisclaimerLine3 = t.draftDisclaimerLine3 || 'Not for patient self-diagnosis.'
+  const consentVersionLabel = t.consentVersionLabel || 'Consent version'
+  const verificationModalTitle = t.verificationModalTitle || 'Physician verification before saving'
+  const verificationModalPrivacyNote =
+    t.verificationModalPrivacyNote ||
+    'Only the case ID and confirmation fact are saved for audit. Patient personal details are not sent.'
+  const verificationModalCheckReviewed =
+    t.verificationModalCheckReviewed ||
+    'I confirm that I personally reviewed and verified this draft before saving.'
+  const verificationModalCheckResponsibility =
+    t.verificationModalCheckResponsibility ||
+    'I understand that final clinical responsibility remains with the physician.'
+  const verificationModalConfirmSave = t.verificationModalConfirmSave || 'Confirm and Save'
+  const verificationModalSaving = t.verificationModalSaving || 'Saving...'
   const [copied, setCopied] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [showPatientSelector, setShowPatientSelector] = useState(false)
@@ -33,6 +64,24 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   const [saving, setSaving] = useState(false)
   const [sessionId, setSessionId] = useState('')
   const [showLibrarySearch, setShowLibrarySearch] = useState(false)
+  const [showVerificationModal, setShowVerificationModal] = useState(false)
+  const [pendingPatientId, setPendingPatientId] = useState<string | null>(null)
+  const [verificationSaving, setVerificationSaving] = useState(false)
+  const [verificationChecks, setVerificationChecks] = useState({
+    reviewed: false,
+    responsibility: false,
+  })
+
+  const parsedResult = useMemo(() => {
+    const marker = '**Draft Clinical Output (Beta)**'
+    const source = String(result || '')
+    const markerIndex = source.indexOf(marker)
+    if (markerIndex === -1) {
+      return { clinicalText: source, hasDraftDisclaimer: false }
+    }
+    const before = source.slice(0, markerIndex).replace(/\n*---\s*$/g, '').trimEnd()
+    return { clinicalText: before, hasDraftDisclaimer: true }
+  }, [result])
 
   const PROTOCOL_DRAFT_KEY = 'protocol_draft'
   const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
@@ -53,6 +102,109 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     }
   }, [result])
 
+  const referenceLinks = useMemo<ReferenceLinkUi[]>(() => {
+    const source = parsedResult.clinicalText.trim()
+    if (!source) return []
+
+    if (imageType === 'dermatoscopy') {
+      return suggestDermnetLinks(source, 8).map((item) => ({
+        id: item.slug,
+        title: item.title,
+        titleEn: item.title,
+        source: 'DermNet NZ',
+        url: item.url,
+      }))
+    }
+    if (imageType === 'ecg') {
+      return suggestEcgReferenceLinks(source, 8).map((item) => ({
+        id: item.id,
+        title: item.title,
+        titleEn: item.titleEn,
+        source: item.source,
+        url: item.url,
+      }))
+    }
+    if (imageType === 'xray') {
+      return suggestXrayReferenceLinks(source, 8).map((item) => ({
+        id: item.id,
+        title: item.title,
+        titleEn: item.titleEn,
+        source: item.source,
+        url: item.url,
+      }))
+    }
+    if (imageType === 'ct' || imageType === 'mri') {
+      return suggestRadiologyReferenceLinks(source, imageType, 8).map((item) => ({
+        id: item.id,
+        title: item.title,
+        titleEn: item.titleEn,
+        source: item.source,
+        url: item.url,
+      }))
+    }
+    if (imageType === 'ultrasound') {
+      return suggestUltrasoundReferenceLinks(source, 8).map((item) => ({
+        id: item.id,
+        title: item.title,
+        titleEn: item.titleEn,
+        source: item.source,
+        url: item.url,
+      }))
+    }
+
+    return []
+  }, [imageType, parsedResult.clinicalText])
+
+  const generalReferenceLinks = useMemo<ReferenceLinkUi[]>(() => {
+    const seed = referenceLinks[0]?.titleEn || referenceLinks[0]?.title || parsedResult.clinicalText
+    if (imageType === 'dermatoscopy') {
+      return [{
+        id: 'dermnet-search',
+        title: 'DermNet Search',
+        titleEn: 'DermNet Search',
+        source: 'DermNet NZ',
+        url: buildDermnetSearchUrl(seed),
+      }]
+    }
+    if (imageType === 'ecg') {
+      return buildEcgGeneralLinks(seed).map((item) => ({
+        id: item.id,
+        title: item.title,
+        titleEn: item.titleEn,
+        source: item.source,
+        url: item.url,
+      }))
+    }
+    if (imageType === 'xray') {
+      return buildXrayGeneralLinks(seed).map((item) => ({
+        id: item.id,
+        title: item.title,
+        titleEn: item.titleEn,
+        source: item.source,
+        url: item.url,
+      }))
+    }
+    if (imageType === 'ct' || imageType === 'mri') {
+      return buildRadiologyGeneralLinks(imageType, seed).map((item) => ({
+        id: item.id,
+        title: item.title,
+        titleEn: item.titleEn,
+        source: item.source,
+        url: item.url,
+      }))
+    }
+    if (imageType === 'ultrasound') {
+      return buildUltrasoundGeneralLinks(seed).map((item) => ({
+        id: item.id,
+        title: item.title,
+        titleEn: item.titleEn,
+        source: item.source,
+        url: item.url,
+      }))
+    }
+    return []
+  }, [imageType, referenceLinks, parsedResult.clinicalText])
+
   const loadPatients = async () => {
     try {
       const allPatients = await getAllPatients()
@@ -68,7 +220,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       await saveAnalysisResult({
         patientId,
         type: 'image', // Можно расширить в зависимости от контекста
-        conclusion: result,
+        conclusion: parsedResult.clinicalText,
         imageType: imageType
       })
       alert(t.saveSuccess)
@@ -78,6 +230,65 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       alert(t.saveFailed)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const openVerificationForPatient = (patientId: string) => {
+    setPendingPatientId(patientId)
+    setVerificationChecks({ reviewed: false, responsibility: false })
+    setShowVerificationModal(true)
+  }
+
+  const buildSha256Hex = async (text: string): Promise<string> => {
+    const normalized = String(text || '')
+    if (typeof window === 'undefined' || !window.crypto?.subtle) {
+      // Fallback (не криптостойкий) только если Web Crypto недоступен.
+      let hash = 0
+      for (let i = 0; i < normalized.length; i += 1) {
+        hash = ((hash << 5) - hash + normalized.charCodeAt(i)) | 0
+      }
+      return `fallback-${Math.abs(hash)}-${normalized.length}`
+    }
+    const encoded = new TextEncoder().encode(normalized)
+    const digest = await window.crypto.subtle.digest('SHA-256', encoded)
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+  }
+
+  const handleConfirmVerificationAndSave = async () => {
+    if (!pendingPatientId) return
+    if (!verificationChecks.reviewed || !verificationChecks.responsibility) return
+
+    setVerificationSaving(true)
+    try {
+      const resultHash = await buildSha256Hex(parsedResult.clinicalText)
+      const verificationResponse = await fetch('/api/legal/verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientId: pendingPatientId,
+          analysisType: imageType || 'image',
+          resultHash,
+          sessionId,
+          physicianVerified: true,
+        }),
+      })
+
+      const verificationPayload = await verificationResponse.json().catch(() => ({}))
+      if (!verificationResponse.ok || verificationPayload?.success !== true) {
+        alert('Failed to record physician verification. Result was not saved.')
+        return
+      }
+
+      await handleSaveToPatient(pendingPatientId)
+      setShowVerificationModal(false)
+      setPendingPatientId(null)
+    } catch (error) {
+      console.error('Verification save error:', error)
+      alert('Failed to complete verification step. Please try again.')
+    } finally {
+      setVerificationSaving(false)
     }
   }
 
@@ -98,7 +309,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   }
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(result)
+    navigator.clipboard.writeText(parsedResult.clinicalText)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -111,7 +322,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       const saveAs = fileSaver.saveAs || fileSaver.default?.saveAs || fileSaver.default;
       const toRuns = (data: DocRunData[]) => data.map(r => new TextRun({ text: r.text, bold: r.bold, italics: r.italics, font: r.font }));
 
-      const lines = result.split('\n').filter(line => {
+      const lines = parsedResult.clinicalText.split('\n').filter(line => {
         const l = line.toLowerCase().trim();
         if (l.includes('data received') || l.includes('section 0 accepted')) return false;
         if (l.includes('preparing analysis') || l.includes('extracting data')) return false;
@@ -474,18 +685,18 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
       if (navigator.share) {
         await navigator.share({
           title: t.shareTitle,
-          text: result.substring(0, 1000) + (result.length > 1000 ? '...' : ''),
+          text: parsedResult.clinicalText.substring(0, 1000) + (parsedResult.clinicalText.length > 1000 ? '...' : ''),
           url: window.location.href
         })
       } else {
-        await navigator.clipboard.writeText(result)
+        await navigator.clipboard.writeText(parsedResult.clinicalText)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
         alert(t.copiedToClipboard)
       }
     } catch (error: any) {
       if (error.name !== 'AbortError') {
-        await navigator.clipboard.writeText(result)
+        await navigator.clipboard.writeText(parsedResult.clinicalText)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
         alert(t.copiedToClipboard)
@@ -494,7 +705,9 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   }
 
   const handleTransferToConsultant = () => {
-    const truncated = result.length > 2000 ? result.substring(0, 2000) + `\n\n${t.transferTruncated}` : result;
+    const truncated = parsedResult.clinicalText.length > 2000
+      ? parsedResult.clinicalText.substring(0, 2000) + `\n\n${t.transferTruncated}`
+      : parsedResult.clinicalText;
     const data = {
       text: truncated,
       type: imageType,
@@ -573,7 +786,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   };
 
   const handleTransferToProtocol = (useEcgTemplate = false) => {
-    const draftText = buildProtocolDraftFromResult(result);
+    const draftText = buildProtocolDraftFromResult(parsedResult.clinicalText);
     const payload = {
       kind: imageType || 'image',
       templateId: useEcgTemplate ? ECG_FUNCTIONAL_TEMPLATE_ID : undefined,
@@ -727,7 +940,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
                   {patients.map(p => (
                     <button
                       key={p.id}
-                      onClick={() => handleSaveToPatient(p.id)}
+                      onClick={() => openVerificationForPatient(p.id)}
                       disabled={saving}
                       className="w-full text-left p-3 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-200 group"
                     >
@@ -752,6 +965,70 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         </div>
       )}
 
+      {showVerificationModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[110] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+            <div className="p-4 border-b bg-amber-50 rounded-t-xl">
+              <h4 className="font-bold text-amber-900">⚠️ {verificationModalTitle}</h4>
+              <p className="text-xs text-amber-800 mt-1">
+                {verificationModalPrivacyNote}
+              </p>
+            </div>
+            <div className="p-4 space-y-3 text-sm text-slate-700">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={verificationChecks.reviewed}
+                  onChange={(e) =>
+                    setVerificationChecks((prev) => ({ ...prev, reviewed: e.target.checked }))
+                  }
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>
+                  {verificationModalCheckReviewed}
+                </span>
+              </label>
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={verificationChecks.responsibility}
+                  onChange={(e) =>
+                    setVerificationChecks((prev) => ({ ...prev, responsibility: e.target.checked }))
+                  }
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>
+                  {verificationModalCheckResponsibility}
+                </span>
+              </label>
+            </div>
+            <div className="p-4 border-t bg-gray-50 rounded-b-xl flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setShowVerificationModal(false)
+                  setPendingPatientId(null)
+                }}
+                disabled={verificationSaving}
+                className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-100"
+              >
+                {t.cancel}
+              </button>
+              <button
+                onClick={handleConfirmVerificationAndSave}
+                disabled={
+                  verificationSaving ||
+                  !verificationChecks.reviewed ||
+                  !verificationChecks.responsibility
+                }
+                className="px-3 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {verificationSaving ? verificationModalSaving : verificationModalConfirmSave}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="prose max-w-none">
         <div 
           className="text-gray-800 leading-relaxed text-base"
@@ -768,11 +1045,70 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             rehypePlugins={[rehypeSanitize]}
             className="[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-6 [&_h1]:mb-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-5 [&_h2]:mb-3 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:mt-4 [&_h3]:mb-2 [&_h4]:text-base [&_h4]:font-semibold [&_h4]:mt-3 [&_h4]:mb-2 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-3 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:mb-3 [&_ol]:space-y-1 [&_li]:mb-1 [&_strong]:font-semibold [&_strong]:text-gray-900 [&_code]:bg-gray-100 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-gray-100 [&_pre]:p-4 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:mb-3 [&_blockquote]:border-l-4 [&_blockquote]:border-gray-300 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-gray-700 [&_table]:w-full [&_table]:border-collapse [&_table]:mb-3 [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-4 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_td]:border [&_td]:border-gray-300 [&_td]:px-4 [&_td]:py-2"
           >
-            {result}
+            {parsedResult.clinicalText}
           </ReactMarkdown>
 
+          {parsedResult.hasDraftDisclaimer && (
+            <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+              <p className="font-semibold mb-2">⚠️ {draftDisclaimerTitle}</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li>{draftDisclaimerLine1}</li>
+                <li>{draftDisclaimerLine2}</li>
+                <li>{draftDisclaimerLine3}</li>
+              </ul>
+              <p className="mt-2 text-[11px] opacity-90">
+                {consentVersionLabel}: <span className="font-mono">{CURRENT_LEGAL_CONSENT_VERSION}</span>
+              </p>
+            </div>
+          )}
+
+          {referenceLinks.length > 0 && (
+            <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <h4 className="text-base font-bold text-slate-900">
+                {locale === 'ru' ? '🔗 Релевантные референсы' : '🔗 Relevant references'}
+              </h4>
+              <p className="mt-1 text-xs text-slate-600">
+                {locale === 'ru'
+                  ? 'Подборка формируется по результату анализа и помогает быстро сверить клинические гипотезы.'
+                  : 'The list is generated from the analysis result and helps quickly validate clinical hypotheses.'}
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {referenceLinks.map((link) => (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 transition-colors hover:border-primary-400 hover:bg-primary-50"
+                  >
+                    <div className="text-sm font-semibold text-slate-900">{link.title}</div>
+                    {link.titleEn && link.titleEn !== link.title && (
+                      <div className="text-[11px] text-slate-500">{link.titleEn}</div>
+                    )}
+                    <div className="text-[11px] text-slate-500">{link.source}</div>
+                  </a>
+                ))}
+              </div>
+              {generalReferenceLinks.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {generalReferenceLinks.map((link) => (
+                    <a
+                      key={link.id}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700"
+                    >
+                      {locale === 'ru' ? `Открыть ${link.source}` : `Open ${link.source}`}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Яркая и заметная кнопка прямо под заключением */}
-          {!loading && result && (
+          {!loading && parsedResult.clinicalText && (
             <div className="mt-12 mb-8 flex justify-center">
               <button
                 onClick={handleTransferToConsultant}
@@ -785,7 +1121,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             </div>
           )}
 
-          <LibrarySearch query={result} isActive={showLibrarySearch} />
+          <LibrarySearch query={parsedResult.clinicalText} isActive={showLibrarySearch} />
         </div>
       </div>
 

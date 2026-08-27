@@ -93,6 +93,20 @@ export async function initDatabase() {
       );
     `;
 
+    // Предложения по улучшению промптов (admin QA loop)
+    await sql`
+      CREATE TABLE IF NOT EXISTS prompt_suggestions (
+        id SERIAL PRIMARY KEY,
+        specialty VARCHAR(100) NOT NULL,
+        pattern_found TEXT NOT NULL,
+        suggested_change TEXT NOT NULL,
+        based_on_cases INTEGER DEFAULT 0,
+        status VARCHAR(30) DEFAULT 'pending',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     // Таблица платежей (для будущей интеграции с Робокассой)
     await sql`
       CREATE TABLE IF NOT EXISTS payments (
@@ -144,6 +158,21 @@ export async function initDatabase() {
       );
     `;
 
+    // Юридические подтверждения при входе (версионируемые)
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_legal_acceptances (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        consent_version VARCHAR(100) NOT NULL,
+        accepted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        locale VARCHAR(20),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(email, consent_version)
+      );
+    `;
+
     // Таблица логов транзакций баланса (используется в webhook/биллинге)
     await sql`
       CREATE TABLE IF NOT EXISTS credit_transactions (
@@ -153,6 +182,23 @@ export async function initDatabase() {
         operation TEXT NOT NULL,
         metadata JSONB,
         balance_after DECIMAL(10, 2) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // Лог подтверждения врачебной верификации (strict no-PHI)
+    await sql`
+      CREATE TABLE IF NOT EXISTS analysis_verification_logs (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        patient_id VARCHAR(255) NOT NULL,
+        analysis_type VARCHAR(100) NOT NULL,
+        result_hash VARCHAR(255) NOT NULL,
+        consent_version VARCHAR(100) NOT NULL,
+        session_id VARCHAR(100),
+        verified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -210,6 +256,93 @@ export async function saveAnalysisFeedback(data: any) {
   } catch (error) {
     safeError('❌ [DATABASE] Ошибка сохранения отзыва:', error);
     return { success: false, error };
+  }
+}
+
+export async function getPromptSuggestions(status?: string) {
+  try {
+    const hasStatus = !!status?.trim();
+    const result = hasStatus
+      ? await sql`
+          SELECT id, specialty, pattern_found, suggested_change, based_on_cases, status, created_at, updated_at
+          FROM prompt_suggestions
+          WHERE status = ${status!.trim()}
+          ORDER BY created_at DESC
+          LIMIT 200
+        `
+      : await sql`
+          SELECT id, specialty, pattern_found, suggested_change, based_on_cases, status, created_at, updated_at
+          FROM prompt_suggestions
+          ORDER BY created_at DESC
+          LIMIT 200
+        `;
+    return { success: true, suggestions: result.rows };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка чтения prompt suggestions:', error);
+    return { success: false, suggestions: [], error };
+  }
+}
+
+export async function savePromptSuggestion(data: {
+  specialty: string;
+  pattern_found: string;
+  suggested_change: string;
+  based_on_cases: number;
+}) {
+  try {
+    const result = await sql`
+      INSERT INTO prompt_suggestions (specialty, pattern_found, suggested_change, based_on_cases, status)
+      VALUES (${data.specialty}, ${data.pattern_found}, ${data.suggested_change}, ${data.based_on_cases}, 'pending')
+      RETURNING id
+    `;
+    return { success: true, id: result.rows[0].id };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка сохранения prompt suggestion:', error);
+    return { success: false, error };
+  }
+}
+
+export async function updateSuggestionStatus(id: number, status: 'pending' | 'approved' | 'rejected') {
+  try {
+    if (!['pending', 'approved', 'rejected'].includes(status)) {
+      return { success: false, error: 'Invalid status' };
+    }
+    const result = await sql`
+      UPDATE prompt_suggestions
+      SET status = ${status}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${id}
+      RETURNING id
+    `;
+    if (result.rows.length === 0) {
+      return { success: false, error: 'Suggestion not found' };
+    }
+    return { success: true, id: result.rows[0].id, status };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка обновления статуса suggestion:', error);
+    return { success: false, error };
+  }
+}
+
+export async function getRejectedFeedback(specialty: string, limit = 30) {
+  try {
+    const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(200, Math.floor(limit))) : 30;
+    const result = await sql`
+      SELECT id, ai_response, doctor_comment, correct_diagnosis, specialty, correctness, feedback_type, created_at
+      FROM analysis_feedback
+      WHERE specialty = ${specialty}
+        AND (
+          correctness::text = '0'
+          OR correctness::text = 'false'
+          OR feedback_type ILIKE 'reject%'
+          OR feedback_type ILIKE 'incorrect%'
+        )
+      ORDER BY created_at DESC
+      LIMIT ${safeLimit}
+    `;
+    return { success: true, cases: result.rows };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка чтения rejected feedback:', error);
+    return { success: false, cases: [], error };
   }
 }
 
@@ -413,6 +546,39 @@ export async function getUserBalance(email: string) {
   } catch (error) {
     safeError('❌ [DATABASE] Ошибка получения баланса:', error);
     return 0;
+  }
+}
+
+export async function saveAnalysisVerificationLog(data: {
+  email: string;
+  patient_id: string;
+  analysis_type: string;
+  result_hash: string;
+  consent_version: string;
+  session_id?: string;
+  ip_address?: string;
+  user_agent?: string;
+}) {
+  try {
+    await sql`
+      INSERT INTO analysis_verification_logs (
+        email, patient_id, analysis_type, result_hash, consent_version, session_id, ip_address, user_agent
+      )
+      VALUES (
+        ${data.email},
+        ${data.patient_id},
+        ${data.analysis_type},
+        ${data.result_hash},
+        ${data.consent_version},
+        ${data.session_id || null},
+        ${data.ip_address || null},
+        ${data.user_agent || null}
+      )
+    `;
+    return { success: true };
+  } catch (error) {
+    safeError('❌ [DATABASE] Ошибка сохранения лога верификации:', error);
+    return { success: false, error };
   }
 }
 

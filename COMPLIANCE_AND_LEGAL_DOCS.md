@@ -2,23 +2,24 @@
 
 **Domain:** doctor-opus.online  
 **Version:** 4.6.x (Global Edition)  
-**Last updated:** February 2026
+**Last updated:** August 2026
 
 ---
 
 ## 1. Service Description (for Payment Processors & Compliance Teams)
 
-**Doctor Opus** is a specialized Software-as-a-Service (SaaS) platform providing licensed healthcare professionals with AI-assisted clinical decision support.
+**Doctor Opus** is a beta Software-as-a-Service (SaaS) platform providing licensed healthcare professionals with AI-assisted clinical decision support.
 
 **What we provide:**
 - Cloud-based access to AI language and vision models for structuring clinical notes, interpreting medical images, and analyzing laboratory and genetic data
 - A credit-based subscription model — users purchase packages of computational units (credits) consumed proportionally to the complexity of each operation
-- Physician-only access — registration requires professional credentials acknowledgment
+- Physician-only access — registration requires professional credentials acknowledgment and mandatory legal acceptance
 
 **What we do NOT provide:**
 - Medical diagnoses, prescriptions, or treatment orders
 - Services to patients (B2C) — physicians only (B2B)
 - FDA-cleared or CE-marked medical device functionality
+- Regulated clinical deployment in EU/US/UK jurisdictions
 
 **Legal classification:** IT SaaS platform / Clinical Decision Support System (CDSS). Not a registered medical device in any jurisdiction.
 
@@ -33,6 +34,7 @@ Doctor Opus operates as an **informational and analytical software service** (CD
 **Key statements:**
 - The system does not autonomously diagnose, prescribe, or perform clinical procedures
 - All AI outputs are advisory and require mandatory physician review and sign-off
+- AI output quality depends on third-party LLM availability and performance
 - The system explicitly prohibits AI from making final diagnoses (enforced in `lib/prompts.ts`)
 - Users acknowledge sole clinical responsibility at registration (mandatory checkbox)
 
@@ -89,6 +91,11 @@ By using Doctor Opus, users consent to anonymized data being processed by OpenRo
 - Clinic dashboard aggregates spending by department without loading production DB
 - All transactions use PostgreSQL `SELECT ... FOR UPDATE` to prevent race conditions
 
+### Legal Consent & Verification Logs
+- First-login legal consent gate records acceptance version + timestamp in DB (`user_legal_acceptances`)
+- Saving AI result to patient record requires physician verification confirmation
+- Verification logs use strict no-PHI design: case identifier + result hash + confirmation metadata only (`analysis_verification_logs`)
+
 ### Infrastructure (`lib/database.ts`)
 - PostgreSQL connection via standard `pg` (node-postgres) driver
 - Connection string via `POSTGRES_URL` or `DATABASE_URL` environment variable
@@ -107,11 +114,11 @@ By using Doctor Opus, users consent to anonymized data being processed by OpenRo
 
 | Package | Credits | Price (USD) |
 |---|---|---|
-| Starter | 50 | $9.99 |
-| Standard | 150 | $24.99 |
-| Pro | 500 | $69.99 |
+| Starter | 50 | $6.99 |
+| Standard | 180 | $19.99 |
+| Pro | 600 | $59.99 |
 
-**Payment gateway:** NOWPayments (crypto + fiat, international)
+**Payment method:** Direct USDT TRC20 transfer (Trust Wallet) with transaction-hash confirmation against TRONSCAN.
 
 **Important:** Payment is for an IT service (computational access), not a medical consultation or service.
 

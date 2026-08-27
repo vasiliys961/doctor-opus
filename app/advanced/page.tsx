@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -9,6 +9,7 @@ import ModalitySelector, { ImageModality } from '@/components/ModalitySelector'
 import AnalysisTips from '@/components/AnalysisTips'
 import { handleSSEStream } from '@/lib/streaming-utils'
 import { logUsage } from '@/lib/simple-logger'
+import { BRIDGE_CONTEXT_KEY } from '@/lib/mobile-bridge-inbox'
 
 export default function AdvancedAnalysisPage() {
   const [mainImage, setMainImage] = useState<File | null>(null)
@@ -26,6 +27,23 @@ export default function AdvancedAnalysisPage() {
   const [modelInfo, setModelInfo] = useState<{ model: string; mode: string }>({ model: '', mode: '' })
   const [showEditor, setShowEditor] = useState(false)
   const [isAnonymous, setIsAnonymous] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const raw = localStorage.getItem(BRIDGE_CONTEXT_KEY)
+    if (!raw) return
+
+    try {
+      const payload = JSON.parse(raw) as { text?: string; title?: string }
+      const text = payload.text?.trim()
+      if (!text) return
+      setAdditionalContext((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text))
+    } catch {
+      // ignore invalid mobile bridge payload
+    } finally {
+      localStorage.removeItem(BRIDGE_CONTEXT_KEY)
+    }
+  }, [])
 
   const handleMainImageUpload = (file: File) => {
     setMainImage(file)
@@ -121,12 +139,14 @@ Additional files: ${additionalFiles.length}`
       </h1>
 
       <AnalysisTips 
+        recommendationProfile="imaging"
         content={{
           fast: "Basic screening of the main image with context.",
           optimized: "Recommended mode (Gemini JSON + Sonnet 5) — best choice for image analysis with clinical description.",
           validated: "Two-stage expert analysis (Gemini JSON + Opus 5) — combining Gemini's visual accuracy and Opus's clinical intelligence.",
           extra: [
             "⭐ Recommended mode: «Optimized» (Gemini JSON + Sonnet) — best choice for image analysis with clinical description.",
+            "🧠 For complex multi-specialty disagreement cases, switch to Consilium mode in AI Assistant (escalation uses Fable 5 debate).",
             "📎 You can attach additional PDFs, DOCX, or photos for contextual analysis.",
             "📡 Streaming lets you see the report being generated in real time."
           ]
@@ -136,7 +156,12 @@ Additional files: ${additionalFiles.length}`
       <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
         <div className="mb-6">
           <h2 className="text-lg sm:text-xl font-semibold mb-3">📷 Main Image</h2>
-          <ImageUpload onUpload={handleMainImageUpload} accept="image/*" maxSize={50} />
+          <ImageUpload
+            onUpload={handleMainImageUpload}
+            accept="image/*"
+            maxSize={50}
+            bridgePullTarget="image_analysis"
+          />
           {mainImagePreview && (
             <div className="mt-4 flex flex-col items-center">
               <img src={mainImagePreview} alt="Preview" className="max-h-64 rounded-lg shadow-md" />

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
+import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
+import { getRateLimitKey } from '@/lib/rate-limiter';
 
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
@@ -12,6 +14,57 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Примерные тарифы OpenRouter за 1000 токенов в условных единицах (для отображения)
 const PRICE_UNITS_PER_1K_TOKENS_SONNET = 2.0; // 2 единицы за 1000 токенов Claude Sonnet 5
 const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4; // 0.4 единицы за 1000 токенов Gemini Flash
+const MIN_CONSULT_COST = 2;
+const MAX_CONSULT_COST = 20;
+const GPT_54_MODEL = 'openai/gpt-5.6-terra';
+const OPUS_FALLBACK_MODEL = 'anthropic/claude-opus-5';
+
+function shouldFallbackFromGpt54(status: number, errorText: string): boolean {
+  const normalized = errorText.toLowerCase();
+  return (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes('permission_denied') ||
+    normalized.includes('provider returned error') ||
+    normalized.includes('azure')
+  );
+}
+
+function normalizeOpenRouterError(status: number, errorText: string): string {
+  const text = (errorText || '').trim();
+  try {
+    const parsed = JSON.parse(text);
+    const nestedMessage = parsed?.error?.metadata?.raw?.error?.message;
+    const directMessage = parsed?.error?.message;
+    const message = nestedMessage || directMessage;
+    if (typeof message === 'string' && message.trim()) {
+      return message.trim();
+    }
+  } catch {
+    // keep raw text fallback
+  }
+
+  if (status === 401 || status === 403) {
+    return 'Выбранная модель временно недоступна у провайдера. Попробуйте повторить запрос или выбрать Opus.';
+  }
+  return text.substring(0, 400) || `HTTP ${status}`;
+}
+
+function estimateConsultCost(params: {
+  mode: string;
+  model: string;
+  analysisLength: number;
+  hasHistory: boolean;
+  filesCount: number;
+}): number {
+  const baseByMode = params.mode === 'fast' ? 2.0 : 4.0;
+  const modelFactor = params.model === 'gpt52' ? 1.15 : 1;
+  const historyFactor = params.hasHistory ? 1.25 : 1;
+  const filesExtra = Math.min(3, params.filesCount * 0.6);
+  const sizeExtra = Math.min(2.5, params.analysisLength / 15000);
+  const estimated = (baseByMode * modelFactor * historyFactor) + filesExtra + sizeExtra;
+  return Number(Math.min(MAX_CONSULT_COST, Math.max(MIN_CONSULT_COST, estimated)).toFixed(2));
+}
 
 /**
  * ЭТАП 2. Дополнительное заключение врача-генетика
@@ -21,22 +74,20 @@ const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4; // 0.4 единицы за 1000 т
  *  - professor → Claude Sonnet 5 (подробное экспертное заключение)
  */
 export async function POST(request: NextRequest) {
+  let billedAmount = 0;
+  let billingEmail: string | null = null;
+  let billingGuestKey: string | null = null;
   try {
-    // Проверка авторизации (ВРЕМЕННО ОТКЛЮЧЕНО)
-    /*
     const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Authorization required' },
-        { status: 401 }
-      );
-    }
-    */
+    const userEmail = session?.user?.email || null;
+    const guestKey = userEmail ? null : getRateLimitKey(request);
+    billingEmail = userEmail;
+    billingGuestKey = guestKey;
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
+        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
         { status: 500 }
       );
     }
@@ -52,16 +103,49 @@ export async function POST(request: NextRequest) {
       history = [],
       isFollowUp = false,
       files = [],
-      isAnonymous = false,
     } = body || {};
 
-    const analysis = isAnonymous ? anonymizeText(rawAnalysis) : rawAnalysis;
-    const clinicalContext = isAnonymous ? anonymizeText(rawClinicalContext) : rawClinicalContext;
-    const question = isAnonymous ? anonymizeText(rawQuestion) : rawQuestion;
+    const estimatedCost = estimateConsultCost({
+      mode: String(mode || 'professor'),
+      model: String(model || 'sonnet'),
+      analysisLength: typeof rawAnalysis === 'string' ? rawAnalysis.length : 0,
+      hasHistory: Array.isArray(history) && history.length > 0,
+      filesCount: Array.isArray(files) ? files.length : 0,
+    });
+    const billing = userEmail
+      ? await checkAndDeductBalance(userEmail, estimatedCost, 'Genetic consult', {
+          mode,
+          model,
+          isFollowUp,
+          historyLength: Array.isArray(history) ? history.length : 0,
+          filesCount: Array.isArray(files) ? files.length : 0,
+          source: 'genetic_consult',
+        })
+      : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: genetic consult', {
+          mode,
+          model,
+          isFollowUp,
+          historyLength: Array.isArray(history) ? history.length : 0,
+          filesCount: Array.isArray(files) ? files.length : 0,
+          source: 'genetic_consult',
+        });
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Недостаточно единиц для генетической консультации' },
+        { status: 402 }
+      );
+    }
+    billedAmount = estimatedCost;
+
+    // Текстовая анонимизация применяется всегда (как во всех остальных модулях),
+    // а не только при включённом чекбоксе "Разовый анонимный анализ".
+    const analysis = anonymizeText(rawAnalysis);
+    const clinicalContext = anonymizeText(rawClinicalContext);
+    const question = anonymizeText(rawQuestion);
 
     if (!analysis || typeof analysis !== 'string' || analysis.trim().length === 0) {
       return NextResponse.json(
-        { success: false, error: 'No source analysis/data provided for interpretation' },
+        { success: false, error: 'Нет исходного анализа/данных для интерпретации' },
         { status: 400 }
       );
     }
@@ -73,7 +157,7 @@ export async function POST(request: NextRequest) {
       // Продолжение диалога - используем историю
       const contextBlock =
         clinicalContext && clinicalContext.trim().length > 0
-          ? `PATIENT CLINICAL CONTEXT:\n${clinicalContext.trim()}\n\n`
+          ? `КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext.trim()}\n\n`
           : '';
       
       const systemPrompt = `${contextBlock}ИССХОДНЫЕ ДАННЫЕ ГЕНЕТИЧЕСКОГО АНАЛИЗА:\n\n${analysis}\n\n
@@ -216,30 +300,63 @@ export async function POST(request: NextRequest) {
     }
 
     const consultModel =
-      model === 'gpt52' ? 'openai/gpt-5.6-terra' : 
+      model === 'gpt52' ? GPT_54_MODEL :
       mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5';
 
-    const payload: any = {
-      model: consultModel,
-      messages: messages,
-      max_tokens: 12000, // Оптимизировано: генетическая консультация
-      temperature: 0.25,
-      stream: useStreaming,
-      stream_options: useStreaming ? { include_usage: true } : undefined,
+    const runOpenRouter = async (targetModel: string) => {
+      const payload: any = {
+        model: targetModel,
+        messages: messages,
+        max_tokens: 12000, // Оптимизировано: генетическая консультация
+        temperature: 0.25,
+        stream: useStreaming,
+        stream_options: useStreaming ? { include_usage: true } : undefined,
+      };
+
+      return fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus',
+        },
+        body: JSON.stringify(payload),
+      });
     };
 
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.online',
-        'X-Title': 'Doctor Opus',
-      },
-      body: JSON.stringify(payload),
-    });
+    let modelUsed = consultModel;
+    let response = await runOpenRouter(modelUsed);
+
+    if (!response.ok && modelUsed === GPT_54_MODEL) {
+      const gptErrorText = await response.text();
+      if (shouldFallbackFromGpt54(response.status, gptErrorText)) {
+        console.warn(`⚠️ [GENETIC CONSULT] ${GPT_54_MODEL} недоступна, переключаемся на ${OPUS_FALLBACK_MODEL}`);
+        modelUsed = OPUS_FALLBACK_MODEL;
+        response = await runOpenRouter(modelUsed);
+      } else {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Ошибка OpenRouter: ${normalizeOpenRouterError(response.status, gptErrorText)}`,
+          },
+          { status: response.status }
+        );
+      }
+    }
 
     // Режим streaming: проксируем поток OpenRouter как SSE
+    if (!response.ok) {
+      const errorText = await response.text();
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Ошибка OpenRouter: ${normalizeOpenRouterError(response.status, errorText)}`,
+        },
+        { status: response.status }
+      );
+    }
+
     if (useStreaming && response.body) {
       const readableStream = new ReadableStream({
         async start(controller) {
@@ -291,17 +408,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Ошибка OpenRouter: ${response.status} - ${errorText.substring(0, 200)}`,
-        },
-        { status: response.status }
-      );
-    }
-
     const data = await response.json();
     const result = data.choices?.[0]?.message?.content || '';
 
@@ -310,14 +416,14 @@ export async function POST(request: NextRequest) {
     const outputTokens: number = data.usage?.completion_tokens || 0;
 
     const pricePer1k =
-      consultModel.startsWith('google/gemini')
+      modelUsed.startsWith('google/gemini')
         ? PRICE_UNITS_PER_1K_TOKENS_GEMINI
         : PRICE_UNITS_PER_1K_TOKENS_SONNET;
 
     const approxCostUnits = Number(((tokensUsed / 1000) * pricePer1k).toFixed(2));
 
     console.log(
-      `✅ [GENETIC CONSULT] Заключение готово (${consultModel}). Токенов: ${tokensUsed} (in=${inputTokens}, out=${outputTokens}), ~${approxCostUnits} ед.`
+      `✅ [GENETIC CONSULT] Заключение готово (${modelUsed}). Токенов: ${tokensUsed} (in=${inputTokens}, out=${outputTokens}), ~${approxCostUnits} ед.`
     );
 
     return NextResponse.json({
@@ -327,15 +433,27 @@ export async function POST(request: NextRequest) {
       inputTokens,
       outputTokens,
       approxCostUnits,
-      model: consultModel,
+      model: modelUsed,
       mode,
     });
   } catch (error: any) {
     console.error('❌ [GENETIC CONSULT] Ошибка:', error);
+    if (billedAmount > 0) {
+      const refundResult = await refundChargedBalanceOnFailure({
+        email: billingEmail,
+        guestKey: billingGuestKey,
+        amount: billedAmount,
+        operation: 'Genetic consult (auto refund on failure)',
+        metadata: { source: 'genetic_consult', billedAmount },
+      });
+      if (!refundResult.success) {
+        console.error('❌ [GENETIC CONSULT] Не удалось выполнить авто-возврат:', refundResult.error);
+      }
+    }
     return NextResponse.json(
       {
         success: false,
-        error: 'Genetics consultation error',
+        error: 'Ошибка генетической консультации',
       },
       { status: 500 }
     );

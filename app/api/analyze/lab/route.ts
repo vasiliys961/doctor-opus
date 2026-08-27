@@ -51,6 +51,9 @@ export async function POST(request: NextRequest) {
     const mode = formData.get('mode') as string || 'fast';
     const model = formData.get('model') as string;
     const useStreaming = formData.get('useStreaming') === 'true';
+    // Закрашивание краёв снимка — отдельно от "не сохранять в базу пациентов"
+    // (то решается только на клиенте). По умолчанию (если поле не прислано) —
+    // маскирование включено.
     const maskImageRaw = formData.get('maskImage');
     const maskImage = maskImageRaw === null ? true : maskImageRaw === 'true';
 
@@ -69,12 +72,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Определение модели на основе режима или прямого указания
+    // Определение модели на основе режима или прямого указания.
+    // Для validated-режима legacy-модель Opus 4.6 принудительно маппим на validated-модель.
     let modelToUse = model || MODELS.GEMINI_3_FLASH;
     if (!model) {
       if (mode === 'fast') modelToUse = MODELS.GEMINI_3_FLASH;
       else if (mode === 'optimized') modelToUse = MODELS.SONNET;
-      else if (mode === 'validated') modelToUse = MODELS.OPUS;
+      else if (mode === 'validated') modelToUse = MODELS.OPUS_VALIDATED;
+    } else if (mode === 'validated' && (model === MODELS.OPUS || model === 'opus')) {
+      modelToUse = MODELS.OPUS_VALIDATED;
     }
 
     const arrayBuffer = await file.arrayBuffer();
@@ -92,7 +98,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Если анонимно и это изображение - анонимизируем буфер
+    // Если маскирование включено и это изображение - анонимизируем буфер
     if (maskImage && (file.type.startsWith('image/') || fileType === 'jpg' || fileType === 'jpeg' || fileType === 'png')) {
       console.log(`🛡️ [LAB] Анонимизация изображения: ${file.name}`);
       // @ts-expect-error - Несовместимость типов Buffer

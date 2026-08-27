@@ -3,14 +3,14 @@
  * Расширяет функциональность openrouter.ts для работы с изображениями и документами
  */
 
-import { MODELS, resolveModelId } from './openrouter';
+import { MODELS } from './openrouter';
 import { calculateCost, formatCostLog } from './cost-calculator';
-import { Specialty, TITAN_CONTEXTS, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT } from './prompts';
+import { Specialty, TITAN_CONTEXTS, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, resolvePromptRuntimeVars } from './prompts';
 import { isGeoRestrictionStatus, isOpenAIGeoRestrictionError } from './geo-restriction';
 import mammoth from 'mammoth';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const RESPONSE_STOP_SEQUENCES = ['Defined by', 'defined by', '---', '###'];
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 /**
  * Конвертация файла в base64 (Серверная версия для Node.js)
@@ -63,13 +63,24 @@ function getChatFallbackModel(primaryModel: string): string | null {
   return null;
 }
 
+function shouldUsePermissionFallback(primaryModel: string, status: number, errorText: string): boolean {
+  if (primaryModel !== MODELS.GPT_5_2) return false;
+  const normalized = (errorText || '').toLowerCase();
+  return (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes('permission_denied') ||
+    normalized.includes('provider returned error') ||
+    normalized.includes('azure')
+  );
+}
+
 /**
  * Извлечение текста из PDF через Gemini Flash (Vision API)
  * Используется как fallback для моделей, не поддерживающих PDF нативно
  */
 async function extractPDFTextViaGemini(base64PDF: string, fileName: string): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.replace(/[\n\r\t]/g, '').trim();
+  const apiKey = getLlmApiKey().replace(/[\n\r\t]/g, '').trim();
   if (!apiKey) return '';
 
   try {
@@ -81,7 +92,7 @@ async function extractPDFTextViaGemini(base64PDF: string, fileName: string): Pro
           content: [
             {
               type: 'text',
-              text: `Извлеки ВЕСЬ текст из этого PDF документа. Сохрани структуру: заголовки, таблицы (в текстовом виде), списки, числовые значения и единицы измерения. Не добавляй своих комментариев — только содержимое документа.`,
+              text: `Extract ALL text from this PDF document. Preserve structure: headings, tables (as text), lists, numeric values, and units. Do not add commentary, return document content only.`,
             },
             {
               type: 'image_url',
@@ -101,7 +112,7 @@ async function extractPDFTextViaGemini(base64PDF: string, fileName: string): Pro
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://doctor-opus.online',
+        'HTTP-Referer': 'https://doctor-opus.ru',
         'X-Title': 'Doctor Opus',
       },
       body: JSON.stringify(extractionPayload),
@@ -190,7 +201,7 @@ async function prepareMessageContent(
     } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
       // === PDF ===
       if (file.size > MAX_PDF_SIZE_BYTES) {
-        appendText(`[PDF файл "${file.name}" (${(file.size / (1024*1024)).toFixed(1)} MB) — слишком большой. Максимум ${MAX_PDF_SIZE_BYTES / (1024*1024)} MB. Загрузите скриншоты страниц или вставьте текст вручную.]`);
+        appendText(`[PDF file "${file.name}" (${(file.size / (1024*1024)).toFixed(1)} MB) is too large. Maximum ${MAX_PDF_SIZE_BYTES / (1024*1024)} MB. Upload page screenshots or paste text manually.]`);
       } else {
         const base64 = await fileToBase64(file);
 
@@ -200,16 +211,16 @@ async function prepareMessageContent(
             type: 'image_url',
             image_url: { url: `data:application/pdf;base64,${base64}` }
           });
-          console.log(`✅ [PDF→Native] PDF "${file.name}" (${(file.size / 1024).toFixed(0)} KB) отправлен напрямую в ${model}`);
+          console.log(`✅ [PDF→Native] PDF "${file.name}" (${(file.size / 1024).toFixed(0)} KB) sent directly to ${model}`);
         } else {
           // GPT / Claude — не принимают PDF. Извлекаем текст через Gemini Flash
-          console.log(`📄 [PDF→Extract] Модель ${model} не поддерживает PDF. Извлекаем текст через Gemini Flash...`);
+          console.log(`📄 [PDF→Extract] Model ${model} does not support PDF. Extracting text via Gemini Flash...`);
           const extractedText = await extractPDFTextViaGemini(base64, file.name);
           if (extractedText.length > 50) {
-            const header = `📄 Содержимое файла "${file.name}" (${(file.size / 1024).toFixed(0)} KB):`;
+            const header = `📄 File content "${file.name}" (${(file.size / 1024).toFixed(0)} KB):`;
             appendText(`${header}\n\n${extractedText}`);
           } else {
-            appendText(`[PDF файл "${file.name}" — не удалось извлечь содержимое. Пожалуйста, загрузите скриншоты страниц или вставьте данные вручную.]`);
+            appendText(`[PDF file "${file.name}" — failed to extract content. Please upload page screenshots or paste data manually.]`);
           }
         }
       }
@@ -220,9 +231,9 @@ async function prepareMessageContent(
       // === Word (.docx) ===
       const wordText = await readWordFile(file);
       if (wordText) {
-        appendText(`📄 Содержимое Word-документа "${file.name}":\n\n${wordText}`);
+        appendText(`📄 Word document content "${file.name}":\n\n${wordText}`);
       } else {
-        appendText(`[Word файл "${file.name}" — не удалось прочитать содержимое]`);
+        appendText(`[Word file "${file.name}" — failed to read content]`);
       }
     } else if (
       file.type.startsWith('text/') || 
@@ -232,13 +243,13 @@ async function prepareMessageContent(
       // Текстовые файлы — читаем содержимое
       const fileText = await readTextFile(file);
       if (fileText) {
-        appendText(`📄 Содержимое файла "${file.name}":\n\n${fileText}`);
+        appendText(`📄 File content "${file.name}":\n\n${fileText}`);
       } else {
-        content.push({ type: 'text', text: `[Файл: ${file.name} — не удалось прочитать]` });
+        content.push({ type: 'text', text: `[File: ${file.name} — failed to read]` });
       }
     } else {
       // Неизвестный тип — добавляем метаданные
-      const fileInfo = `[Файл: ${file.name}, размер: ${(file.size / 1024).toFixed(1)} KB, тип: ${file.type || 'неизвестен'}]`;
+      const fileInfo = `[File: ${file.name}, size: ${(file.size / 1024).toFixed(1)} KB, type: ${file.type || 'unknown'}]`;
       appendText(fileInfo);
     }
   }
@@ -256,16 +267,14 @@ export async function sendTextRequestWithFiles(
   model: string = MODELS.OPUS,
   specialty?: Specialty
 ): Promise<string> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.replace(/[\n\r\t]/g, '').trim();
+  const apiKey = getLlmApiKey().replace(/[\n\r\t]/g, '').trim();
 
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+    throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
   }
 
   // Подготавливаем контент с файлами (передаём модель для выбора стратегии PDF)
-  const resolvedModel = resolveModelId(model);
-  const messageContent = await prepareMessageContent(prompt, files, resolvedModel);
+  const messageContent = await prepareMessageContent(prompt, files, model);
 
   // Выбираем системный промпт: Всегда используем полный SYSTEM_PROMPT для глубины аналитики
   const basePrompt = SYSTEM_PROMPT;
@@ -278,7 +287,7 @@ export async function sendTextRequestWithFiles(
   const messages = [
     {
       role: 'system' as const,
-      content: systemPrompt
+      content: resolvePromptRuntimeVars(systemPrompt)
     },
     ...history.map(msg => ({
       role: msg.role as 'user' | 'assistant',
@@ -302,7 +311,7 @@ export async function sendTextRequestWithFiles(
     mode: 'file-analysis'
   });
 
-  let modelUsed = resolvedModel;
+  let modelUsed = model;
 
   try {
     console.log('Calling OpenRouter API with files:', {
@@ -315,11 +324,10 @@ export async function sendTextRequestWithFiles(
 
     const runRequest = async (targetModel: string) => {
       const payload = {
-        model: resolveModelId(targetModel),
+        model: targetModel,
         messages,
         max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от размера файлов
         temperature: 0.1,
-        stop: RESPONSE_STOP_SEQUENCES,
       };
 
       return fetch(OPENROUTER_API_URL, {
@@ -327,7 +335,7 @@ export async function sendTextRequestWithFiles(
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.online',
+          'HTTP-Referer': 'https://doctor-opus.ru',
           'X-Title': 'Doctor Opus'
         },
         body: JSON.stringify(payload)
@@ -338,9 +346,12 @@ export async function sendTextRequestWithFiles(
     if (!response.ok) {
       const errorText = await response.text();
       const fallbackModel = getChatFallbackModel(modelUsed);
-      const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
+      const shouldFallback = !!fallbackModel && (
+        (isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText)) ||
+        shouldUsePermissionFallback(modelUsed, response.status, errorText)
+      );
       if (shouldFallback) {
-        console.warn(`⚠️ [FILES FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
+        console.warn(`⚠️ [FILES FALLBACK] ${modelUsed} временно недоступна у провайдера, переключаемся на ${fallbackModel}`);
         modelUsed = fallbackModel!;
         response = await runRequest(modelUsed);
       } else {
@@ -356,7 +367,7 @@ export async function sendTextRequestWithFiles(
     const data = await response.json();
 
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      throw new Error('Неверный формат ответа от OpenRouter API');
+      throw new Error('Invalid response format from OpenRouter API');
     }
 
     // Логирование токенов и стоимости
@@ -386,16 +397,14 @@ export async function sendTextRequestStreamingWithFiles(
   model: string = MODELS.OPUS,
   specialty?: Specialty
 ): Promise<ReadableStream<Uint8Array>> {
-  const rawKey = process.env.OPENROUTER_API_KEY;
-  const apiKey = rawKey?.replace(/[\n\r\t]/g, '').trim();
+  const apiKey = getLlmApiKey().replace(/[\n\r\t]/g, '').trim();
 
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен');
+    throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
   }
 
   // Подготавливаем контент с файлами (передаём модель для выбора стратегии PDF)
-  const resolvedModel = resolveModelId(model);
-  const messageContent = await prepareMessageContent(prompt, files, resolvedModel);
+  const messageContent = await prepareMessageContent(prompt, files, model);
 
   // Выбираем системный промпт: Всегда используем полный SYSTEM_PROMPT для глубины аналитики
   const basePrompt = SYSTEM_PROMPT;
@@ -408,7 +417,7 @@ export async function sendTextRequestStreamingWithFiles(
   const messages = [
     {
       role: 'system' as const,
-      content: systemPrompt
+      content: resolvePromptRuntimeVars(systemPrompt)
     },
     ...history.map(msg => ({
       role: msg.role as 'user' | 'assistant',
@@ -432,7 +441,7 @@ export async function sendTextRequestStreamingWithFiles(
     mode: 'file-analysis'
   });
 
-  let modelUsed = resolvedModel;
+  let modelUsed = model;
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -456,11 +465,10 @@ export async function sendTextRequestStreamingWithFiles(
 
       const runStreamingRequest = async (targetModel: string) => {
         const payload = {
-          model: resolveModelId(targetModel),
+          model: targetModel,
           messages,
           max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от размера файлов
           temperature: 0.1,
-          stop: RESPONSE_STOP_SEQUENCES,
           stream: true,
           stream_options: { include_usage: true }
         };
@@ -469,7 +477,7 @@ export async function sendTextRequestStreamingWithFiles(
           headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://doctor-opus.online',
+            'HTTP-Referer': 'https://doctor-opus.ru',
             'X-Title': 'Doctor Opus'
           },
           body: JSON.stringify(payload)
@@ -482,9 +490,12 @@ export async function sendTextRequestStreamingWithFiles(
       if (!response.ok) {
         const errorText = await response.text();
         const fallbackModel = getChatFallbackModel(modelUsed);
-        const shouldFallback = !!fallbackModel && isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText);
+        const shouldFallback = !!fallbackModel && (
+          (isGeoRestrictionStatus(response.status) && isOpenAIGeoRestrictionError(errorText)) ||
+          shouldUsePermissionFallback(modelUsed, response.status, errorText)
+        );
         if (shouldFallback) {
-          console.warn(`⚠️ [FILES STREAM FALLBACK] ${modelUsed} недоступна по региону, переключаемся на ${fallbackModel}`);
+          console.warn(`⚠️ [FILES STREAM FALLBACK] ${modelUsed} временно недоступна у провайдера, переключаемся на ${fallbackModel}`);
           modelUsed = fallbackModel!;
           response = await runStreamingRequest(modelUsed);
         } else {

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MODELS, sendTextRequest } from '@/lib/openrouter';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { checkAndDeductBalance } from '@/lib/server-billing';
 
 type TriageLevel = 'normal' | 'attention' | 'urgent';
 
@@ -18,13 +21,13 @@ function safeParseJson(raw: string): any {
 
 function normalizeLevel(value: unknown): TriageLevel {
   const normalized = String(value || '').toLowerCase();
-  if (normalized === 'urgent') return 'urgent';
-  if (normalized === 'attention') return 'attention';
+  if (normalized === 'urgent' || normalized === 'срочно') return 'urgent';
+  if (normalized === 'attention' || normalized === 'требует внимания') return 'attention';
   return 'normal';
 }
 
 function normalizePayload(payload: any): TriageResponse {
-  const summary = String(payload?.summary || '').trim() || 'No clinically significant deviations detected.';
+  const summary = String(payload?.summary || '').trim() || 'Auto-triage found no clinically significant deviations.';
   const deviations = Array.isArray(payload?.deviations)
     ? payload.deviations.map((item: unknown) => String(item || '').trim()).filter(Boolean).slice(0, 6)
     : [];
@@ -38,6 +41,14 @@ function normalizePayload(payload: any): TriageResponse {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { success: false, error: 'Authorization required' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const comparisonText = String(body?.comparisonText || '').trim();
     const comparisonMode = String(body?.comparisonMode || 'general');
@@ -46,32 +57,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'comparisonText is required' }, { status: 400 });
     }
 
-    const systemPrompt = `You are a clinical assistant for first-pass triage.
-Classify the comparative findings into:
+    const estimatedCost = Number(Math.min(3, Math.max(0.7, comparisonText.length / 2500)).toFixed(2));
+    const billing = await checkAndDeductBalance(
+      session.user.email,
+      estimatedCost,
+      'Comparative triage',
+      { comparisonMode, textLength: comparisonText.length, model: MODELS.GEMINI_3_FLASH }
+    );
+    if (!billing.allowed) {
+      return NextResponse.json(
+        { success: false, error: billing.error || 'Insufficient balance' },
+        { status: 402 }
+      );
+    }
+
+    const systemPrompt = `You are a clinical assistant for initial triage.
+Task: from "comparison with previous" text, return category:
 - normal
 - attention
 - urgent
 
 Criteria:
-- normal: no clinically significant deterioration.
-- attention: some worsening/deviation requiring follow-up and treatment adjustment.
-- urgent: potentially dangerous deterioration requiring urgent physician review.
+- normal: trend without clinically meaningful deterioration.
+- attention: deviations/deterioration requiring monitoring and plan adjustment.
+- urgent: signs of potentially dangerous deterioration requiring urgent physician assessment.
 
-Return STRICT JSON:
+Reply STRICTLY in JSON:
 {
   "level": "normal|attention|urgent",
-  "summary": "short rationale, 1-2 sentences",
+  "summary": "brief, 1-2 sentences",
   "deviations": ["specific deviation 1", "specific deviation 2"]
 }
 
-No markdown, JSON only.`;
+Write in English, no markdown.`;
 
     const prompt = `Comparison mode: ${comparisonMode}
 
-Comparative analysis text:
+Comparison analysis text:
 ${comparisonText}
 
-Provide triage classification and concise rationale.`;
+Return triage and a brief rationale.`;
 
     const raw = await sendTextRequest(prompt, [], MODELS.GEMINI_3_FLASH, undefined, systemPrompt);
     const parsed = safeParseJson(raw);
@@ -90,3 +115,4 @@ Provide triage classification and concise rationale.`;
     );
   }
 }
+

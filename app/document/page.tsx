@@ -353,6 +353,7 @@ export default function DocumentPage() {
 
         <AnalysisTips 
           title={t.scanningTipsTitle}
+          recommendationProfile="document"
           content={{
             fast: scanMode === 'ai' ? t.aiTipFast : t.localTipFast,
             extra: scanMode === 'ai' ? [
@@ -374,7 +375,12 @@ export default function DocumentPage() {
           <p className="text-sm text-gray-600 mb-4">
             {t.supportedFormats}
           </p>
-          <ImageUpload onUpload={handleUpload} accept=".pdf,image/*" maxSize={50} />
+          <ImageUpload
+            onUpload={handleUpload}
+            accept=".pdf,image/*"
+            maxSize={50}
+            bridgePullTarget="document_scan"
+          />
         </div>
 
         {/* Прогресс конвертации PDF */}

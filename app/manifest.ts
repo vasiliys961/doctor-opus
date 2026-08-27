@@ -11,8 +11,8 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: '#064e3b',
     icons: [
       {
-        src: 'https://vrachirf.ru/apple-touch-icon.png',
-        sizes: '180x180',
+        src: '/vrachirf-icon.png',
+        sizes: '512x512',
         type: 'image/png',
       },
     ],

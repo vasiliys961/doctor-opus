@@ -1,6 +1,6 @@
 # 📘 Doctor Opus — Guía del Usuario Médico
 
-> **Importante:** Doctor Opus es un Sistema de Soporte a la Decisión Clínica (CDSS) destinado **únicamente a profesionales de la salud con licencia**. No cuenta con la aprobación de la FDA y no constituye un diagnóstico médico. Todos los resultados generados por IA requieren verificación clínica independiente. Usted asume la responsabilidad total de todas las decisiones clínicas.
+> **Importante:** Doctor Opus es un software beta de soporte a la decisión clínica (CDSS) destinado **únicamente a profesionales de la salud con licencia**. No es un dispositivo médico y no proporciona diagnósticos finales ni órdenes de tratamiento. La calidad de salida de la IA depende de capacidades de LLM de terceros y puede ser incompleta o inexacta. Todos los resultados generados por IA requieren verificación médica independiente. Restricción de uso: no está destinado al despliegue clínico regulado en jurisdicciones de la UE/EE. UU./Reino Unido. Usted asume la responsabilidad total de todas las decisiones clínicas.
 
 Doctor Opus acelera su flujo de trabajo clínico proporcionando interpretación asistida por IA de imágenes médicas, datos de laboratorio, informes genéticos y notas clínicas. Cada sección contiene consejos contextuales; revíselos en el primer uso.
 
@@ -33,6 +33,17 @@ Una vez instalada, la aplicación se abre a pantalla completa, es accesible medi
 ## 🏠 Inicio
 
 Panel de control general con navegación rápida a todas las secciones.
+
+---
+
+## ⚖️ Flujo legal obligatorio
+
+Después del primer inicio de sesión (o tras una actualización de la versión legal), debe confirmar la aceptación legal antes de usar los módulos clínicos.
+
+Al guardar un resultado de IA en la ficha del paciente:
+- Aparece una ventana de verificación médica
+- Debe confirmar revisión personal y responsabilidad clínica
+- El registro de auditoría guarda solo el identificador del caso y metadatos de confirmación/hash (no se envían datos personales del paciente)
 
 ---
 
@@ -335,9 +346,17 @@ Los créditos se consumen al utilizar modelos de IA avanzados. Las consultas de 
 | Copiadora local / calculadoras | Gratis |
 
 **Paquetes:**
-- **Starter:** 50 créditos — $9.99
-- **Standard:** 150 créditos — $24.99
-- **Pro:** 500 créditos — $69.99
+- **Starter:** 50 créditos — $6.99
+- **Standard:** 180 créditos — $19.99
+- **Pro:** 600 créditos — $59.99
+
+**Flujo de pago (actual):**
+- Seleccione un paquete en la página de Suscripción
+- Envíe el monto exacto en USDT mediante **TRON (TRC20)** a la billetera mostrada en la factura
+- Pegue el hash de transacción (`txHash`) para confirmar el pago automáticamente
+- Los créditos se agregan después de la validación de la transacción
+
+No hay créditos de prueba para las funciones de IA.
 
 El costo exacto de cada solicitud se muestra en el bloque de resultados inmediatamente después de completar el análisis. El historial completo de transacciones está disponible en **Saldo e Historial**.
 
