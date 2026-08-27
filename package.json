@@ -10,13 +10,14 @@
     "dev:db:down": "docker compose -f docker-compose.local-db.yml down",
     "dev:db:logs": "docker compose -f docker-compose.local-db.yml logs -f postgres-local",
     "dev:auto": "npm run dev",
-    "prebuild": "npm run manual:prebuild",
+    "prebuild": "npm run setup:models && npm run manual:prebuild",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "test:unit": "vitest run",
     "migrate": "bash scripts/migrate-db.sh",
-    "manual:prebuild": "node scripts/prebuild-manual-translations.mjs"
+    "manual:prebuild": "node scripts/prebuild-manual-translations.mjs",
+    "setup:models": "node scripts/setup-local-models.mjs"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",

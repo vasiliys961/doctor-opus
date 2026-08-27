@@ -88,3 +88,12 @@ PROTOCOL_TEMPLATES_FIX.md
 RELEASE_NOTES_*.md
 REMINDER_*.md
 SECURITY_UPDATES_*.md
+
+# Локальные ML-модели для эмбеддингов — скачиваются в build-time через
+# `npm run setup:models` (scripts/setup-local-models.mjs), не коммитятся в git
+public/models/
+public/ort/
+
+# Кэш HuggingFace для локального STT-сервиса (faster-whisper) — качается
+# автоматически при первом запуске stt-service, не коммитится в git
+stt-service/models/
