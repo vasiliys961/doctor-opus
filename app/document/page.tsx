@@ -291,12 +291,12 @@ export default function DocumentPage() {
       if (data.success) {
         setResult(data.result)
         setCurrentCost(data.cost || 0)
-        setModel(data.model || 'google/gemini-3-flash-preview')
+        setModel(data.model || 'google/gemini-3.8-flash')
         setMode('fast')
 
         logUsage({
           section: 'document',
-          model: data.model || 'google/gemini-3-flash-preview',
+          model: data.model || 'google/gemini-3.8-flash',
           inputTokens: data.usage?.prompt_tokens || 1500,
           outputTokens: data.usage?.completion_tokens || 800,
         })

@@ -13,6 +13,8 @@ import { authOptions } from "@/lib/auth";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 import { anonymizeImageBuffer } from '@/lib/server-image-processing';
+import { getLlmApiKey } from '@/lib/llm-provider';
+import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 // Максимальное время выполнения (5 минут)
 export const maxDuration = 300;
@@ -45,6 +47,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { images: rawImages, prompt, clinicalContext, mode, useStreaming, model, maskImage: maskImageInput } = body;
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
+    const normalizedPrompt = String(prompt || 'Analyze laboratory report images and extract all markers, values, units, and reference ranges.');
+    const languageAwarePrompt = appendLanguageInstruction(normalizedPrompt, responseLanguageInstruction);
 
     if (!rawImages || !Array.isArray(rawImages) || rawImages.length === 0) {
       return NextResponse.json(
@@ -81,10 +86,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    try {
+      getLlmApiKey();
+    } catch {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
+        { success: false, error: 'LLM API key is not configured' },
         { status: 500 }
       );
     }
@@ -108,17 +114,17 @@ export async function POST(request: NextRequest) {
       
       if (images.length > 1) {
         if (mode === 'optimized') {
-          stream = await analyzeMultipleImagesOpusTwoStageStreaming(prompt, images, 'lab', clinicalContext, images.map(() => 'image/png'), modelToUse);
+          stream = await analyzeMultipleImagesOpusTwoStageStreaming(languageAwarePrompt, images, 'lab', clinicalContext, images.map(() => 'image/png'), modelToUse);
         } else if (mode === 'validated') {
-          stream = await analyzeMultipleImagesWithJSONStreaming(prompt, images, 'lab', clinicalContext, images.map(() => 'image/png'), undefined, modelToUse);
+          stream = await analyzeMultipleImagesWithJSONStreaming(languageAwarePrompt, images, 'lab', clinicalContext, images.map(() => 'image/png'), undefined, modelToUse);
         } else {
-          stream = await analyzeMultipleImagesStreaming(prompt, images, images.map(() => 'image/png'), modelToUse, clinicalContext);
+          stream = await analyzeMultipleImagesStreaming(languageAwarePrompt, images, images.map(() => 'image/png'), modelToUse, clinicalContext);
         }
       } else {
         // Одиночное изображение
         if (mode === 'optimized' || mode === 'validated') {
           stream = await analyzeImageOpusTwoStageStreaming(
-            prompt,
+            languageAwarePrompt,
             images[0],
             'universal',
             clinicalContext,
@@ -129,7 +135,7 @@ export async function POST(request: NextRequest) {
             'image/png'
           );
         } else {
-          stream = await analyzeImageStreaming(prompt, images[0], modelToUse, 'image/png', clinicalContext);
+          stream = await analyzeImageStreaming(languageAwarePrompt, images[0], modelToUse, 'image/png', clinicalContext);
         }
       }
       
@@ -142,8 +148,14 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < images.length; i++) {
       const imageBase64 = images[i];
       const pagePrompt = i === 0 
-        ? `${prompt}\n\nЭто страница ${i + 1} из ${images.length} лабораторного отчета. Проанализируйте изображение и извлеките все лабораторные показатели, их значения, единицы измерения и референсные диапазоны.`
-        : `Продолжение анализа лабораторного отчета. Страница ${i + 1} из ${images.length}. Извлеките все лабораторные показатели, их значения, единицы измерения и референсные диапазоны.`;
+        ? appendLanguageInstruction(
+            `${normalizedPrompt}\n\nThis is page ${i + 1} of ${images.length} from a laboratory report. Analyze the image and extract all laboratory markers, values, units, and reference ranges.`,
+            responseLanguageInstruction
+          )
+        : appendLanguageInstruction(
+            `Continuation of laboratory report analysis. Page ${i + 1} of ${images.length}. Extract all laboratory markers, values, units, and reference ranges.`,
+            responseLanguageInstruction
+          );
       
       try {
         console.log(`🖼️ [LAB IMAGES] Анализ страницы ${i + 1}/${images.length} в режиме ${mode} (${modelToUse})...`);
@@ -169,10 +181,13 @@ export async function POST(request: NextRequest) {
     if (images.length > 1 || results.length > 0) {
       console.log(`📊 [LAB IMAGES] Финальное структурирование через ${modelToUse}...`);
       // Запрашиваем финальную структуризацию всех страниц
-      let structuredPrompt = `Объедини и структурируй данные из всех страниц лабораторного отчета:\n\n${finalResult}\n\nСоздай единый структурированный отчет со всеми показателями, их значениями, единицами измерения и референсными диапазонами.`;
+      let structuredPrompt = appendLanguageInstruction(
+        `Merge and structure data from all pages of the laboratory report:\n\n${finalResult}\n\nCreate one structured report with all markers, values, units, and reference ranges.`,
+        responseLanguageInstruction
+      );
       
       if (clinicalContext) {
-        structuredPrompt = `${structuredPrompt}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${clinicalContext}`;
+        structuredPrompt = `${structuredPrompt}\n\n=== PATIENT CLINICAL CONTEXT ===\n${clinicalContext}`;
       }
       
       if (useStreaming) {

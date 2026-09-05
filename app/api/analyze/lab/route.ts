@@ -13,6 +13,8 @@ import { anonymizeImageBuffer } from "@/lib/server-image-processing";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 import * as XLSX from 'xlsx';
+import { getLlmApiKey } from '@/lib/llm-provider';
+import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 // Максимальное время выполнения (5 минут)
 export const maxDuration = 300;
@@ -48,6 +50,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const prompt = anonymizeText(formData.get('prompt') as string || 'Analyze the laboratory data. Extract all markers, their values, and reference ranges.');
     const clinicalContext = anonymizeText(formData.get('clinicalContext') as string || '');
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
     const mode = formData.get('mode') as string || 'fast';
     const model = formData.get('model') as string;
     const useStreaming = formData.get('useStreaming') === 'true';
@@ -64,10 +67,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    try {
+      getLlmApiKey();
+    } catch {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
+        { success: false, error: 'LLM API key is not configured' },
         { status: 500 }
       );
     }
@@ -113,7 +117,10 @@ export async function POST(request: NextRequest) {
         console.log(`🖼️ [LAB] Обработка изображения в режиме ${mode} (${modelToUse}):`, file.name);
         const base64Image = buffer.toString('base64');
         
-        let fullPrompt = `${prompt}\n\nЭто изображение лабораторного бланка или медицинского документа. Проанализируйте изображение и извлеките все лабораторные показатели, их значения, единицы измерения и референсные диапазоны.`;
+        let fullPrompt = appendLanguageInstruction(
+          `${prompt}\n\nThis is a lab form or medical document image. Analyze it and extract all laboratory markers, values, units, and reference ranges.`,
+          responseLanguageInstruction
+        );
         
         if (useStreaming) {
           let stream: ReadableStream;
@@ -172,12 +179,15 @@ export async function POST(request: NextRequest) {
         workbook.SheetNames.forEach((sheetName) => {
           const worksheet = workbook.Sheets[sheetName];
           const csv = XLSX.utils.sheet_to_csv(worksheet);
-          csvText += `\n\n=== Лист "${sheetName}" ===\n${csv}`;
+          csvText += `\n\n=== Sheet "${sheetName}" ===\n${csv}`;
         });
 
-        let fullPrompt = `${prompt}\n\nДанные из Excel файла:\n${csvText}`;
+        let fullPrompt = appendLanguageInstruction(
+          `${prompt}\n\nData from Excel file:\n${csvText}`,
+          responseLanguageInstruction
+        );
         if (clinicalContext) {
-          fullPrompt = `${fullPrompt}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${clinicalContext}`;
+          fullPrompt = `${fullPrompt}\n\n=== PATIENT CLINICAL CONTEXT ===\n${clinicalContext}`;
         }
 
         if (useStreaming) {
@@ -213,12 +223,15 @@ export async function POST(request: NextRequest) {
 
         const maxSize = 500000;
         if (textContent.length > maxSize) {
-          textContent = textContent.substring(0, maxSize) + '\n\n... (файл обрезан)';
+          textContent = textContent.substring(0, maxSize) + '\n\n... (file truncated)';
         }
 
-        let fullPrompt = `${prompt}\n\nДанные:\n${textContent}`;
+        let fullPrompt = appendLanguageInstruction(
+          `${prompt}\n\nData:\n${textContent}`,
+          responseLanguageInstruction
+        );
         if (clinicalContext) {
-          fullPrompt = `${fullPrompt}\n\n=== КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА ===\n${clinicalContext}`;
+          fullPrompt = `${fullPrompt}\n\n=== PATIENT CLINICAL CONTEXT ===\n${clinicalContext}`;
         }
 
         if (useStreaming) {

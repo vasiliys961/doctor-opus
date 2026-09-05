@@ -28,7 +28,14 @@ function getConsiliumDebateModel(): string {
   const raw = String(process.env.CONSILIUM_DEBATE_MODEL || '').trim().toLowerCase();
   if (!raw) return MODELS.FABLE_5;
   if (raw === 'opus' || raw === MODELS.OPUS_VALIDATED.toLowerCase()) return MODELS.OPUS_VALIDATED;
-  if (raw === 'fable' || raw === 'fable-5' || raw === MODELS.FABLE_5.toLowerCase()) return MODELS.FABLE_5;
+  if (
+    raw === 'fable' ||
+    raw === 'fable-5' ||
+    raw === 'fable-5.1' ||
+    raw === 'anthropic/claude-fable-5' ||
+    raw === 'anthropic/claude-fable-5.1' ||
+    raw === MODELS.FABLE_5.toLowerCase()
+  ) return MODELS.FABLE_5;
   return raw; // Разрешаем указать произвольный ID модели OpenRouter напрямую.
 }
 

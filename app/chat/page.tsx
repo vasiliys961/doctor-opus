@@ -1123,9 +1123,9 @@ export default function ChatPage() {
             title="Consilium Model Guide"
             recommendationProfile="consilium"
             content={{
-              validated: 'For complex disagreements, core debate agents escalate to Claude Fable 5 before the final synthesis.',
+              validated: 'For complex disagreements, core debate agents escalate to Claude Fable 5.1 before the final synthesis.',
               extra: [
-                '🧠 Fable 5 is activated only for difficult, high-disagreement branches (not for every case).',
+                '🧠 Fable 5.1 is activated only for difficult, high-disagreement branches (not for every case).',
                 '💰 Billing remains fail-closed: if escalation balance is insufficient, full debate does not start.',
               ],
             }}
@@ -1149,7 +1149,7 @@ export default function ChatPage() {
                 {t.consiliumModeEnabledHint} <strong>{t.consiliumRunButton}</strong>.
               </div>
               <div className="bg-violet-50 text-violet-900 px-4 py-3 rounded border border-violet-200 text-xs">
-                🧠 <strong>Fable 5:</strong> {t.consiliumFableHint}
+                🧠 <strong>Fable 5.1:</strong> {t.consiliumFableHint}
               </div>
             </div>
           )}
@@ -1467,8 +1467,8 @@ export default function ChatPage() {
               <option value="gpt52">🚀 GPT-5.6 Terra</option>
               <option value="opus">🧠 Opus 5</option>
               <option value="sonnet">🤖 Sonnet 5</option>
-              <option value="fable">🧩 Fable 5</option>
-              <option value="gemini">⚡ Gemini 3 Flash</option>
+              <option value="fable">🧩 Fable 5.1</option>
+              <option value="gemini">⚡ Gemini 3.8 Flash</option>
             </select>
           </div>
 

@@ -4,6 +4,8 @@ import { calculateCost } from '@/lib/cost-calculator';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { checkAndDeductBalance } from '@/lib/server-billing';
+import { getLlmApiKey } from '@/lib/llm-provider';
+import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -18,18 +20,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    try {
+      getLlmApiKey();
+    } catch {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: 'LLM_API_KEY (or OPENROUTER_API_KEY) не настроен' },
         { status: 500 }
       );
     }
 
     const formData = await request.formData();
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
     const video1 = formData.get('video1') as File | null;
     const video2 = formData.get('video2') as File | null;
     const prompt = (formData.get('prompt') as string | null) || undefined;
+    const languageAwarePrompt = appendLanguageInstruction(
+      prompt || 'Compare two medical videos and provide clinically meaningful differences and next-step guidance.',
+      responseLanguageInstruction
+    );
 
     if (!video1 || !video2) {
       return NextResponse.json(
@@ -69,14 +77,14 @@ export async function POST(request: NextRequest) {
     const buffer2 = Buffer.from(await video2.arrayBuffer());
 
     const { description, analysis, usage } = await analyzeTwoVideosTwoStage({
-      prompt,
+      prompt: languageAwarePrompt,
       video1Base64: buffer1.toString('base64'),
       video2Base64: buffer2.toString('base64'),
       mimeType1: video1.type,
       mimeType2: video2.type,
     });
 
-    const model = 'google/gemini-3-flash-preview';
+    const model = 'google/gemini-3.8-flash';
     let cost = 0;
     if (usage) {
       const costInfo = calculateCost(usage.prompt_tokens, usage.completion_tokens, model);

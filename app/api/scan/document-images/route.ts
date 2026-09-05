@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateCost } from '@/lib/cost-calculator';
 import { anonymizeImageBuffer } from "@/lib/server-image-processing";
-
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider';
+import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 // Модели для сканирования документов (Gemini Flash, Haiku или Llama)
 const DOCUMENT_SCAN_MODELS = [
-  'google/gemini-3-flash-preview',           // Gemini 1.5 Flash — стабильно и качественно для OCR
+  'google/gemini-3.8-flash',           // Gemini 1.5 Flash — стабильно и качественно для OCR
   'anthropic/claude-haiku-4.5',              // Haiku 4.5 — быстрое сканирование документов
   'meta-llama/llama-3.2-90b-vision-instruct', // Llama 3.2 90B — резерв для документов
 ];
@@ -19,20 +19,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { images, prompt, maskImage: maskImageInput } = body;
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
+    const normalizedPrompt = String(prompt || 'Extract text from all pages while preserving structure.');
+    const languageAwarePrompt = appendLanguageInstruction(normalizedPrompt, responseLanguageInstruction);
     const maskImage = maskImageInput === undefined ? true : Boolean(maskImageInput);
 
     if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
         { success: false, error: 'No images provided' },
         { status: 400 }
-      );
-    }
-
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
-        { status: 500 }
       );
     }
 
@@ -57,32 +52,32 @@ export async function POST(request: NextRequest) {
       }
 
       const pagePrompt = i === 0 
-        ? `${prompt}\n\nЭто страница ${i + 1} из ${images.length} документа. ОБЯЗАТЕЛЬНО сохраняй таблицы в формате Markdown со всеми строками и столбцами.`
-        : `Продолжение сканирования документа. Страница ${i + 1} из ${images.length}. ОБЯЗАТЕЛЬНО сохраняй таблицы в формате Markdown со всеми строками и столбцами.`;
+        ? `${languageAwarePrompt}\n\nThis is page ${i + 1} of ${images.length}. Preserve tables in Markdown with all rows and columns.`
+        : `Continuation of document scan. Page ${i + 1} of ${images.length}. Preserve tables in Markdown with all rows and columns.`;
       
       // Промпт для извлечения текста с сохранением структуры
-      const scanPrompt = `Извлеки весь текст из этого документа, СОХРАНЯЯ СТРУКТУРУ:
+      const scanPrompt = appendLanguageInstruction(`Extract all text from this document while preserving structure.
 
-ВАЖНО ДЛЯ ТАБЛИЦ:
-- Если видишь таблицу, ОБЯЗАТЕЛЬНО сохрани её в формате Markdown
-- Пример таблицы:
+TABLE RULES:
+- If you detect a table, preserve it in Markdown format.
+- Example table:
   | Заголовок 1 | Заголовок 2 | Заголовок 3 |
   |-------------|-------------|-------------|
   | Ячейка 1    | Ячейка 2    | Ячейка 3    |
   | Ячейка 4    | Ячейка 5    | Ячейка 6    |
-- Сохраняй ВСЕ строки и столбцы таблицы точно как в оригинале
-- Не пропускай ячейки, даже если они пустые (используй пустую строку: | |)
-- Сохраняй выравнивание и форматирование внутри ячеек
+- Preserve all table rows/columns exactly as in source.
+- Do not skip empty cells (use | |).
+- Preserve alignment and inline formatting.
 
-ДЛЯ ОСТАЛЬНОГО:
-- Сохраняй нумерованные и маркированные списки
-- Сохраняй заголовки и подзаголовки (используй # для заголовков)
-- Сохраняй абзацы и отступы
-- Сохраняй выделение текста (жирный **, курсив *)
-- Не добавляй комментарии, анализ или объяснения
-- Только текст документа с сохранением структуры
+GENERAL RULES:
+- Preserve numbered and bulleted lists.
+- Preserve headings/subheadings (Markdown # allowed).
+- Preserve paragraphs and indentation.
+- Preserve emphasis (**bold**, *italic*).
+- Do not add commentary or analysis.
+- Return document text only, with structure preserved.
 
-${pagePrompt}`;
+${pagePrompt}`, responseLanguageInstruction);
 
       let pageResult = '';
       let modelUsed = '';
@@ -115,15 +110,11 @@ ${pagePrompt}`;
             temperature: 0.1 // Низкая температура для точного копирования текста
           };
 
-          const response = await fetch(OPENROUTER_API_URL, {
-            method: 'POST',
+          const response = await postLlmChatCompletionsWithFallback(payload, {
             headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
               'HTTP-Referer': 'https://doctor-opus.online',
               'X-Title': 'Doctor Opus'
             },
-            body: JSON.stringify(payload)
           });
 
           if (response.ok) {
@@ -162,7 +153,7 @@ ${pagePrompt}`;
         throw new Error(`Не удалось отсканировать страницу ${i + 1} ни через одну модель`);
       }
 
-      results.push(`\n\n=== Страница ${i + 1} ===\n${pageResult}`);
+      results.push(`\n\n=== Page ${i + 1} ===\n${pageResult}`);
     }
 
     // Объединяем результаты всех страниц
@@ -171,7 +162,7 @@ ${pagePrompt}`;
     if (images.length > 1) {
       console.log('📊 [DOC IMAGES] Объединение результатов со всех страниц...');
       // Можно добавить дополнительную структуризацию, но обычно просто объединяем
-      finalResult = `=== СКАНИРОВАНИЕ ДОКУМЕНТА (${images.length} страниц) ===\n${finalResult}`;
+      finalResult = `=== DOCUMENT SCAN (${images.length} pages) ===\n${finalResult}`;
     }
 
     console.log('✅ [DOC IMAGES] Сканирование завершено успешно');

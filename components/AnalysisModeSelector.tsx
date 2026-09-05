@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export type AnalysisMode = 'fast' | 'optimized' | 'validated'
 export type OptimizedModel = 'sonnet' | 'gpt52'
@@ -13,6 +13,8 @@ interface AnalysisModeSelectorProps {
   disabled?: boolean
   useLibrary?: boolean
   onLibraryToggle?: (val: boolean) => void
+  disableFastMode?: boolean
+  disableFastReason?: string
 }
 
 export default function AnalysisModeSelector({ 
@@ -22,13 +24,42 @@ export default function AnalysisModeSelector({
   onOptimizedModelChange,
   disabled = false,
   useLibrary = false,
-  onLibraryToggle
+  onLibraryToggle,
+  disableFastMode = false,
+  disableFastReason = 'Fast mode is disabled for this study type. Please use Optimized or Expert Validated mode.'
 }: AnalysisModeSelectorProps) {
+  const FAST_MODE_ACK_STORAGE_KEY = 'fast-mode-beta-ack';
+  const [fastModeAck, setFastModeAck] = useState(false);
+
+  useEffect(() => {
+    try {
+      setFastModeAck(sessionStorage.getItem(FAST_MODE_ACK_STORAGE_KEY) === '1');
+    } catch {}
+  }, []);
+
+  const handleModeSelect = (nextMode: AnalysisMode) => {
+    if (disabled) return;
+    if (nextMode === 'fast') {
+      if (disableFastMode) return;
+      if (!fastModeAck) {
+        const confirmed = window.confirm(
+          'Fast mode is marked as BETA and may produce errors. Use it only for preliminary screening and always verify clinically before decisions. Continue?'
+        );
+        if (!confirmed) return;
+        setFastModeAck(true);
+        try {
+          sessionStorage.setItem(FAST_MODE_ACK_STORAGE_KEY, '1');
+        } catch {}
+      }
+    }
+    onChange(nextMode);
+  };
+
   const modes: Array<{ value: AnalysisMode; label: string; description: string; icon: string }> = [
     {
       value: 'fast',
-      label: '⚡ Fast Analysis',
-      description: 'Gemini 3 Flash — concise report for initial screening',
+      label: '⚡ Fast (Beta)',
+      description: 'Preliminary screening mode: faster, but may be less reliable than optimized/validated analysis',
       icon: '⚡'
     },
     {
@@ -40,7 +71,7 @@ export default function AnalysisModeSelector({
     {
       value: 'validated',
       label: '🧠 Expert Validated',
-      description: 'Gemini JSON + Opus 5 — expert review for complex cases',
+      description: 'Gemini JSON + Opus 5 (for complex cases, Fable 5.1 may be offered)',
       icon: '🧠'
     }
   ]
@@ -51,19 +82,32 @@ export default function AnalysisModeSelector({
         <label className="block text-sm font-medium text-gray-700">
           Analysis Mode:
         </label>
+        {value === 'fast' && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <strong>⚠️ Fast mode is for preliminary screening only.</strong> Always verify findings clinically before decisions.
+          </div>
+        )}
+        {disableFastMode && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+            <strong>⛔ Fast mode disabled:</strong> {disableFastReason}
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {modes.map((mode) => (
+          {modes.map((mode) => {
+            const fastBlocked = mode.value === 'fast' && disableFastMode;
+            return (
             <button
               key={mode.value}
-              onClick={() => !disabled && onChange(mode.value)}
-              disabled={disabled}
+              onClick={() => handleModeSelect(mode.value)}
+              disabled={disabled || fastBlocked}
+              title={fastBlocked ? disableFastReason : undefined}
               className={`
                 p-4 rounded-lg border-2 transition-all text-left
                 ${value === mode.value
                   ? 'border-primary-500 bg-primary-50'
                   : 'border-gray-200 hover:border-primary-300'
                 }
-                ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                ${(disabled || fastBlocked) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}
               `}
             >
               <div className="font-semibold text-gray-900 mb-1">
@@ -72,8 +116,14 @@ export default function AnalysisModeSelector({
               <div className="text-xs text-gray-600">
                 {mode.description}
               </div>
+              {fastBlocked && (
+                <div className="mt-2 text-[10px] font-semibold text-red-700">
+                  Disabled for this page
+                </div>
+              )}
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 

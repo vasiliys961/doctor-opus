@@ -8,8 +8,7 @@ import {
   updateSuggestionStatus,
   getRejectedFeedback,
 } from '@/lib/database';
-
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider';
 
 const SPECIALTIES = ['ЭКГ', 'Дерматоскопия', 'УЗИ', 'Рентген', 'КТ', 'МРТ', 'Лаборатория'];
 
@@ -71,9 +70,6 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-      if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
-
       const casesText = cases
         .map((c: any, i: number) => {
           return `--- Кейс ${i + 1} ---
@@ -101,21 +97,20 @@ ${casesText}
 
 Отвечай только JSON, без лишнего текста.`;
 
-      const response = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://doctor-opus.ru',
-          'X-Title': 'Doctor Opus',
-        },
-        body: JSON.stringify({
+      const response = await postLlmChatCompletionsWithFallback(
+        {
           model: 'anthropic/claude-sonnet-5',
           messages: [{ role: 'user', content: prompt }],
           max_tokens: 1000,
           temperature: 0.2,
-        }),
-      });
+        },
+        {
+          headers: {
+            'HTTP-Referer': 'https://doctor-opus.ru',
+            'X-Title': 'Doctor Opus',
+          },
+        }
+      );
 
       if (!response.ok) {
         const err = await response.text();

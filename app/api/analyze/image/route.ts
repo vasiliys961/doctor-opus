@@ -22,6 +22,8 @@ import fs from 'fs/promises';
 import os from 'os';
 import { checkRateLimit, RATE_LIMIT_ANALYSIS, getRateLimitKey } from '@/lib/rate-limiter';
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost, refundChargedBalanceOnFailure } from '@/lib/server-billing';
+import { getLlmApiKey } from '@/lib/llm-provider';
+import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 const execPromise = promisify(exec);
 
@@ -31,8 +33,14 @@ export const dynamic = 'force-dynamic';
 // Лимит размера файла: 50MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const COMPLEX_MODALITIES = new Set(['ct', 'mri', 'xray', 'ultrasound']);
-const FABLE_MODEL = (process.env.VALIDATED_FABLE_MODEL || '').trim();
-const ENABLE_VALIDATED_FABLE = process.env.ENABLE_VALIDATED_FABLE === 'true' && Boolean(FABLE_MODEL);
+const ENABLE_VALIDATED_FABLE = process.env.ENABLE_VALIDATED_FABLE === 'true';
+const FABLE_MODEL = (() => {
+  const raw = (process.env.VALIDATED_FABLE_MODEL || '').trim();
+  if (!ENABLE_VALIDATED_FABLE) return '';
+  if (!raw) return MODELS.FABLE_5;
+  if (raw === 'anthropic/claude-fable-5') return MODELS.FABLE_5;
+  return raw;
+})();
 const FABLE_COST_MULTIPLIER = Math.max(1, Number(process.env.VALIDATED_FABLE_COST_MULTIPLIER || '2'));
 const MIN_COMPLEX_IMAGES = Math.max(2, Number(process.env.VALIDATED_COMPLEX_MIN_IMAGES || '3'));
 const MIN_COMPLEX_CONTEXT_CHARS = Math.max(200, Number(process.env.VALIDATED_COMPLEX_MIN_CONTEXT_CHARS || '500'));
@@ -209,8 +217,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) return NextResponse.json({ success: false, error: 'OPENROUTER_API_KEY not set' }, { status: 500 });
+    try {
+      getLlmApiKey();
+    } catch {
+      return NextResponse.json({ success: false, error: 'LLM_API_KEY (or OPENROUTER_API_KEY) not set' }, { status: 500 });
+    }
 
     const formData = await request.formData();
     const mode = (formData.get('mode') as string) || 'optimized';
@@ -292,6 +303,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const prompt = anonymizeText(formData.get('prompt') as string || 'Analyze the medical image.');
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
     const stage = ((formData.get('stage') as string) || 'all').toLowerCase();
     const descriptionFromStep1 = anonymizeText(formData.get('description') as string || '');
     const useStreaming = formData.get('useStreaming') === 'true';
@@ -452,7 +464,7 @@ export async function POST(request: NextRequest) {
 
     // Сравнительный промпт включаем ТОЛЬКО по явному флагу.
     // Множественные кадры/срезы одного исследования не считаем динамикой "было/стало".
-    let finalPrompt = prompt;
+    let finalPrompt = appendLanguageInstruction(prompt, responseLanguageInstruction);
     if (stage === 'directive') {
       if (!descriptionFromStep1.trim()) {
         return NextResponse.json(
@@ -461,20 +473,23 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      finalPrompt = `КЛИНИЧЕСКАЯ ДИРЕКТИВА (ШАГ 2)
+      finalPrompt = appendLanguageInstruction(
+        `CLINICAL DIRECTIVE (STAGE 2)
 
-Используй:
-1) описание изображения из шага 1,
-2) клинический контекст пациента,
-3) технические данные и приложенные изображения.
+Use:
+1) image description from stage 1,
+2) patient clinical context,
+3) technical data and attached images.
 
-Важно:
-- НЕ повторяй заново полный блок визуального описания;
-- дай клиническую интерпретацию, дифференциальный ряд и приоритеты;
-- выдели следующие клинические шаги и риски.
+Important:
+- do not repeat the full visual description block;
+- provide clinical interpretation, differential priorities, and next steps;
+- highlight immediate risks and follow-up priorities.
 
-=== ОПИСАНИЕ ИЗ ШАГА 1 ===
-${descriptionFromStep1}`;
+=== STAGE 1 DESCRIPTION ===
+${descriptionFromStep1}`,
+        responseLanguageInstruction
+      );
     }
 
     if (stage !== 'directive' && isComparative && allImages.length > 1 && !prompt.includes('СРАВНИТЕЛЬНЫЙ')) {

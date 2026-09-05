@@ -727,7 +727,7 @@ export default function ProtocolPage() {
               <option value="sonnet">🤖 Sonnet 5</option>
               <option value="gpt52">🚀 GPT-5.6 Terra</option>
               <option value="opus">🧠 Opus 5</option>
-              <option value="gemini">⚡ Gemini 3 Flash</option>
+              <option value="gemini">⚡ Gemini 3.8 Flash</option>
             </select>
           </div>
 

@@ -10,8 +10,7 @@
 
 import { getDescriptionPrompt, getDirectivePrompt, getComparisonDescriptionPrompt, ImageType } from './prompts';
 import { MODELS } from './openrouter';
-
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+import { postLlmChatCompletionsWithFallback } from './llm-provider';
 
 export interface AnalyzeVideoOptions {
   /** Дополнительный текстовый контекст от пользователя */
@@ -53,12 +52,6 @@ export interface AnalyzeVideoResult {
 export async function analyzeVideoTwoStage(
   options: AnalyzeVideoOptions
 ): Promise<AnalyzeVideoResult> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY не настроен. Проверьте переменные окружения.');
-  }
-
   const mimeType = options.mimeType || 'video/mp4';
   const imageType = options.imageType || 'universal';
 
@@ -96,16 +89,15 @@ export async function analyzeVideoTwoStage(
     temperature: 0.1,
   };
 
-  const descriptionResponse = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
+  const descriptionResponse = await postLlmChatCompletionsWithFallback(
+    descriptionPayload,
+    {
+      headers: {
       'HTTP-Referer': 'https://doctor-opus.online',
       'X-Title': 'Doctor Opus',
-    },
-    body: JSON.stringify(descriptionPayload),
-  });
+      },
+    }
+  );
 
   if (!descriptionResponse.ok) {
     const errorText = await descriptionResponse.text();
@@ -141,16 +133,15 @@ export async function analyzeVideoTwoStage(
     temperature: 0.2,
   };
 
-  const analysisResponse = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
+  const analysisResponse = await postLlmChatCompletionsWithFallback(
+    analysisPayload,
+    {
+      headers: {
       'HTTP-Referer': 'https://doctor-opus.online',
       'X-Title': 'Doctor Opus',
-    },
-    body: JSON.stringify(analysisPayload),
-  });
+      },
+    }
+  );
 
   if (!analysisResponse.ok) {
     const errorText = await analysisResponse.text();
@@ -183,9 +174,6 @@ export async function analyzeVideoTwoStage(
 export async function analyzeTwoVideosTwoStage(
   options: AnalyzeTwoVideosOptions
 ): Promise<AnalyzeVideoResult> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
-
   const imageType = options.imageType || 'universal';
   let totalPromptTokens = 0;
   let totalCompletionTokens = 0;
@@ -216,16 +204,15 @@ export async function analyzeTwoVideosTwoStage(
     temperature: 0.1,
   };
 
-  const descriptionResponse = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
+  const descriptionResponse = await postLlmChatCompletionsWithFallback(
+    descriptionPayload,
+    {
+      headers: {
       'HTTP-Referer': 'https://doctor-opus.online',
       'X-Title': 'Doctor Opus',
-    },
-    body: JSON.stringify(descriptionPayload),
-  });
+      },
+    }
+  );
 
   if (!descriptionResponse.ok) {
     throw new Error(`OpenRouter error (Stage 1): ${await descriptionResponse.text()}`);
@@ -256,16 +243,15 @@ export async function analyzeTwoVideosTwoStage(
     temperature: 0.2,
   };
 
-  const analysisResponse = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
+  const analysisResponse = await postLlmChatCompletionsWithFallback(
+    analysisPayload,
+    {
+      headers: {
       'HTTP-Referer': 'https://doctor-opus.online',
       'X-Title': 'Doctor Opus',
-    },
-    body: JSON.stringify(analysisPayload),
-  });
+      },
+    }
+  );
 
   if (!analysisResponse.ok) {
     throw new Error(`OpenRouter error (Stage 2): ${await analysisResponse.text()}`);

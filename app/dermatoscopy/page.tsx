@@ -59,7 +59,7 @@ export default function DermatoscopyPage() {
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-5');
       } else if (analysisMode === 'fast') {
-        formData.append('model', 'google/gemini-3-flash-preview');
+        formData.append('model', 'google/gemini-3.8-flash');
       }
 
       if (useStream && (analysisMode === 'validated' || analysisMode === 'optimized' || analysisMode === 'fast')) {
@@ -79,7 +79,7 @@ export default function DermatoscopyPage() {
         
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         
-        const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
+        const modelUsed = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
 
         await handleSSEStream(response, {
@@ -122,7 +122,7 @@ export default function DermatoscopyPage() {
         if (data.success) {
           setResult(data.result)
           
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5');
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5');
           const inputTokens = 2000;
           const outputTokens = Math.ceil(data.result.length / 4);
           const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);

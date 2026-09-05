@@ -1,8 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { formatCostLog } from '@/lib/cost-calculator';
 import { MODELS } from '@/lib/openrouter';
+import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider';
+import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
+import { getRequestLocale } from '@/lib/i18n/server';
+import type { Locale } from '@/lib/i18n/config';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+function localeToLanguageLabel(locale: Locale): string {
+  switch (locale) {
+    case 'fr':
+      return 'French';
+    case 'es':
+      return 'Spanish';
+    case 'ar':
+      return 'Arabic';
+    case 'hi':
+      return 'Hindi';
+    case 'pt-BR':
+      return 'Brazilian Portuguese';
+    case 'id':
+      return 'Indonesian';
+    case 'ms':
+      return 'Malay';
+    case 'tr':
+      return 'Turkish';
+    case 'zh-CN':
+      return 'Simplified Chinese';
+    case 'en':
+    default:
+      return 'English';
+  }
+}
+
+async function translateGuidelinesContent(content: string, locale: Locale): Promise<string> {
+  if (!content || locale === 'en') return content;
+  const targetLanguage = localeToLanguageLabel(locale);
+  const translationModel = process.env.MODEL_TRANSLATOR?.trim() || MODELS.GEMINI_3_FLASH;
+
+  const response = await postLlmChatCompletionsWithFallback({
+    model: translationModel,
+    temperature: 0,
+    max_tokens: 12000,
+    messages: [
+      {
+        role: 'system',
+        content:
+          `Translate the medical guideline review into ${targetLanguage}. ` +
+          'Preserve structure, numbering, bullet points, and guideline names/acronyms. ' +
+          'Return only the translated text.',
+      },
+      {
+        role: 'user',
+        content,
+      },
+    ],
+  });
+
+  if (!response.ok) return content;
+  const data = await response.json();
+  return data?.choices?.[0]?.message?.content?.trim() || content;
+}
+
+function streamSingleSseText(content: string, model: string): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      const payload = { model, choices: [{ delta: { content } }] };
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+}
 
 /**
  * API endpoint for searching current international clinical guidelines
@@ -11,21 +80,18 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
  */
 export async function POST(request: NextRequest) {
   try {
+    const locale = await getRequestLocale();
     const body = await request.json();
     const { query, specialty = '', useStreaming = true, modelMode = 'standard' } = body;
+    const requestedStreaming = Boolean(useStreaming);
+    const requiresPostTranslation = locale !== 'en';
+    const upstreamStreaming = requestedStreaming && !requiresPostTranslation;
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
 
     if (!query || !query.trim()) {
       return NextResponse.json(
         { success: false, error: 'Query cannot be empty' },
         { status: 400 }
-      );
-    }
-
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
-        { status: 500 }
       );
     }
 
@@ -35,7 +101,7 @@ export async function POST(request: NextRequest) {
 Find current international clinical guidelines on: ${query}
 ${specialty ? `Specialty: ${specialty}` : ''}
 
-Provide a comprehensive expert review in English using the following structure:
+Provide a comprehensive expert review using the following structure:
 
 1. GUIDELINE NAMES:
    - 2-3 major international guidelines [INTERNATIONAL] (ESC, AHA/ACC, WHO, KDIGO, NCCN, NICE, etc.)
@@ -67,11 +133,15 @@ Provide a comprehensive expert review in English using the following structure:
    - Red flag signs requiring immediate escalation or hospitalization.
 
 CRITICAL REQUIREMENTS:
-- Respond exclusively in English.
 - Be academically rigorous and clinically detailed.
 - Do NOT fabricate references.
 - Base all recommendations on international guidelines only (ESC, AHA, WHO, NICE, KDIGO, NCCN, IDSA, etc.)
-- If no specific scales or management algorithm exists for this topic, state so explicitly.`;
+- If no specific scales or management algorithm exists for this topic, state so explicitly.
+
+LANGUAGE COMPLIANCE (HIGHEST PRIORITY):
+${responseLanguageInstruction}
+- Translate section headings and all narrative text into the required language.
+- Keep official guideline names in original language when needed, but explain them in the required language.`;
 
     // Model selection based on mode: standard (Gemini), detailed (GPT), or online (Perplexity)
     let MODEL = MODELS.GEMINI_3_FLASH;
@@ -88,12 +158,13 @@ CRITICAL REQUIREMENTS:
     // Dynamic system prompt
     let systemPrompt = '';
     if (modelMode === 'online') {
-      systemPrompt = 'You are a leading medical expert. Your task is to find the most current international clinical guidelines (2024-2025) and provide a deep review of patient management tactics. Focus on diagnostic criteria, required clinical scores, and step-by-step management algorithms. Do NOT write introductions — start immediately with the sections. Respond in English only.';
+      systemPrompt = 'You are a leading medical expert. Your task is to find the most current international clinical guidelines (2024-2025) and provide a deep review of patient management tactics. Focus on diagnostic criteria, required clinical scores, and step-by-step management algorithms. Do NOT write introductions — start immediately with the sections.';
     } else if (modelMode === 'detailed') {
-      systemPrompt = 'You are an expert medical AI assistant with the competence of a professor of medicine. Your task is to provide a comprehensive, academically rigorous review of the topic. Always include a detailed differential diagnosis analysis, prognostic scores, step-by-step patient management, and evidence-based treatment regimens with levels of evidence. Your answer should be detailed and clinically deep. Do NOT write introductions — start immediately with the sections. Respond in English only.';
+      systemPrompt = 'You are an expert medical AI assistant with the competence of a professor of medicine. Your task is to provide a comprehensive, academically rigorous review of the topic. Always include a detailed differential diagnosis analysis, prognostic scores, step-by-step patient management, and evidence-based treatment regimens with levels of evidence. Your answer should be detailed and clinically deep. Do NOT write introductions — start immediately with the sections.';
     } else {
-      systemPrompt = 'You are an expert physician assistant. You search for current international clinical guidelines. Focus on management tactics and diagnostic criteria. ALWAYS start your answer IMMEDIATELY with section "1. GUIDELINE NAMES". Do NOT write introductions. Respond in English only.';
+      systemPrompt = 'You are an expert physician assistant. You search for current international clinical guidelines. Focus on management tactics and diagnostic criteria. ALWAYS start your answer IMMEDIATELY with section "1. GUIDELINE NAMES". Do NOT write introductions.';
     }
+    systemPrompt = `${responseLanguageInstruction}\n${systemPrompt}`;
     
     console.log('');
     console.log('🔍 [CLINICAL RECS] ========== SEARCHING CLINICAL GUIDELINES ==========');
@@ -102,7 +173,7 @@ CRITICAL REQUIREMENTS:
     console.log('🤖 [MODEL] Model:', MODEL);
     console.log('🤖 [AI] Max tokens:', MAX_TOKENS);
     console.log('🤖 [AI] Prompt size:', `${searchPrompt.length} chars`);
-    console.log('🤖 [AI] Mode:', useStreaming ? 'streaming' : 'standard');
+    console.log('🤖 [AI] Mode:', upstreamStreaming ? 'streaming' : 'standard');
     console.log('');
 
     // Using selected model via OpenRouter
@@ -120,19 +191,15 @@ CRITICAL REQUIREMENTS:
       ],
       max_tokens: MAX_TOKENS,
       temperature: 0.3,
-      stream: useStreaming,
-      stream_options: { include_usage: true }
+      stream: upstreamStreaming,
+      stream_options: upstreamStreaming ? { include_usage: true } : undefined
     };
 
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
+    const response = await postLlmChatCompletionsWithFallback(payload, {
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
         'HTTP-Referer': 'https://doctor-opus.online',
         'X-Title': 'Doctor Opus'
       },
-      body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
@@ -153,7 +220,7 @@ CRITICAL REQUIREMENTS:
     }
 
     // If streaming is enabled, return SSE stream
-    if (useStreaming && response.body) {
+    if (upstreamStreaming && response.body) {
     console.log(`📡 [${modelMode.toUpperCase()}] Starting streaming mode...`);
     console.log('📡 [MODEL] Model:', MODEL);
       console.log('');
@@ -260,34 +327,26 @@ CRITICAL REQUIREMENTS:
     // Standard mode without streaming
     const data = await response.json();
     let content = data.choices?.[0]?.message?.content || '';
+    content = await translateGuidelinesContent(content, locale);
     const usage = data.usage || {};
     const tokensUsed = usage.total_tokens || 0;
-
-    // FILTER: trim everything before the first "1. GUIDELINE NAMES" section
-    const protocolStartMarkers = [
-      '1. GUIDELINE NAMES',
-      'GUIDELINE NAMES',
-      '1. PROTOCOLS',
-      'PROTOCOLS'
-    ];
-
-    let foundIndex = -1;
-    for (const marker of protocolStartMarkers) {
-      const index = content.indexOf(marker);
-      if (index >= 0 && (foundIndex === -1 || index < foundIndex)) {
-        foundIndex = index;
-      }
-    }
-
-    if (foundIndex > 0) {
-      content = content.substring(foundIndex);
-      console.log('✂️ [AI] Trimmed', foundIndex, 'chars before guideline section');
-    }
 
     console.log('');
     console.log('✅ [AI] ========== RESPONSE RECEIVED ==========');
     console.log(formatCostLog(MODEL, usage.prompt_tokens || 0, usage.completion_tokens || 0, tokensUsed));
     console.log('');
+
+    if (requestedStreaming && requiresPostTranslation) {
+      return new Response(streamSingleSseText(content, MODEL), {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -295,7 +354,7 @@ CRITICAL REQUIREMENTS:
       tokensUsed: tokensUsed,
       model: modelMode === 'online' ? 'Perplexity Sonar (Online Search)' :
              modelMode === 'detailed' ? 'GPT-5.4 (Detailed)' :
-             'Gemini 3.0 Flash (Standard)'
+             'Gemini 3.8 Flash (Standard)'
     });
 
   } catch (error: any) {

@@ -64,7 +64,7 @@ export default function ECGPage() {
           console.log('📦 [CACHE] ECG cache hit, skipping request');
           setResult(cachedResult);
           setLoading(false);
-          setModelInfo(analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
+          setModelInfo(analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
                         analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5');
           return;
         }
@@ -87,7 +87,7 @@ export default function ECGPage() {
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-5');
       } else if (analysisMode === 'fast') {
-        formData.append('model', 'google/gemini-3-flash-preview');
+        formData.append('model', 'google/gemini-3.8-flash');
       }
 
       if (useStream) {
@@ -107,7 +107,7 @@ export default function ECGPage() {
           }
 
           const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
-          const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
+          const modelUsed = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
                           analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
           setModelInfo(modelUsed)
 
@@ -177,7 +177,7 @@ export default function ECGPage() {
             saveToCache((window as any)._currentCacheKey, data.result, analysisMode);
           }
 
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5')
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5')
           setModelInfo(modelUsed)
           
           const cost = data.cost || 1.0;

@@ -4,12 +4,12 @@ import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider';
+import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
-
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Примерные тарифы OpenRouter за 1000 токенов в условных единицах (для отображения)
 const PRICE_UNITS_PER_1K_TOKENS_SONNET = 2.0; // 2 единицы за 1000 токенов Claude Sonnet 5
@@ -78,19 +78,13 @@ export async function POST(request: NextRequest) {
   let billingEmail: string | null = null;
   let billingGuestKey: string | null = null;
   try {
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
+
     const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email || null;
     const guestKey = userEmail ? null : getRateLimitKey(request);
     billingEmail = userEmail;
     billingGuestKey = guestKey;
-
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
-        { status: 500 }
-      );
-    }
 
     const body = await request.json();
     const {
@@ -157,18 +151,22 @@ export async function POST(request: NextRequest) {
       // Продолжение диалога - используем историю
       const contextBlock =
         clinicalContext && clinicalContext.trim().length > 0
-          ? `КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext.trim()}\n\n`
+          ? `PATIENT CLINICAL CONTEXT:\n${clinicalContext.trim()}\n\n`
           : '';
       
-      const systemPrompt = `${contextBlock}ИССХОДНЫЕ ДАННЫЕ ГЕНЕТИЧЕСКОГО АНАЛИЗА:\n\n${analysis}\n\n
-Ты ведущий врач-генетик. Ранее ты провел анализ генетических данных и дал свое экспертное мнение.
-Сейчас твоя задача — вести профессиональный диалог, отвечая на уточняющие вопросы лаконично и по существу.
+      const systemPrompt = `${responseLanguageInstruction}
 
-### ПРАВИЛА:
-1. **ЗАПРЕЩЕНО** заново использовать структуру полного отчета (Обзор, План действий и т.д.), если тебя об этом не просят прямо.
-2. Отвечай прямо на поставленный вопрос, сохраняя экспертный тон.
-3. Учитывай контекст предыдущего анализа и всей истории переписки.
-4. Избегай вводных фраз вроде «Конечно», «Я понимаю». Сразу переходи к сути.`;
+${contextBlock}SOURCE GENETIC ANALYSIS DATA:
+
+${analysis}
+
+You are a senior clinical geneticist. You already produced an expert report and now continue a physician-to-physician dialogue.
+
+RULES:
+1. Do not regenerate the full report structure (overview, plan, etc.) unless explicitly requested.
+2. Answer the latest question directly, with concise and clinically actionable points.
+3. Use the prior analysis and the full dialogue history as context.
+4. Avoid filler intros. Start with substance immediately.`;
 
       messages.push({
         role: 'system',
@@ -199,10 +197,10 @@ export async function POST(request: NextRequest) {
         
         // Добавляем информацию о файлах в текст
         if (files.length > 0) {
-          const filesInfo = files.map((f: any) => `Файл: ${f.name} (${f.type})`).join('\n');
+          const filesInfo = files.map((f: any) => `File: ${f.name} (${f.type})`).join('\n');
           userContent.push({
             type: 'text',
-            text: `\n\nПРИКРЕПЛЕННЫЕ ФАЙЛЫ:\n${filesInfo}\n\nПроанализируй эти файлы в контексте генетического анализа и ответь на вопрос выше.`,
+            text: `\n\nATTACHED FILES:\n${filesInfo}\n\nAnalyze these files in the context of the genetic case and answer the question above.`,
           });
           
           // Добавляем изображения как image_url для Vision API
@@ -229,41 +227,43 @@ export async function POST(request: NextRequest) {
       // Первый запрос - стандартная логика
       const contextBlock =
         clinicalContext && clinicalContext.trim().length > 0
-          ? `КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${clinicalContext.trim()}\n\n`
+          ? `PATIENT CLINICAL CONTEXT:\n${clinicalContext.trim()}\n\n`
           : '';
 
       const questionBlock =
         question && question.trim().length > 0
-          ? `ДОПОЛНИТЕЛЬНЫЙ ЗАПРОС ОТ ВРАЧА:\n${question.trim()}\n\n`
-          : 'Сформируй итоговое заключение врача-генетика для истории болезни и плана ведения пациента.\n\n';
+          ? `ADDITIONAL PHYSICIAN QUESTION:\n${question.trim()}\n\n`
+          : 'Prepare a final clinical genetics report for the medical record and management plan.\n\n';
 
       // Добавляем информацию о файлах если есть
       const filesBlock = files.length > 0
-        ? `ПРИКРЕПЛЕННЫЕ ДОПОЛНИТЕЛЬНЫЕ ФАЙЛЫ:\n${files.map((f: any) => `- ${f.name} (${f.type})`).join('\n')}\n\nПроанализируй эти файлы в контексте генетического анализа.\n\n`
+        ? `ATTACHED ADDITIONAL FILES:\n${files.map((f: any) => `- ${f.name} (${f.type})`).join('\n')}\n\nAnalyze these files in the context of this genetic case.\n\n`
         : '';
 
-      const userPrompt = `${contextBlock}${questionBlock}${filesBlock}ИССХОДНЫЕ ДАННЫЕ ГЕНЕТИЧЕСКОГО АНАЛИЗА / ПРЕДЫДУЩЕЕ ЗАКЛЮЧЕНИЕ:\n\n${analysis}\n\n
-ТВОЯ ЗАДАЧА:
-- Не пересказывать дословно текст выше, а на его основе сформировать чёткое, структурированное КЛИНИЧЕСКОЕ ЗАКЛЮЧЕНИЕ врача-генетика.
-- Сделать акцент на: патогенных и вероятно патогенных вариантах, фармакогенетике, нутригеномике, рисках заболеваний и стратегии превентивной медицины/лонгевити.
+      const userPrompt = `${contextBlock}${questionBlock}${filesBlock}SOURCE GENETIC ANALYSIS DATA / PREVIOUS CONCLUSION:
 
-ФОРМАТ ОТВЕТА:
-1. Краткий клинический обзор генетического профиля (2–3 предложения).
-2. Ключевые патогенные/вероятно патогенные варианты (ACMG классы, гены, rsID, клиническое значение).
-3. Фармакогенетика (конкретные препараты, дозировки/ограничения, ссылки на CPIC/PharmGKB, если уместно).
-4. Нутригеномика и метаболизм (витамины, макронутриенты, воспаление, антиоксидантные системы).
-5. Персонализированные рекомендации по лечению, наблюдению и образу жизни (пошаговый план).
-6. Рекомендации по скринингу и семейному консультированию (если уместно).
+${analysis}
 
-ПИШИ КАК ВРАЧ ДЛЯ ВРАЧА (не для пациента), профессиональным медицинским языком, с конкретикой.
-Избегай «воды», сосредоточься на клинически значимых выводах и действиях.`;
+TASK:
+- Do not copy the source verbatim. Produce a clear, structured clinical genetics conclusion for physician use.
+- Focus on likely pathogenic/pathogenic variants, pharmacogenetics, nutrigenomics, disease-risk signals, and preventive strategy.
+
+OUTPUT STRUCTURE:
+1. Brief clinical overview of the genetic profile (2-3 sentences).
+2. Key pathogenic/likely pathogenic variants (ACMG class, gene, rsID, clinical significance).
+3. Pharmacogenetics (specific drugs, dosing constraints, CPIC/PharmGKB references when relevant).
+4. Nutrigenomics and metabolism (vitamins, macronutrients, inflammation, antioxidant systems).
+5. Personalized management recommendations (step-by-step plan).
+6. Screening and family counseling recommendations (if relevant).
+
+Write physician-to-physician: professional, precise, clinically actionable, no fluff.`;
 
       messages.push({
         role: 'system',
         content:
           mode === 'fast'
-            ? 'Ты врач-генетик. Дай краткое, но клинически полезное заключение для врача на основе списка SNP и контекста.'
-            : 'Ты ведущий врач-генетик. На основе генетического анализа и клинического контекста формируешь клинически применимое экспертное мнение для врача-коллеги, без лишней воды.',
+            ? `${responseLanguageInstruction}\nYou are a clinical geneticist. Provide a concise but clinically useful physician-facing conclusion based on SNP data and context.`
+            : `${responseLanguageInstruction}\nYou are a senior clinical geneticist. Build a clinically actionable expert conclusion for a physician colleague using genetic data and clinical context.`,
       });
       
       // Если есть изображения, используем массив content
@@ -301,7 +301,7 @@ export async function POST(request: NextRequest) {
 
     const consultModel =
       model === 'gpt52' ? GPT_54_MODEL :
-      mode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5';
+      mode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5';
 
     const runOpenRouter = async (targetModel: string) => {
       const payload: any = {
@@ -313,15 +313,11 @@ export async function POST(request: NextRequest) {
         stream_options: useStreaming ? { include_usage: true } : undefined,
       };
 
-      return fetch(OPENROUTER_API_URL, {
-        method: 'POST',
+      return postLlmChatCompletionsWithFallback(payload, {
         headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
           'HTTP-Referer': 'https://doctor-opus.ru',
           'X-Title': 'Doctor Opus',
         },
-        body: JSON.stringify(payload),
       });
     };
 

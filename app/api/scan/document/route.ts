@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { calculateCost } from '@/lib/cost-calculator';
 import { anonymizeText } from "@/lib/anonymization";
 import { anonymizeImageBuffer } from "@/lib/server-image-processing";
-
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider';
+import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 // Модели для сканирования документов (Gemini Flash, Haiku или Llama)
 const DOCUMENT_SCAN_MODELS = [
-  'google/gemini-3-flash-preview',           // Gemini 1.5 Flash — стабильно и качественно для OCR
+  'google/gemini-3.8-flash',           // Gemini 1.5 Flash — стабильно и качественно для OCR
   'anthropic/claude-haiku-4.5',              // Haiku 4.5 — быстрое сканирование документов
   'meta-llama/llama-3.2-90b-vision-instruct', // Llama 3.2 90B — резерв для документов
 ];
@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = anonymizeText(formData.get('prompt') as string || 'Извлеки весь текст из документа. Просто скопируй текст как есть, без комментариев и анализа.');
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
     const maskImageRaw = formData.get('maskImage');
     const maskImage = maskImageRaw === null ? true : maskImageRaw === 'true';
 
@@ -29,11 +30,6 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'No file provided' },
         { status: 400 }
       );
-    }
-
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      throw new Error('OPENROUTER_API_KEY is not configured');
     }
 
     const arrayBuffer = await file.arrayBuffer();
@@ -49,28 +45,28 @@ export async function POST(request: NextRequest) {
     const base64Image = buffer.toString('base64');
 
     // Промпт для извлечения текста с сохранением структуры
-    const scanPrompt = `Извлеки весь текст из этого документа, СОХРАНЯЯ СТРУКТУРУ:
+    const scanPrompt = appendLanguageInstruction(`Extract all text from this document while preserving structure.
 
-ВАЖНО ДЛЯ ТАБЛИЦ:
-- Если видишь таблицу, ОБЯЗАТЕЛЬНО сохрани её в формате Markdown
-- Пример таблицы:
+TABLE RULES:
+- If you detect a table, preserve it in Markdown format.
+- Example table:
   | Заголовок 1 | Заголовок 2 | Заголовок 3 |
   |-------------|-------------|-------------|
   | Ячейка 1    | Ячейка 2    | Ячейка 3    |
   | Ячейка 4    | Ячейка 5    | Ячейка 6    |
-- Сохраняй ВСЕ строки и столбцы таблицы точно как в оригинале
-- Не пропускай ячейки, даже если они пустые (используй пустую строку: | |)
-- Сохраняй выравнивание и форматирование внутри ячеек
+- Preserve all table rows/columns exactly as in source.
+- Do not skip empty cells (use | |).
+- Preserve alignment and inline formatting.
 
-ДЛЯ ОСТАЛЬНОГО:
-- Сохраняй нумерованные и маркированные списки
-- Сохраняй заголовки и подзаголовки (используй # для заголовков)
-- Сохраняй абзацы и отступы
-- Сохраняй выделение текста (жирный **, курсив *)
-- Не добавляй комментарии, анализ или объяснения
-- Только текст документа с сохранением структуры
+GENERAL RULES:
+- Preserve numbered and bulleted lists.
+- Preserve headings/subheadings (Markdown # allowed).
+- Preserve paragraphs and indentation.
+- Preserve emphasis (**bold**, *italic*).
+- Do not add commentary or analysis.
+- Return document text only, with structure preserved.
 
-${prompt}`;
+${prompt}`, responseLanguageInstruction);
 
     // Пробуем модели в порядке приоритета (Haiku → Llama → Sonnet)
     for (const model of DOCUMENT_SCAN_MODELS) {
@@ -100,15 +96,11 @@ ${prompt}`;
           temperature: 0.1 // Низкая температура для точного копирования текста
         };
 
-        const response = await fetch(OPENROUTER_API_URL, {
-          method: 'POST',
+        const response = await postLlmChatCompletionsWithFallback(payload, {
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
             'HTTP-Referer': 'https://doctor-opus.online',
             'X-Title': 'Doctor Opus'
           },
-          body: JSON.stringify(payload)
         });
 
         if (response.ok) {

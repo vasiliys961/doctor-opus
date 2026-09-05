@@ -7,11 +7,10 @@ import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calc
 import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, prepareVisionDataForTextPrompt, resolvePromptRuntimeVars } from './prompts';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
 import { getValidatedOpusModel } from './validated-opus-model';
-import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
+import { getLlmApiKey, getLlmChatCompletionsUrl, getLlmEndpointChain } from './llm-provider';
 import { CLINICAL_DRAFT_DISCLAIMER } from './clinical-disclaimer';
 
 const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
-const DEFAULT_OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Актуальные модели (последние флагманы 2025-2026)
 const MODELS = {
@@ -21,8 +20,8 @@ const MODELS = {
   GPT_5_2: 'openai/gpt-5.6-terra',                  // GPT-5.6 Terra (legacy key name kept for compatibility)
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
-  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
-  GEMINI_3_PRO: 'google/gemini-3.1-pro-preview'          // Gemini 3.1 Pro Preview
+  GEMINI_3_FLASH: 'google/gemini-3.8-flash',       // Gemini 3.8 Flash
+  GEMINI_3_PRO: 'google/gemini-3.8-flash'          // Secondary vision model (same as flash)
 };
 
 function isNetworkStage2Error(error: any): boolean {
@@ -1151,8 +1150,8 @@ export async function sendTextRequestStreaming(
   specialty?: Specialty,
   customSystemPrompt?: string
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiKey = getLlmApiKey();
-  if (!apiKey) throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
+  const providerEndpoints = getLlmEndpointChain();
+  if (!providerEndpoints.length) throw new Error('LLM provider endpoints are not configured');
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -1211,21 +1210,17 @@ export async function sendTextRequestStreaming(
       let modelUsed = model;
 
       const runStreamingRequest = async (targetModel: string): Promise<Response> => {
-        const urlsToTry = OPENROUTER_API_URL === DEFAULT_OPENROUTER_API_URL
-          ? [OPENROUTER_API_URL]
-          : [OPENROUTER_API_URL, DEFAULT_OPENROUTER_API_URL];
-
         let lastError: any = null;
-        for (const apiUrl of urlsToTry) {
+        for (const endpoint of providerEndpoints) {
           for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
             try {
-              const attemptResponse = await fetch(apiUrl, {
+              const attemptResponse = await fetch(endpoint.chatCompletionsUrl, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${apiKey}`,
+                    'Authorization': `Bearer ${endpoint.apiKey}`,
                     'Content-Type': 'application/json',
                     'HTTP-Referer': 'https://openrouter.ai',
                     'X-Title': 'Medical AI'
@@ -1266,7 +1261,7 @@ export async function sendTextRequestStreaming(
               await new Promise(resolve => setTimeout(resolve, backoffMs));
             }
           }
-          console.warn(`⚠️ [TEXT STREAM RETRY] switching API endpoint to ${apiUrl === DEFAULT_OPENROUTER_API_URL ? 'default openrouter.ai' : 'configured provider'} failed`);
+          console.warn(`⚠️ [TEXT STREAM RETRY] switching API endpoint to ${endpoint.name} failed`);
         }
         throw lastError || new Error('OpenRouter streaming request failed: no response received');
       };

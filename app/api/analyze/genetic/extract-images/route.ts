@@ -4,8 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider';
+import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4;
 const MIN_EXTRACT_IMAGES_COST = 1.5;
 const MAX_EXTRACT_IMAGES_COST = 15;
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email || null;
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
     const guestKey = userEmail ? null : getRateLimitKey(request);
     billingEmail = userEmail;
     billingGuestKey = guestKey;
@@ -61,14 +63,6 @@ export async function POST(request: NextRequest) {
     }
     billedAmount = estimatedCost;
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
-        { status: 500 }
-      );
-    }
-
     console.log(`🧬 [GENETIC IMAGES] Обработка ${images.length} изображений из ${fileName}`);
     
     // Проверяем формат изображений
@@ -83,7 +77,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const extractionPrompt = `Ты — специализированный OCR-движок для извлечения генетических данных из таблиц медицинских отчетов.
+    const extractionPrompt = `${responseLanguageInstruction}
+You are a specialized OCR engine for extracting structured genetic variants from medical report tables.
+
+Ты — специализированный OCR-движок для извлечения генетических данных из таблиц медицинских отчетов.
 
 ТВОЯ ЗАДАЧА: Извлечь ВСЕ генетические данные из таблиц на этом изображении.
 
@@ -113,7 +110,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
 - Извлекай данные ТОЧНО как они указаны в таблице`;
 
     // Используем Gemini 3.0 Flash для извлечения JSON
-    let extractionModel = 'google/gemini-3-flash-preview';
+    let extractionModel = 'google/gemini-3.8-flash';
     const allExtractedData: string[] = [];
     let totalTokens = 0;
     let successCount = 0;
@@ -169,16 +166,15 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
         try {
           console.log(`🔄 [GENETIC IMAGES] Страница ${pageNumber}, попытка ${4 - retries}/3...`);
           
-          const extractionResponse = await fetch(OPENROUTER_API_URL, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
+          const extractionResponse = await postLlmChatCompletionsWithFallback(
+            extractionPayload,
+            {
+              headers: {
               'HTTP-Referer': 'https://doctor-opus.ru',
               'X-Title': 'Doctor Opus',
-            },
-            body: JSON.stringify(extractionPayload),
-          });
+              },
+            }
+          );
 
           if (!extractionResponse.ok) {
             // ... (rest of the error handling remains the same)
@@ -210,7 +206,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
                 lastError
               );
               // Пробуем другую модель если текущая не работает
-              if (retries === 3 && extractionModel === 'google/gemini-3-flash-preview') {
+              if (retries === 3 && extractionModel === 'google/gemini-3.8-flash') {
                 console.log(`🔄 [GENETIC IMAGES] Пробуем альтернативную модель для страницы ${pageNumber}...`);
                 extractionPayload.model = 'google/gemini-1.5-flash';
                 continue; // Повторяем с новой моделью

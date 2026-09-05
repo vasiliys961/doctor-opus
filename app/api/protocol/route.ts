@@ -3,14 +3,17 @@ import { sendTextRequest, MODELS } from '@/lib/openrouter';
 import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
 import { formatCostLog } from '@/lib/cost-calculator';
 import { anonymizeText } from '@/lib/anonymization';
+import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 function buildProtocolCorrectionPrompt(params: {
   rawText: string;
   template: string;
   draft: string;
+  languageInstruction: string;
 }): string {
-  const { rawText, template, draft } = params;
-  return `You are a senior clinical documentation quality reviewer.
+  const { rawText, template, draft, languageInstruction } = params;
+  return `${languageInstruction}
+You are a senior clinical documentation quality reviewer.
 
 REVIEW AND CORRECT THE DRAFT PROTOCOL:
 1) Keep template structure 1:1 (sections, order, tables).
@@ -92,6 +95,7 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
 
 export async function POST(request: NextRequest) {
   try {
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
     const body = await request.json();
     const { 
       rawText: rawIncomingText, 
@@ -191,7 +195,8 @@ Never substitute current facts with template/RAG content.`;
     // ECG mode: concise formal conclusion only.
     // This prevents clinical hypotheses and management reasoning.
     const prompt = isEcgFunctionalConclusion
-      ? `You are a physician specialized in functional diagnostics (ECG). Create a SHORT formal ECG conclusion based on the input text.
+      ? `${responseLanguageInstruction}
+You are a physician specialized in functional diagnostics (ECG). Create a SHORT formal ECG conclusion based on the input text.
 ${specialistDirective}INPUT DATA (from ECG analysis):
 ${rawText}
 
@@ -204,11 +209,10 @@ MANDATORY CONSTRAINTS:
 3. Do not invent parameters. Include values (PQ/QRS/QTc, ST in mm) only if explicitly present in the input text. If absent, write "no data".
 4. Preserve ST direction exactly: if the input says "depression", do not output "elevation", and vice versa.
 5. Do not diagnose ACS/MI and do not add phrases like "no ACS" unless explicitly present in the input.
-6. Output language is STRICTLY English-only, regardless of the input language.
-7. If any non-English text appears, rewrite it to English before finalizing the answer.
 ${refreshFromCurrentCaseDirective}
-Language: English-only.`
-      : `You are an experienced physician (${specialistName || 'Internal Medicine Physician'}), an expert clinical assistant with the competence of a professor of clinical medicine and broad academic-hospital experience.
+`
+      : `${responseLanguageInstruction}
+You are an experienced physician (${specialistName || 'Internal Medicine Physician'}), an expert clinical assistant with the competence of a professor of clinical medicine and broad academic-hospital experience.
 ${specialistDirective}You combine clinical rigor and responsibility, transforming unstructured information into a standard encounter protocol with evidence-based diagnostic and treatment recommendations.
 
 YOUR TASK:
@@ -228,9 +232,6 @@ MANDATORY STYLE AND CONTENT RULES:
 7. Length: keep the protocol compact and practical (about up to 2 A4 pages equivalent).
 8. Footer note: include a brief informed-consent acknowledgment at the end (can be plain text).
 9. References: cite trusted international sources (UpToDate, PubMed, Cochrane, NCCN, ESC, WHO, etc.), preferably recent (<=5 years), for key management decisions.
-10. Output language is STRICTLY English-only, regardless of the input language.
-11. Ignore non-English wording in user input and RAG examples for output language choice.
-12. If any non-English text appears, rewrite it to English before finalizing the answer.
 ${requiredClinicalBlockDirective}
 ${strictTemplateDirective}
 ${tableDirective}
@@ -240,7 +241,7 @@ ${clinicalDefaultsDirective}
 ${clinicalReasoningDirective}
 ${evidencePriorityDirective}
 
-Style: strictly professional, clinically and technically accurate. Language: English-only.`;
+Style: strictly professional, clinically and technically accurate.`;
 
     const MODEL = model === 'opus' ? MODELS.OPUS : 
                  model === 'gpt52' ? MODELS.GPT_5_2 : 
@@ -264,6 +265,7 @@ Style: strictly professional, clinically and technically accurate. Language: Eng
         rawText,
         template: safeTemplate,
         draft: result,
+        languageInstruction: responseLanguageInstruction,
       });
       result = await sendTextRequest(correctionPrompt, []);
     }

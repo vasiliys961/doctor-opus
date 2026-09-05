@@ -135,7 +135,7 @@ export default function ComparativeAnalysisPage() {
       }
 
       const modelToUse = mode === 'fast' 
-        ? 'google/gemini-3-flash-preview' 
+        ? 'google/gemini-3.8-flash' 
         : mode === 'optimized' 
           ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra')
           : 'anthropic/claude-opus-5'
@@ -334,7 +334,9 @@ export default function ComparativeAnalysisPage() {
             onChange={setMode} 
             optimizedModel={optimizedModel}
             onOptimizedModelChange={setOptimizedModel}
-            disabled={loading} 
+            disabled={loading}
+            disableFastMode={true}
+            disableFastReason="Fast mode is disabled for comparative studies. Use Optimized or Expert Validated mode."
           />
         </div>
 

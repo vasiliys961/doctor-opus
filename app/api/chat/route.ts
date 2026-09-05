@@ -104,6 +104,7 @@ function logProviderAccessDiagnostics(params: {
   const { request, selectedModel, useStreaming, stage, error } = params;
   const errMessage = String((error as any)?.message || 'unknown').slice(0, 500);
   const status = parseStatusFromError(error);
+  const llmKeyPresent = Boolean(process.env.LLM_API_KEY?.trim());
   const openrouterKeyPresent = Boolean(process.env.OPENROUTER_API_KEY?.trim());
   const anthropicKeyPresent = Boolean(process.env.ANTHROPIC_API_KEY?.trim());
 
@@ -116,6 +117,7 @@ function logProviderAccessDiagnostics(params: {
     origin: request.headers.get('origin') || 'n/a',
     xForwardedFor: request.headers.get('x-forwarded-for') || 'n/a',
     userAgent: request.headers.get('user-agent') || 'n/a',
+    llmKeyPresent,
     openrouterKeyPresent,
     anthropicKeyPresent,
     errorSnippet: errMessage,
@@ -219,7 +221,7 @@ function estimateChatCost(params: {
   totalFileBytes: number;
 }): number {
   const modelBase =
-    params.selectedModel === 'anthropic/claude-fable-5' ? 4.4 :
+    (params.selectedModel === 'anthropic/claude-fable-5.1' || params.selectedModel === 'anthropic/claude-fable-5') ? 4.4 :
     (params.selectedModel === MODELS.OPUS || params.selectedModel === MODELS.OPUS_VALIDATED) ? 2.2 :
     params.selectedModel === MODELS.SONNET ? 1.3 :
     params.selectedModel === MODELS.GPT_5_2 ? 1.4 : 0.9;
@@ -351,8 +353,8 @@ export async function POST(request: NextRequest) {
       ? (allowGpt52Chat ? MODELS.GPT_5_2 : MODELS.SONNET)
       : (model === 'sonnet' || model === MODELS.SONNET) 
         ? MODELS.SONNET 
-        : (model === 'fable' || model === 'anthropic/claude-fable-5')
-          ? 'anthropic/claude-fable-5'
+        : (model === 'fable' || model === 'anthropic/claude-fable-5' || model === 'anthropic/claude-fable-5.1')
+          ? 'anthropic/claude-fable-5.1'
         : (model && (model === 'gemini' || model.includes('gemini')))
           ? MODELS.GEMINI_3_FLASH
       : MODELS.OPUS_VALIDATED;

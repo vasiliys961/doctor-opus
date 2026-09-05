@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isLocale } from '@/lib/i18n/config'
-
-const OPENROUTER_DEFAULT_URL = 'https://openrouter.ai/api/v1/chat/completions'
+import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider'
 const TRANSLATION_MODEL =
   process.env.MODEL_TRANSLATOR?.trim() ||
   process.env.MODEL_GEMINI_FLASH?.trim() ||
-  'google/gemini-3-flash-preview'
+  'google/gemini-3.8-flash'
 
 const LOCALE_TO_LANGUAGE: Record<string, string> = {
   en: 'English',
@@ -20,14 +19,6 @@ const LOCALE_TO_LANGUAGE: Record<string, string> = {
   'zh-CN': 'Simplified Chinese',
 }
 
-function resolveApiUrl(): string {
-  const baseUrl = process.env.OPENROUTER_BASE_URL?.trim()
-  if (!baseUrl) return OPENROUTER_DEFAULT_URL
-  return baseUrl.endsWith('/chat/completions')
-    ? baseUrl
-    : `${baseUrl.replace(/\/+$/, '')}/chat/completions`
-}
-
 function parseJsonTranslations(raw: string): string[] | null {
   try {
     const parsed = JSON.parse(raw)
@@ -39,6 +30,7 @@ function parseJsonTranslations(raw: string): string[] | null {
 }
 
 export async function POST(request: NextRequest) {
+  let fallbackTranslations: string[] = []
   try {
     const { locale, texts } = await request.json()
 
@@ -54,6 +46,7 @@ export async function POST(request: NextRequest) {
       .map((item) => String(item ?? '').trim())
       .filter(Boolean)
       .slice(0, 40)
+    fallbackTranslations = normalized
 
     if (normalized.length === 0) {
       return NextResponse.json({ translations: [] })
@@ -63,20 +56,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ translations: normalized })
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY?.trim()
-    if (!apiKey) {
-      return NextResponse.json({ translations: normalized })
-    }
-
     const targetLanguage = LOCALE_TO_LANGUAGE[locale] || 'English'
 
-    const response = await fetch(resolveApiUrl(), {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    const response = await postLlmChatCompletionsWithFallback(
+      {
         model: TRANSLATION_MODEL,
         temperature: 0,
         max_tokens: 4000,
@@ -93,8 +76,9 @@ export async function POST(request: NextRequest) {
             content: JSON.stringify({ texts: normalized }),
           },
         ],
-      }),
-    })
+      },
+      { timeoutMs: 45000 }
+    )
 
     if (!response.ok) {
       return NextResponse.json({ translations: normalized })
@@ -113,7 +97,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ translations: parsed })
   } catch {
-    return NextResponse.json({ translations: [] })
+    return NextResponse.json({ translations: fallbackTranslations })
   }
 }
 

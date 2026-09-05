@@ -237,11 +237,11 @@ export default function Navigation({ locale }: Props) {
             <p className="font-semibold mb-1">Clinical Assistant v3.50</p>
             <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">{ui.clinicalEdition}</p>
             <ul className="space-y-1 text-xs opacity-70">
-              <li>• Opus 5 + Fable 5 + Gemini 3 Flash</li>
+              <li>• Opus 5 + Fable 5.1 + Gemini 3.8 Flash</li>
               <li>• DICOM Viewer + Measure</li>
               <li>• Multi-modal (Images + Labs)</li>
               <li>• Trend Analysis & RAG</li>
-              <li>• Consilium: Fable 5 for complex debate rounds</li>
+              <li>• Consilium: Fable 5.1 for complex debate rounds</li>
               <li className="text-teal-400 font-bold mt-2">🛡️ Clinical Decision Support</li>
             </ul>
           </div>

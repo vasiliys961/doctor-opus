@@ -418,7 +418,7 @@ export default function VideoPage() {
       if (data.success) {
         setResult(data.result || 'Analysis complete')
         setCurrentCost(data.cost || 0)
-        setModel(data.model || 'google/gemini-3-flash-preview')
+        setModel(data.model || 'google/gemini-3.8-flash')
         setMode(data.mode || 'fast')
         setStage1TechnicalData('')
         setShowTechnicalData(false)
@@ -426,7 +426,7 @@ export default function VideoPage() {
         // Логирование использования
         logUsage({
           section: 'video-frames',
-          model: data.model || 'google/gemini-3-flash-preview',
+          model: data.model || 'google/gemini-3.8-flash',
           inputTokens: data.usage?.prompt_tokens || 0, 
           outputTokens: data.usage?.completion_tokens || 0,
         })
@@ -492,13 +492,13 @@ export default function VideoPage() {
         setStage1TechnicalData(data.description || '')
         setShowTechnicalData(false)
         setCurrentCost(data.cost || 0)
-        setModel(data.model || 'google/gemini-3-flash-preview')
+        setModel(data.model || 'google/gemini-3.8-flash')
         setMode('fast')
         
         // Логирование использования
         logUsage({
           section: 'video-full',
-          model: data.model || 'google/gemini-3-flash-preview',
+          model: data.model || 'google/gemini-3.8-flash',
           inputTokens: data.usage?.prompt_tokens || 5000, 
           outputTokens: data.usage?.completion_tokens || 4000,
         })

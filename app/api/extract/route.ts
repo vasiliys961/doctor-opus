@@ -7,6 +7,8 @@ import * as XLSX from 'xlsx';
 import AdmZip from 'adm-zip';
 import { normalizeMarkdown } from '@/lib/markdown-utils';
 import { anonymizeText } from '@/lib/anonymization';
+import { getLlmApiKey } from '@/lib/llm-provider';
+import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 const gunzipAsync = promisify(gunzip);
 
@@ -17,9 +19,13 @@ const gunzipAsync = promisify(gunzip);
  */
 export async function POST(request: NextRequest) {
   try {
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const prompt = anonymizeText(formData.get('prompt') as string || 'Extract all information from the file. Structure the data.');
+    const prompt = appendLanguageInstruction(
+      anonymizeText(formData.get('prompt') as string || 'Extract all information from the file. Structure the data.'),
+      responseLanguageInstruction
+    );
 
     if (!file) {
       return NextResponse.json(
@@ -28,10 +34,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    try {
+      getLlmApiKey();
+    } catch {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
+        { success: false, error: 'LLM API key is not configured' },
         { status: 500 }
       );
     }
@@ -102,7 +109,7 @@ export async function POST(request: NextRequest) {
 
         // Для VCF - парсим и структурируем
         if (fileType === 'vcf') {
-          const vcfPrompt = `${prompt}\n\nЭто VCF файл с генетическими вариантами. Проанализируй структуру, извлеки метаданные и варианты.`;
+          const vcfPrompt = `${prompt}\n\nThis is a VCF file with genetic variants. Analyze structure, metadata, and variants.`;
           const result = await sendTextRequest(`${vcfPrompt}\n\nДанные VCF:\n${textContent.substring(0, 100000)}`);
           
           return NextResponse.json({
@@ -119,7 +126,7 @@ export async function POST(request: NextRequest) {
 
         // Для CSV - структурируем данные
         if (fileType === 'csv') {
-          const csvPrompt = `${prompt}\n\nЭто CSV файл. Извлеки все данные, структурируй в таблицу, определи параметры и их значения.`;
+          const csvPrompt = `${prompt}\n\nThis is a CSV file. Extract all data, structure it as a table, and identify parameters with values.`;
           const result = await sendTextRequest(`${csvPrompt}\n\nДанные CSV:\n${textContent}`);
           
           return NextResponse.json({
@@ -161,7 +168,7 @@ export async function POST(request: NextRequest) {
           ? textContent.substring(0, maxSize) + '\n\n... (файл обрезан, слишком большой)'
           : textContent;
         
-        const vcfPrompt = `${prompt}\n\nЭто VCF файл с генетическими вариантами (распакован из GZ). Проанализируй структуру, извлеки метаданные и варианты.`;
+        const vcfPrompt = `${prompt}\n\nThis is a VCF file with genetic variants (unpacked from GZ). Analyze structure, metadata, and variants.`;
         const result = await sendTextRequest(`${vcfPrompt}\n\nДанные VCF:\n${processedContent.substring(0, 100000)}`);
         
         const normalizedResult = normalizeMarkdown(result);
@@ -206,7 +213,7 @@ export async function POST(request: NextRequest) {
           csvContent = csvContent.substring(0, maxSize) + '\n\n... (файл обрезан, слишком большой)';
         }
         
-        const excelPrompt = `${prompt}\n\nЭто Excel файл (конвертирован в CSV). Извлеки все данные, структурируй в таблицу, определи параметры и их значения.`;
+        const excelPrompt = `${prompt}\n\nThis is an Excel file (converted to CSV). Extract all data, structure it as a table, and identify parameters with values.`;
         const result = await sendTextRequest(`${excelPrompt}\n\nДанные Excel:\n${csvContent}`);
         
         const normalizedResult = normalizeMarkdown(result);
@@ -260,7 +267,7 @@ export async function POST(request: NextRequest) {
               const imageBuffer = entry.getData();
               const base64Image = imageBuffer.toString('base64');
               
-              const imagePrompt = `${prompt}\n\nЭто изображение из ZIP архива. Извлеки весь текст и структурируй данные.`;
+              const imagePrompt = `${prompt}\n\nThis is an image from a ZIP archive. Extract all text and structure the data.`;
               const imageResult = await analyzeImage({
                 prompt: imagePrompt,
                 imageBase64: base64Image,
@@ -301,7 +308,7 @@ export async function POST(request: NextRequest) {
           combinedContent = combinedContent.substring(0, maxSize) + '\n\n... (содержимое обрезано, слишком большое)';
         }
         
-        const zipPrompt = `${prompt}\n\nЭто содержимое ZIP архива. Извлеки всю информацию из всех файлов, структурируй данные.`;
+        const zipPrompt = `${prompt}\n\nThis is ZIP archive content. Extract all information from all files and structure the data.`;
         const result = await sendTextRequest(`${zipPrompt}\n\nСодержимое архива:\n${combinedContent}`);
         
         const normalizedResult = normalizeMarkdown(result);

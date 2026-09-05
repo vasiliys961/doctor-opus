@@ -294,7 +294,7 @@ export default function GeneticPage() {
 
         setExtractedData(extractionData.extractedData || '')
         
-        const ocrModel = extractionData.ocrModel || 'google/gemini-3-flash-preview';
+        const ocrModel = extractionData.ocrModel || 'google/gemini-3.8-flash';
         logUsage({
           section: 'genetic',
           model: ocrModel,
@@ -325,7 +325,7 @@ export default function GeneticPage() {
         setExtractedData(extractionData.extractedData || '')
         logUsage({
           section: 'genetic',
-          model: 'google/gemini-3-flash-preview',
+          model: 'google/gemini-3.8-flash',
           inputTokens: 3000,
           outputTokens: 2000,
         })

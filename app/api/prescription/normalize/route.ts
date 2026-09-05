@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { MODELS, sendTextRequest } from '@/lib/openrouter'
+import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language'
 
 type PrescriptionForm = 'Tab.' | 'Sol.' | 'Ung.' | 'Caps.' | 'Supp.' | 'Gtt.'
 type SourceType = 'mnn' | 'brand' | 'unknown'
@@ -89,6 +90,7 @@ function sanitizeMedication(item: any, fallback: MedicationInput): MedicationOut
 
 export async function POST(request: NextRequest) {
   try {
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest()
     const body = await request.json()
     const items = Array.isArray(body?.items) ? (body.items as MedicationInput[]) : []
     if (!items.length) {
@@ -98,7 +100,8 @@ export async function POST(request: NextRequest) {
     const cappedItems = items.slice(0, 18)
     const model = process.env.PRESCRIPTION_NORMALIZER_MODEL?.trim() || MODELS.HAIKU
 
-    const systemPrompt = `Ты клинический фармаколог и врач, оформляющий рецепты по форме 107-1/у.
+    const systemPrompt = `${responseLanguageInstruction}
+Ты клинический фармаколог и врач, оформляющий рецепты по форме 107-1/у.
 Твоя цель: нормализовать строки назначений в формат Rp./S. для печати рецепта.
 Ориентируйся на общепринятые фарм-справочные нормы (уровень Vidal/РЛС), без выдумывания редких доз.
 

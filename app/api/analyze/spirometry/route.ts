@@ -5,8 +5,9 @@ import { getRateLimitKey } from '@/lib/rate-limiter'
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing'
 import { getRequestLocale } from '@/lib/i18n/server'
 import { getSpirometryMessages } from '@/lib/i18n/spirometry'
+import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider'
+import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language'
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const PRIMARY_MODEL = 'openai/gpt-5.6-terra'
 const FALLBACK_MODEL = 'anthropic/claude-sonnet-5'
 
@@ -25,16 +26,18 @@ export async function POST(request: NextRequest) {
   try {
     const locale = await getRequestLocale()
     const t = getSpirometryMessages(locale)
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest()
     const session = await getServerSession(authOptions)
     const userEmail = session?.user?.email || null
     const guestKey = userEmail ? null : getRateLimitKey(request)
 
     const formData = await request.formData()
-    const prompt = formData.get('prompt') as string
+    const rawPrompt = formData.get('prompt') as string
+    const prompt = appendLanguageInstruction(String(rawPrompt || ''), responseLanguageInstruction)
     const file = formData.get('file') as File | null
     const isTextOnly = formData.get('isTextOnly') === 'true'
 
-    if (!prompt) {
+    if (!rawPrompt) {
       return NextResponse.json({ success: false, error: t.noPrompt }, { status: 400 })
     }
 
@@ -75,21 +78,21 @@ export async function POST(request: NextRequest) {
     }
 
     const runRequest = async (model: string) => {
-      return fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': process.env.NEXTAUTH_URL || 'https://doctor-opus.ru',
-          'X-Title': 'Doctor Opus — Spirometry',
-        },
-        body: JSON.stringify({
+      return postLlmChatCompletionsWithFallback(
+        {
           model,
           messages,
           max_tokens: 2000,
           temperature: 0.2,
-        }),
-      })
+        },
+        {
+          headers: {
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.NEXTAUTH_URL || 'https://doctor-opus.ru',
+          'X-Title': 'Doctor Opus — Spirometry',
+          },
+        }
+      )
     }
 
     let modelUsed = PRIMARY_MODEL

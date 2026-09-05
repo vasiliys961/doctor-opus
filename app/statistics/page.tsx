@@ -11,11 +11,13 @@ import type { Locale } from '@/lib/i18n/config'
 const MODEL_PRICING = {
   'anthropic/claude-opus-5': { input: 5.0, output: 25.0 },
   'anthropic/claude-fable-5': { input: 10.0, output: 50.0 },
+  'anthropic/claude-fable-5.1': { input: 10.0, output: 50.0 },
   'anthropic/claude-sonnet-5': { input: 3.0, output: 15.0 },
   'openai/gpt-5.6-terra': { input: 2.5, output: 15.0 },
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
-  'google/gemini-3-flash': { input: 0.50, output: 3.00 },
   'google/gemini-3-flash-preview': { input: 0.50, output: 3.00 },
+  'google/gemini-3-flash': { input: 0.50, output: 3.00 },
+  'google/gemini-3.8-flash': { input: 0.50, output: 3.00 },
   'google/gemini-3-pro': { input: 2.00, output: 12.00 },
   'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },
 }

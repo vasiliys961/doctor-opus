@@ -3,12 +3,14 @@ import { MODELS } from '@/lib/openrouter';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider';
+import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const LABS_ANALYSIS_COST = 1.5;
 
 export async function POST(req: Request) {
   try {
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
     const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email || null;
     const guestKey = userEmail
@@ -46,24 +48,19 @@ export async function POST(req: Request) {
     const base64 = Buffer.from(bytes).toString('base64');
     const mimeType = file.type || 'image/png';
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
-    }
-
     const payload = {
       model: MODELS.GEMINI_3_FLASH,
       messages: [
         {
           role: 'system',
-          content: 'Ты — медицинский ассистент, специализирующийся на оцифровке лабораторных анализов. Твоя задача — извлечь все показатели, их значения и референсные интервалы. Верни результат в виде структурированного текста.'
+          content: `${responseLanguageInstruction}\nYou are a medical assistant specialized in digitizing laboratory reports. Extract all markers, values, units, and reference intervals. Return a structured text report.`
         },
         {
           role: 'user',
           content: [
             {
               type: 'text',
-              text: 'Извлеки все данные из этого лабораторного анализа. Укажи название теста, результат, единицы измерения и референсные значения. Если есть отклонения, пометь их.'
+              text: 'Extract all data from this laboratory report. Include test name, result, units, and reference ranges. Mark abnormal findings explicitly.'
             },
             {
               type: 'image_url',
@@ -78,16 +75,17 @@ export async function POST(req: Request) {
       temperature: 0.1
     };
 
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
+    const response = await postLlmChatCompletionsWithFallback(payload, {
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
         'HTTP-Referer': 'https://doctor-opus.ru',
         'X-Title': 'Doctor Opus',
       },
-      body: JSON.stringify(payload)
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return NextResponse.json({ success: false, error: `AI request failed: ${response.status} ${errorText.substring(0, 200)}` }, { status: response.status });
+    }
 
     const data = await response.json();
     const labsText = data.choices?.[0]?.message?.content || 'Не удалось извлечь данные';

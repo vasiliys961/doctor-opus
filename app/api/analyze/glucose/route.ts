@@ -3,8 +3,9 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getRateLimitKey } from '@/lib/rate-limiter'
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing'
+import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider'
+import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language'
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const PRIMARY_MODEL = 'openai/gpt-5.6-terra'
 const FALLBACK_MODEL = 'anthropic/claude-sonnet-5'
 
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
     const stats = JSON.parse(statsRaw)
     const patientInfo = patientInfoRaw ? JSON.parse(patientInfoRaw) : {}
     const hourlyStats = hourlyStatsRaw ? JSON.parse(hourlyStatsRaw) : []
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest()
 
     // Биллинг
     const estimatedCost = getAnalysisCost('optimized', file ? 1 : 0)
@@ -56,46 +58,46 @@ export async function POST(request: NextRequest) {
     // Суточный профиль по часам (топ проблемные периоды)
     const problematicHours = hourlyStats
       .filter((h: any) => h.avg > 10 || h.avg < 3.9)
-      .map((h: any) => `${String(h.hour).padStart(2,'0')}:00 — среднее ${h.avg} ммоль/л (${h.min}–${h.max})`)
-      .join('\n') || 'Не выявлено'
+      .map((h: any) => `${String(h.hour).padStart(2,'0')}:00 — average ${h.avg} mmol/L (${h.min}–${h.max})`)
+      .join('\n') || 'None detected'
 
     const patientText = [
-      patientInfo.age       && `Возраст: ${patientInfo.age} лет`,
-      patientInfo.sex       && `Пол: ${patientInfo.sex}`,
-      patientInfo.diabetesType && `СД ${patientInfo.diabetesType} типа`,
-      patientInfo.hba1c     && `HbA1c последний: ${patientInfo.hba1c}%`,
+      patientInfo.age       && `Age: ${patientInfo.age} years`,
+      patientInfo.sex       && `Sex: ${patientInfo.sex}`,
+      patientInfo.diabetesType && `Diabetes type: ${patientInfo.diabetesType}`,
+      patientInfo.hba1c     && `Last HbA1c: ${patientInfo.hba1c}%`,
     ].filter(Boolean).join(', ')
 
-    const prompt = `Вы эндокринолог. Проанализируйте данные непрерывного мониторинга глюкозы (CGM) за ${daysCount} дней (${pointsCount} измерений).
+    const prompt = appendLanguageInstruction(`You are an endocrinologist. Analyze continuous glucose monitoring (CGM) data for ${daysCount} days (${pointsCount} measurements).
 
-${patientText ? `Пациент: ${patientText}\n` : ''}
-МЕТРИКИ ГЛИКЕМИЧЕСКОГО КОНТРОЛЯ:
-• Среднее: ${stats.avg} ммоль/л
-• GMI (расчётный HbA1c): ${stats.gmi}%
-• Вариабельность (CV): ${stats.cv}% ${stats.cv > 36 ? '⚠️ ВЫСОКАЯ' : '✓ приемлемая'}
-• Min/Max: ${stats.min} / ${stats.max} ммоль/л
+${patientText ? `Patient: ${patientText}\n` : ''}
+GLYCEMIC CONTROL METRICS:
+• Mean glucose: ${stats.avg} mmol/L
+• GMI (estimated HbA1c): ${stats.gmi}%
+• Variability (CV): ${stats.cv}% ${stats.cv > 36 ? '⚠️ HIGH' : '✓ acceptable'}
+• Min/Max: ${stats.min} / ${stats.max} mmol/L
 
-ВРЕМЯ В ДИАПАЗОНЕ (TIR):
-• В целевом диапазоне 3.9–10 ммоль/л: ${stats.tir}% ${stats.tir >= 70 ? '✓' : '⚠️ НИЖЕ ЦЕЛИ 70%'}
-• Выше 10 ммоль/л (гипергликемия): ${stats.tar}%
-• Ниже 3.9 ммоль/л (гипогликемия): ${stats.tbr}% (${stats.hypoCount} эпизодов)
+TIME IN RANGE (TIR):
+• In target range 3.9–10 mmol/L: ${stats.tir}% ${stats.tir >= 70 ? '✓' : '⚠️ BELOW 70% TARGET'}
+• Above 10 mmol/L (hyperglycemia): ${stats.tar}%
+• Below 3.9 mmol/L (hypoglycemia): ${stats.tbr}% (${stats.hypoCount} episodes)
 
-СУТОЧНЫЙ ПРОФИЛЬ:
-• Ночью (00–06): ${stats.nightAvg} ммоль/л
-• Днём (06–24): ${stats.dayAvg} ммоль/л
+DAILY PROFILE:
+• Night (00–06): ${stats.nightAvg} mmol/L
+• Day (06–24): ${stats.dayAvg} mmol/L
 
-ПРОБЛЕМНЫЕ ПЕРИОДЫ:
+PROBLEMATIC PERIODS:
 ${problematicHours}
-${file ? '\nПредоставлен AGP-график (см. изображение).' : ''}
+${file ? '\nAGP chart attached (see image).' : ''}
 
-Составьте клиническое заключение по следующей структуре:
-1. **Оценка гликемического контроля** (компенсирован/субкомпенсирован/декомпенсирован)
-2. **Анализ TIR** — достижение целей, основные проблемы
-3. **Гипогликемии** — риск, паттерны, рекомендации
-4. **Гипергликемии** — паттерны, возможные причины (утренняя зора, постпрандиальные пики и др.)
-5. **Вариабельность гликемии** — клиническое значение
-6. **Рекомендации** — коррекция терапии, питания, мониторинга
-7. **Краткое заключение** (2-3 предложения)`
+Provide a clinical conclusion in this structure:
+1. Glycemic control status (compensated/subcompensated/decompensated)
+2. TIR analysis: target achievement and major issues
+3. Hypoglycemia: risk, patterns, recommendations
+4. Hyperglycemia: patterns and likely causes (dawn phenomenon, postprandial peaks, etc.)
+5. Glycemic variability and clinical significance
+6. Recommendations: therapy, nutrition, and monitoring adjustments
+7. Brief summary (2-3 sentences)`, responseLanguageInstruction)
 
     // Формируем запрос к OpenRouter
     const messages: any[] = []
@@ -115,16 +117,16 @@ ${file ? '\nПредоставлен AGP-график (см. изображен�
     }
 
     const runRequest = async (model: string) => {
-      return fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      return postLlmChatCompletionsWithFallback(
+        { model, messages, max_tokens: 2500, temperature: 0.2 },
+        {
+          headers: {
           'Content-Type': 'application/json',
           'HTTP-Referer': process.env.NEXTAUTH_URL || 'https://doctor-opus.ru',
           'X-Title': 'Doctor Opus — Glucose Profile',
-        },
-        body: JSON.stringify({ model, messages, max_tokens: 2500, temperature: 0.2 }),
-      })
+          },
+        }
+      )
     }
 
     let modelUsed = PRIMARY_MODEL

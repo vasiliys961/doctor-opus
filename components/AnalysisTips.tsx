@@ -29,7 +29,7 @@ const RECOMMENDATION_TEXT: Record<
   lab: {
     title: 'Model recommendation',
     lines: [
-      'Use Fast mode (Gemini 3 Flash) for reliable extraction from tables and lab forms.',
+      'Use Fast mode (Gemini 3.8 Flash) for reliable extraction from tables and lab forms.',
       'Use Optimized mode for balanced interpretation of abnormal values.',
       'Use Expert Validated when nuanced differential interpretation is required.',
       'If Claude is unavailable in your region, use GPT-5.6 Terra as fallback.',
@@ -66,7 +66,7 @@ const RECOMMENDATION_TEXT: Record<
     title: 'Model recommendation',
     lines: [
       'Consilium starts with a multi-specialty round for broad clinical coverage.',
-      'For complex or conflicting cases, the system escalates to role-based debate on Claude Fable 5.',
+      'For complex or conflicting cases, the system escalates to role-based debate on Claude Fable 5.1.',
       'Use Consilium when you need disagreement analysis and safer consensus building.',
       'If escalation is blocked by balance, a round-0 clinical summary is still returned for manual review.',
     ],

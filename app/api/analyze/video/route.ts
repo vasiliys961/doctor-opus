@@ -5,6 +5,8 @@ import { anonymizeText } from '@/lib/anonymization';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { checkAndDeductBalance } from '@/lib/server-billing';
+import { getLlmApiKey } from '@/lib/llm-provider';
+import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 // Максимальное время выполнения для тяжелых видео (5 минут)
 export const maxDuration = 300;
@@ -26,26 +28,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ... (код проверки API ключа и файла остается прежним)
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      console.error('OPENROUTER_API_KEY не найден в переменных окружения');
+    try {
+      getLlmApiKey();
+    } catch {
+      console.error('LLM API key is not configured');
       return NextResponse.json(
         {
           success: false,
-          error: 'OPENROUTER_API_KEY не настроен. Проверьте .env.local.',
+          error: 'LLM_API_KEY (or OPENROUTER_API_KEY) is not configured. Проверьте .env.local.',
         },
         { status: 500 },
       );
     }
 
     const formData = await request.formData();
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
     const file = formData.get('file') as File | null;
     const rawPrompt = (formData.get('prompt') as string | null) || undefined;
     const rawAdditionalContext = formData.get('additionalContext') as string | null;
     
     // Анонимизация текстовых данных
     const prompt = rawPrompt ? anonymizeText(rawPrompt) : undefined;
+    const languageAwarePrompt = appendLanguageInstruction(
+      prompt || 'Analyze this medical video study and produce a clinically actionable conclusion.',
+      responseLanguageInstruction
+    );
     const additionalContext = rawAdditionalContext ? anonymizeText(rawAdditionalContext) : null;
     
     const imageType = (formData.get('imageType') as any) || 'universal';
@@ -127,7 +134,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { description, analysis, usage } = await analyzeVideoTwoStage({
-      prompt: prompt || undefined,
+      prompt: languageAwarePrompt,
       videoBase64,
       mimeType,
       imageType,
@@ -136,7 +143,7 @@ export async function POST(request: NextRequest) {
 
     // Рассчитываем стоимость
     let cost = 0;
-    const model = 'google/gemini-3-flash-preview';
+    const model = 'google/gemini-3.8-flash';
     if (usage) {
       const costInfo = calculateCost(usage.prompt_tokens, usage.completion_tokens, model);
       cost = costInfo.totalCostUnits;
@@ -156,7 +163,7 @@ export async function POST(request: NextRequest) {
     const message = error?.message || 'Internal server error';
     let status = 500;
 
-    if (message.includes('OPENROUTER_API_KEY')) {
+    if (message.includes('OPENROUTER_API_KEY') || message.includes('LLM_API_KEY')) {
       status = 500;
     } else if (message.includes('network') || message.includes('fetch failed')) {
       status = 503;

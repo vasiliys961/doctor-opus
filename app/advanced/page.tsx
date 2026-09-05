@@ -79,7 +79,7 @@ Clinical information: ${additionalContext}
 Additional files: ${additionalFiles.length}`
 
       const modelToUse = mode === 'fast' 
-        ? 'google/gemini-3-flash-preview' 
+        ? 'google/gemini-3.8-flash' 
         : mode === 'optimized' 
           ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra')
           : 'anthropic/claude-opus-5'
@@ -146,7 +146,7 @@ Additional files: ${additionalFiles.length}`
           validated: "Two-stage expert analysis (Gemini JSON + Opus 5) — combining Gemini's visual accuracy and Opus's clinical intelligence.",
           extra: [
             "⭐ Recommended mode: «Optimized» (Gemini JSON + Sonnet) — best choice for image analysis with clinical description.",
-            "🧠 For complex multi-specialty disagreement cases, switch to Consilium mode in AI Assistant (escalation uses Fable 5 debate).",
+            "🧠 For complex multi-specialty disagreement cases, switch to Consilium mode in AI Assistant (escalation uses Fable 5.1 debate).",
             "📎 You can attach additional PDFs, DOCX, or photos for contextual analysis.",
             "📡 Streaming lets you see the report being generated in real time."
           ]

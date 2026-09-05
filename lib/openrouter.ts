@@ -9,11 +9,10 @@ import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, 
 import { safeLog, safeError, safeWarn } from './logger';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
 import { getValidatedOpusModel } from './validated-opus-model';
-import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
+import { getLlmApiKey, getLlmChatCompletionsUrl, getLlmEndpointChain, postLlmChatCompletionsWithFallback } from './llm-provider';
 import { appendClinicalDraftDisclaimer } from './clinical-disclaimer';
 
 const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
-const DEFAULT_OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // В Next.js 14 используется встроенный fetch из Node.js 18+
 // fetch доступен глобально на сервере
@@ -27,9 +26,9 @@ export const MODELS = {
   GROK_4_5: 'x-ai/grok-4.5',                         // xAI Grok 4.5
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
-  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
-  GEMINI_3_PRO: 'google/gemini-3.1-pro-preview',           // Gemini 3.1 Pro Preview
-  FABLE_5: 'anthropic/claude-fable-5',                   // Claude Fable 5 — глубина рассуждений (HealthBench Professional)
+  GEMINI_3_FLASH: 'google/gemini-3.8-flash',       // Gemini 3.8 Flash
+  GEMINI_3_PRO: 'google/gemini-3.8-flash',         // Secondary vision model (same as flash)
+  FABLE_5: 'anthropic/claude-fable-5.1',           // Claude Fable 5.1 — deep clinical reasoning
   FUGU_ULTRA: 'sakana/fugu-ultra',                       // Sakana Fugu Ultra — резервная модель без прямых мед. бенчмарков
 };
 
@@ -70,6 +69,41 @@ interface StreamingOptions {
  * Вспомогательная функция для fetch с таймаутом
  */
 async function fetchWithTimeout(url: string, options: any, timeout = 300000) {
+  const method = String(options?.method || 'GET').toUpperCase();
+  const isChatCompletionsRequest = method === 'POST' && url.includes('/chat/completions');
+  if (isChatCompletionsRequest && options?.body) {
+    try {
+      const payload = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+      const rawHeaders = options?.headers;
+      const normalizedHeaders: Record<string, string> = {};
+      if (rawHeaders instanceof Headers) {
+        rawHeaders.forEach((value, key) => {
+          if (key.toLowerCase() === 'authorization') return;
+          if (key.toLowerCase() === 'content-type') return;
+          normalizedHeaders[key] = value;
+        });
+      } else if (Array.isArray(rawHeaders)) {
+        for (const [key, value] of rawHeaders) {
+          if (String(key).toLowerCase() === 'authorization') continue;
+          if (String(key).toLowerCase() === 'content-type') continue;
+          normalizedHeaders[String(key)] = String(value);
+        }
+      } else if (rawHeaders && typeof rawHeaders === 'object') {
+        for (const [key, value] of Object.entries(rawHeaders)) {
+          if (key.toLowerCase() === 'authorization') continue;
+          if (key.toLowerCase() === 'content-type') continue;
+          normalizedHeaders[key] = String(value);
+        }
+      }
+      return postLlmChatCompletionsWithFallback(payload, {
+        headers: normalizedHeaders,
+        timeoutMs: timeout,
+      });
+    } catch {
+      // fallback to plain fetch below
+    }
+  }
+
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   
@@ -123,7 +157,7 @@ function shouldUsePermissionFallback(primaryModel: string, status: number, error
   );
 }
 
-type RoutingImageQuality = 'good' | 'moderate' | 'poor';
+type RoutingImageQuality = 'good' | 'acceptable' | 'moderate' | 'poor' | 'non_diagnostic';
 
 interface RoutingMetadata {
   self_confidence?: number;
@@ -157,7 +191,7 @@ function shouldUseProByRouting(modality: string, routing: RoutingMetadata): { es
   if (typeof routing.difficulty_level === 'number' && routing.difficulty_level >= 4) {
     reasons.push('high_difficulty');
   }
-  if (routing.image_quality === 'poor') {
+  if (routing.image_quality === 'poor' || routing.image_quality === 'non_diagnostic') {
     reasons.push('poor_image_quality');
   }
   if (routing.ambiguous_findings) {
@@ -385,15 +419,13 @@ export async function analyzeImageFast(options: {
       MODELS.SONNET
     ];
     
-    const contextPrompt = `You are an expert medical assistant with professor-level clinical competence. Based on these data and your expertise, provide a clinical directive. RESPOND STRICTLY IN ENGLISH.
+    const contextPrompt = `You are an expert medical assistant with professor-level clinical competence. Based on these data and your expertise, provide a clinical directive.
 
 === STRUCTURED DATA (GEMINI 3.0) ===
 ${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 \n=== INSTRUCTION ===
 ${directivePrompt}
-${options.clinicalContext ? `\nPatient context: ${options.clinicalContext}` : ''}
-
-RESPOND STRICTLY IN ENGLISH.`;
+${options.clinicalContext ? `\nPatient context: ${options.clinicalContext}` : ''}`;
     
     const messages = [
       { role: 'system', content: resolvePromptRuntimeVars(SYSTEM_PROMPT) },
@@ -404,7 +436,7 @@ RESPOND STRICTLY IN ENGLISH.`;
 
     for (const textModel of textModels) {
       for (let attempt = 0; attempt < 2; attempt++) {
-        const textResponse = await fetch(OPENROUTER_API_URL, {
+        const textResponse = await fetchWithTimeout(OPENROUTER_API_URL, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -418,7 +450,7 @@ RESPOND STRICTLY IN ENGLISH.`;
             max_tokens: 10000, // Оптимизировано: текстовый анализ
             temperature: 0.1,
           })
-        });
+        }, 120000);
 
         if (textResponse.ok) {
           const textData = await textResponse.json();
@@ -509,7 +541,7 @@ ${options.clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${options.clinicalCo
     safeLog(`🚀 [TWO-STAGE] Шаг 2: ${textModel} анализирует данные (JSON)...`);
     
     const runStage2Request = async (targetModel: string) => {
-      return fetch(OPENROUTER_API_URL, {
+      return fetchWithTimeout(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
@@ -699,6 +731,7 @@ export async function extractImageJSON(options: {
     MODELS.HAIKU,
     MODELS.GPT_5_2,
   ];
+  const hasDistinctProVisionModel = MODELS.GEMINI_3_PRO !== MODELS.GEMINI_3_FLASH;
 
   // Fast path for forced model and non-smart routing
   if (!smartRoutingEnabled || preferModel !== MODELS.GEMINI_3_FLASH) {
@@ -739,6 +772,18 @@ export async function extractImageJSON(options: {
     flashResult = await callModel(MODELS.GEMINI_3_FLASH, 60000);
   } catch (error: any) {
     safeWarn(`⚠️ [SMART ROUTER] Flash unavailable, trying Pro: ${error.message}`);
+    if (!hasDistinctProVisionModel) {
+      safeWarn('⚠️ [SMART ROUTER] Secondary Gemini model is not configured, using non-Gemini fallbacks');
+      for (const model of nonGeminiFallbackModels) {
+        try {
+          return await callModel(model, 90000);
+        } catch (fallbackError: any) {
+          safeWarn(`⚠️ [SMART ROUTER] Fallback error with ${model}: ${fallbackError.message}`);
+          if (String(fallbackError.message).includes('[429]')) await sleep(1500);
+        }
+      }
+      throw new Error('Failed to extract JSON via all available vision models');
+    }
     try {
       return await callModel(MODELS.GEMINI_3_PRO, 90000);
     } catch (proError: any) {
@@ -761,6 +806,14 @@ export async function extractImageJSON(options: {
 
   if (!decision.escalate) {
     return flashResult;
+  }
+
+  if (!hasDistinctProVisionModel) {
+    safeWarn('⚠️ [SMART ROUTER] Escalation requested, but secondary Gemini model is not configured. Returning Flash result.');
+    return {
+      ...flashResult,
+      router: { decision: 'flash_no_secondary_gemini', reasons: decision.reasons }
+    };
   }
 
   try {
@@ -840,7 +893,7 @@ export async function analyzeMultipleImagesTwoStage(options: {
     
     const contextPrompt = `${options.isComparative
       ? 'You are an expert medical assistant with professor-level competence. Provide a comparative clinical interpretation of data from MULTIPLE images supplied by the specialist.'
-      : 'You are an expert medical assistant with professor-level competence. Provide one integrated clinical analysis of images from a single study, without temporal trend interpretation.'} RESPOND STRICTLY IN ENGLISH.
+      : 'You are an expert medical assistant with professor-level competence. Provide one integrated clinical analysis of images from a single study, without temporal trend interpretation.'}
 
 ### SPECIALIST DATA (JSON):
 ${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
@@ -854,7 +907,7 @@ ${directiveCriteria}`;
     safeLog(`🚀 [MULTI-TWO-STAGE] Шаг 2: ${textModel} анализирует данные (JSON)...`);
 
     const runStage2Request = async (targetModel: string) => {
-      return fetch(OPENROUTER_API_URL, {
+      return fetchWithTimeout(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
@@ -1088,11 +1141,10 @@ export async function sendTextRequestWithUsage(
   specialty?: Specialty,
   customSystemPrompt?: string
 ): Promise<TextRequestResult> {
-  const apiKey = getLlmApiKey();
-  
-  if (!apiKey) {
-    safeError('LLM_API_KEY / OPENROUTER_API_KEY не найден в переменных окружения');
-    throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured. Check environment variables.');
+  const providerEndpoints = getLlmEndpointChain();
+  if (!providerEndpoints.length) {
+    safeError('LLM provider endpoints are not configured');
+    throw new Error('LLM provider endpoints are not configured. Check environment variables.');
   }
 
   let selectedModel = model;
@@ -1125,7 +1177,7 @@ export async function sendTextRequestWithUsage(
     safeLog('Calling OpenRouter API for text:', {
       url: OPENROUTER_API_URL,
       model: selectedModel,
-      hasApiKey: !!apiKey,
+      hasApiKey: providerEndpoints.some((endpoint) => Boolean(endpoint.apiKey)),
       promptLength: prompt.length
     });
 
@@ -1134,12 +1186,8 @@ export async function sendTextRequestWithUsage(
     let response: Response | null = null;
     const sendWithRetries = async (targetModel: string): Promise<Response> => {
       let attemptResponse: Response | null = null;
-      const urlsToTry = OPENROUTER_API_URL === DEFAULT_OPENROUTER_API_URL
-        ? [OPENROUTER_API_URL]
-        : [OPENROUTER_API_URL, DEFAULT_OPENROUTER_API_URL];
-
       let lastError: any = null;
-      for (const apiUrl of urlsToTry) {
+      for (const endpoint of providerEndpoints) {
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
           const payload = {
             model: targetModel,
@@ -1148,10 +1196,10 @@ export async function sendTextRequestWithUsage(
             temperature: 0.1,
           };
           try {
-            attemptResponse = await fetchWithTimeout(apiUrl, {
+            attemptResponse = await fetchWithTimeout(endpoint.chatCompletionsUrl, {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${apiKey}`,
+                'Authorization': `Bearer ${endpoint.apiKey}`,
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify(payload)

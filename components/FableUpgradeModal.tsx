@@ -33,15 +33,15 @@ export default function FableUpgradeModal({
         onClick={(event) => event.stopPropagation()}
       >
         <h3 className="text-lg font-bold text-slate-900 mb-2">
-          Для сложного случая рекомендуется Fable 5
+          Для сложного случая рекомендуется Fable 5.1
         </h3>
         <p className="text-sm text-slate-600 mb-4">
-          Fable 5 обычно дает более глубокий экспертный разбор, но стоит дороже.
+          Fable 5.1 обычно дает более глубокий экспертный разбор, но стоит дороже.
         </p>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 mb-3">
           <div><strong>Opus 5:</strong> ~{estimatedCostOpus.toFixed(2)} ед.</div>
-          <div><strong>Fable 5:</strong> ~{estimatedCostFable.toFixed(2)} ед.</div>
+          <div><strong>Fable 5.1:</strong> ~{estimatedCostFable.toFixed(2)} ед.</div>
           <div><strong>Разница:</strong> +{estimatedDifference.toFixed(2)} ед.</div>
         </div>
 
@@ -60,7 +60,7 @@ export default function FableUpgradeModal({
             onClick={() => onSelect('fable')}
             className="px-3 py-2 rounded-lg border border-blue-700 bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-colors"
           >
-            Использовать Fable 5
+            Использовать Fable 5.1
           </button>
         </div>
       </div>

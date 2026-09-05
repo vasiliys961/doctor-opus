@@ -83,7 +83,10 @@ export function prepareVisionDataForTextPrompt(payload: unknown, confidenceThres
   const highConfidenceFindings = findings
     .filter((item) => {
       if (!item || typeof item !== 'object') return false;
-      const confidence = (item as Record<string, unknown>).confidence;
+      const row = item as Record<string, unknown>;
+      const confidence = typeof row.confidence === 'number'
+        ? row.confidence
+        : row.observation_confidence;
       return typeof confidence === 'number' && confidence > confidenceThreshold;
     })
     .map((item) => ({ ...(item as Record<string, unknown>) }));
@@ -91,7 +94,10 @@ export function prepareVisionDataForTextPrompt(payload: unknown, confidenceThres
   const lowConfidenceFindings = findings
     .filter((item) => {
       if (!item || typeof item !== 'object') return false;
-      const confidence = (item as Record<string, unknown>).confidence;
+      const row = item as Record<string, unknown>;
+      const confidence = typeof row.confidence === 'number'
+        ? row.confidence
+        : row.observation_confidence;
       return typeof confidence !== 'number' || confidence <= confidenceThreshold;
     })
     .map((item) => ({
@@ -542,39 +548,86 @@ export function getDescriptionPrompt(modality: ImageType, specialty?: Specialty)
   const criteria = SPECIALIST_CRITERIA[modality] || SPECIALIST_CRITERIA.universal;
   const specialtyContext = specialty && SPECIALTY_CONTEXTS[specialty] ? SPECIALTY_CONTEXTS[specialty] : '';
   
-  return `You are an expert Vision-AI module (role: ${criteria.title}).
+  return `You are an expert Vision-AI observer module (role: ${criteria.title}).
 ${specialtyContext}
-Your task: perform an EXHAUSTIVELY DETAILED technical analysis of the image and extract ALL clinically significant signs, metrics, and patterns.
+Your task: perform a strictly visual technical extraction and return structured JSON.
+
+Observer-only policy (MANDATORY):
+- Describe only what is visually observable in the image.
+- DO NOT provide diagnosis, differential diagnosis, treatment, triage, or management advice.
+- If a structure is not confidently visualized, use null/uncertain fields instead of guessing.
 
 ### INSTRUCTIONS:
-1. **Precision:** Extract specific numerical values (dimensions in mm, density in HU, intervals in ms).
-2. **Completeness:** Do not omit even minor details. If a finding is normal but clinically important to exclude pathology — mention it.
-3. **Objectivity:** Describe only what you visually observe. Do not make diagnostic conclusions — the primary module handles that.
-4. **Format:** Clean JSON only. No prose before or after the code.
+1. **Precision:** Extract numerical values when visible (mm, HU, ms, %, etc.).
+2. **Completeness:** Include both positive findings and important negative visual findings.
+3. **Uncertainty discipline:** use explicit uncertainty entries for doubtful/partially visible signs.
+4. **Format:** output clean JSON only, no prose before/after.
 
 ### ANALYSIS CRITERIA:
 - **Requirements:** ${criteria.requirements}
 - **Look for signs of:** ${criteria.pathologies}
-- **IMAGE QUALITY:** separately assess input quality (sharpness, exposure, noise, smartphone artifacts) and state it in the routing field.
+- **IMAGE QUALITY:** explicitly assess quality (sharpness, exposure, artifacts, crop limits, motion blur).
+- **QUALITY GATE (mandatory):**
+  - if image quality is "poor" or "non_diagnostic", set:
+    - routing.ambiguous_findings = true
+    - routing.needs_second_read = true
+    - routing.self_confidence <= 0.40
+  - never compensate poor visual data by assumptions.
 
 ### STRICT JSON OUTPUT FORMAT:
 {
+  "schema_version": "vision.extraction.v1",
   "source": "${modality}_vision_expert",
   "specialty": "${specialty || 'universal'}",
   "modality": "${modality}",
+  "study": {
+    "projection_or_plane": null,
+    "laterality": null,
+    "image_quality": "good",
+    "quality_issues": []
+  },
   "findings": [
     {
+      "id": "f1",
+      "anatomy": "structure/region",
       "loc": "anatomical localization (maximally precise)",
       "sign": "medical name of the finding",
-      "desc": "comprehensive description (morphology, dimensions, structure, margins, signal intensity/density)",
+      "desc": "visual description only: morphology, dimensions, structure, margins, signal/density",
       "severity": 1, 
       "is_norm": false,
-      "confidence": 0.95
+      "observation_confidence": 0.95,
+      "confidence": 0.95,
+      "visibility_limitations": null
+    }
+  ],
+  "measurements": [
+    {
+      "name": "lesion_length",
+      "value": 0,
+      "unit": "mm",
+      "context": "where/how measured"
     }
   ],
   "metrics": {
     "key": "numeric_value_with_units"
   },
+  "negative_findings": [
+    "key visual negatives that matter for this modality"
+  ],
+  "critical_flags": [
+    {
+      "flag": "purely visual red flag (not diagnosis)",
+      "basis": "what is visually seen",
+      "confidence": 0.7
+    }
+  ],
+  "uncertainties": [
+    {
+      "item": "uncertain observation",
+      "reason": "why uncertain",
+      "impact": "how uncertainty can affect interpretation"
+    }
+  ],
   "routing": {
     "self_confidence": 0.0,
     "difficulty_level": 1,
@@ -582,45 +635,92 @@ Your task: perform an EXHAUSTIVELY DETAILED technical analysis of the image and 
     "ambiguous_findings": false,
     "needs_second_read": false
   },
-  "technical_summary": "Brief technical description of key findings without interpretation."
+  "technical_summary": "Brief technical visual summary only, without diagnosis.",
+  "provenance": {
+    "observer_role": "vision_extractor",
+    "diagnostic_reasoning_included": false
+  }
 }`;
 }
 
 export function getComparisonDescriptionPrompt(modality: ImageType, specialty?: Specialty): string {
   const criteria = SPECIALIST_CRITERIA[modality] || SPECIALIST_CRITERIA.universal;
-  return `You are a Vision-AI expert in comparative analysis (${criteria.title}).
-Your task: identify dynamic changes between the provided studies (previous vs current).
+  return `You are a Vision-AI observer module for comparative analysis (${criteria.title}).
+Your task: identify purely visual dynamics between studies (previous vs current).
 
 ### RULES:
-1. Clearly document: appearance of new lesions, disappearance of old ones, size changes (growth/regression in %), intensity/density changes.
-2. Assess stability of findings.
-3. Response in JSON format only.
-4. Mandatory: assess comparison reliability and input image quality in the routing field.
+1. Document: new findings, resolved findings, size/signal/density changes, and stable findings.
+2. Observer-only: no diagnosis, no treatment, no management suggestions.
+3. If uncertainty is high, encode it explicitly (do not infer).
+4. JSON only.
+5. Quality gate for poor/non-diagnostic input:
+   - routing.ambiguous_findings = true
+   - routing.needs_second_read = true
+   - routing.self_confidence <= 0.40
 
 ### STRICT JSON FORMAT:
 {
+  "schema_version": "vision.extraction.v1",
   "source": "${modality}_comparison_expert",
   "specialty": "${specialty || 'universal'}",
   "modality": "${modality}",
-  "comparison_summary": "Summary of dynamics (progression, stabilization, regression).",
+  "study": {
+    "image_quality": "good",
+    "quality_issues": []
+  },
+  "comparison_summary": "Purely visual dynamics summary.",
   "findings": [
     {
+      "id": "f1",
+      "anatomy": "structure/region",
       "loc": "localization",
-      "sign": "finding",
+      "sign": "visual finding",
+      "desc": "what is seen now",
       "dynamic": "description of changes (was → now)",
       "percent_change": "percentage change if applicable",
-      "status": "new / stable / regressed / increased"
+      "status": "new / stable / regressed / increased",
+      "observation_confidence": 0.9,
+      "confidence": 0.9
+    }
+  ],
+  "measurements": [
+    {
+      "name": "metric_name",
+      "value": 0,
+      "unit": "mm",
+      "context": "previous vs current"
     }
   ],
   "delta_metrics": {
     "metric_name": "value change"
   },
+  "negative_findings": [
+    "important stable negative signs"
+  ],
+  "critical_flags": [
+    {
+      "flag": "visual red flag",
+      "basis": "observed change",
+      "confidence": 0.7
+    }
+  ],
+  "uncertainties": [
+    {
+      "item": "uncertain comparison element",
+      "reason": "technical/visual limitation",
+      "impact": "possible interpretation shift"
+    }
+  ],
   "routing": {
     "self_confidence": 0.0,
     "difficulty_level": 1,
     "image_quality": "good",
     "ambiguous_findings": false,
     "needs_second_read": false
+  },
+  "provenance": {
+    "observer_role": "vision_comparison_extractor",
+    "diagnostic_reasoning_included": false
   }
 }`;
 }

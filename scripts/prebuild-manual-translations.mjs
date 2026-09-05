@@ -54,7 +54,7 @@ function loadLocalEnv() {
 }
 
 function resolveApiUrl() {
-  const baseUrl = process.env.OPENROUTER_BASE_URL?.trim();
+  const baseUrl = process.env.LLM_BASE_URL?.trim() || process.env.OPENROUTER_BASE_URL?.trim();
   if (!baseUrl) return OPENROUTER_FALLBACK_URL;
   return baseUrl.endsWith('/chat/completions')
     ? baseUrl
@@ -65,14 +65,14 @@ function resolveTranslatorModel() {
   return (
     process.env.MODEL_TRANSLATOR?.trim() ||
     process.env.MODEL_GEMINI_FLASH?.trim() ||
-    'google/gemini-3-flash-preview'
+    'google/gemini-3.8-flash'
   );
 }
 
 async function translateMarkdown(markdown, targetLanguage) {
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  const apiKey = process.env.LLM_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY is not configured');
+    throw new Error('LLM_API_KEY (or OPENROUTER_API_KEY) is not configured');
   }
 
   const response = await fetch(resolveApiUrl(), {

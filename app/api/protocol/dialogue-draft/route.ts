@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { MODELS, sendTextRequest } from '@/lib/openrouter'
 import { anonymizeText } from '@/lib/anonymization'
+import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language'
 
 const DEFAULT_DRAFT_MODEL = process.env.PROTOCOL_DIALOGUE_DRAFT_MODEL?.trim() || MODELS.HAIKU
 const FALLBACK_DRAFT_MODEL = MODELS.GEMINI_3_FLASH
 
-function buildDialogueDraftPrompt(params: { transcript: string; specialistName?: string }): string {
-  const { transcript, specialistName } = params
-  return `You are a medical assistant for initial structuring of visit data.
+function buildDialogueDraftPrompt(params: { transcript: string; specialistName?: string; languageInstruction: string }): string {
+  const { transcript, specialistName, languageInstruction } = params
+  return `${languageInstruction}
+You are a medical assistant for initial structuring of visit data.
 Task: from a physician-patient conversation transcript, produce a draft for further protocol completion.
 Physician specialty: ${specialistName || 'general practitioner'}.
 
@@ -15,27 +17,17 @@ IMPORTANT:
 - This is only a draft from complaints/history; no final diagnosis and no definitive treatment plan.
 - If data is missing, explicitly write "NO DATA" so the physician can quickly complete it.
 - Do not invent facts. Use only information present in the conversation.
-- Write in English, plain text only, no markdown, no "*" list formatting.
+- Plain text only, no markdown, no "*" list formatting.
 
-Return text strictly in this structure:
-Complaints:
-...
+Return plain text in this exact section order.
+Important: section titles MUST be written in the required response language.
 
-History of present illness:
-...
-
-Past medical/social history:
-...
-
-Medications/allergies from the conversation:
-...
-
-Objective findings (already present in conversation):
-...
-
-What the physician still needs to document objectively:
-1. ...
-2. ...
+1) Complaints
+2) History of present illness
+3) Past medical/social history
+4) Medications/allergies from the conversation
+5) Objective findings (already present in conversation)
+6) What the physician still needs to document objectively (numbered list)
 
 Raw conversation text:
 ${transcript}`
@@ -43,6 +35,7 @@ ${transcript}`
 
 export async function POST(request: NextRequest) {
   try {
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest()
     const body = await request.json()
     const transcriptRaw = String(body?.transcript || '')
     const specialistName = String(body?.specialistName || '')
@@ -52,7 +45,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Transcript is empty' }, { status: 400 })
     }
 
-    const prompt = buildDialogueDraftPrompt({ transcript, specialistName })
+    const prompt = buildDialogueDraftPrompt({ transcript, specialistName, languageInstruction: responseLanguageInstruction })
     let modelUsed = DEFAULT_DRAFT_MODEL
     let draft = ''
 

@@ -168,7 +168,7 @@ export default function ClinicalProtocolsPage() {
         📚 Clinical Guidelines
       </h1>
       <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">
-        Search current international clinical guidelines via Opus 5 and Gemini 3 Flash
+        Search current international clinical guidelines via Opus 5 and Gemini 3.8 Flash
       </p>
 
       {/* Форма поиска */}

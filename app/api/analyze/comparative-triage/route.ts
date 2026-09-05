@@ -3,6 +3,7 @@ import { MODELS, sendTextRequest } from '@/lib/openrouter';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { checkAndDeductBalance } from '@/lib/server-billing';
+import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 type TriageLevel = 'normal' | 'attention' | 'urgent';
 
@@ -41,6 +42,7 @@ function normalizePayload(payload: any): TriageResponse {
 
 export async function POST(request: NextRequest) {
   try {
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json(
@@ -89,7 +91,11 @@ Reply STRICTLY in JSON:
   "deviations": ["specific deviation 1", "specific deviation 2"]
 }
 
-Write in English, no markdown.`;
+For output language, follow this policy:
+${responseLanguageInstruction}
+
+Keep "level" strictly as one of: normal | attention | urgent.
+Write summary/deviations in the required language, no markdown.`;
 
     const prompt = `Comparison mode: ${comparisonMode}
 

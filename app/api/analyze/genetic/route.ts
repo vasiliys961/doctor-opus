@@ -9,8 +9,9 @@ import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider';
+import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const gunzipAsync = promisify(gunzip);
 
 // Примерные стоимости моделей в единицах за 1000 токенов
@@ -37,6 +38,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email || null;
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
     const guestKey = userEmail ? null : getRateLimitKey(request);
     billingEmail = userEmail;
     billingGuestKey = guestKey;
@@ -76,15 +78,6 @@ export async function POST(request: NextRequest) {
     }
     billedAmount = estimatedCost;
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      console.error('❌ [GENETIC] OPENROUTER_API_KEY не настроен');
-      return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
-        { status: 500 }
-      );
-    }
-
     console.log(
       `🧬 [GENETIC] Файл: ${file.name}, размер: ${file.size} байт, тип: ${file.type || 'unknown'}`
     );
@@ -115,7 +108,10 @@ export async function POST(request: NextRequest) {
         console.log('🧬 [GENETIC] Используем Vision API для обработки PDF...');
         
         const base64PDF = buffer.toString('base64');
-        const extractionPrompt = `Ты — эксперт по анализу генетических отчётов.
+        const extractionPrompt = `${responseLanguageInstruction}
+You are an expert in extracting structured genetic variants from medical reports.
+
+Ты — эксперт по анализу генетических отчётов.
 
 Извлеки из этого PDF документа ВСЕ генетические данные:
 - rsID (например: rs1801133, rs4680, rs699)
@@ -132,7 +128,7 @@ export async function POST(request: NextRequest) {
 MTHFR;rs1801133;CT;сниженная активность фермента
 APOE;rs429358;CC;высокий риск болезни Альцгеймера`;
 
-        const extractionModel = 'google/gemini-3-flash-preview';
+        const extractionModel = 'google/gemini-3.8-flash';
 
         const extractionPayload = {
           model: extractionModel,
@@ -157,16 +153,15 @@ APOE;rs429358;CC;высокий риск болезни Альцгеймера`;
           temperature: 0.1,
         };
 
-        const extractionResponse = await fetch(OPENROUTER_API_URL, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
+        const extractionResponse = await postLlmChatCompletionsWithFallback(
+          extractionPayload,
+          {
+            headers: {
             'HTTP-Referer': 'https://doctor-opus.ru',
             'X-Title': 'Doctor Opus',
-          },
-          body: JSON.stringify(extractionPayload),
-        });
+            },
+          }
+        );
 
         if (!extractionResponse.ok) {
           const errorText = await extractionResponse.text();
@@ -216,7 +211,10 @@ APOE;rs429358;CC;высокий риск болезни Альцгеймера`;
 
       const base64Image = buffer.toString('base64');
 
-      const extractionPrompt = `Ты — OCR-движок генетических отчётов.
+      const extractionPrompt = `${responseLanguageInstruction}
+You are an OCR engine for genetic reports. Keep output structured and concise.
+
+Ты — OCR-движок генетических отчётов.
 ТВОЯ ЕДИНСТВЕННАЯ ЗАДАЧА — извлечь СТРОГО СТРУКТУРИРОВАННЫЕ ДАННЫЕ SNP/генов/генотипов из изображения генетического отчёта.
 
 ИЗВЛЕКИ ТОЛЬКО СТРОКИ ТАБЛИЦ, СОДЕРЖАЩИЕ:
@@ -235,7 +233,7 @@ APOE;rs429358;CC;высокий риск болезни Альцгеймера`;
 MTHFR;rs1801133;CT;сниженная активность фермента, умеренно повышенный гомоцистеин
 APOE;rs429358;CC;генотип E4/E4, высокий риск болезни Альцгеймера`;
 
-      const extractionModel = 'google/gemini-3-flash-preview';
+      const extractionModel = 'google/gemini-3.8-flash';
 
       const extractionPayload = {
         model: extractionModel,
@@ -260,16 +258,15 @@ APOE;rs429358;CC;генотип E4/E4, высокий риск болезни А
           temperature: 0.1,
       };
 
-      const extractionResponse = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
+      const extractionResponse = await postLlmChatCompletionsWithFallback(
+        extractionPayload,
+        {
+          headers: {
           'HTTP-Referer': 'https://doctor-opus.ru',
           'X-Title': 'Doctor Opus',
-        },
-        body: JSON.stringify(extractionPayload),
-      });
+          },
+        }
+      );
 
       if (!extractionResponse.ok) {
         const errorText = await extractionResponse.text();

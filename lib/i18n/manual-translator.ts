@@ -1,17 +1,14 @@
 import { createHash } from 'crypto';
 import type { Locale } from './config';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from '../llm-provider';
 
 function resolveTranslationApiUrl(): string {
-  const baseUrl = process.env.OPENROUTER_BASE_URL?.trim();
-  if (!baseUrl) return 'https://openrouter.ai/api/v1/chat/completions';
-  return baseUrl.endsWith('/chat/completions')
-    ? baseUrl
-    : `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  return getLlmChatCompletionsUrl();
 }
 const TRANSLATION_MODEL =
   process.env.MODEL_TRANSLATOR?.trim() ||
   process.env.MODEL_GEMINI_FLASH?.trim() ||
-  'google/gemini-3-flash-preview';
+  'google/gemini-3.8-flash';
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -55,8 +52,12 @@ async function translateMarkdown(
   targetLanguage: string,
   timeoutMs: number
 ): Promise<string | null> {
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-  if (!apiKey) return null;
+  let apiKey = '';
+  try {
+    apiKey = getLlmApiKey();
+  } catch {
+    return null;
+  }
 
   const systemPrompt = `You are a professional medical technical translator.
 Translate the user-provided Markdown from English to ${targetLanguage}.

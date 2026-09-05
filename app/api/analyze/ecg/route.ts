@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 /**
  * API endpoint для анализа ЭКГ
@@ -19,7 +20,9 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const prompt = formData.get('prompt') as string || 'Проанализируйте ЭКГ. Опишите ритм, интервалы, сегменты, признаки ишемии, аритмии, блокады.';
+    const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
+    const rawPrompt = formData.get('prompt') as string || 'Analyze ECG. Describe rhythm, intervals, segments, ischemia signs, arrhythmias, and conduction blocks.';
+    const prompt = appendLanguageInstruction(rawPrompt, responseLanguageInstruction);
     const useStreaming = formData.get('useStreaming') === 'true';
 
     if (!file) {

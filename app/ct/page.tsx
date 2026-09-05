@@ -143,7 +143,7 @@ export default function CTPage() {
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-5');
       } else if (analysisMode === 'fast') {
-        formData.append('model', 'google/gemini-3-flash-preview');
+        formData.append('model', 'google/gemini-3.8-flash');
       }
 
       if (useStream && (analysisMode === 'validated' || analysisMode === 'optimized' || analysisMode === 'fast')) {
@@ -162,7 +162,7 @@ export default function CTPage() {
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
-        const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
+        const modelUsed = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
 
         await handleSSEStream(response, {
@@ -206,7 +206,7 @@ export default function CTPage() {
         if (data.success) {
           setResult(data.result)
           setAnalysisStep('description_complete')
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5');
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5');
           setCurrentCost(data.cost || 1.5)
           setModelInfo({ model: modelUsed, mode: analysisMode });
 
@@ -395,6 +395,8 @@ export default function CTPage() {
               optimizedModel={optimizedModel}
               onOptimizedModelChange={setOptimizedModel}
               disabled={loading}
+              disableFastMode={true}
+              disableFastReason="Fast mode is disabled for CT studies. Use Optimized or Expert Validated mode."
             />
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
@@ -412,10 +414,11 @@ export default function CTPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => analyzeImage('fast', useStreaming)}
-                disabled={loading}
-                className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={true}
+                title="Fast mode is disabled for CT"
+                className="px-4 py-2 bg-gray-300 text-gray-600 rounded cursor-not-allowed"
               >
-                ⚡ {t.fast} {useStreaming ? t.streamingSuffix : ''}
+                ⚡ {t.fast} (Beta disabled)
               </button>
               <button
                 onClick={() => analyzeImage('optimized', useStreaming)}

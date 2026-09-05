@@ -13,6 +13,7 @@ import { saveConsiliumAuditTrail } from '@/lib/diagnostics/audit';
 import { CaseInput, ConsiliumProgressEvent } from '@/lib/diagnostics/types';
 import { getRequestLocale } from '@/lib/i18n/server';
 import { getDiagnosticsMessages, type DiagnosticsMessages } from '@/lib/i18n/diagnostics';
+import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -98,6 +99,7 @@ function localizeConsiliumStageMessage(message: string, i18n: DiagnosticsMessage
 
 export async function POST(request: NextRequest) {
   const locale = await getRequestLocale();
+  const responseLanguageInstruction = await getForcedLanguageInstructionForRequest();
   const i18n = getDiagnosticsMessages(locale);
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
@@ -218,7 +220,11 @@ export async function POST(request: NextRequest) {
 
           const caseInput: CaseInput = {
             patientId,
-            freeTextInput: [freeTextInput, imageFindingsText ? `### FINDINGS FROM ATTACHED IMAGES\n${imageFindingsText}` : '']
+            freeTextInput: [
+              freeTextInput,
+              `### RESPONSE LANGUAGE POLICY\n${responseLanguageInstruction}`,
+              imageFindingsText ? `### FINDINGS FROM ATTACHED IMAGES\n${imageFindingsText}` : '',
+            ]
               .filter(Boolean)
               .join('\n\n'),
             attachedDocuments,

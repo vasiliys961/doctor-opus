@@ -86,7 +86,7 @@ export default function UltrasoundPage() {
       formData.append('isAnonymous', isAnonymous.toString())
 
       // Подбор модели
-      const targetModelId = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
+      const targetModelId = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
                           analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') :
                           'anthropic/claude-opus-5';
       formData.append('model', targetModelId);

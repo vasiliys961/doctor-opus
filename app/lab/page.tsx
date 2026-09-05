@@ -176,7 +176,7 @@ export default function LabPage() {
           body: JSON.stringify({
             images: processedImages,
             mode: mode,
-            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5'),
+            model: mode === 'fast' ? 'google/gemini-3.8-flash' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
             prompt: REQUEST_PROMPTS.lab.allPages,
@@ -195,7 +195,7 @@ export default function LabPage() {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
-              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5')
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3.8-flash' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5')
               setModelInfo({ model: usedModel, mode: mode })
               
               logUsage({
@@ -217,7 +217,7 @@ export default function LabPage() {
           const data = await response.json()
           if (data.success) {
             setResult(data.result)
-            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5');
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3.8-flash' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5');
             setCurrentCost(data.cost || 1.0);
             setModelInfo({ model: usedModel, mode: mode });
 
@@ -257,7 +257,7 @@ export default function LabPage() {
           body: JSON.stringify({
             images: pdfImages,
             mode: mode,
-            model: mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5'),
+            model: mode === 'fast' ? 'google/gemini-3.8-flash' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
             prompt: REQUEST_PROMPTS.lab.allPages,
@@ -276,7 +276,7 @@ export default function LabPage() {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
-              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5')
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3.8-flash' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5')
               setModelInfo({ model: usedModel, mode: mode })
               
               logUsage({
@@ -298,7 +298,7 @@ export default function LabPage() {
           const data = await response.json()
           if (data.success) {
             setResult(data.result)
-            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5');
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3.8-flash' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5');
             setCurrentCost(data.cost || 1.0);
             setModelInfo({ model: usedModel, mode: mode });
 
@@ -317,7 +317,7 @@ export default function LabPage() {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('mode', mode)
-        const targetModelId = mode === 'fast' ? 'google/gemini-3-flash-preview' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5');
+        const targetModelId = mode === 'fast' ? 'google/gemini-3.8-flash' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5');
         formData.append('model', targetModelId)
         formData.append('useStreaming', useStreaming.toString())
         formData.append('isAnonymous', isAnonymous.toString())
@@ -340,7 +340,7 @@ export default function LabPage() {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
               setCurrentCost(usage.total_cost)
               
-              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5')
+              const usedModel = usage.model || (mode === 'fast' ? 'google/gemini-3.8-flash' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5')
               setModelInfo({ model: usedModel, mode: mode })
               
               logUsage({
@@ -362,7 +362,7 @@ export default function LabPage() {
           const data = await response.json()
           if (data.success) {
             setResult(data.result)
-            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3-flash-preview' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5');
+            const usedModel = data.model || (mode === 'fast' ? 'google/gemini-3.8-flash' : mode === 'optimized' ? 'anthropic/claude-sonnet-5' : 'anthropic/claude-opus-5');
             setCurrentCost(data.cost || 1.0);
             setModelInfo({ model: usedModel, mode: mode });
 
@@ -402,11 +402,11 @@ export default function LabPage() {
         <AnalysisTips 
           recommendationProfile="lab"
           content={{
-            fast: "Fast analysis via Gemini 3 Flash — ideal for instant extraction of data from lab reports.",
+            fast: "Fast analysis via Gemini 3.8 Flash — ideal for instant extraction of data from lab reports.",
             optimized: "Balanced mode (Gemini JSON + Sonnet 5) — deep clinical interpretation of extracted data.",
             validated: "Expert analysis (Gemini JSON + Opus 5) — the most detailed assessment of abnormal values.",
             extra: [
-              "🚀 Recommended: Gemini 3 Flash (Fast mode) — highest accuracy for table and value recognition.",
+              "🚀 Recommended: Gemini 3.8 Flash (Fast mode) — highest accuracy for table and value recognition.",
               "📄 You can upload PDF, Excel (XLSX/XLS), CSV, or a photo of a lab report.",
               "🔍 The system automatically recognizes tables and converts them to digital format.",
               "💾 Results can be saved and used for comparative analysis in the future."

@@ -8,7 +8,7 @@ import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
 
 const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 // Быстрая/дешёвая модель — нужен только короткий поисковый запрос, не полноценный ответ.
-const TRANSLATION_MODEL = 'google/gemini-3-flash-preview';
+const TRANSLATION_MODEL = 'google/gemini-3.8-flash';
 
 const TRANSLATION_SYSTEM_PROMPT = `Ты — переводчик медицинских поисковых запросов для PubMed.
 Переведи запрос врача на английский язык в виде краткой поисковой фразы с использованием
