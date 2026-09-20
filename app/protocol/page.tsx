@@ -78,7 +78,7 @@ export default function ProtocolPage() {
   const [isEditingTemplate, setIsEditingTemplate] = useState(false)
   const [templateRagDocId, setTemplateRagDocId] = useState<string | null>(null)
   const [isTemplateLocked, setIsTemplateLocked] = useState(false)
-  const [strictTemplateMode, setStrictTemplateMode] = useState(true)
+  const [strictTemplateMode, setStrictTemplateMode] = useState(false)
 
   // Универсальные промпты
   const [selectedUniversalKey, setSelectedUniversalKey] = useState<string>('')
@@ -123,8 +123,6 @@ export default function ProtocolPage() {
           setCustomTemplate(parsed.template)
           setSpecialistName(parsed.name || specialistName)
           setIsEditingTemplate(true)
-          setIsTemplateLocked(Boolean(parsed.isTemplateLocked))
-          setStrictTemplateMode(parsed.strictTemplateMode !== false)
           if (parsed.ragDocId) {
             setTemplateRagDocId(parsed.ragDocId)
           }
@@ -178,9 +176,7 @@ export default function ProtocolPage() {
     const data = {
       template: customTemplate,
       name: specialistName,
-      ragDocId: templateRagDocId,
-      isTemplateLocked,
-      strictTemplateMode
+      ragDocId: templateRagDocId
     }
     localStorage.setItem('user_protocol_template', JSON.stringify(data))
     alert('Template saved as your personal standard!')

@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { getClientLocale } from '@/lib/i18n/client'
+import type { Locale } from '@/lib/i18n/config'
 
 interface VoiceInputProps {
   onTranscript: (text: string) => void
@@ -9,14 +11,37 @@ interface VoiceInputProps {
   placeholder?: string
 }
 
+const SPEECH_RECOGNITION_LANG_BY_LOCALE: Record<Locale, string> = {
+  en: 'en-US',
+  fr: 'fr-FR',
+  es: 'es-ES',
+  ar: 'ar-SA',
+  hi: 'hi-IN',
+  'pt-BR': 'pt-BR',
+  id: 'id-ID',
+  ms: 'ms-MY',
+  tr: 'tr-TR',
+  'zh-CN': 'zh-CN',
+}
+
 export default function VoiceInput({ onTranscript, disabled = false, className = "", placeholder = "" }: VoiceInputProps) {
   const [isListening, setIsListening] = useState(false)
   const [supported, setSupported] = useState(true)
+  const recognitionRef = useRef<any | null>(null)
+  const latestInterimRef = useRef('')
+  const hasEmittedFinalRef = useRef(false)
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) {
       setSupported(false)
+    }
+
+    return () => {
+      try {
+        recognitionRef.current?.abort?.()
+      } catch {}
+      recognitionRef.current = null
     }
   }, [])
 
@@ -25,29 +50,55 @@ export default function VoiceInput({ onTranscript, disabled = false, className =
     if (!SpeechRecognition) return
 
     if (isListening) {
-      // recognition.stop() is handled via instance, but we can just toggle state 
-      // if we want to stop it properly we need a ref to the recognition instance
+      try {
+        recognitionRef.current?.stop?.()
+      } catch {
+        try {
+          recognitionRef.current?.abort?.()
+        } catch {}
+      }
       return
     }
 
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort()
+      } catch {}
+      recognitionRef.current = null
+    }
+
     const recognition = new SpeechRecognition()
-    recognition.lang = 'ru-RU'
+    recognitionRef.current = recognition
+    const locale = getClientLocale()
+    recognition.lang = SPEECH_RECOGNITION_LANG_BY_LOCALE[locale] || 'en-US'
     recognition.interimResults = true // Показывать промежуточные результаты для "живого" эффекта
     recognition.maxAlternatives = 1
     recognition.continuous = false // Останавливаться после фразы
 
     recognition.onstart = () => {
+      latestInterimRef.current = ''
+      hasEmittedFinalRef.current = false
       setIsListening(true)
     }
 
     recognition.onresult = (event: any) => {
       let finalTranscript = ''
+      let interimTranscript = ''
       for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const chunk = String(event.results[i]?.[0]?.transcript || '').trim()
+        if (!chunk) continue
         if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript
+          finalTranscript += (finalTranscript ? ' ' : '') + chunk
+        } else {
+          interimTranscript += (interimTranscript ? ' ' : '') + chunk
         }
       }
+      if (interimTranscript) {
+        latestInterimRef.current = interimTranscript
+      }
       if (finalTranscript) {
+        hasEmittedFinalRef.current = true
+        latestInterimRef.current = ''
         onTranscript(finalTranscript)
       }
     }
@@ -55,13 +106,29 @@ export default function VoiceInput({ onTranscript, disabled = false, className =
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error)
       setIsListening(false)
+      recognitionRef.current = null
     }
 
     recognition.onend = () => {
+      // Если пользователь остановил запись вручную до финализации фразы,
+      // Web Speech API иногда не отдает isFinal=true. В этом случае отдаём
+      // последний interim-текст, чтобы диктовка не "пропадала".
+      if (!hasEmittedFinalRef.current && latestInterimRef.current.trim()) {
+        onTranscript(latestInterimRef.current.trim())
+      }
+      latestInterimRef.current = ''
+      hasEmittedFinalRef.current = false
       setIsListening(false)
+      recognitionRef.current = null
     }
 
-    recognition.start()
+    try {
+      recognition.start()
+    } catch (error) {
+      console.error('Speech recognition start error:', error)
+      setIsListening(false)
+      recognitionRef.current = null
+    }
   }
 
   if (!supported) return null
