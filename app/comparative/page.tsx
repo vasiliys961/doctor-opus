@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'

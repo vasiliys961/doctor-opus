@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -112,10 +111,8 @@ export default function ECGPage() {
           setModelInfo(modelUsed)
 
           await handleSSEStream(response, {
-            onChunk: (content, accumulatedText) => {
-              flushSync(() => {
-                setResult(accumulatedText)
-              })
+            onChunk: (_content, accumulatedText) => {
+              setResult(accumulatedText)
             },
             onUsage: (usage) => {
               setCurrentCost(usage.total_cost)
@@ -152,6 +149,7 @@ export default function ECGPage() {
               }
             },
             onError: (err) => {
+              setResult('')
               setError(`${t.streamingError}: ${err.message}`)
             }
           })

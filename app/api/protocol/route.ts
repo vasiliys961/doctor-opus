@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendTextRequest, MODELS } from '@/lib/openrouter';
+import { sendTextRequestWithUsage, MODELS } from '@/lib/openrouter';
 import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
-import { formatCostLog } from '@/lib/cost-calculator';
+import { addModelUsage, emptyTokenUsage, formatCostLog } from '@/lib/cost-calculator';
 import { anonymizeText } from '@/lib/anonymization';
 import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language';
+import { STAGE1_PROTOCOL_SYSTEM_PROMPT } from '@/lib/prompts';
+import {
+  buildDiagnosticReportUserPrompt,
+  finalizeDiagnosticReport,
+  getDiagnosticReportSystemPrompt,
+  resolveDiagnosticKindFromTemplateId,
+} from '@/lib/diagnostic-report';
+import {
+  finalizeProtocolDocument,
+  hasUnresolvedHeadingPlaceholder,
+} from '@/lib/protocol-presentation';
 
 function buildProtocolCorrectionPrompt(params: {
   rawText: string;
@@ -19,9 +30,13 @@ REVIEW AND CORRECT THE DRAFT PROTOCOL:
 1) Keep template structure 1:1 (sections, order, tables).
 2) Clinical facts must come ONLY from the current case.
 3) If the draft keeps legacy values from the template, replace them with current-case values.
-4) If clinical fields are not explicitly provided, fill with clinically neutral normal findings (not stale template data).
-5) Diagnosis and management plan are mandatory.
-6) Return only corrected final document. No explanations.
+4) If the visit was documented but routine exam negatives were omitted, use clinically neutral normal findings. If the input is only a conversation or incomplete notes, do not invent a performed exam; keep unknowns in one "Missing / To Clarify" block.
+5) Diagnosis and management plan are mandatory. ICD codes only in the final diagnosis section, marked provisional if exam is incomplete.
+6) Remove any "MEDICAL CONSULTATIVE REPORT", "VERIFIED BY PHYSICIAN", signature lines, branding, AI disclaimer, or "Draft Clinical Output".
+7) Do not repeat red flags, missing-data sentences, or the same evidence source across sections.
+8) Keep every section heading exactly as in the template. Never replace a heading with [NAME], [PLACEHOLDER], or any other token.
+9) A list section must start with its heading line, then the list.
+10) Return only corrected final document. No explanations.
 
 CURRENT CASE:
 ${rawText}
@@ -51,7 +66,7 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
         const parsed = JSON.parse(payload);
         const content = parsed?.choices?.[0]?.delta?.content;
         if (typeof content === 'string' && content.length > 0) {
-          parsed.choices[0].delta.content = anonymizeText(content);
+          parsed.choices[0].delta.content = content;
         }
         return `data: ${JSON.stringify(parsed)}`;
       } catch {
@@ -109,7 +124,7 @@ export async function POST(request: NextRequest) {
       strictTemplateMode = true
     } = body;
     const rawText = anonymizeText(String(rawIncomingText ?? ''));
-    const safeTemplate = anonymizeText(String(customTemplate ?? '')).trim();
+    const safeTemplate = String(customTemplate ?? '').trim();
     const isStrictTemplateMode = strictTemplateMode !== false;
 
     if (!rawText || !rawText.trim()) {
@@ -121,7 +136,11 @@ export async function POST(request: NextRequest) {
 
     // Add specialist-specific instruction to the prompt
     const specialistDirective = universalPrompt
-      ? `PROFILE-SPECIFIC INSTRUCTION (${specialistName}): ${universalPrompt}\n\n`
+      ? `PROFILE-SPECIFIC INSTRUCTION (${specialistName}): ${universalPrompt}
+
+If the current input is a conversation transcript or incomplete notes without a documented exam, ignore any profile instruction to invent normal examination phrases. Use one "Missing / To Clarify" block instead.
+
+`
       : '';
     const safeRagExamples = Array.isArray(ragExamples)
       ? ragExamples
@@ -136,12 +155,13 @@ ${safeRagExamples.map((chunk: string, index: number) => `--- EXAMPLE #${index + 
 `
       : '';
 
-    const isEcgFunctionalConclusion = templateId === 'ecg-functional-conclusion';
+    const diagnosticKind = resolveDiagnosticKindFromTemplateId(templateId);
+    const isDiagnosticReport = Boolean(diagnosticKind);
     const hasDiagnosisSection = /(diagnosis|assessment|icd|conclusion)/i.test(safeTemplate);
     const hasTreatmentSection = /(treatment|therapy|recommendation|plan|management)/i.test(safeTemplate);
     const templateHasMarkdownTable = /\|.+\|\s*\n\|[\s:-]+\|/m.test(safeTemplate);
     const requiredClinicalBlockDirective =
-      !isEcgFunctionalConclusion && (!hasDiagnosisSection || !hasTreatmentSection)
+      !isDiagnosticReport && (!hasDiagnosisSection || !hasTreatmentSection)
         ? `\n10. If template has no explicit diagnosis/treatment sections, append two short sections at the end: "Diagnostic Conclusion" and "Treatment and Recommendations".`
         : '';
     const strictTemplateDirective = isStrictTemplateMode
@@ -158,26 +178,31 @@ ${safeRagExamples.map((chunk: string, index: number) => `--- EXAMPLE #${index + 
 - Preserve column count and column order.
 - Never flatten a table into plain text.`
       : '';
-    const diagnosisDirective = !isEcgFunctionalConclusion
+    const diagnosisDirective = !isDiagnosticReport
       ? `\nDIAGNOSIS AND PLAN (MANDATORY):
 - Diagnosis section(s) must always be filled.
 - Formulate primary diagnosis from current-case evidence.
-- Add ICD-10 code: if explicit in input, keep it; if absent, provide the most clinically justified code.
-- Treatment/recommendation block must be filled within template structure (or added by rule #10).`
+- ICD-10/11 codes appear only in the final diagnosis/assessment section. If objective exam is missing, mark them "provisional, pending exam".
+- Do not put ICD codes inside a differential/hypothesis list.
+- Treatment/recommendation block must be filled within template structure (or added by rule #10).
+- Exact numeric drug doses only if key contraindications are documented as absent; otherwise write "standard guideline dose if no contraindications; see dosing protocol" plus one source.`
       : '';
     const refreshFromCurrentCaseDirective = `\nDATA PRIORITY (CRITICAL):
 - Use uploaded template and RAG examples as STRUCTURE only.
 - If template already contains old clinical values (complaints, history, vitals, ECG, diagnosis, treatment), REPLACE them with current-case values.
 - Do not rewrite old case from template.
 - In any conflict, CURRENT CASE input always wins.`;
-    const clinicalDefaultsDirective = !isEcgFunctionalConclusion
-      ? `\nDEFAULT NORMALS FOR MISSING CLINICAL DETAILS:
-- For clinical fields (objective exam, systems review, local status), if no pathology is provided, fill with clinically neutral normal findings.
+    const clinicalDefaultsDirective = !isDiagnosticReport
+      ? `\nMISSING DATA AND RED FLAGS:
+- If the physician documented a performed visit and omitted routine negatives, fill those exam items with clinically neutral normal findings.
+- If the input is only a conversation/complaints draft without a documented exam, do not invent a complete normal examination.
+- Put all undocumented items in one "Missing / To Clarify" block. Do not repeat "not documented" in Complaints, HPI, PMH, and Exam.
+- If red-flag exclusion matters, list flags once under "Red Flags to Exclude" and refer to that block later.
 - Never import old abnormalities from template unless present in current case.
-- Use "NO DATA" only for administrative/signature/document fields, or unknown exact numeric values that cannot be safely inferred.
+- Use "NO DATA" only for administrative fields or unknown exact numeric values that cannot be safely inferred.
 - If clinician reports abnormalities (e.g., BP 180, headache, nausea), they must be explicitly reflected in matching sections.`
       : '';
-    const clinicalReasoningDirective = !isEcgFunctionalConclusion
+    const clinicalReasoningDirective = !isDiagnosticReport
       ? `\nCLINICAL INTELLIGENCE (MANDATORY, DO NOT OUTPUT REASONING):
 - Internally validate coherence: symptoms -> objective findings -> diagnosis -> management.
 - Diagnosis must explain key complaints and objective findings from current case.
@@ -192,24 +217,15 @@ ${safeRagExamples.map((chunk: string, index: number) => `--- EXAMPLE #${index + 
 3) RAG samples for style/format only.
 Never substitute current facts with template/RAG content.`;
 
-    // ECG mode: concise formal conclusion only.
-    // This prevents clinical hypotheses and management reasoning.
-    const prompt = isEcgFunctionalConclusion
-      ? `${responseLanguageInstruction}
-You are a physician specialized in functional diagnostics (ECG). Create a SHORT formal ECG conclusion based on the input text.
-${specialistDirective}INPUT DATA (from ECG analysis):
-${rawText}
+    const prompt = isDiagnosticReport && diagnosticKind
+      ? `${buildDiagnosticReportUserPrompt({
+          languageInstruction: responseLanguageInstruction,
+          kind: diagnosticKind,
+          sourceText: rawText,
+        })}
 
-${ragDirective}STRICT OUTPUT TEMPLATE (fill it exactly):
+STRICT OUTPUT TEMPLATE:
 ${safeTemplate}
-
-MANDATORY CONSTRAINTS:
-1. Output ONLY the template-based conclusion. No sections like "clinical hypotheses", differential diagnosis, management strategy, verification notes, disclaimers, or reasoning.
-2. Length: 4-6 lines (concise).
-3. Do not invent parameters. Include values (PQ/QRS/QTc, ST in mm) only if explicitly present in the input text. If absent, write "no data".
-4. Preserve ST direction exactly: if the input says "depression", do not output "elevation", and vice versa.
-5. Do not diagnose ACS/MI and do not add phrases like "no ACS" unless explicitly present in the input.
-${refreshFromCurrentCaseDirective}
 `
       : `${responseLanguageInstruction}
 You are an experienced physician (${specialistName || 'Internal Medicine Physician'}), an expert clinical assistant with the competence of a professor of clinical medicine and broad academic-hospital experience.
@@ -223,15 +239,15 @@ ${ragDirective}STRICT TEMPLATE TO FILL:
 ${safeTemplate}
 
 MANDATORY STYLE AND CONTENT RULES:
-1. Start strictly from the first line of the template. No greetings or intro phrases.
-2. Formatting: inside each section (complaints, history, examination), write as continuous prose with no extra blank lines.
+1. Copy every template heading verbatim as **Heading:**. Fill only the body under it. Never output [NAME], [PLACEHOLDER], [SECTION], or similar tokens.
+2. Formatting: inside each section (complaints, history, examination), write as continuous prose with no extra blank lines. List sections must have their heading immediately before the list.
 3. Physical exam: do not use phrases like "not performed". If pathology details are absent, provide clinically neutral normal findings for major systems.
 4. Diagnosis: use international ICD-10 coding conventions where applicable.
-5. Recommendations: use numbered points 1., 2., etc. Keep phrasing concise and practical.
-6. Medications: use international nonproprietary names (INN/generic). Add brand examples only when clinically justified and region-neutral.
+5. Recommendations: use numbered points 1., 2., etc. Keep phrasing concise and practical. Put verification tests in this plan only, not under each differential item.
+6. Medications: use international nonproprietary names (INN/generic). Add brand examples only when clinically justified and region-neutral. No numeric doses unless key contraindications are documented as absent.
 7. Length: keep the protocol compact and practical (about up to 2 A4 pages equivalent).
-8. Footer note: include a brief informed-consent acknowledgment at the end (can be plain text).
-9. References: cite trusted international sources (UpToDate, PubMed, Cochrane, NCCN, ESC, WHO, etc.), preferably recent (<=5 years), for key management decisions.
+8. Do not generate "VERIFIED BY PHYSICIAN", signature lines, product branding, or legal disclaimers.
+9. References: if included, use a Markdown table with columns Query | Date | Source | Title | DOI/URL | Used | Comment. Each source once; if already cited, write "see above".
 ${requiredClinicalBlockDirective}
 ${strictTemplateDirective}
 ${tableDirective}
@@ -243,12 +259,24 @@ ${evidencePriorityDirective}
 
 Style: strictly professional, clinically and technically accurate.`;
 
-    const MODEL = model === 'opus' ? MODELS.OPUS : 
+    const MODEL = isDiagnosticReport
+      ? MODELS.HAIKU
+      : (model === 'opus' ? MODELS.OPUS : 
                  model === 'gpt52' ? MODELS.GPT_5_2 : 
-                 (model === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET);
+                 (model === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET));
+    const systemPrompt = isDiagnosticReport && diagnosticKind
+      ? getDiagnosticReportSystemPrompt(diagnosticKind)
+      : STAGE1_PROTOCOL_SYSTEM_PROMPT;
     
     if (useStreaming) {
-      const stream = await sendTextRequestStreaming(prompt, [], MODEL);
+      const stream = await sendTextRequestStreaming(
+        prompt,
+        [],
+        MODEL,
+        undefined,
+        systemPrompt,
+        { skipDisclaimer: true }
+      );
       const sanitizedStream = sanitizeProtocolSse(stream);
       return new Response(sanitizedStream, {
         headers: {
@@ -259,18 +287,40 @@ Style: strictly professional, clinically and technically accurate.`;
       });
     }
 
-    let result = await sendTextRequest(prompt, []);
-    if (!isEcgFunctionalConclusion && isStrictTemplateMode) {
+    const protocolLlmOptions = { skipDisclaimer: true };
+    let usage = emptyTokenUsage();
+    const firstPass = await sendTextRequestWithUsage(prompt, [], MODEL, undefined, systemPrompt, protocolLlmOptions);
+    usage = addModelUsage(usage, firstPass.modelUsed, firstPass.usage);
+    let result = firstPass.content;
+    if (!isDiagnosticReport && isStrictTemplateMode) {
       const correctionPrompt = buildProtocolCorrectionPrompt({
         rawText,
         template: safeTemplate,
         draft: result,
         languageInstruction: responseLanguageInstruction,
       });
-      result = await sendTextRequest(correctionPrompt, []);
+      const correction = await sendTextRequestWithUsage(correctionPrompt, [], MODEL, undefined, systemPrompt, protocolLlmOptions);
+      usage = addModelUsage(usage, correction.modelUsed, correction.usage);
+      result = correction.content;
     }
-    result = anonymizeText(result);
-    return NextResponse.json({ success: true, protocol: result });
+    result = isDiagnosticReport
+      ? finalizeDiagnosticReport(result)
+      : finalizeProtocolDocument(result, safeTemplate);
+    if (!isDiagnosticReport && hasUnresolvedHeadingPlaceholder(result)) {
+      const headingRepairPrompt = buildProtocolCorrectionPrompt({
+        rawText,
+        template: safeTemplate,
+        draft: result,
+        languageInstruction: responseLanguageInstruction,
+      });
+      const repaired = await sendTextRequestWithUsage(headingRepairPrompt, [], MODEL, undefined, systemPrompt, protocolLlmOptions);
+      usage = addModelUsage(usage, repaired.modelUsed, repaired.usage);
+      result = finalizeProtocolDocument(repaired.content, safeTemplate);
+    }
+    if (usage.total_tokens > 0) {
+      console.log(formatCostLog(MODEL, usage.prompt_tokens, usage.completion_tokens, usage.total_tokens));
+    }
+    return NextResponse.json({ success: true, protocol: result, usage });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: 'Protocol generation error' }, { status: 500 });
   }

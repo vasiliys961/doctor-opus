@@ -67,6 +67,14 @@ export function getLlmEndpointChain(): LlmEndpoint[] {
   return chain;
 }
 
+export function canSwitchToNextLlmProvider(
+  status: number,
+  endpointIndex: number,
+  endpointCount: number
+): boolean {
+  return endpointIndex < endpointCount - 1 && PROVIDER_FALLBACK_STATUSES.has(status);
+}
+
 interface PostLlmOptions {
   headers?: Record<string, string>;
   timeoutMs?: number;

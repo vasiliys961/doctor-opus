@@ -1,7 +1,6 @@
 /**
  * Универсальный интерфейс провайдера транскрипции речи.
- * Позволяет переключаться между AssemblyAI и Yandex SpeechKit
- * через env: SPEECH_PROVIDER=assemblyai | yandex
+ * На глобальной версии используется только AssemblyAI.
  */
 
 export interface TranscriptionResult {
@@ -15,20 +14,9 @@ export interface SpeechProvider {
 }
 
 /**
- * Возвращает актуальный провайдер транскрипции.
- * По умолчанию — AssemblyAI. Для Yandex установите SPEECH_PROVIDER=yandex.
+ * Возвращает AssemblyAI-провайдер транскрипции.
  */
-export function getSpeechProvider(): SpeechProvider {
-  const provider = process.env.SPEECH_PROVIDER || 'assemblyai';
-
-  switch (provider.toLowerCase()) {
-    case 'yandex':
-      // Ленивый импорт, чтобы не тянуть зависимости зря
-      const { YandexSpeechKitProvider } = require('./yandex-speechkit');
-      return new YandexSpeechKitProvider();
-    case 'assemblyai':
-    default:
-      const { AssemblyAIProvider } = require('./assemblyai');
-      return new AssemblyAIProvider();
-  }
+export function getSpeechProvider(languageOrLocale?: string): SpeechProvider {
+  const { AssemblyAIProvider } = require('./assemblyai');
+  return new AssemblyAIProvider(languageOrLocale);
 }

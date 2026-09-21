@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { MODELS, sendTextRequest } from '@/lib/openrouter'
+import { MODELS, sendTextRequestWithUsage } from '@/lib/openrouter'
+import { addModelUsage, emptyTokenUsage } from '@/lib/cost-calculator'
 import { anonymizeText } from '@/lib/anonymization'
 import { getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language'
 
@@ -47,13 +48,20 @@ export async function POST(request: NextRequest) {
 
     const prompt = buildDialogueDraftPrompt({ transcript, specialistName, languageInstruction: responseLanguageInstruction })
     let modelUsed = DEFAULT_DRAFT_MODEL
+    let usage = emptyTokenUsage()
     let draft = ''
 
     try {
-      draft = await sendTextRequest(prompt, [], modelUsed)
+      const primary = await sendTextRequestWithUsage(prompt, [], modelUsed)
+      usage = addModelUsage(usage, primary.modelUsed, primary.usage)
+      modelUsed = primary.modelUsed
+      draft = primary.content
     } catch (primaryError) {
       modelUsed = FALLBACK_DRAFT_MODEL
-      draft = await sendTextRequest(prompt, [], modelUsed)
+      const fallback = await sendTextRequestWithUsage(prompt, [], modelUsed)
+      usage = addModelUsage(usage, fallback.modelUsed, fallback.usage)
+      modelUsed = fallback.modelUsed
+      draft = fallback.content
     }
 
     draft = anonymizeText(String(draft || '')).trim()
@@ -65,6 +73,7 @@ export async function POST(request: NextRequest) {
       success: true,
       draft,
       modelUsed,
+      usage,
     })
   } catch (error: any) {
     return NextResponse.json(

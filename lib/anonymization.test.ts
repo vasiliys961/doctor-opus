@@ -22,6 +22,26 @@ describe('anonymizeText', () => {
     expect(result).not.toContain('Иванян А.П.');
   });
 
+  it('keeps English protocol headings and guideline names', () => {
+    const source = [
+      'History of Present Illness',
+      'Objective Examination',
+      'Differential Diagnosis',
+      'Red Flags to Exclude',
+      'American College of Physicians',
+      'Patient Education/Discussion',
+    ].join('\n');
+    const result = anonymizeText(source);
+
+    expect(result).toContain('History of Present Illness');
+    expect(result).toContain('Objective Examination');
+    expect(result).toContain('Differential Diagnosis');
+    expect(result).toContain('Red Flags to Exclude');
+    expect(result).toContain('American College of Physicians');
+    expect(result).toContain('Patient Education/Discussion');
+    expect(result).not.toMatch(/^\s*\[NAME\]/m);
+  });
+
   it('masks phone and email', () => {
     const source = 'Phone: +7 (999) 123-45-67, Email: john.smith@example.com';
     const result = anonymizeText(source);

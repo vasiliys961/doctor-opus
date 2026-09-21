@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import PatientSelector from '@/components/PatientSelector'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -15,7 +14,7 @@ import { labPageMessages } from '@/lib/i18n/ui-client-messages'
 import type { Locale } from '@/lib/i18n/config'
 import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
-import { handleSSEStream } from '@/lib/streaming-utils'
+import { createStreamRenderer, handleSSEStream, isStreamingStatusOnly, stripStreamingStatusNoise } from '@/lib/streaming-utils'
 import { REQUEST_PROMPTS } from '@/lib/request-prompts'
 
 // Расширяем Window для PDF.js
@@ -162,6 +161,7 @@ export default function LabPage() {
     setLoading(true)
     setCurrentCost(0)
     setModelInfo({ model: '', mode: '' })
+    const streamUi = createStreamRenderer(setResult)
 
     try {
       // Если у нас есть обработанные (анонимизированные) изображения, используем их
@@ -186,10 +186,8 @@ export default function LabPage() {
 
         if (useStreaming) {
           await handleSSEStream(response, {
-            onChunk: (content, accumulatedText) => {
-              flushSync(() => {
-                setResult(accumulatedText)
-              })
+            onChunk: (_content, accumulatedText) => {
+              streamUi.push(accumulatedText)
             },
             onUsage: (usage) => {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
@@ -211,6 +209,10 @@ export default function LabPage() {
             },
             onComplete: (finalText) => {
               console.log('✅ [LAB STREAMING] Анализ завершен')
+              streamUi.flush(stripStreamingStatusNoise(finalText) || finalText)
+              if (isStreamingStatusOnly(finalText)) {
+                setError('The model did not return a report. Try again or switch mode.')
+              }
             }
           })
         } else {
@@ -267,10 +269,8 @@ export default function LabPage() {
 
         if (useStreaming) {
           await handleSSEStream(response, {
-            onChunk: (content, accumulatedText) => {
-              flushSync(() => {
-                setResult(accumulatedText)
-              })
+            onChunk: (_content, accumulatedText) => {
+              streamUi.push(accumulatedText)
             },
             onUsage: (usage) => {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
@@ -292,6 +292,10 @@ export default function LabPage() {
             },
             onComplete: (finalText) => {
               console.log('✅ [LAB STREAMING] Анализ завершен')
+              streamUi.flush(stripStreamingStatusNoise(finalText) || finalText)
+              if (isStreamingStatusOnly(finalText)) {
+                setError('The model did not return a report. Try again or switch mode.')
+              }
             }
           })
         } else {
@@ -331,10 +335,8 @@ export default function LabPage() {
 
         if (useStreaming) {
           await handleSSEStream(response, {
-            onChunk: (content, accumulatedText) => {
-              flushSync(() => {
-                setResult(accumulatedText)
-              })
+            onChunk: (_content, accumulatedText) => {
+              streamUi.push(accumulatedText)
             },
             onUsage: (usage) => {
               console.log('📊 [LAB STREAMING] Получена точная стоимость:', usage.total_cost)
@@ -356,6 +358,10 @@ export default function LabPage() {
             },
             onComplete: (finalText) => {
               console.log('✅ [LAB STREAMING] Анализ завершен')
+              streamUi.flush(stripStreamingStatusNoise(finalText) || finalText)
+              if (isStreamingStatusOnly(finalText)) {
+                setError('The model did not return a report. Try again or switch mode.')
+              }
             }
           })
         } else {
@@ -619,6 +625,7 @@ export default function LabPage() {
           loading={loading} 
           model={modelInfo.model}
           mode={modelInfo.mode || mode}
+          imageType="lab"
           cost={currentCost} 
           isAnonymous={isAnonymous}
           images={processedImages.length > 0 ? processedImages.map(img => `data:image/jpeg;base64,${img}`) : file?.type.startsWith('image/') ? [URL.createObjectURL(file)] : []}

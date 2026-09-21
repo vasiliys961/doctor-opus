@@ -9,7 +9,7 @@ import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, 
 import { safeLog, safeError, safeWarn } from './logger';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
 import { getValidatedOpusModel } from './validated-opus-model';
-import { getLlmApiKey, getLlmChatCompletionsUrl, getLlmEndpointChain, postLlmChatCompletionsWithFallback } from './llm-provider';
+import { canSwitchToNextLlmProvider, getLlmApiKey, getLlmChatCompletionsUrl, getLlmEndpointChain, postLlmChatCompletionsWithFallback } from './llm-provider';
 import { appendClinicalDraftDisclaimer } from './clinical-disclaimer';
 
 const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
@@ -120,13 +120,6 @@ async function fetchWithTimeout(url: string, options: any, timeout = 300000) {
   }
 }
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-function isRateLimit(status: number, errorText?: string) {
-  if (status === 429) return true;
-  const text = (errorText || '').toLowerCase();
-  return text.includes('rate-limited') || text.includes('rate limited');
-}
 
 function getStage2FallbackModel(primaryModel: string): string | null {
   if (isAnthropicModel(primaryModel)) {
@@ -413,12 +406,6 @@ export async function analyzeImageFast(options: {
     const { getDirectivePrompt } = await import('./prompts');
     const directivePrompt = getDirectivePrompt(imageType, options.prompt, specialty);
 
-    const textModels = [
-      MODELS.GEMINI_3_FLASH,
-      MODELS.HAIKU,
-      MODELS.SONNET
-    ];
-    
     const contextPrompt = `You are an expert medical assistant with professor-level clinical competence. Based on these data and your expertise, provide a clinical directive.
 
 === STRUCTURED DATA (GEMINI 3.0) ===
@@ -432,44 +419,22 @@ ${options.clinicalContext ? `\nPatient context: ${options.clinicalContext}` : ''
       { role: 'user', content: contextPrompt }
     ];
 
-    safeLog('🚀 [FAST] Шаг 2: формирование директивы (fallback при 429)...');
+    safeLog('🚀 [FAST] Шаг 2: формирование директивы (один hop Polza → OpenRouter)...');
 
-    for (const textModel of textModels) {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const textResponse = await fetchWithTimeout(OPENROUTER_API_URL, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://doctor-opus.online',
-            'X-Title': 'Doctor Opus'
-          },
-          body: JSON.stringify({
-            model: textModel,
-            messages: messages,
-            max_tokens: 10000, // Оптимизировано: текстовый анализ
-            temperature: 0.1,
-          })
-        }, 120000);
+    const textResponse = await postLlmChatCompletionsWithFallback({
+      model: MODELS.GEMINI_3_FLASH,
+      messages,
+      max_tokens: 10000,
+      temperature: 0.1,
+    }, { timeoutMs: 120000 });
 
-        if (textResponse.ok) {
-          const textData = await textResponse.json();
-          return appendClinicalDraftDisclaimer(textData.choices[0].message.content || '');
-        }
-
-        const errorText = await textResponse.text();
-        if (isRateLimit(textResponse.status, errorText) && attempt === 0) {
-          safeWarn(`⚠️ [FAST] 429 на модели ${textModel}, повтор через паузу...`);
-          await sleep(1500);
-          continue;
-        }
-
-        safeWarn(`⚠️ [FAST] Ошибка ${textResponse.status} на модели ${textModel}: ${errorText.substring(0, 200)}`);
-        break;
-      }
+    if (!textResponse.ok) {
+      const errorText = await textResponse.text();
+      throw new Error(`Fast analysis failed: ${textResponse.status} - ${errorText.substring(0, 200)}`);
     }
 
-    throw new Error('Fast analysis failed on all available models');
+    const textData = await textResponse.json();
+    return appendClinicalDraftDisclaimer(textData.choices[0].message.content || '');
     
   } catch (error: any) {
     safeError('❌ [FAST] Ошибка:', error);
@@ -676,14 +641,9 @@ export async function extractImageJSON(options: {
       temperature: 0.1,
     };
 
-    const response = await fetchWithTimeout(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    }, timeoutMs);
+    const response = await postLlmChatCompletionsWithFallback(payload, {
+      timeoutMs,
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -726,44 +686,21 @@ export async function extractImageJSON(options: {
     };
   };
 
-  const nonGeminiFallbackModels = [
-    MODELS.SONNET,
-    MODELS.HAIKU,
-    MODELS.GPT_5_2,
-  ];
+  const visionFallbackModel = preferModel === MODELS.SONNET ? MODELS.GEMINI_3_FLASH : MODELS.SONNET;
   const hasDistinctProVisionModel = MODELS.GEMINI_3_PRO !== MODELS.GEMINI_3_FLASH;
+
+  const callWithOneFallback = async (primaryModel: string, timeoutMs = 60000) => {
+    try {
+      return await callModel(primaryModel, timeoutMs);
+    } catch (error: any) {
+      safeWarn(`⚠️ [VISION JSON] ${primaryModel} failed: ${error.message}. One fallback to ${visionFallbackModel}`);
+      return await callModel(visionFallbackModel, 90000);
+    }
+  };
 
   // Fast path for forced model and non-smart routing
   if (!smartRoutingEnabled || preferModel !== MODELS.GEMINI_3_FLASH) {
-    const orderedModels = [
-      preferModel,
-      MODELS.GEMINI_3_FLASH,
-      MODELS.GEMINI_3_PRO,
-      'google/gemini-2.0-flash-001',
-      'google/gemini-flash-1.5',
-      'google/gemini-pro-1.5'
-    ].filter((value, index, arr) => !!value && arr.indexOf(value) === index);
-
-    for (const model of orderedModels) {
-      try {
-        return await callModel(model, model === MODELS.GEMINI_3_PRO ? 90000 : 60000);
-      } catch (error: any) {
-        safeWarn(`⚠️ [VISION JSON] Error with ${model}: ${error.message}, trying next model...`);
-        if (String(error.message).includes('[429]')) await sleep(1500);
-        continue;
-      }
-    }
-
-    for (const model of nonGeminiFallbackModels) {
-      try {
-        return await callModel(model, 90000);
-      } catch (error: any) {
-        safeWarn(`⚠️ [VISION JSON] Fallback error with ${model}: ${error.message}, trying next model...`);
-        if (String(error.message).includes('[429]')) await sleep(1500);
-      }
-    }
-
-    throw new Error('Failed to extract JSON via all available vision models');
+    return callWithOneFallback(preferModel, preferModel === MODELS.GEMINI_3_PRO ? 90000 : 60000);
   }
 
   // Smart routing: start with Flash, then escalate to Pro if needed.
@@ -771,33 +708,17 @@ export async function extractImageJSON(options: {
   try {
     flashResult = await callModel(MODELS.GEMINI_3_FLASH, 60000);
   } catch (error: any) {
-    safeWarn(`⚠️ [SMART ROUTER] Flash unavailable, trying Pro: ${error.message}`);
-    if (!hasDistinctProVisionModel) {
-      safeWarn('⚠️ [SMART ROUTER] Secondary Gemini model is not configured, using non-Gemini fallbacks');
-      for (const model of nonGeminiFallbackModels) {
-        try {
-          return await callModel(model, 90000);
-        } catch (fallbackError: any) {
-          safeWarn(`⚠️ [SMART ROUTER] Fallback error with ${model}: ${fallbackError.message}`);
-          if (String(fallbackError.message).includes('[429]')) await sleep(1500);
-        }
+    safeWarn(`⚠️ [SMART ROUTER] Flash unavailable: ${error.message}`);
+    if (hasDistinctProVisionModel) {
+      try {
+        return await callModel(MODELS.GEMINI_3_PRO, 90000);
+      } catch (proError: any) {
+        safeWarn(`⚠️ [SMART ROUTER] Pro unavailable, one fallback to ${visionFallbackModel}: ${proError.message}`);
+        return await callModel(visionFallbackModel, 90000);
       }
-      throw new Error('Failed to extract JSON via all available vision models');
     }
-    try {
-      return await callModel(MODELS.GEMINI_3_PRO, 90000);
-    } catch (proError: any) {
-      safeWarn(`⚠️ [SMART ROUTER] Pro unavailable, using non-Gemini fallbacks: ${proError.message}`);
-      for (const model of nonGeminiFallbackModels) {
-        try {
-          return await callModel(model, 90000);
-        } catch (fallbackError: any) {
-          safeWarn(`⚠️ [SMART ROUTER] Fallback error with ${model}: ${fallbackError.message}`);
-          if (String(fallbackError.message).includes('[429]')) await sleep(1500);
-        }
-      }
-      throw new Error('Failed to extract JSON via all available vision models');
-    }
+    safeWarn(`⚠️ [SMART ROUTER] One fallback to ${visionFallbackModel}`);
+    return await callModel(visionFallbackModel, 90000);
   }
 
   const routing = extractRoutingMetadata(flashResult.data);
@@ -1139,7 +1060,8 @@ export async function sendTextRequestWithUsage(
   history: Array<{role: string, content: string}> = [],
   model: string = MODELS.OPUS,
   specialty?: Specialty,
-  customSystemPrompt?: string
+  customSystemPrompt?: string,
+  options?: { skipDisclaimer?: boolean }
 ): Promise<TextRequestResult> {
   const providerEndpoints = getLlmEndpointChain();
   if (!providerEndpoints.length) {
@@ -1182,51 +1104,36 @@ export async function sendTextRequestWithUsage(
     });
 
     const REQUEST_TIMEOUT_MS = 45000;
-    const MAX_RETRIES = 2;
     let response: Response | null = null;
     const sendWithRetries = async (targetModel: string): Promise<Response> => {
-      let attemptResponse: Response | null = null;
       let lastError: any = null;
-      for (const endpoint of providerEndpoints) {
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-          const payload = {
-            model: targetModel,
-            messages,
-            max_tokens: 10000, // Оптимизировано: текстовый запрос
-            temperature: 0.1,
-          };
-          try {
-            attemptResponse = await fetchWithTimeout(endpoint.chatCompletionsUrl, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${endpoint.apiKey}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(payload)
-            }, REQUEST_TIMEOUT_MS);
+      for (let i = 0; i < providerEndpoints.length; i += 1) {
+        const endpoint = providerEndpoints[i];
+        const payload = {
+          model: targetModel,
+          messages,
+          max_tokens: 10000, // Оптимизировано: текстовый запрос
+          temperature: 0.1,
+        };
+        try {
+          const attemptResponse = await fetchWithTimeout(endpoint.chatCompletionsUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${endpoint.apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+          }, REQUEST_TIMEOUT_MS);
+          if (attemptResponse.ok || !canSwitchToNextLlmProvider(attemptResponse.status, i, providerEndpoints.length)) {
             return attemptResponse;
-          } catch (err: any) {
-            lastError = err;
-            const message = String(err?.message || '').toLowerCase();
-            const isTransientNetworkError =
-              err?.name === 'AbortError' ||
-              err?.name === 'TimeoutError' ||
-              message.includes('fetch failed') ||
-              message.includes('und_err_connect_timeout') ||
-              message.includes('etimedout') ||
-              message.includes('econnreset') ||
-              message.includes('econnrefused') ||
-              message.includes('enotfound') ||
-              message.includes('network');
-
-            if (!isTransientNetworkError || attempt === MAX_RETRIES) {
-              break;
-            }
-
-            const backoffMs = 1200 * (attempt + 1);
-            safeWarn(`OpenRouter text request transient network error (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${backoffMs}ms`);
-            await sleep(backoffMs);
           }
+          safeWarn(`Primary LLM ${endpoint.name} returned ${attemptResponse.status}, switching once to OpenRouter`);
+        } catch (err: any) {
+          lastError = err;
+          if (i >= providerEndpoints.length - 1) {
+            throw err;
+          }
+          safeWarn(`Primary LLM ${endpoint.name} failed, switching once to OpenRouter`);
         }
       }
       throw lastError || new Error('OpenRouter text request failed: no response received');
@@ -1281,14 +1188,15 @@ export async function sendTextRequestWithUsage(
     }
     const usageCost = calculateCost(inputTokens, outputTokens, selectedModel).totalCostUnits;
 
+    const rawContent = data.choices[0].message.content || '';
     return {
-      content: appendClinicalDraftDisclaimer(data.choices[0].message.content || ''),
+      content: options?.skipDisclaimer ? rawContent : appendClinicalDraftDisclaimer(rawContent),
       modelUsed: selectedModel,
       usage: {
         prompt_tokens: inputTokens,
         completion_tokens: outputTokens,
         total_tokens: tokensUsed || (inputTokens + outputTokens),
-        total_cost: Number(data?.usage?.total_cost) > 0 ? Number(data.usage.total_cost) : usageCost,
+        total_cost: usageCost,
       },
     };
   } catch (error: any) {
@@ -1323,8 +1231,9 @@ export async function sendTextRequest(
   history: Array<{role: string, content: string}> = [],
   model: string = MODELS.OPUS,
   specialty?: Specialty,
-  customSystemPrompt?: string
+  customSystemPrompt?: string,
+  options?: { skipDisclaimer?: boolean }
 ): Promise<string> {
-  const result = await sendTextRequestWithUsage(prompt, history, model, specialty, customSystemPrompt);
+  const result = await sendTextRequestWithUsage(prompt, history, model, specialty, customSystemPrompt, options);
   return result.content;
 }

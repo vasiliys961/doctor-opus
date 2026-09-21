@@ -18,6 +18,12 @@ import { logUsage } from '@/lib/simple-logger'
 import { calculateCost } from '@/lib/cost-calculator'
 import { saveDocument, getDocumentChunks, searchLibraryLocal } from '@/lib/library-db'
 import { anonymizeText } from '@/lib/anonymization'
+import { finalizeProtocolDocument } from '@/lib/protocol-presentation'
+import { getDiagnosticReportUi, isDiagnosticTemplateId, resolveDiagnosticKindFromTemplateId } from '@/lib/diagnostic-report'
+import { finalizeStage2Note, isValidStage2Note } from '@/lib/protocol-stage2'
+import { getClientLocale } from '@/lib/i18n/client'
+import { protocolMessages } from '@/lib/i18n/ui-client-messages'
+import type { Locale } from '@/lib/i18n/config'
 import mammoth from 'mammoth'
 
 declare global {
@@ -28,8 +34,27 @@ declare global {
 
 const PROTOCOL_DRAFT_KEY = 'protocol_draft'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
-const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
 const CYRILLIC_REGEX = /[А-Яа-яЁё]/
+const PROTOCOL_USAGE_SECTION = 'appointment-protocol'
+
+type ProtocolCostPart = 'stt' | 'prep' | 'stage1' | 'stage2'
+
+function formatConversationClock(seconds: number): string {
+  const safe = Math.max(0, Math.round(seconds))
+  const mins = Math.floor(safe / 60)
+  const secs = safe % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+function readApiUsage(data: any): { prompt_tokens: number; completion_tokens: number; total_cost: number } | null {
+  const usage = data?.usage
+  if (!usage || typeof usage !== 'object') return null
+  const promptTokens = Number(usage.prompt_tokens) || 0
+  const completionTokens = Number(usage.completion_tokens) || 0
+  const totalCost = Number(usage.total_cost) || 0
+  if (totalCost <= 0 && promptTokens <= 0 && completionTokens <= 0) return null
+  return { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_cost: totalCost }
+}
 
 function chunkTemplateForRag(content: string, maxChunkLength: number = 1200): string[] {
   const clean = content.replace(/\r\n/g, '\n').trim()
@@ -63,9 +88,22 @@ function chunkTemplateForRag(content: string, maxChunkLength: number = 1200): st
 }
 
 export default function ProtocolPage() {
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = protocolMessages[locale] || protocolMessages.en
   const [rawText, setRawText] = useState('')
-  const [showAudioUpload, setShowAudioUpload] = useState(false)
+  const [showConversationRecorder, setShowConversationRecorder] = useState(false)
+  const [conversationTranscriptText, setConversationTranscriptText] = useState('')
+  const [recordedDraftText, setRecordedDraftText] = useState('')
+  const [draftFromConversationLoading, setDraftFromConversationLoading] = useState(false)
+  const [draftFromConversationError, setDraftFromConversationError] = useState('')
+  const [draftFromConversationModel, setDraftFromConversationModel] = useState<string | null>(null)
+  const [autoInsertConversationToProtocol, setAutoInsertConversationToProtocol] = useState(false)
+  const [conversationStats, setConversationStats] = useState({ duration: 0, cost: 0 })
   const [protocol, setProtocol] = useState('')
+  const [finalNote, setFinalNote] = useState('')
+  const [physicianAdditions, setPhysicianAdditions] = useState('')
+  const [finalNoteLoading, setFinalNoteLoading] = useState(false)
+  const [finalNoteError, setFinalNoteError] = useState('')
   const [loading, setLoading] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
   const [model, setModel] = useState<'sonnet' | 'opus' | 'gemini' | 'gpt52'>('sonnet')
@@ -86,6 +124,39 @@ export default function ProtocolPage() {
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const conversationRecorderRef = useRef<HTMLDivElement | null>(null)
+  const costPartsRef = useRef<Record<ProtocolCostPart, number>>({ stt: 0, prep: 0, stage1: 0, stage2: 0 })
+
+  const publishSessionCost = () => {
+    const parts = costPartsRef.current
+    setCurrentCost(parts.stt + parts.prep + parts.stage1 + parts.stage2)
+  }
+
+  const setCostPart = (part: ProtocolCostPart, amount: number, mode: 'set' | 'add' = 'set') => {
+    const next = Math.max(0, Number(amount) || 0)
+    costPartsRef.current[part] = mode === 'add' ? costPartsRef.current[part] + next : next
+    publishSessionCost()
+  }
+
+  const logProtocolUsage = (params: { model: string; inputTokens: number; outputTokens: number }) => {
+    if (params.inputTokens <= 0 && params.outputTokens <= 0) return
+    logUsage({
+      section: PROTOCOL_USAGE_SECTION,
+      model: params.model,
+      inputTokens: params.inputTokens,
+      outputTokens: params.outputTokens,
+      specialty: specialistName,
+    })
+  }
+
+  useEffect(() => {
+    setLocale(getClientLocale())
+  }, [])
+
+  useEffect(() => {
+    if (!showConversationRecorder) return
+    conversationRecorderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [showConversationRecorder])
 
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.pdfjsLib) {
@@ -391,11 +462,11 @@ export default function ProtocolPage() {
 
     setLoading(true)
     setProtocol('')
-    setCurrentCost(0)
-
-    const modelUsed = model === 'opus' ? MODELS.OPUS : 
-                    model === 'gpt52' ? MODELS.GPT_5_2 :
-                    model === 'gemini' ? MODELS.GEMINI_3_FLASH : MODELS.SONNET;
+    setFinalNote('')
+    setFinalNoteError('')
+    costPartsRef.current.stage1 = 0
+    costPartsRef.current.stage2 = 0
+    publishSessionCost()
 
     const modelsMap: Record<string, string> = {
       'opus': MODELS.OPUS,
@@ -437,24 +508,25 @@ export default function ProtocolPage() {
 
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 
+        let lastUsage: { total_cost: number; prompt_tokens: number; completion_tokens: number; model?: string } | null = null
         await handleSSEStream(response, {
           onChunk: (text) => {
             setProtocol(prev => prev + text)
           },
           onUsage: (usage) => {
-            console.log('📊 [PROTOCOL STREAMING] Получена точная стоимость:', usage.total_cost)
-            setCurrentCost(usage.total_cost)
-            
-            logUsage({
-              section: 'protocols',
-              model: usage.model || finalModel,
-              inputTokens: usage.prompt_tokens,
-              outputTokens: usage.completion_tokens,
-              specialty: specialistName // Передаем специальность для аудита
-            });
+            if (!(usage.total_cost > 0)) return
+            lastUsage = usage
+            setCostPart('stage1', usage.total_cost)
           },
           onComplete: (finalText) => {
-            console.log('✅ [PROTOCOL STREAMING] Протокол готов')
+            setProtocol(finalizeProtocolDocument(finalText, customTemplate))
+            if (lastUsage) {
+              logProtocolUsage({
+                model: lastUsage.model || finalModel,
+                inputTokens: lastUsage.prompt_tokens,
+                outputTokens: lastUsage.completion_tokens,
+              })
+            }
           }
         })
       } else {
@@ -466,18 +538,16 @@ export default function ProtocolPage() {
         const data = await response.json()
         if (data.success) {
           setProtocol(data.protocol)
-          const inputTokens = Math.ceil(rawText.length / 4) + 1000;
-          const outputTokens = Math.ceil(data.protocol.length / 4);
-          const costInfo = calculateCost(inputTokens, outputTokens, finalModel);
-          setCurrentCost(costInfo.totalCostUnits);
-
-          logUsage({
-            section: 'protocols',
+          const usage = readApiUsage(data)
+          const inputTokens = usage?.prompt_tokens || Math.ceil(rawText.length / 4) + 1000
+          const outputTokens = usage?.completion_tokens || Math.ceil(String(data.protocol || '').length / 4)
+          const cost = usage?.total_cost || calculateCost(inputTokens, outputTokens, finalModel).totalCostUnits
+          setCostPart('stage1', cost)
+          logProtocolUsage({
             model: finalModel,
             inputTokens,
             outputTokens,
-            specialty: specialistName // Передаем специальность для аудита
-          });
+          })
         }
         else setProtocol(`Error: ${data.error}`)
       }
@@ -500,10 +570,113 @@ export default function ProtocolPage() {
     setUniversalPrompt('')
   }
 
-  const handleExportToDocx = async () => {
-    if (!protocol) return
+  const diagnosticKind = resolveDiagnosticKindFromTemplateId(selectedTemplateId)
+  const isDiagnosticProtocol = isDiagnosticTemplateId(selectedTemplateId)
+  const exportableNote = isDiagnosticProtocol ? protocol : finalNote
+
+  const handleGenerateFinalNote = async () => {
+    if (!protocol.trim() || isDiagnosticProtocol) return
+
+    setFinalNoteLoading(true)
+    setFinalNoteError('')
+    setFinalNote('')
+    costPartsRef.current.stage2 = 0
+    publishSessionCost()
     try {
-      const lines = protocol.split('\n')
+      const payload = {
+        draft: anonymizeText(protocol),
+        physicianAdditions,
+        specialistName,
+        model,
+        useStreaming,
+      }
+
+      if (useStreaming) {
+        const response = await fetch('/api/protocol/final-note', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+
+        let lastUsage: { total_cost: number; prompt_tokens: number; completion_tokens: number; model?: string } | null = null
+        await handleSSEStream(response, {
+          onChunk: (text) => {
+            setFinalNote((prev) => prev + text)
+          },
+          onUsage: (usage) => {
+            if (!(usage.total_cost > 0)) return
+            lastUsage = usage
+            setCostPart('stage2', usage.total_cost)
+          },
+          onComplete: async (finalText) => {
+            const cleaned = finalizeStage2Note(finalText)
+            if (lastUsage) {
+              logProtocolUsage({
+                model: lastUsage.model || MODELS.SONNET,
+                inputTokens: lastUsage.prompt_tokens,
+                outputTokens: lastUsage.completion_tokens,
+              })
+            }
+            if (isValidStage2Note(cleaned)) {
+              setFinalNote(cleaned)
+              return
+            }
+
+            const retryResponse = await fetch('/api/protocol/final-note', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...payload, useStreaming: false }),
+            })
+            const retryData = await retryResponse.json()
+            if (!retryData?.success) {
+              throw new Error(retryData?.error || t.finalNoteError)
+            }
+            setFinalNote(String(retryData.finalNote || '').trim())
+            const retryUsage = readApiUsage(retryData)
+            if (retryUsage) {
+              setCostPart('stage2', retryUsage.total_cost, 'add')
+              logProtocolUsage({
+                model: String(retryData.modelUsed || payload.model),
+                inputTokens: retryUsage.prompt_tokens,
+                outputTokens: retryUsage.completion_tokens,
+              })
+            }
+          },
+        })
+      } else {
+        const response = await fetch('/api/protocol/final-note', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...payload, useStreaming: false }),
+        })
+        const data = await response.json()
+        if (!data?.success) {
+          throw new Error(data?.error || t.finalNoteError)
+        }
+        setFinalNote(String(data.finalNote || '').trim())
+        const usage = readApiUsage(data)
+        if (usage) {
+          setCostPart('stage2', usage.total_cost)
+          logProtocolUsage({
+            model: String(data.modelUsed || payload.model),
+            inputTokens: usage.prompt_tokens,
+            outputTokens: usage.completion_tokens,
+          })
+        }
+      }
+    } catch (error: any) {
+      setFinalNote('')
+      setFinalNoteError(error?.message || t.finalNoteError)
+    } finally {
+      setFinalNoteLoading(false)
+    }
+  }
+
+  const handleExportToDocx = async () => {
+    if (!exportableNote) return
+    try {
+      const lines = exportableNote.split('\n')
       const paragraphs: any[] = []
       for (const line of lines) {
         if (!line.trim()) {
@@ -533,31 +706,71 @@ export default function ProtocolPage() {
       const doc = new Document({ sections: [{ properties: {}, children: paragraphs }] })
       const blob = await Packer.toBlob(doc)
       const datePart = new Date().toISOString().split('T')[0]
-      const filePrefix = selectedTemplateId === ECG_FUNCTIONAL_TEMPLATE_ID ? 'Protocol_ECG' : 'Protocol_Appointment'
+      const filePrefix = diagnosticKind
+        ? getDiagnosticReportUi(diagnosticKind).filePrefix
+        : 'Clinical_Note_SOAP'
       saveAs(blob, `${filePrefix}_${datePart}.docx`)
     } catch (err: any) {
       alert('Export error: ' + err.message)
     }
   }
 
+  const buildDraftFromConversation = async (transcriptText: string) => {
+    const safeTranscript = anonymizeText(transcriptText || '').trim()
+    if (!safeTranscript) return
+
+    setDraftFromConversationLoading(true)
+    setDraftFromConversationError('')
+    try {
+      const response = await fetch('/api/protocol/dialogue-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcript: safeTranscript,
+          specialistName,
+        }),
+      })
+      const data = await response.json()
+      if (!data?.success) {
+        throw new Error(data?.error || t.draftError)
+      }
+      const draft = String(data?.draft || '').trim()
+      if (!draft) {
+        throw new Error(t.draftError)
+      }
+      setRecordedDraftText(draft)
+      setDraftFromConversationModel(typeof data?.modelUsed === 'string' ? data.modelUsed : null)
+      const usage = readApiUsage(data)
+      if (usage) {
+        setCostPart('prep', usage.total_cost, 'add')
+        logProtocolUsage({
+          model: typeof data?.modelUsed === 'string' ? data.modelUsed : MODELS.HAIKU,
+          inputTokens: usage.prompt_tokens,
+          outputTokens: usage.completion_tokens,
+        })
+      }
+      if (autoInsertConversationToProtocol) {
+        setRawText((prev) => (prev ? `${prev}\n\n${draft}` : draft))
+      }
+    } catch (error: any) {
+      setDraftFromConversationError(error?.message || t.draftError)
+      setRecordedDraftText(safeTranscript)
+      setDraftFromConversationModel(null)
+      if (autoInsertConversationToProtocol) {
+        setRawText((prev) => (prev ? `${prev}\n\n${safeTranscript}` : safeTranscript))
+      }
+    } finally {
+      setDraftFromConversationLoading(false)
+    }
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <h1 className="text-3xl font-bold text-primary-900 mb-6">
-        {selectedTemplateId === ECG_FUNCTIONAL_TEMPLATE_ID ? '🫀 ECG Protocol' : '📝 Appointment Protocol'}
+        {isDiagnosticProtocol
+          ? `📄 ${diagnosticKind ? getDiagnosticReportUi(diagnosticKind).title : t.generatedProtocol}`
+          : `📝 ${t.appointmentProtocol}`}
       </h1>
-      
-      {showAudioUpload && (
-        <div className="mb-4 bg-white rounded-lg shadow-lg p-4">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold">🎤 Audio Upload</h3>
-            <button onClick={() => setShowAudioUpload(false)} className="text-gray-500 hover:text-gray-700">✕</button>
-          </div>
-          <AudioUpload onTranscribe={(transcript) => {
-            setRawText(prev => prev ? prev + '\n\n' + transcript : transcript)
-            setShowAudioUpload(false)
-          }} />
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow-lg p-6">
@@ -705,14 +918,110 @@ export default function ProtocolPage() {
             />
           </div>
 
-          <div className="flex gap-2 mb-4">
-            <button onClick={() => setShowAudioUpload(!showAudioUpload)} className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors text-sm" disabled={loading}>
-              📁 Audio file
+          <div className="flex gap-2 mb-4 flex-wrap">
+            <button onClick={() => setShowConversationRecorder(!showConversationRecorder)} className="px-4 py-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors text-sm" disabled={loading}>
+              🎙️ {t.recordConversation}
             </button>
             <button onClick={() => setRawText('')} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm" disabled={!rawText || loading}>
-              🗑️ Clear
+              🗑️ {t.clear}
             </button>
           </div>
+
+          {showConversationRecorder && (
+            <div ref={conversationRecorderRef} className="mb-4 bg-white rounded-lg shadow-lg p-4 border border-indigo-100">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-semibold">🎙️ {t.conversationTitle}</h3>
+                <button onClick={() => setShowConversationRecorder(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+              </div>
+              <p className="text-[11px] text-gray-500 mb-2">
+                {t.conversationHint}
+              </p>
+              <p className="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-2">
+                {t.conversationCostHint}
+              </p>
+              <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                {t.conversationStartHint}
+              </p>
+              {conversationStats.duration > 0 && (
+                <p className="text-[11px] font-semibold text-indigo-800 mb-3">
+                  ⏱️ {t.conversationRecorded}: {formatConversationClock(conversationStats.duration)} · STT {conversationStats.cost.toFixed(2)} cr.
+                </p>
+              )}
+              <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-indigo-700 mb-3">
+                <input
+                  type="checkbox"
+                  checked={autoInsertConversationToProtocol}
+                  onChange={(e) => setAutoInsertConversationToProtocol(e.target.checked)}
+                  className="w-3.5 h-3.5"
+                />
+                {t.autoInsertDraft}
+              </label>
+              <AudioUpload
+                onTranscribe={(transcript, meta) => {
+                  if (meta?.cost) setCostPart('stt', meta.cost, 'add')
+                  if (meta?.duration || meta?.cost) {
+                    setConversationStats((prev) => ({
+                      duration: prev.duration + (Number(meta.duration) || 0),
+                      cost: prev.cost + (Number(meta.cost) || 0),
+                    }))
+                  }
+                  const nextTranscript = conversationTranscriptText
+                    ? `${conversationTranscriptText}\n\n${transcript}`
+                    : transcript
+                  setConversationTranscriptText(nextTranscript)
+                  void buildDraftFromConversation(nextTranscript)
+                }}
+              />
+              {draftFromConversationLoading && (
+                <p className="mt-2 text-xs text-indigo-600">⏳ {t.draftLoading}</p>
+              )}
+              {draftFromConversationError && (
+                <p className="mt-2 text-xs text-amber-700">⚠️ {draftFromConversationError}</p>
+              )}
+              {draftFromConversationModel && (
+                <p className="mt-2 text-[11px] text-blue-700">🤖 {t.draftModel}: {draftFromConversationModel}</p>
+              )}
+              {recordedDraftText && (
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-gray-700 mb-2">{t.draftLabel}</label>
+                  <textarea
+                    value={recordedDraftText}
+                    onChange={(e) => setRecordedDraftText(e.target.value)}
+                    className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-xs min-h-[140px] focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder={t.draftPlaceholder}
+                    disabled={loading}
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setRawText(prev => prev ? `${prev}\n\n${recordedDraftText}` : recordedDraftText)}
+                      className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-colors"
+                      disabled={loading || !recordedDraftText.trim()}
+                    >
+                      ➕ {t.insertDraft}
+                    </button>
+                    <button
+                      onClick={() => setRecordedDraftText('')}
+                      className="px-3 py-1.5 bg-gray-500 text-white rounded-lg text-xs font-semibold hover:bg-gray-600 transition-colors"
+                      disabled={loading}
+                    >
+                      🗑️ {t.clearDraft}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {conversationTranscriptText && (
+                <details className="mt-3">
+                  <summary className="text-xs text-gray-500 cursor-pointer">{t.showRawTranscript}</summary>
+                  <textarea
+                    value={conversationTranscriptText}
+                    onChange={(e) => setConversationTranscriptText(e.target.value)}
+                    className="mt-2 w-full px-3 py-2 border border-gray-200 rounded-lg text-xs min-h-[100px] focus:ring-2 focus:ring-gray-400 outline-none"
+                    disabled={loading}
+                  />
+                </details>
+              )}
+            </div>
+          )}
 
           <div className="mb-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -727,37 +1036,106 @@ export default function ProtocolPage() {
             </select>
           </div>
 
-          <button onClick={handleGenerateProtocol} data-tour="protocol-generate-button" disabled={!rawText.trim() || loading} className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50 font-semibold shadow-md">
-            {loading ? '⏳ Generating...' : '📝 Generate Protocol'}
+          <button onClick={handleGenerateProtocol} data-tour="protocol-generate-button" disabled={!rawText.trim() || loading || finalNoteLoading} className="w-full px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50 font-semibold shadow-md">
+            {loading ? `⏳ ${isDiagnosticProtocol ? t.generating : t.generatingDraft}` : `📝 ${isDiagnosticProtocol ? t.generateProtocol : t.generateDraft}`}
           </button>
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <div>
-              <h2 className="text-xl font-semibold">Generated Protocol</h2>
+              <h2 className="text-xl font-semibold">{isDiagnosticProtocol ? t.generatedProtocol : t.draftTitle}</h2>
               {currentCost > 0 && (
-                <div className="mt-1 bg-teal-50 text-teal-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-teal-200 inline-block shadow-sm">
-                  💰 Service cost: {currentCost.toFixed(2)} cr.
+                <div className="mt-1">
+                  <div className="bg-teal-50 text-teal-700 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border border-teal-200 inline-block shadow-sm">
+                    💰 {t.serviceCost}: {currentCost.toFixed(2)} cr.
+                  </div>
+                  {conversationStats.cost > 0 && (
+                    <div className="mt-1 text-[10px] text-teal-700">
+                      {t.conversationRecorded}: {formatConversationClock(conversationStats.duration)} · STT {conversationStats.cost.toFixed(2)} cr.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-            {protocol && (
+            {isDiagnosticProtocol && protocol && (
               <div className="flex gap-2">
-                <button onClick={() => { navigator.clipboard.writeText(protocol); alert('Copied'); }} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm">📋</button>
+                <button onClick={() => { navigator.clipboard.writeText(protocol); alert(t.copied); }} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm">📋</button>
                 <button onClick={handleExportToDocx} className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">📄 DOCX</button>
               </div>
             )}
           </div>
+
+          {!isDiagnosticProtocol && protocol && (
+            <p className="mb-3 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              {t.draftWorkHint}
+            </p>
+          )}
           
           {protocol ? (
-            <div data-tour="protocol-generated-result" className="prose prose-sm max-w-none border border-gray-200 rounded-lg p-6 bg-white overflow-y-auto max-h-[800px]">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{protocol}</ReactMarkdown>
-            </div>
+            isDiagnosticProtocol ? (
+              <div data-tour="protocol-generated-result" className="prose prose-sm max-w-none border border-gray-200 rounded-lg p-6 bg-white overflow-y-auto max-h-[800px]">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{protocol}</ReactMarkdown>
+              </div>
+            ) : (
+              <textarea
+                data-tour="protocol-generated-result"
+                value={protocol}
+                onChange={(e) => {
+                  setProtocol(e.target.value)
+                  setFinalNote('')
+                }}
+                className="w-full min-h-[280px] px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                disabled={loading || finalNoteLoading}
+              />
+            )
           ) : (
             <div className="text-center text-gray-500 py-20 border-2 border-dashed border-gray-100 rounded-lg">
               {loading ? <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div> : <p className="text-4xl mb-4 opacity-20">📄</p>}
-              <p>{loading ? 'AI is generating protocol...' : 'Result will appear here'}</p>
+              <p>{loading ? t.aiGenerating : t.resultWillAppear}</p>
+            </div>
+          )}
+
+          {!isDiagnosticProtocol && protocol && (
+            <div className="mt-4 space-y-3">
+              <label className="block text-xs font-semibold text-gray-700">
+                {t.physicianAdditions}
+                <textarea
+                  value={physicianAdditions}
+                  onChange={(e) => setPhysicianAdditions(e.target.value)}
+                  placeholder={t.physicianAdditionsPlaceholder}
+                  className="mt-1 w-full min-h-[88px] px-3 py-2 border border-indigo-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                  disabled={loading || finalNoteLoading}
+                />
+              </label>
+              <button
+                onClick={handleGenerateFinalNote}
+                disabled={finalNoteLoading || loading || !protocol.trim()}
+                className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:opacity-50 font-semibold"
+              >
+                {finalNoteLoading ? `⏳ ${t.generatingFinalNote}` : `📋 ${t.generateFinalNote}`}
+              </button>
+              {finalNoteError && (
+                <p className="text-xs text-amber-700">⚠️ {finalNoteError}</p>
+              )}
+            </div>
+          )}
+
+          {!isDiagnosticProtocol && finalNote && (
+            <div className="mt-6">
+              <div className="flex justify-between items-center mb-2">
+                <div>
+                  <h3 className="text-lg font-semibold">{t.finalNoteTitle}</h3>
+                  <p className="text-[11px] text-gray-500">{t.finalNoteHint}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => { navigator.clipboard.writeText(finalNote); alert(t.copied); }} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm">📋</button>
+                  <button onClick={handleExportToDocx} className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">📄 DOCX</button>
+                </div>
+              </div>
+              <div className="prose prose-sm max-w-none border border-indigo-100 rounded-lg p-6 bg-indigo-50/30 overflow-y-auto max-h-[520px]">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{finalNote}</ReactMarkdown>
+              </div>
             </div>
           )}
         </div>

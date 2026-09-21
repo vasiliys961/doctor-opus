@@ -388,10 +388,36 @@ type ProtocolMessages = {
   dictate: string;
   textPlaceholder: string;
   audioFile: string;
+  recordConversation: string;
+  conversationTitle: string;
+  conversationHint: string;
+  conversationCostHint: string;
+  conversationStartHint: string;
+  conversationRecorded: string;
+  autoInsertDraft: string;
+  draftLoading: string;
+  draftError: string;
+  draftModel: string;
+  draftLabel: string;
+  draftPlaceholder: string;
+  insertDraft: string;
+  clearDraft: string;
+  showRawTranscript: string;
   clear: string;
   streaming: string;
   generating: string;
   generateProtocol: string;
+  generateDraft: string;
+  generatingDraft: string;
+  draftTitle: string;
+  draftWorkHint: string;
+  physicianAdditions: string;
+  physicianAdditionsPlaceholder: string;
+  generateFinalNote: string;
+  generatingFinalNote: string;
+  finalNoteTitle: string;
+  finalNoteHint: string;
+  finalNoteError: string;
   generatedProtocol: string;
   serviceCost: string;
   copied: string;
@@ -431,7 +457,35 @@ const statisticsFallback: StatisticsMessages = {
   title: 'Usage Statistics', loading: 'Loading...', noStats: 'Statistics not available yet. Use analysis features to accumulate data.', noStatsHint: 'Try running an analysis in: Laboratory Data, ECG, or Genetics sections', clearMonth: 'Clear Month', clearAll: 'Clear All', monthSpent: 'Spent', monthRequests: 'Requests', sectionTitle: 'By Section', section: 'Section', requests: 'Requests', cost: 'Cost (cr.)', ofTotal: '% of total', totalCostAllTime: 'Total cost of all requests (all time)', model: 'Model', totalCalls: 'Total calls', successful: 'Successful', failed: 'Failed', successRate: 'Success rate', tokens: 'Tokens', modelSuccessRate: 'Model Success Rate', numberOfCalls: 'Number of Calls', note: 'Costs are calculated in credits based on current model pricing. Statistics are stored locally in your browser.', clearAllConfirm: 'Are you sure you want to clear all statistics?', clearMonthConfirm: "Are you sure you want to clear this month's statistics?", deleteAccount: 'Delete account and all personal data (Right to erasure)', deleteAccountWarn1: 'WARNING! This action is irreversible. Your account, balance, and all cloud data will be deleted. Are you sure?', deleteAccountWarn2: 'Do you confirm deletion of all your data (GDPR right to erasure)?', deletedOk: 'Your account has been successfully deleted. All data erased.', deleteError: 'Deletion error:', deleteTechError: 'A technical error occurred while deleting the account.',
 };
 const protocolFallback: ProtocolMessages = {
-  ecgProtocol: 'ECG Protocol', appointmentProtocol: 'Appointment Protocol', audioUpload: 'Audio Upload', settingsAndInput: 'Settings and Input', whoExamines: 'Who is performing the examination:', whoExaminesPlaceholder: 'Example: Neurologist', specialtyTemplate: 'Specialty (template):', selectSpecialty: '-- Select specialty --', aiInstructions: 'AI Instructions (editable):', quickFormatting: 'Quick formatting:', hideStructure: 'Hide document structure', showStructure: 'Configure document structure (H1, H2...)', pinTemplate: 'Pin my template (do not overwrite when changing specialist)', strictTemplate: 'Strictly preserve template structure', saveStandard: 'Save as my standard', loadFromFile: 'Load from file (.txt/.docx/.pdf)', textToProcess: 'Text to process:', dictate: 'Dictate', textPlaceholder: 'Enter examination data or use 🎤...', audioFile: 'Audio file', clear: 'Clear', streaming: 'Streaming', generating: 'Generating...', generateProtocol: 'Generate Protocol', generatedProtocol: 'Generated Protocol', serviceCost: 'Service cost', copied: 'Copied', resultWillAppear: 'Result will appear here', aiGenerating: 'AI is generating protocol...', focusLabel: 'Focus', clinicianHint: 'Specific instructions for this clinician...', templateSaved: 'Template saved as your personal standard!', readTextError: 'Failed to read text file', readWordError: 'Failed to read Word file. For .doc, prefer .docx.', pdfLoadingError: 'PDF module is still loading. Wait 2-3 seconds and try again.', supportedFormatsError: 'Supported formats: .txt, .doc/.docx, .pdf', emptyTemplateError: 'File was read, but template content is empty.', templateLoaded: 'Template loaded and saved to library as RAG sample.', templateLoadError: 'Failed to load template file.', exportError: 'Export error', checkInteractions: 'Interactions', checkingInteractions: 'Checking...', interactionsTitle: 'Potential interactions', interactionsHint: 'Click "Interactions" to review prescribed drugs after protocol generation.', interactionsNone: 'No clinically significant interactions found in local rule set.', interactionsChecking: 'Checking potential interactions...', interactionsUnavailable: 'Interaction check service is temporarily unavailable.', interactionRiskHigh: 'High risk', interactionRiskModerate: 'Moderate risk', interactionRiskLow: 'Low risk', mechanismLabel: 'Mechanism', explanationLabel: 'Explanation', recommendationLabel: 'Recommendation',
+  ecgProtocol: 'ECG Protocol', appointmentProtocol: 'Appointment Protocol', audioUpload: 'Audio Upload', settingsAndInput: 'Settings and Input', whoExamines: 'Who is performing the examination:', whoExaminesPlaceholder: 'Example: Neurologist', specialtyTemplate: 'Specialty (template):', selectSpecialty: '-- Select specialty --', aiInstructions: 'AI Instructions (editable):', quickFormatting: 'Quick formatting:', hideStructure: 'Hide document structure', showStructure: 'Configure document structure (H1, H2...)', pinTemplate: 'Pin my template (do not overwrite when changing specialist)', strictTemplate: 'Strictly preserve template structure', saveStandard: 'Save as my standard', loadFromFile: 'Load from file (.txt/.docx/.pdf)', textToProcess: 'Text to process:', dictate: 'Dictate', textPlaceholder: 'Enter examination data or use 🎤...',   audioFile: 'Audio file',
+  recordConversation: 'Record conversation',
+  conversationTitle: 'Patient conversation recording',
+  conversationHint: 'Flow: record or upload audio → AssemblyAI transcription in the current UI language → conversation draft. Then add objective findings and generate the final protocol.',
+  conversationCostHint: 'Recording cost includes speech-to-text and depends on conversation length ($0.62 per hour of audio). The timer shows the actual duration. Protocol generation is billed separately.',
+  conversationStartHint: 'Read the cost note first. Recording and the microphone prompt start only after you press “Record from microphone”.',
+  conversationRecorded: 'Recorded conversation',
+  autoInsertDraft: 'Automatically insert the draft into the protocol field',
+  draftLoading: 'A lightweight model is drafting the conversation...',
+  draftError: 'Could not build the conversation draft',
+  draftModel: 'Draft generated by',
+  draftLabel: 'Draft from complaints/history (edit before inserting):',
+  draftPlaceholder: 'The conversation draft will appear here...',
+  insertDraft: 'Insert draft into protocol',
+  clearDraft: 'Clear draft',
+  showRawTranscript: 'Show raw conversation transcript',
+  clear: 'Clear', streaming: 'Streaming', generating: 'Generating...', generateProtocol: 'Generate Protocol',
+  generateDraft: 'Generate diagnostic draft',
+  generatingDraft: 'Generating draft...',
+  draftTitle: 'Diagnostic Reasoning Draft',
+  draftWorkHint: 'Working document only. Edit in exam findings, then generate the SOAP note. This draft is not the downloadable chart note.',
+  physicianAdditions: 'Vitals / exam / ROS to add before the final note',
+  physicianAdditionsPlaceholder: 'Example: BP 128/76. Gait normal. SLR negative. No saddle anesthesia.',
+  generateFinalNote: 'Generate final clinical note',
+  generatingFinalNote: 'Generating SOAP note...',
+  finalNoteTitle: 'Final Clinical Note (SOAP)',
+  finalNoteHint: 'Compact chart note. This is the document you download.',
+  finalNoteError: 'Could not generate a valid final note. Add exam findings and try again.',
+  generatedProtocol: 'Generated Protocol', serviceCost: 'Service cost', copied: 'Copied', resultWillAppear: 'Result will appear here', aiGenerating: 'AI is generating protocol...', focusLabel: 'Focus', clinicianHint: 'Specific instructions for this clinician...', templateSaved: 'Template saved as your personal standard!', readTextError: 'Failed to read text file', readWordError: 'Failed to read Word file. For .doc, prefer .docx.', pdfLoadingError: 'PDF module is still loading. Wait 2-3 seconds and try again.', supportedFormatsError: 'Supported formats: .txt, .doc/.docx, .pdf', emptyTemplateError: 'File was read, but template content is empty.', templateLoaded: 'Template loaded and saved to library as RAG sample.', templateLoadError: 'Failed to load template file.', exportError: 'Export error', checkInteractions: 'Interactions', checkingInteractions: 'Checking...', interactionsTitle: 'Potential interactions', interactionsHint: 'Click "Interactions" to review prescribed drugs after protocol generation.', interactionsNone: 'No clinically significant interactions found in local rule set.', interactionsChecking: 'Checking potential interactions...', interactionsUnavailable: 'Interaction check service is temporarily unavailable.', interactionRiskHigh: 'High risk', interactionRiskModerate: 'Moderate risk', interactionRiskLow: 'Low risk', mechanismLabel: 'Mechanism', explanationLabel: 'Explanation', recommendationLabel: 'Recommendation',
 };
 
 export const manualMessages: Record<Locale, ManualMessages> = {
@@ -466,15 +520,240 @@ export const statisticsMessages: Record<Locale, StatisticsMessages> = {
 
 export const protocolMessages: Record<Locale, ProtocolMessages> = {
   en: protocolFallback,
-  es: { ...protocolFallback, ecgProtocol: 'Protocolo ECG', appointmentProtocol: 'Protocolo de consulta', audioUpload: 'Subir audio', settingsAndInput: 'Configuración y entrada', textToProcess: 'Texto a procesar', generateProtocol: 'Generar protocolo', generatedProtocol: 'Protocolo generado' },
-  fr: { ...protocolFallback, ecgProtocol: 'Protocole ECG', appointmentProtocol: 'Protocole de consultation', audioUpload: 'Téléverser audio', settingsAndInput: 'Paramètres et saisie', textToProcess: 'Texte à traiter', generateProtocol: 'Générer le protocole', generatedProtocol: 'Protocole généré' },
-  ar: { ...protocolFallback, ecgProtocol: 'بروتوكول ECG', appointmentProtocol: 'بروتوكول الزيارة', audioUpload: 'رفع الصوت', settingsAndInput: 'الإعدادات والإدخال', textToProcess: 'النص للمعالجة', generateProtocol: 'توليد البروتوكول', generatedProtocol: 'البروتوكول الناتج' },
-  hi: { ...protocolFallback, ecgProtocol: 'ECG प्रोटोकॉल', appointmentProtocol: 'अपॉइंटमेंट प्रोटोकॉल', audioUpload: 'ऑडियो अपलोड', settingsAndInput: 'सेटिंग्स और इनपुट', textToProcess: 'प्रोसेस हेतु टेक्स्ट', generateProtocol: 'प्रोटोकॉल जनरेट करें', generatedProtocol: 'जनरेटेड प्रोटोकॉल' },
-  'pt-BR': { ...protocolFallback, ecgProtocol: 'Protocolo ECG', appointmentProtocol: 'Protocolo de consulta', audioUpload: 'Upload de áudio', settingsAndInput: 'Configurações e entrada', textToProcess: 'Texto para processar', generateProtocol: 'Gerar protocolo', generatedProtocol: 'Protocolo gerado' },
-  id: { ...protocolFallback, ecgProtocol: 'Protokol ECG', appointmentProtocol: 'Protokol kunjungan', audioUpload: 'Unggah audio', settingsAndInput: 'Pengaturan dan input', textToProcess: 'Teks untuk diproses', generateProtocol: 'Buat protokol', generatedProtocol: 'Protokol hasil' },
-  ms: { ...protocolFallback, ecgProtocol: 'Protokol ECG', appointmentProtocol: 'Protokol lawatan', audioUpload: 'Muat naik audio', settingsAndInput: 'Tetapan dan input', textToProcess: 'Teks untuk diproses', generateProtocol: 'Jana protokol', generatedProtocol: 'Protokol dijana' },
-  tr: { ...protocolFallback, ecgProtocol: 'ECG protokolü', appointmentProtocol: 'Muayene protokolü', audioUpload: 'Ses yükle', settingsAndInput: 'Ayarlar ve giriş', textToProcess: 'İşlenecek metin', generateProtocol: 'Protokol oluştur', generatedProtocol: 'Oluşturulan protokol' },
-  'zh-CN': { ...protocolFallback, ecgProtocol: 'ECG 协议', appointmentProtocol: '就诊协议', audioUpload: '上传音频', settingsAndInput: '设置与输入', textToProcess: '待处理文本', generateProtocol: '生成协议', generatedProtocol: '生成结果' },
+  es: {
+    ...protocolFallback,
+    ecgProtocol: 'Protocolo ECG',
+    appointmentProtocol: 'Protocolo de consulta',
+    audioUpload: 'Subir audio',
+    settingsAndInput: 'Configuración y entrada',
+    textToProcess: 'Texto a procesar',
+    generateProtocol: 'Generar protocolo',
+    generatedProtocol: 'Protocolo generado',
+    recordConversation: 'Grabar conversación',
+    conversationTitle: 'Grabación de la conversación con el paciente',
+    conversationHint: 'Flujo: grabar o subir audio → transcripción AssemblyAI en el idioma de la interfaz → borrador de la conversación. Luego complete los hallazgos objetivos y genere el protocolo final.',
+    conversationCostHint: 'El costo de la grabación incluye STT y depende de la duración ($0.62 por hora de audio). El temporizador muestra la duración real. La generación del protocolo se cobra aparte.',
+    conversationStartHint: 'Lea primero la nota de costo. La grabación y el permiso del micrófono empiezan solo al pulsar “Grabar con el micrófono”.',
+    conversationRecorded: 'Conversación grabada',
+    autoInsertDraft: 'Insertar automáticamente el borrador en el campo del protocolo',
+    draftLoading: 'Un modelo ligero está redactando el borrador...',
+    draftError: 'No se pudo crear el borrador de la conversación',
+    draftModel: 'Borrador generado por',
+    draftLabel: 'Borrador de motivos/antecedentes (edite antes de insertar):',
+    draftPlaceholder: 'El borrador de la conversación aparecerá aquí...',
+    insertDraft: 'Insertar borrador en el protocolo',
+    clearDraft: 'Borrar borrador',
+    showRawTranscript: 'Mostrar transcripción original',
+    clear: 'Limpiar',
+  },
+  fr: {
+    ...protocolFallback,
+    ecgProtocol: 'Protocole ECG',
+    appointmentProtocol: 'Protocole de consultation',
+    audioUpload: 'Téléverser audio',
+    settingsAndInput: 'Paramètres et saisie',
+    textToProcess: 'Texte à traiter',
+    generateProtocol: 'Générer le protocole',
+    generatedProtocol: 'Protocole généré',
+    recordConversation: 'Enregistrer la conversation',
+    conversationTitle: 'Enregistrement de la conversation avec le patient',
+    conversationHint: 'Parcours : enregistrer ou téléverser l’audio → transcription AssemblyAI dans la langue de l’interface → brouillon. Ajoutez ensuite l’examen objectif et générez le protocole final.',
+    conversationCostHint: 'Le coût de l’enregistrement inclut le STT et dépend de la durée (0,62 $ par heure d’audio). Le minuteur affiche la durée réelle. La génération du protocole est facturée à part.',
+    conversationStartHint: 'Lisez d’abord la note de coût. L’enregistrement et la demande du microphone commencent seulement après « Enregistrer au microphone ».',
+    conversationRecorded: 'Conversation enregistrée',
+    autoInsertDraft: 'Insérer automatiquement le brouillon dans le champ du protocole',
+    draftLoading: 'Un modèle léger prépare le brouillon...',
+    draftError: 'Impossible de créer le brouillon de conversation',
+    draftModel: 'Brouillon généré par',
+    draftLabel: 'Brouillon motifs/antécédents (modifiable avant insertion) :',
+    draftPlaceholder: 'Le brouillon de conversation apparaîtra ici...',
+    insertDraft: 'Insérer le brouillon dans le protocole',
+    clearDraft: 'Effacer le brouillon',
+    showRawTranscript: 'Afficher la transcription brute',
+    clear: 'Effacer',
+  },
+  ar: {
+    ...protocolFallback,
+    ecgProtocol: 'بروتوكول ECG',
+    appointmentProtocol: 'بروتوكول الزيارة',
+    audioUpload: 'رفع الصوت',
+    settingsAndInput: 'الإعدادات والإدخال',
+    textToProcess: 'النص للمعالجة',
+    generateProtocol: 'توليد البروتوكول',
+    generatedProtocol: 'البروتوكول الناتج',
+    recordConversation: 'تسجيل المحادثة',
+    conversationTitle: 'تسجيل محادثة مع المريض',
+    conversationHint: 'المسار: تسجيل أو رفع الصوت → تفريغ AssemblyAI بلغة الواجهة → مسودة المحادثة. ثم أضف الفحص الموضوعي وأنشئ البروتوكول النهائي.',
+    conversationCostHint: 'تكلفة التسجيل تشمل التفريغ النصي وتعتمد على مدة المحادثة (0.62$ لكل ساعة صوت). المؤقت يعرض المدة الفعلية. إنشاء البروتوكول يُحسب بشكل منفصل.',
+    conversationStartHint: 'اقرأ ملاحظة التكلفة أولاً. يبدأ التسجيل وطلب الميكروفون فقط بعد الضغط على «تسجيل من الميكروفون».',
+    conversationRecorded: 'المحادثة المسجّلة',
+    autoInsertDraft: 'إدراج المسودة تلقائياً في حقل البروتوكول',
+    draftLoading: 'نموذج خفيف يُعد المسودة...',
+    draftError: 'تعذر إنشاء مسودة المحادثة',
+    draftModel: 'أُنشئت المسودة بواسطة',
+    draftLabel: 'مسودة الشكوى/التاريخ (يمكن تعديلها قبل الإدراج):',
+    draftPlaceholder: 'ستظهر مسودة المحادثة هنا...',
+    insertDraft: 'إدراج المسودة في البروتوكول',
+    clearDraft: 'مسح المسودة',
+    showRawTranscript: 'عرض التفريغ الأصلي',
+    clear: 'مسح',
+  },
+  hi: {
+    ...protocolFallback,
+    ecgProtocol: 'ECG प्रोटोकॉल',
+    appointmentProtocol: 'अपॉइंटमेंट प्रोटोकॉल',
+    audioUpload: 'ऑडियो अपलोड',
+    settingsAndInput: 'सेटिंग्स और इनपुट',
+    textToProcess: 'प्रोसेस हेतु टेक्स्ट',
+    generateProtocol: 'प्रोटोकॉल जनरेट करें',
+    generatedProtocol: 'जनरेटेड प्रोटोकॉल',
+    recordConversation: 'बातचीत रिकॉर्ड करें',
+    conversationTitle: 'रोगी से बातचीत की रिकॉर्डिंग',
+    conversationHint: 'प्रवाह: ऑडियो रिकॉर्ड/अपलोड → UI भाषा में AssemblyAI ट्रांस्क्रिप्शन → बातचीत का ड्राफ्ट। फिर वस्तुनिष्ठ निष्कर्ष जोड़ें और अंतिम प्रोटोकॉल बनाएँ।',
+    conversationCostHint: 'रिकॉर्डिंग की लागत में STT शामिल है और अवधि पर निर्भर करती है ($0.62 प्रति घंटा ऑडियो)। टाइमर वास्तविक अवधि दिखाता है। प्रोटोकॉल जनरेशन अलग से लगता है।',
+    conversationStartHint: 'पहले लागत नोट पढ़ें। रिकॉर्डिंग और माइक्रोफ़ोन अनुमति तभी शुरू होगी जब आप «माइक्रोफ़ोन से रिकॉर्ड करें» दबाएँगे।',
+    conversationRecorded: 'रिकॉर्ड की गई बातचीत',
+    autoInsertDraft: 'ड्राफ्ट को प्रोटोकॉल फ़ील्ड में स्वतः डालें',
+    draftLoading: 'हल्की मॉडल ड्राफ्ट तैयार कर रही है...',
+    draftError: 'बातचीत का ड्राफ्ट नहीं बन सका',
+    draftModel: 'ड्राफ्ट बनाने वाला मॉडल',
+    draftLabel: 'शिकायत/इतिहास का ड्राफ्ट (डालने से पहले संपादित करें):',
+    draftPlaceholder: 'बातचीत का ड्राफ्ट यहाँ दिखेगा...',
+    insertDraft: 'ड्राफ्ट प्रोटोकॉल में डालें',
+    clearDraft: 'ड्राफ्ट साफ़ करें',
+    showRawTranscript: 'मूल ट्रांस्क्रिप्ट दिखाएँ',
+    clear: 'साफ़ करें',
+  },
+  'pt-BR': {
+    ...protocolFallback,
+    ecgProtocol: 'Protocolo ECG',
+    appointmentProtocol: 'Protocolo de consulta',
+    audioUpload: 'Upload de áudio',
+    settingsAndInput: 'Configurações e entrada',
+    textToProcess: 'Texto para processar',
+    generateProtocol: 'Gerar protocolo',
+    generatedProtocol: 'Protocolo gerado',
+    recordConversation: 'Gravar conversa',
+    conversationTitle: 'Gravação da conversa com o paciente',
+    conversationHint: 'Fluxo: gravar ou enviar áudio → transcrição AssemblyAI no idioma da interface → rascunho da conversa. Depois complete os achados objetivos e gere o protocolo final.',
+    conversationCostHint: 'O custo da gravação inclui STT e depende da duração (US$ 0,62 por hora de áudio). O cronômetro mostra a duração real. A geração do protocolo é cobrada à parte.',
+    conversationStartHint: 'Leia primeiro a nota de custo. A gravação e o pedido do microfone começam só depois de “Gravar pelo microfone”.',
+    conversationRecorded: 'Conversa gravada',
+    autoInsertDraft: 'Inserir automaticamente o rascunho no campo do protocolo',
+    draftLoading: 'Um modelo leve está montando o rascunho...',
+    draftError: 'Não foi possível montar o rascunho da conversa',
+    draftModel: 'Rascunho gerado por',
+    draftLabel: 'Rascunho de queixas/histórico (edite antes de inserir):',
+    draftPlaceholder: 'O rascunho da conversa aparecerá aqui...',
+    insertDraft: 'Inserir rascunho no protocolo',
+    clearDraft: 'Limpar rascunho',
+    showRawTranscript: 'Mostrar transcrição original',
+    clear: 'Limpar',
+  },
+  id: {
+    ...protocolFallback,
+    ecgProtocol: 'Protokol ECG',
+    appointmentProtocol: 'Protokol kunjungan',
+    audioUpload: 'Unggah audio',
+    settingsAndInput: 'Pengaturan dan input',
+    textToProcess: 'Teks untuk diproses',
+    generateProtocol: 'Buat protokol',
+    generatedProtocol: 'Protokol hasil',
+    recordConversation: 'Rekam percakapan',
+    conversationTitle: 'Rekaman percakapan dengan pasien',
+    conversationHint: 'Alur: rekam atau unggah audio → transkripsi AssemblyAI dalam bahasa antarmuka → draf percakapan. Lalu lengkapi temuan objektif dan buat protokol akhir.',
+    conversationCostHint: 'Biaya rekaman mencakup STT dan bergantung pada durasi ($0,62 per jam audio). Timer menampilkan durasi aktual. Pembuatan protokol ditagih terpisah.',
+    conversationStartHint: 'Baca catatan biaya dulu. Rekaman dan izin mikrofon mulai hanya setelah Anda menekan “Rekam dari mikrofon”.',
+    conversationRecorded: 'Percakapan terekam',
+    autoInsertDraft: 'Masukkan draf otomatis ke kolom protokol',
+    draftLoading: 'Model ringan sedang menyusun draf...',
+    draftError: 'Gagal membuat draf percakapan',
+    draftModel: 'Draf dibuat oleh',
+    draftLabel: 'Draf keluhan/riwayat (edit sebelum dimasukkan):',
+    draftPlaceholder: 'Draf percakapan akan muncul di sini...',
+    insertDraft: 'Masukkan draf ke protokol',
+    clearDraft: 'Hapus draf',
+    showRawTranscript: 'Tampilkan transkrip asli',
+    clear: 'Hapus',
+  },
+  ms: {
+    ...protocolFallback,
+    ecgProtocol: 'Protokol ECG',
+    appointmentProtocol: 'Protokol lawatan',
+    audioUpload: 'Muat naik audio',
+    settingsAndInput: 'Tetapan dan input',
+    textToProcess: 'Teks untuk diproses',
+    generateProtocol: 'Jana protokol',
+    generatedProtocol: 'Protokol dijana',
+    recordConversation: 'Rakam perbualan',
+    conversationTitle: 'Rakaman perbualan dengan pesakit',
+    conversationHint: 'Aliran: rakam atau muat naik audio → transkripsi AssemblyAI dalam bahasa UI → draf perbualan. Kemudian lengkapkan penemuan objektif dan jana protokol akhir.',
+    conversationCostHint: 'Kos rakaman merangkumi STT dan bergantung pada tempoh (AS$0.62 sejam audio). Pemasa menunjukkan tempoh sebenar. Penjanaan protokol dicaj berasingan.',
+    conversationStartHint: 'Baca nota kos dahulu. Rakaman dan kebenaran mikrofon bermula hanya selepas anda tekan “Rakam dari mikrofon”.',
+    conversationRecorded: 'Perbualan dirakam',
+    autoInsertDraft: 'Masukkan draf secara automatik ke medan protokol',
+    draftLoading: 'Model ringan sedang menyediakan draf...',
+    draftError: 'Tidak dapat membina draf perbualan',
+    draftModel: 'Draf dijana oleh',
+    draftLabel: 'Draf aduan/sejarah (edit sebelum dimasukkan):',
+    draftPlaceholder: 'Draf perbualan akan muncul di sini...',
+    insertDraft: 'Masukkan draf ke protokol',
+    clearDraft: 'Kosongkan draf',
+    showRawTranscript: 'Tunjuk transkrip asal',
+    clear: 'Kosongkan',
+  },
+  tr: {
+    ...protocolFallback,
+    ecgProtocol: 'ECG protokolü',
+    appointmentProtocol: 'Muayene protokolü',
+    audioUpload: 'Ses yükle',
+    settingsAndInput: 'Ayarlar ve giriş',
+    textToProcess: 'İşlenecek metin',
+    generateProtocol: 'Protokol oluştur',
+    generatedProtocol: 'Oluşturulan protokol',
+    recordConversation: 'Görüşmeyi kaydet',
+    conversationTitle: 'Hasta görüşmesi kaydı',
+    conversationHint: 'Akış: ses kaydı veya yükleme → arayüz dilinde AssemblyAI transkripsiyonu → görüşme taslağı. Ardından objektif bulguları ekleyip nihai protokolü oluşturun.',
+    conversationCostHint: 'Kayıt ücreti STT’yi içerir ve süreye bağlıdır (saatlik ses için 0,62 $). Zamanlayıcı gerçek süreyi gösterir. Protokol üretimi ayrıca ücretlendirilir.',
+    conversationStartHint: 'Önce ücret notunu okuyun. Kayıt ve mikrofon izni yalnızca “Mikrofondan kaydet”e basınca başlar.',
+    conversationRecorded: 'Kaydedilen görüşme',
+    autoInsertDraft: 'Taslağı otomatik olarak protokol alanına ekle',
+    draftLoading: 'Hafif model taslağı hazırlıyor...',
+    draftError: 'Görüşme taslağı oluşturulamadı',
+    draftModel: 'Taslağı oluşturan model',
+    draftLabel: 'Şikayet/öykü taslağı (eklemeden önce düzenleyin):',
+    draftPlaceholder: 'Görüşme taslağı burada görünecek...',
+    insertDraft: 'Taslağı protokole ekle',
+    clearDraft: 'Taslağı temizle',
+    showRawTranscript: 'Ham transkripti göster',
+    clear: 'Temizle',
+  },
+  'zh-CN': {
+    ...protocolFallback,
+    ecgProtocol: 'ECG 协议',
+    appointmentProtocol: '就诊协议',
+    audioUpload: '上传音频',
+    settingsAndInput: '设置与输入',
+    textToProcess: '待处理文本',
+    generateProtocol: '生成协议',
+    generatedProtocol: '生成结果',
+    recordConversation: '记录对话',
+    conversationTitle: '患者对话录音',
+    conversationHint: '流程：录音或上传音频 → 按界面语言用 AssemblyAI 转写 → 生成对话草稿。然后补充客观检查并生成最终协议。',
+    conversationCostHint: '录音费用包含语音转写，并按实际时长计费（每小时音频 0.62 美元）。计时器显示实际时长。生成协议另行计费。',
+    conversationStartHint: '请先阅读费用说明。只有按下“从麦克风录制”后才会开始录音并请求麦克风权限。',
+    conversationRecorded: '已录对话',
+    autoInsertDraft: '自动将草稿插入协议字段',
+    draftLoading: '轻量模型正在生成草稿...',
+    draftError: '无法生成对话草稿',
+    draftModel: '草稿生成模型',
+    draftLabel: '主诉/病史草稿（插入前可编辑）：',
+    draftPlaceholder: '对话草稿将显示在这里...',
+    insertDraft: '将草稿插入协议',
+    clearDraft: '清除草稿',
+    showRawTranscript: '显示原始转写',
+    clear: '清除',
+  },
 };
 
 type ImagingCommonMessages = {
@@ -1331,6 +1610,10 @@ type AnalysisResultComponentMessages = {
   searchLibrary: string;
   hideLibrary: string;
   ecgProtocol: string;
+  generatingEcgProtocol: string;
+  ecgProtocolTitle: string;
+  ecgProtocolHint: string;
+  ecgProtocolError: string;
   toProtocol: string;
   downloadDocx: string;
   downloading: string;
@@ -1401,6 +1684,10 @@ const analysisResultComponentFallback: AnalysisResultComponentMessages = {
   searchLibrary: 'Search Library',
   hideLibrary: 'Hide Library',
   ecgProtocol: 'ECG Protocol',
+  generatingEcgProtocol: 'Formatting ECG report...',
+  ecgProtocolTitle: 'ECG diagnostic report',
+  ecgProtocolHint: 'Rewrites the existing analysis into a short test report. This is not a visit note.',
+  ecgProtocolError: 'Could not format the ECG report',
   toProtocol: 'To Protocol',
   downloadDocx: 'Download .docx',
   downloading: 'Downloading...',
@@ -1453,13 +1740,13 @@ export const uploadComponentMessages: Record<Locale, UploadComponentMessages> = 
 
 export const analysisResultComponentMessages: Record<Locale, AnalysisResultComponentMessages> = {
   en: analysisResultComponentFallback,
-  es: { loading: 'Análisis en curso...', reportTitle: 'Informe consultivo', modelUsed: 'Modelo usado', copied: 'Copiado', copy: 'Copiar', saveToPatient: 'Guardar en historial del paciente', selectPatient: 'Seleccionar paciente', emptyPatients: 'La base de pacientes está vacía', cancel: 'Cancelar', searchLibrary: 'Buscar en biblioteca', hideLibrary: 'Ocultar biblioteca', ecgProtocol: 'Protocolo ECG', toProtocol: 'Al protocolo', downloadDocx: 'Descargar .docx', downloading: 'Descargando...', print: 'Imprimir', share: 'Compartir', discussManagement: 'Discutir manejo', goCreatePatient: 'Ir a crear paciente', noDiagnosis: 'Sin diagnóstico', modeFast: 'rápido', modeOptimized: 'optimizado', modeValidated: 'experto validado', discussClinicalManagement: 'Discutir manejo clínico', verificationRequired: 'Verificación requerida: este informe debe ser revisado y firmado por el médico tratante.', pricingInfo: 'Precios: el costo en créditos refleja modelos IA e infraestructura.', sessionId: 'ID de sesión', coreVersion: 'Versión core', saveSuccess: '¡Resultado guardado en el paciente!', saveFailed: 'No se pudo guardar el resultado.', downloadError: 'Error de descarga', unknownError: 'Error desconocido', shareTitle: 'Resultado del análisis médico', copiedToClipboard: '¡Texto copiado al portapapeles!', transferTruncated: '[...resultado truncado para transferencia]', notAvailable: 'N/D', draftDisclaimerTitle: 'Borrador clínico (Beta)', draftDisclaimerLine1: 'Este resultado de IA puede ser incompleto o inexacto.', draftDisclaimerLine2: 'Se requiere verificación independiente por un médico antes del uso clínico.', draftDisclaimerLine3: 'No usar para autodiagnóstico del paciente.', consentVersionLabel: 'Versión de consentimiento', verificationModalTitle: 'Verificación médica antes de guardar', verificationModalPrivacyNote: 'Para auditoría solo se guardan el ID del caso y el hecho de confirmación. No se envían datos personales del paciente.', verificationModalCheckReviewed: 'Confirmo que revisé y validé personalmente este borrador antes de guardarlo.', verificationModalCheckResponsibility: 'Entiendo que la responsabilidad clínica final recae en el médico.', verificationModalConfirmSave: 'Confirmar y guardar', verificationModalSaving: 'Guardando...' },
-  fr: { loading: 'Analyse en cours...', reportTitle: 'Rapport consultatif', modelUsed: 'Modèle utilisé', copied: 'Copié', copy: 'Copier', saveToPatient: 'Enregistrer dans le dossier patient', selectPatient: 'Sélectionner un patient', emptyPatients: 'La base patients est vide', cancel: 'Annuler', searchLibrary: 'Rechercher dans la bibliothèque', hideLibrary: 'Masquer la bibliothèque', ecgProtocol: 'Protocole ECG', toProtocol: 'Vers protocole', downloadDocx: 'Télécharger .docx', downloading: 'Téléchargement...', print: 'Imprimer', share: 'Partager', discussManagement: 'Discuter la prise en charge', goCreatePatient: 'Créer un patient', noDiagnosis: 'Aucun diagnostic', modeFast: 'rapide', modeOptimized: 'optimisé', modeValidated: 'expert validé', discussClinicalManagement: 'Discuter la prise en charge clinique', verificationRequired: 'Vérification requise : ce rapport doit être revu et signé par le médecin traitant.', pricingInfo: 'Tarification : le coût en crédits couvre modèles IA et infrastructure.', sessionId: 'ID session', coreVersion: 'Version core', saveSuccess: 'Résultat enregistré dans le dossier patient !', saveFailed: 'Échec de l’enregistrement du résultat.', downloadError: 'Erreur de téléchargement', unknownError: 'Erreur inconnue', shareTitle: 'Résultat d’analyse médicale', copiedToClipboard: 'Texte copié dans le presse-papiers !', transferTruncated: '[...résultat tronqué pour transfert]', notAvailable: 'N/D', draftDisclaimerTitle: 'Brouillon clinique (Bêta)', draftDisclaimerLine1: 'Ce résultat IA peut être incomplet ou inexact.', draftDisclaimerLine2: 'Une vérification indépendante par un médecin est requise avant tout usage clinique.', draftDisclaimerLine3: 'Ne pas utiliser pour l’auto-diagnostic du patient.', consentVersionLabel: 'Version du consentement', verificationModalTitle: 'Vérification médicale avant enregistrement', verificationModalPrivacyNote: 'Pour l’audit, seuls l’ID du cas et la confirmation sont enregistrés. Aucune donnée personnelle du patient n’est envoyée.', verificationModalCheckReviewed: 'Je confirme avoir personnellement vérifié et validé ce brouillon avant enregistrement.', verificationModalCheckResponsibility: 'Je comprends que la responsabilité clinique finale revient au médecin.', verificationModalConfirmSave: 'Confirmer et enregistrer', verificationModalSaving: 'Enregistrement...' },
-  ar: { loading: 'جارٍ التحليل...', reportTitle: 'تقرير استشاري', modelUsed: 'النموذج المستخدم', copied: 'تم النسخ', copy: 'نسخ', saveToPatient: 'حفظ في سجل المريض', selectPatient: 'اختر مريضًا', emptyPatients: 'قاعدة بيانات المرضى فارغة', cancel: 'إلغاء', searchLibrary: 'بحث في المكتبة', hideLibrary: 'إخفاء المكتبة', ecgProtocol: 'بروتوكول ECG', toProtocol: 'إلى البروتوكول', downloadDocx: 'تنزيل .docx', downloading: 'جارٍ التنزيل...', print: 'طباعة', share: 'مشاركة', discussManagement: 'مناقشة الخطة', goCreatePatient: 'إنشاء مريض', noDiagnosis: 'لا يوجد تشخيص', modeFast: 'سريع', modeOptimized: 'محسّن', modeValidated: 'خبير معتمد', discussClinicalManagement: 'مناقشة الإدارة السريرية', verificationRequired: 'التحقق مطلوب: يجب مراجعة هذا التقرير وتوقيعه من الطبيب المعالج.', pricingInfo: 'التسعير: تكلفة الرصيد تشمل نماذج الذكاء والبنية التحتية.', sessionId: 'معرف الجلسة', coreVersion: 'إصدار النواة', saveSuccess: 'تم حفظ النتيجة في سجل المريض!', saveFailed: 'فشل حفظ النتيجة.', downloadError: 'خطأ في التنزيل', unknownError: 'خطأ غير معروف', shareTitle: 'نتيجة التحليل الطبي', copiedToClipboard: 'تم نسخ النص إلى الحافظة!', transferTruncated: '[...تم تقصير النتيجة للنقل]', notAvailable: 'غير متاح', draftDisclaimerTitle: 'مسودة سريرية (بيتا)', draftDisclaimerLine1: 'قد تكون نتيجة الذكاء الاصطناعي غير مكتملة أو غير دقيقة.', draftDisclaimerLine2: 'يلزم التحقق المستقل من طبيب قبل أي استخدام سريري.', draftDisclaimerLine3: 'غير مخصص للتشخيص الذاتي للمريض.', consentVersionLabel: 'إصدار الموافقة', verificationModalTitle: 'تحقق الطبيب قبل الحفظ', verificationModalPrivacyNote: 'لأغراض التدقيق نحفظ فقط رقم الحالة وتأكيد الطبيب. لا يتم إرسال بيانات المريض الشخصية.', verificationModalCheckReviewed: 'أؤكد أنني راجعت هذه المسودة وتحققت منها بنفسي قبل الحفظ.', verificationModalCheckResponsibility: 'أفهم أن المسؤولية السريرية النهائية تقع على الطبيب.', verificationModalConfirmSave: 'تأكيد وحفظ', verificationModalSaving: 'جارٍ الحفظ...' },
-  hi: { loading: 'विश्लेषण जारी है...', reportTitle: 'परामर्श रिपोर्ट', modelUsed: 'उपयोग किया गया मॉडल', copied: 'कॉपी किया गया', copy: 'कॉपी करें', saveToPatient: 'रोगी रिकॉर्ड में सहेजें', selectPatient: 'रोगी चुनें', emptyPatients: 'रोगी डेटाबेस खाली है', cancel: 'रद्द करें', searchLibrary: 'लाइब्रेरी खोजें', hideLibrary: 'लाइब्रेरी छुपाएँ', ecgProtocol: 'ECG प्रोटोकॉल', toProtocol: 'प्रोटोकॉल में भेजें', downloadDocx: '.docx डाउनलोड करें', downloading: 'डाउनलोड हो रहा है...', print: 'प्रिंट', share: 'शेयर', discussManagement: 'प्रबंधन पर चर्चा करें', goCreatePatient: 'रोगी बनाएं', noDiagnosis: 'कोई निदान नहीं', modeFast: 'तेज़', modeOptimized: 'अनुकूलित', modeValidated: 'विशेषज्ञ मान्य', discussClinicalManagement: 'क्लिनिकल प्रबंधन पर चर्चा', verificationRequired: 'सत्यापन आवश्यक: इस रिपोर्ट की चिकित्सक द्वारा समीक्षा और हस्ताक्षर आवश्यक हैं।', pricingInfo: 'मूल्य: क्रेडिट लागत में AI मॉडल और इंफ्रास्ट्रक्चर शामिल है।', sessionId: 'सेशन आईडी', coreVersion: 'कोर संस्करण', saveSuccess: 'परिणाम रोगी रिकॉर्ड में सहेज दिया गया!', saveFailed: 'परिणाम सहेजने में विफल।', downloadError: 'डाउनलोड त्रुटि', unknownError: 'अज्ञात त्रुटि', shareTitle: 'मेडिकल विश्लेषण परिणाम', copiedToClipboard: 'टेक्स्ट क्लिपबोर्ड में कॉपी हो गया!', transferTruncated: '[...ट्रांसफ़र के लिए परिणाम संक्षिप्त]', notAvailable: 'उपलब्ध नहीं', draftDisclaimerTitle: 'क्लिनिकल ड्राफ्ट (बीटा)', draftDisclaimerLine1: 'यह AI आउटपुट अधूरा या गलत हो सकता है।', draftDisclaimerLine2: 'क्लिनिकल उपयोग से पहले डॉक्टर द्वारा स्वतंत्र सत्यापन आवश्यक है।', draftDisclaimerLine3: 'रोगी के स्व-निदान के लिए उपयोग न करें।', consentVersionLabel: 'सहमति संस्करण', verificationModalTitle: 'सहेजने से पहले डॉक्टर सत्यापन', verificationModalPrivacyNote: 'ऑडिट के लिए केवल केस ID और पुष्टि सहेजी जाती है। रोगी की व्यक्तिगत जानकारी भेजी नहीं जाती।', verificationModalCheckReviewed: 'मैं पुष्टि करता/करती हूँ कि सहेजने से पहले मैंने इस ड्राफ्ट की स्वयं समीक्षा और पुष्टि की है।', verificationModalCheckResponsibility: 'मैं समझता/समझती हूँ कि अंतिम क्लिनिकल जिम्मेदारी डॉक्टर की है।', verificationModalConfirmSave: 'पुष्टि करें और सहेजें', verificationModalSaving: 'सहेजा जा रहा है...' },
-  'pt-BR': { loading: 'Análise em andamento...', reportTitle: 'Relatório consultivo', modelUsed: 'Modelo usado', copied: 'Copiado', copy: 'Copiar', saveToPatient: 'Salvar no prontuário do paciente', selectPatient: 'Selecionar paciente', emptyPatients: 'Base de pacientes vazia', cancel: 'Cancelar', searchLibrary: 'Pesquisar biblioteca', hideLibrary: 'Ocultar biblioteca', ecgProtocol: 'Protocolo ECG', toProtocol: 'Para protocolo', downloadDocx: 'Baixar .docx', downloading: 'Baixando...', print: 'Imprimir', share: 'Compartilhar', discussManagement: 'Discutir conduta', goCreatePatient: 'Criar paciente', noDiagnosis: 'Sem diagnóstico', modeFast: 'rápido', modeOptimized: 'otimizado', modeValidated: 'especialista validado', discussClinicalManagement: 'Discutir manejo clínico', verificationRequired: 'Verificação obrigatória: este relatório deve ser revisado e assinado pelo médico assistente.', pricingInfo: 'Preço: custo em créditos cobre modelos IA e infraestrutura.', sessionId: 'ID da sessão', coreVersion: 'Versão do core', saveSuccess: 'Resultado salvo no prontuário do paciente!', saveFailed: 'Falha ao salvar resultado.', downloadError: 'Erro de download', unknownError: 'Erro desconhecido', shareTitle: 'Resultado da análise médica', copiedToClipboard: 'Texto copiado para a área de transferência!', transferTruncated: '[...resultado truncado para transferência]', notAvailable: 'N/D', draftDisclaimerTitle: 'Rascunho clínico (Beta)', draftDisclaimerLine1: 'Este resultado de IA pode estar incompleto ou impreciso.', draftDisclaimerLine2: 'É necessária verificação independente por um médico antes do uso clínico.', draftDisclaimerLine3: 'Não usar para autodiagnóstico do paciente.', consentVersionLabel: 'Versão do consentimento', verificationModalTitle: 'Verificação médica antes de salvar', verificationModalPrivacyNote: 'Para auditoria, salvamos apenas o ID do caso e a confirmação. Dados pessoais do paciente não são enviados.', verificationModalCheckReviewed: 'Confirmo que revisei e validei pessoalmente este rascunho antes de salvar.', verificationModalCheckResponsibility: 'Entendo que a responsabilidade clínica final permanece com o médico.', verificationModalConfirmSave: 'Confirmar e salvar', verificationModalSaving: 'Salvando...' },
-  id: { loading: 'Analisis sedang berlangsung...', reportTitle: 'Laporan konsultatif', modelUsed: 'Model yang digunakan', copied: 'Disalin', copy: 'Salin', saveToPatient: 'Simpan ke rekam pasien', selectPatient: 'Pilih pasien', emptyPatients: 'Basis data pasien kosong', cancel: 'Batal', searchLibrary: 'Cari pustaka', hideLibrary: 'Sembunyikan pustaka', ecgProtocol: 'Protokol ECG', toProtocol: 'Ke protokol', downloadDocx: 'Unduh .docx', downloading: 'Mengunduh...', print: 'Cetak', share: 'Bagikan', discussManagement: 'Diskusikan tata laksana', goCreatePatient: 'Buat pasien', noDiagnosis: 'Tanpa diagnosis', modeFast: 'cepat', modeOptimized: 'optimal', modeValidated: 'ahli tervalidasi', discussClinicalManagement: 'Diskusikan manajemen klinis', verificationRequired: 'Verifikasi diperlukan: laporan ini harus ditinjau dan ditandatangani dokter penanggung jawab.', pricingInfo: 'Harga: biaya kredit mencakup model AI dan infrastruktur.', sessionId: 'ID sesi', coreVersion: 'Versi inti', saveSuccess: 'Hasil berhasil disimpan ke rekam pasien!', saveFailed: 'Gagal menyimpan hasil.', downloadError: 'Kesalahan unduh', unknownError: 'Kesalahan tidak dikenal', shareTitle: 'Hasil analisis medis', copiedToClipboard: 'Teks disalin ke clipboard!', transferTruncated: '[...hasil dipotong untuk transfer]', notAvailable: 'T/A' },
-  ms: { loading: 'Analisis sedang berjalan...', reportTitle: 'Laporan konsultatif', modelUsed: 'Model digunakan', copied: 'Disalin', copy: 'Salin', saveToPatient: 'Simpan ke rekod pesakit', selectPatient: 'Pilih pesakit', emptyPatients: 'Pangkalan data pesakit kosong', cancel: 'Batal', searchLibrary: 'Cari pustaka', hideLibrary: 'Sembunyikan pustaka', ecgProtocol: 'Protokol ECG', toProtocol: 'Ke protokol', downloadDocx: 'Muat turun .docx', downloading: 'Memuat turun...', print: 'Cetak', share: 'Kongsi', discussManagement: 'Bincang pengurusan', goCreatePatient: 'Cipta pesakit', noDiagnosis: 'Tiada diagnosis', modeFast: 'pantas', modeOptimized: 'dioptimumkan', modeValidated: 'pakar disahkan', discussClinicalManagement: 'Bincang pengurusan klinikal', verificationRequired: 'Pengesahan diperlukan: laporan ini mesti disemak dan ditandatangani oleh doktor merawat.', pricingInfo: 'Harga: kos kredit meliputi model AI dan infrastruktur.', sessionId: 'ID sesi', coreVersion: 'Versi teras', saveSuccess: 'Keputusan berjaya disimpan ke rekod pesakit!', saveFailed: 'Gagal menyimpan keputusan.', downloadError: 'Ralat muat turun', unknownError: 'Ralat tidak diketahui', shareTitle: 'Keputusan analisis perubatan', copiedToClipboard: 'Teks disalin ke papan klip!', transferTruncated: '[...keputusan dipendekkan untuk pemindahan]', notAvailable: 'T/A' },
-  tr: { loading: 'Analiz sürüyor...', reportTitle: 'Konsültatif rapor', modelUsed: 'Kullanılan model', copied: 'Kopyalandı', copy: 'Kopyala', saveToPatient: 'Hasta kaydına kaydet', selectPatient: 'Hasta seç', emptyPatients: 'Hasta veritabanı boş', cancel: 'İptal', searchLibrary: 'Kütüphanede ara', hideLibrary: 'Kütüphaneyi gizle', ecgProtocol: 'EKG protokolü', toProtocol: 'Protokole aktar', downloadDocx: '.docx indir', downloading: 'İndiriliyor...', print: 'Yazdır', share: 'Paylaş', discussManagement: 'Yönetimi tartış', goCreatePatient: 'Hasta oluştur', noDiagnosis: 'Tanı yok', modeFast: 'hızlı', modeOptimized: 'optimize', modeValidated: 'uzman doğrulamalı', discussClinicalManagement: 'Klinik yönetimi tartış', verificationRequired: 'Doğrulama gerekli: bu rapor sorumlu hekim tarafından incelenip imzalanmalıdır.', pricingInfo: 'Fiyatlandırma: kredi ücreti AI modelleri ve altyapıyı kapsar.', sessionId: 'Oturum ID', coreVersion: 'Çekirdek sürümü', saveSuccess: 'Sonuç hasta kaydına başarıyla kaydedildi!', saveFailed: 'Sonuç kaydedilemedi.', downloadError: 'İndirme hatası', unknownError: 'Bilinmeyen hata', shareTitle: 'Tıbbi analiz sonucu', copiedToClipboard: 'Metin panoya kopyalandı!', transferTruncated: '[...aktarım için sonuç kısaltıldı]', notAvailable: 'Yok' },
-  'zh-CN': { loading: '分析进行中...', reportTitle: '会诊报告', modelUsed: '使用模型', copied: '已复制', copy: '复制', saveToPatient: '保存到患者记录', selectPatient: '选择患者', emptyPatients: '患者数据库为空', cancel: '取消', searchLibrary: '搜索资料库', hideLibrary: '隐藏资料库', ecgProtocol: 'ECG 协议', toProtocol: '转到协议', downloadDocx: '下载 .docx', downloading: '下载中...', print: '打印', share: '分享', discussManagement: '讨论处理方案', goCreatePatient: '创建患者', noDiagnosis: '无诊断', modeFast: '快速', modeOptimized: '优化', modeValidated: '专家校验', discussClinicalManagement: '讨论临床管理', verificationRequired: '需要验证：该报告必须由主治医生审核并签署。', pricingInfo: '计费：积分成本包含 AI 模型和基础设施费用。', sessionId: '会话 ID', coreVersion: '核心版本', saveSuccess: '结果已成功保存到患者记录！', saveFailed: '保存结果失败。', downloadError: '下载错误', unknownError: '未知错误', shareTitle: '医学分析结果', copiedToClipboard: '文本已复制到剪贴板！', transferTruncated: '[...用于传输的结果已截断]', notAvailable: '无' },
+  es: { loading: 'Análisis en curso...', reportTitle: 'Informe consultivo', modelUsed: 'Modelo usado', copied: 'Copiado', copy: 'Copiar', saveToPatient: 'Guardar en historial del paciente', selectPatient: 'Seleccionar paciente', emptyPatients: 'La base de pacientes está vacía', cancel: 'Cancelar', searchLibrary: 'Buscar en biblioteca', hideLibrary: 'Ocultar biblioteca', ecgProtocol: 'Protocolo ECG', generatingEcgProtocol: 'Formateando informe ECG...', ecgProtocolTitle: 'Informe diagnóstico ECG', ecgProtocolHint: 'Reescribe el análisis existente en un informe corto de la prueba. No es una nota de consulta.', ecgProtocolError: 'No se pudo formatear el informe ECG', toProtocol: 'Al protocolo', downloadDocx: 'Descargar .docx', downloading: 'Descargando...', print: 'Imprimir', share: 'Compartir', discussManagement: 'Discutir manejo', goCreatePatient: 'Ir a crear paciente', noDiagnosis: 'Sin diagnóstico', modeFast: 'rápido', modeOptimized: 'optimizado', modeValidated: 'experto validado', discussClinicalManagement: 'Discutir manejo clínico', verificationRequired: 'Verificación requerida: este informe debe ser revisado y firmado por el médico tratante.', pricingInfo: 'Precios: el costo en créditos refleja modelos IA e infraestructura.', sessionId: 'ID de sesión', coreVersion: 'Versión core', saveSuccess: '¡Resultado guardado en el paciente!', saveFailed: 'No se pudo guardar el resultado.', downloadError: 'Error de descarga', unknownError: 'Error desconocido', shareTitle: 'Resultado del análisis médico', copiedToClipboard: '¡Texto copiado al portapapeles!', transferTruncated: '[...resultado truncado para transferencia]', notAvailable: 'N/D', draftDisclaimerTitle: 'Borrador clínico (Beta)', draftDisclaimerLine1: 'Este resultado de IA puede ser incompleto o inexacto.', draftDisclaimerLine2: 'Se requiere verificación independiente por un médico antes del uso clínico.', draftDisclaimerLine3: 'No usar para autodiagnóstico del paciente.', consentVersionLabel: 'Versión de consentimiento', verificationModalTitle: 'Verificación médica antes de guardar', verificationModalPrivacyNote: 'Para auditoría solo se guardan el ID del caso y el hecho de confirmación. No se envían datos personales del paciente.', verificationModalCheckReviewed: 'Confirmo que revisé y validé personalmente este borrador antes de guardarlo.', verificationModalCheckResponsibility: 'Entiendo que la responsabilidad clínica final recae en el médico.', verificationModalConfirmSave: 'Confirmar y guardar', verificationModalSaving: 'Guardando...' },
+  fr: { loading: 'Analyse en cours...', reportTitle: 'Rapport consultatif', modelUsed: 'Modèle utilisé', copied: 'Copié', copy: 'Copier', saveToPatient: 'Enregistrer dans le dossier patient', selectPatient: 'Sélectionner un patient', emptyPatients: 'La base patients est vide', cancel: 'Annuler', searchLibrary: 'Rechercher dans la bibliothèque', hideLibrary: 'Masquer la bibliothèque', ecgProtocol: 'Protocole ECG', generatingEcgProtocol: 'Mise en forme du rapport ECG...', ecgProtocolTitle: 'Rapport diagnostique ECG', ecgProtocolHint: 'Réécrit l’analyse existante en un court rapport d’examen. Ce n’est pas une note de consultation.', ecgProtocolError: 'Impossible de formater le rapport ECG', toProtocol: 'Vers protocole', downloadDocx: 'Télécharger .docx', downloading: 'Téléchargement...', print: 'Imprimer', share: 'Partager', discussManagement: 'Discuter la prise en charge', goCreatePatient: 'Créer un patient', noDiagnosis: 'Aucun diagnostic', modeFast: 'rapide', modeOptimized: 'optimisé', modeValidated: 'expert validé', discussClinicalManagement: 'Discuter la prise en charge clinique', verificationRequired: 'Vérification requise : ce rapport doit être revu et signé par le médecin traitant.', pricingInfo: 'Tarification : le coût en crédits couvre modèles IA et infrastructure.', sessionId: 'ID session', coreVersion: 'Version core', saveSuccess: 'Résultat enregistré dans le dossier patient !', saveFailed: 'Échec de l’enregistrement du résultat.', downloadError: 'Erreur de téléchargement', unknownError: 'Erreur inconnue', shareTitle: 'Résultat d’analyse médicale', copiedToClipboard: 'Texte copié dans le presse-papiers !', transferTruncated: '[...résultat tronqué pour transfert]', notAvailable: 'N/D', draftDisclaimerTitle: 'Brouillon clinique (Bêta)', draftDisclaimerLine1: 'Ce résultat IA peut être incomplet ou inexact.', draftDisclaimerLine2: 'Une vérification indépendante par un médecin est requise avant tout usage clinique.', draftDisclaimerLine3: 'Ne pas utiliser pour l’auto-diagnostic du patient.', consentVersionLabel: 'Version du consentement', verificationModalTitle: 'Vérification médicale avant enregistrement', verificationModalPrivacyNote: 'Pour l’audit, seuls l’ID du cas et la confirmation sont enregistrés. Aucune donnée personnelle du patient n’est envoyée.', verificationModalCheckReviewed: 'Je confirme avoir personnellement vérifié et validé ce brouillon avant enregistrement.', verificationModalCheckResponsibility: 'Je comprends que la responsabilité clinique finale revient au médecin.', verificationModalConfirmSave: 'Confirmer et enregistrer', verificationModalSaving: 'Enregistrement...' },
+  ar: { loading: 'جارٍ التحليل...', reportTitle: 'تقرير استشاري', modelUsed: 'النموذج المستخدم', copied: 'تم النسخ', copy: 'نسخ', saveToPatient: 'حفظ في سجل المريض', selectPatient: 'اختر مريضًا', emptyPatients: 'قاعدة بيانات المرضى فارغة', cancel: 'إلغاء', searchLibrary: 'بحث في المكتبة', hideLibrary: 'إخفاء المكتبة', ecgProtocol: 'بروتوكول ECG', generatingEcgProtocol: 'جارٍ تنسيق تقرير تخطيط القلب...', ecgProtocolTitle: 'تقرير تشخيصي لتخطيط القلب', ecgProtocolHint: 'يعيد صياغة التحليل الحالي في تقرير فحص قصير. هذه ليست ملاحظة زيارة.', ecgProtocolError: 'تعذر تنسيق تقرير تخطيط القلب', toProtocol: 'إلى البروتوكول', downloadDocx: 'تنزيل .docx', downloading: 'جارٍ التنزيل...', print: 'طباعة', share: 'مشاركة', discussManagement: 'مناقشة الخطة', goCreatePatient: 'إنشاء مريض', noDiagnosis: 'لا يوجد تشخيص', modeFast: 'سريع', modeOptimized: 'محسّن', modeValidated: 'خبير معتمد', discussClinicalManagement: 'مناقشة الإدارة السريرية', verificationRequired: 'التحقق مطلوب: يجب مراجعة هذا التقرير وتوقيعه من الطبيب المعالج.', pricingInfo: 'التسعير: تكلفة الرصيد تشمل نماذج الذكاء والبنية التحتية.', sessionId: 'معرف الجلسة', coreVersion: 'إصدار النواة', saveSuccess: 'تم حفظ النتيجة في سجل المريض!', saveFailed: 'فشل حفظ النتيجة.', downloadError: 'خطأ في التنزيل', unknownError: 'خطأ غير معروف', shareTitle: 'نتيجة التحليل الطبي', copiedToClipboard: 'تم نسخ النص إلى الحافظة!', transferTruncated: '[...تم تقصير النتيجة للنقل]', notAvailable: 'غير متاح', draftDisclaimerTitle: 'مسودة سريرية (بيتا)', draftDisclaimerLine1: 'قد تكون نتيجة الذكاء الاصطناعي غير مكتملة أو غير دقيقة.', draftDisclaimerLine2: 'يلزم التحقق المستقل من طبيب قبل أي استخدام سريري.', draftDisclaimerLine3: 'غير مخصص للتشخيص الذاتي للمريض.', consentVersionLabel: 'إصدار الموافقة', verificationModalTitle: 'تحقق الطبيب قبل الحفظ', verificationModalPrivacyNote: 'لأغراض التدقيق نحفظ فقط رقم الحالة وتأكيد الطبيب. لا يتم إرسال بيانات المريض الشخصية.', verificationModalCheckReviewed: 'أؤكد أنني راجعت هذه المسودة وتحققت منها بنفسي قبل الحفظ.', verificationModalCheckResponsibility: 'أفهم أن المسؤولية السريرية النهائية تقع على الطبيب.', verificationModalConfirmSave: 'تأكيد وحفظ', verificationModalSaving: 'جارٍ الحفظ...' },
+  hi: { loading: 'विश्लेषण जारी है...', reportTitle: 'परामर्श रिपोर्ट', modelUsed: 'उपयोग किया गया मॉडल', copied: 'कॉपी किया गया', copy: 'कॉपी करें', saveToPatient: 'रोगी रिकॉर्ड में सहेजें', selectPatient: 'रोगी चुनें', emptyPatients: 'रोगी डेटाबेस खाली है', cancel: 'रद्द करें', searchLibrary: 'लाइब्रेरी खोजें', hideLibrary: 'लाइब्रेरी छुपाएँ', ecgProtocol: 'ECG प्रोटोकॉल', generatingEcgProtocol: 'ECG रिपोर्ट स्वरूपित हो रही है...', ecgProtocolTitle: 'ECG नैदानिक रिपोर्ट', ecgProtocolHint: 'मौजूदा विश्लेषण को छोटी परीक्षण रिपोर्ट में लिखता है। यह विजिट नोट नहीं है।', ecgProtocolError: 'ECG रिपोर्ट स्वरूपित नहीं हो सकी', toProtocol: 'प्रोटोकॉल में भेजें', downloadDocx: '.docx डाउनलोड करें', downloading: 'डाउनलोड हो रहा है...', print: 'प्रिंट', share: 'शेयर', discussManagement: 'प्रबंधन पर चर्चा करें', goCreatePatient: 'रोगी बनाएं', noDiagnosis: 'कोई निदान नहीं', modeFast: 'तेज़', modeOptimized: 'अनुकूलित', modeValidated: 'विशेषज्ञ मान्य', discussClinicalManagement: 'क्लिनिकल प्रबंधन पर चर्चा', verificationRequired: 'सत्यापन आवश्यक: इस रिपोर्ट की चिकित्सक द्वारा समीक्षा और हस्ताक्षर आवश्यक हैं।', pricingInfo: 'मूल्य: क्रेडिट लागत में AI मॉडल और इंफ्रास्ट्रक्चर शामिल है।', sessionId: 'सेशन आईडी', coreVersion: 'कोर संस्करण', saveSuccess: 'परिणाम रोगी रिकॉर्ड में सहेज दिया गया!', saveFailed: 'परिणाम सहेजने में विफल।', downloadError: 'डाउनलोड त्रुटि', unknownError: 'अज्ञात त्रुटि', shareTitle: 'मेडिकल विश्लेषण परिणाम', copiedToClipboard: 'टेक्स्ट क्लिपबोर्ड में कॉपी हो गया!', transferTruncated: '[...ट्रांसफ़र के लिए परिणाम संक्षिप्त]', notAvailable: 'उपलब्ध नहीं', draftDisclaimerTitle: 'क्लिनिकल ड्राफ्ट (बीटा)', draftDisclaimerLine1: 'यह AI आउटपुट अधूरा या गलत हो सकता है।', draftDisclaimerLine2: 'क्लिनिकल उपयोग से पहले डॉक्टर द्वारा स्वतंत्र सत्यापन आवश्यक है।', draftDisclaimerLine3: 'रोगी के स्व-निदान के लिए उपयोग न करें।', consentVersionLabel: 'सहमति संस्करण', verificationModalTitle: 'सहेजने से पहले डॉक्टर सत्यापन', verificationModalPrivacyNote: 'ऑडिट के लिए केवल केस ID और पुष्टि सहेजी जाती है। रोगी की व्यक्तिगत जानकारी भेजी नहीं जाती।', verificationModalCheckReviewed: 'मैं पुष्टि करता/करती हूँ कि सहेजने से पहले मैंने इस ड्राफ्ट की स्वयं समीक्षा और पुष्टि की है।', verificationModalCheckResponsibility: 'मैं समझता/समझती हूँ कि अंतिम क्लिनिकल जिम्मेदारी डॉक्टर की है।', verificationModalConfirmSave: 'पुष्टि करें और सहेजें', verificationModalSaving: 'सहेजा जा रहा है...' },
+  'pt-BR': { loading: 'Análise em andamento...', reportTitle: 'Relatório consultivo', modelUsed: 'Modelo usado', copied: 'Copiado', copy: 'Copiar', saveToPatient: 'Salvar no prontuário do paciente', selectPatient: 'Selecionar paciente', emptyPatients: 'Base de pacientes vazia', cancel: 'Cancelar', searchLibrary: 'Pesquisar biblioteca', hideLibrary: 'Ocultar biblioteca', ecgProtocol: 'Protocolo ECG', generatingEcgProtocol: 'Formatando relatório de ECG...', ecgProtocolTitle: 'Relatório diagnóstico de ECG', ecgProtocolHint: 'Reescreve a análise existente em um relatório curto do exame. Não é uma nota de consulta.', ecgProtocolError: 'Não foi possível formatar o relatório de ECG', toProtocol: 'Para protocolo', downloadDocx: 'Baixar .docx', downloading: 'Baixando...', print: 'Imprimir', share: 'Compartilhar', discussManagement: 'Discutir conduta', goCreatePatient: 'Criar paciente', noDiagnosis: 'Sem diagnóstico', modeFast: 'rápido', modeOptimized: 'otimizado', modeValidated: 'especialista validado', discussClinicalManagement: 'Discutir manejo clínico', verificationRequired: 'Verificação obrigatória: este relatório deve ser revisado e assinado pelo médico assistente.', pricingInfo: 'Preço: custo em créditos cobre modelos IA e infraestrutura.', sessionId: 'ID da sessão', coreVersion: 'Versão do core', saveSuccess: 'Resultado salvo no prontuário do paciente!', saveFailed: 'Falha ao salvar resultado.', downloadError: 'Erro de download', unknownError: 'Erro desconhecido', shareTitle: 'Resultado da análise médica', copiedToClipboard: 'Texto copiado para a área de transferência!', transferTruncated: '[...resultado truncado para transferência]', notAvailable: 'N/D', draftDisclaimerTitle: 'Rascunho clínico (Beta)', draftDisclaimerLine1: 'Este resultado de IA pode estar incompleto ou impreciso.', draftDisclaimerLine2: 'É necessária verificação independente por um médico antes do uso clínico.', draftDisclaimerLine3: 'Não usar para autodiagnóstico do paciente.', consentVersionLabel: 'Versão do consentimento', verificationModalTitle: 'Verificação médica antes de salvar', verificationModalPrivacyNote: 'Para auditoria, salvamos apenas o ID do caso e a confirmação. Dados pessoais do paciente não são enviados.', verificationModalCheckReviewed: 'Confirmo que revisei e validei pessoalmente este rascunho antes de salvar.', verificationModalCheckResponsibility: 'Entendo que a responsabilidade clínica final permanece com o médico.', verificationModalConfirmSave: 'Confirmar e salvar', verificationModalSaving: 'Salvando...' },
+  id: { loading: 'Analisis sedang berlangsung...', reportTitle: 'Laporan konsultatif', modelUsed: 'Model yang digunakan', copied: 'Disalin', copy: 'Salin', saveToPatient: 'Simpan ke rekam pasien', selectPatient: 'Pilih pasien', emptyPatients: 'Basis data pasien kosong', cancel: 'Batal', searchLibrary: 'Cari pustaka', hideLibrary: 'Sembunyikan pustaka', ecgProtocol: 'Protokol ECG', generatingEcgProtocol: 'Memformat laporan ECG...', ecgProtocolTitle: 'Laporan diagnostik ECG', ecgProtocolHint: 'Menulis ulang analisis yang ada menjadi laporan pemeriksaan singkat. Ini bukan catatan kunjungan.', ecgProtocolError: 'Gagal memformat laporan ECG', toProtocol: 'Ke protokol', downloadDocx: 'Unduh .docx', downloading: 'Mengunduh...', print: 'Cetak', share: 'Bagikan', discussManagement: 'Diskusikan tata laksana', goCreatePatient: 'Buat pasien', noDiagnosis: 'Tanpa diagnosis', modeFast: 'cepat', modeOptimized: 'optimal', modeValidated: 'ahli tervalidasi', discussClinicalManagement: 'Diskusikan manajemen klinis', verificationRequired: 'Verifikasi diperlukan: laporan ini harus ditinjau dan ditandatangani dokter penanggung jawab.', pricingInfo: 'Harga: biaya kredit mencakup model AI dan infrastruktur.', sessionId: 'ID sesi', coreVersion: 'Versi inti', saveSuccess: 'Hasil berhasil disimpan ke rekam pasien!', saveFailed: 'Gagal menyimpan hasil.', downloadError: 'Kesalahan unduh', unknownError: 'Kesalahan tidak dikenal', shareTitle: 'Hasil analisis medis', copiedToClipboard: 'Teks disalin ke clipboard!', transferTruncated: '[...hasil dipotong untuk transfer]', notAvailable: 'T/A' },
+  ms: { loading: 'Analisis sedang berjalan...', reportTitle: 'Laporan konsultatif', modelUsed: 'Model digunakan', copied: 'Disalin', copy: 'Salin', saveToPatient: 'Simpan ke rekod pesakit', selectPatient: 'Pilih pesakit', emptyPatients: 'Pangkalan data pesakit kosong', cancel: 'Batal', searchLibrary: 'Cari pustaka', hideLibrary: 'Sembunyikan pustaka', ecgProtocol: 'Protokol ECG', generatingEcgProtocol: 'Memformat laporan ECG...', ecgProtocolTitle: 'Laporan diagnostik ECG', ecgProtocolHint: 'Menulis semula analisis sedia ada menjadi laporan ujian ringkas. Ini bukan nota lawatan.', ecgProtocolError: 'Tidak dapat memformat laporan ECG', toProtocol: 'Ke protokol', downloadDocx: 'Muat turun .docx', downloading: 'Memuat turun...', print: 'Cetak', share: 'Kongsi', discussManagement: 'Bincang pengurusan', goCreatePatient: 'Cipta pesakit', noDiagnosis: 'Tiada diagnosis', modeFast: 'pantas', modeOptimized: 'dioptimumkan', modeValidated: 'pakar disahkan', discussClinicalManagement: 'Bincang pengurusan klinikal', verificationRequired: 'Pengesahan diperlukan: laporan ini mesti disemak dan ditandatangani oleh doktor merawat.', pricingInfo: 'Harga: kos kredit meliputi model AI dan infrastruktur.', sessionId: 'ID sesi', coreVersion: 'Versi teras', saveSuccess: 'Keputusan berjaya disimpan ke rekod pesakit!', saveFailed: 'Gagal menyimpan keputusan.', downloadError: 'Ralat muat turun', unknownError: 'Ralat tidak diketahui', shareTitle: 'Keputusan analisis perubatan', copiedToClipboard: 'Teks disalin ke papan klip!', transferTruncated: '[...keputusan dipendekkan untuk pemindahan]', notAvailable: 'T/A' },
+  tr: { loading: 'Analiz sürüyor...', reportTitle: 'Konsültatif rapor', modelUsed: 'Kullanılan model', copied: 'Kopyalandı', copy: 'Kopyala', saveToPatient: 'Hasta kaydına kaydet', selectPatient: 'Hasta seç', emptyPatients: 'Hasta veritabanı boş', cancel: 'İptal', searchLibrary: 'Kütüphanede ara', hideLibrary: 'Kütüphaneyi gizle', ecgProtocol: 'EKG protokolü', generatingEcgProtocol: 'EKG raporu biçimlendiriliyor...', ecgProtocolTitle: 'EKG tanı raporu', ecgProtocolHint: 'Mevcut analizi kısa bir test raporuna dönüştürür. Bu bir muayene notu değildir.', ecgProtocolError: 'EKG raporu biçimlendirilemedi', toProtocol: 'Protokole aktar', downloadDocx: '.docx indir', downloading: 'İndiriliyor...', print: 'Yazdır', share: 'Paylaş', discussManagement: 'Yönetimi tartış', goCreatePatient: 'Hasta oluştur', noDiagnosis: 'Tanı yok', modeFast: 'hızlı', modeOptimized: 'optimize', modeValidated: 'uzman doğrulamalı', discussClinicalManagement: 'Klinik yönetimi tartış', verificationRequired: 'Doğrulama gerekli: bu rapor sorumlu hekim tarafından incelenip imzalanmalıdır.', pricingInfo: 'Fiyatlandırma: kredi ücreti AI modelleri ve altyapıyı kapsar.', sessionId: 'Oturum ID', coreVersion: 'Çekirdek sürümü', saveSuccess: 'Sonuç hasta kaydına başarıyla kaydedildi!', saveFailed: 'Sonuç kaydedilemedi.', downloadError: 'İndirme hatası', unknownError: 'Bilinmeyen hata', shareTitle: 'Tıbbi analiz sonucu', copiedToClipboard: 'Metin panoya kopyalandı!', transferTruncated: '[...aktarım için sonuç kısaltıldı]', notAvailable: 'Yok' },
+  'zh-CN': { loading: '分析进行中...', reportTitle: '会诊报告', modelUsed: '使用模型', copied: '已复制', copy: '复制', saveToPatient: '保存到患者记录', selectPatient: '选择患者', emptyPatients: '患者数据库为空', cancel: '取消', searchLibrary: '搜索资料库', hideLibrary: '隐藏资料库', ecgProtocol: 'ECG 协议', generatingEcgProtocol: '正在格式化心电图报告...', ecgProtocolTitle: '心电图诊断报告', ecgProtocolHint: '将已有分析改写成简短检查报告。这不是就诊记录。', ecgProtocolError: '无法格式化心电图报告', toProtocol: '转到协议', downloadDocx: '下载 .docx', downloading: '下载中...', print: '打印', share: '分享', discussManagement: '讨论处理方案', goCreatePatient: '创建患者', noDiagnosis: '无诊断', modeFast: '快速', modeOptimized: '优化', modeValidated: '专家校验', discussClinicalManagement: '讨论临床管理', verificationRequired: '需要验证：该报告必须由主治医生审核并签署。', pricingInfo: '计费：积分成本包含 AI 模型和基础设施费用。', sessionId: '会话 ID', coreVersion: '核心版本', saveSuccess: '结果已成功保存到患者记录！', saveFailed: '保存结果失败。', downloadError: '下载错误', unknownError: '未知错误', shareTitle: '医学分析结果', copiedToClipboard: '文本已复制到剪贴板！', transferTruncated: '[...用于传输的结果已截断]', notAvailable: '无' },
 };

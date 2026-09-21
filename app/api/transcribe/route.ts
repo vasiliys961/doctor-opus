@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSpeechProvider } from '@/lib/speech-provider';
-import { AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE } from '@/lib/cost-calculator';
+import { AssemblyAIProvider } from '@/lib/assemblyai';
+import { calculateAudioTranscriptionCost } from '@/lib/cost-calculator';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { getRequestLocale } from '@/lib/i18n/server';
+import { resolveAssemblyAiLanguage } from '@/lib/i18n/stt-language';
 
 /**
  * API endpoint для транскрипции аудио.
- * Провайдер выбирается через SPEECH_PROVIDER env (assemblyai | yandex).
- * По умолчанию — AssemblyAI.
+ * Транскрипция всегда через AssemblyAI.
+ * Язык берётся из form-поля language или cookie UI-локали.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -45,7 +47,7 @@ export async function POST(request: NextRequest) {
     // Резервируем оценочную стоимость до вызова внешнего провайдера.
     // Консервативно: ~5 MB ≈ 1 минута аудио, затем после транскрипции делаем корректировку.
     const estimatedMinutes = Math.max(1 / 6, file.size / (1024 * 1024 * 5));
-    const estimatedCost = Math.max(0.1, estimatedMinutes * AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE);
+    const estimatedCost = calculateAudioTranscriptionCost(estimatedMinutes * 60);
     const reserve = userEmail
       ? await checkAndDeductBalance(userEmail, estimatedCost, 'Audio transcription (reserve)', { estimatedMinutes, fileSize: file.size })
       : await checkAndDeductGuestBalance(guestKey!, estimatedCost, 'Guest trial: audio transcription (reserve)', { estimatedMinutes, fileSize: file.size });
@@ -78,15 +80,14 @@ export async function POST(request: NextRequest) {
       console.log(`🔧 MIME тип не определен, использую: ${mimeType} (по расширению: ${extension})`)
     }
 
-    // Получаем провайдер (AssemblyAI или Yandex SpeechKit)
-    const provider = getSpeechProvider();
-    console.log(`🚀 Транскрипция через ${provider.name} с MIME:`, mimeType)
+    const requestLocale = await getRequestLocale();
+    const languageCode = resolveAssemblyAiLanguage(String(formData.get('language') || ''), requestLocale);
+    const provider = new AssemblyAIProvider(languageCode);
+    console.log(`🚀 Транскрипция через ${provider.name} [${languageCode}] с MIME:`, mimeType)
 
     const { text, duration } = await provider.transcribe(arrayBuffer, mimeType);
 
-    // Расчет стоимости
-    const durationMinutes = duration / 60;
-    const cost = Math.max(0.1, durationMinutes * AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE);
+    const cost = duration > 0 ? calculateAudioTranscriptionCost(duration) : estimatedCost;
     const delta = cost - estimatedCost;
     if (Math.abs(delta) > 0.01) {
       const adjustResult = userEmail

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor, { DrawingPath } from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -166,10 +165,8 @@ export default function CTPage() {
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
 
         await handleSSEStream(response, {
-          onChunk: (content, accumulatedText) => {
-            flushSync(() => {
-              setResult(accumulatedText)
-            })
+          onChunk: (_content, accumulatedText) => {
+            setResult(accumulatedText)
           },
           onUsage: (usage) => {
             console.log('📊 [CT STREAMING] Получена точная стоимость:', usage.total_cost)

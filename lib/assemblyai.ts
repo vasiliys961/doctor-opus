@@ -6,6 +6,13 @@
  */
 
 import type { SpeechProvider, TranscriptionResult } from './speech-provider';
+import { DEFAULT_LOCALE, type Locale } from './i18n/config';
+import {
+  getSpeakerLabel,
+  mapLocaleToAssemblyAiLanguage,
+  resolveAssemblyAiLanguage,
+  resolveSpeakerLocale,
+} from './i18n/stt-language';
 
 const ASSEMBLYAI_API_URL = 'https://api.assemblyai.com/v2';
 
@@ -24,9 +31,16 @@ interface TranscriptionConfig {
  */
 export class AssemblyAIProvider implements SpeechProvider {
   readonly name = 'AssemblyAI';
+  private readonly languageCode: string;
+  private readonly locale: Locale;
+
+  constructor(languageOrLocale: string = DEFAULT_LOCALE) {
+    this.languageCode = resolveAssemblyAiLanguage(languageOrLocale);
+    this.locale = resolveSpeakerLocale(languageOrLocale);
+  }
 
   async transcribe(audioData: ArrayBuffer, mimeType: string = 'audio/webm'): Promise<TranscriptionResult> {
-    return transcribeAudio(audioData, mimeType);
+    return transcribeAudio(audioData, mimeType, this.languageCode, this.locale);
   }
 }
 
@@ -34,7 +48,12 @@ export class AssemblyAIProvider implements SpeechProvider {
  * Транскрипция аудио через AssemblyAI
  * Использует ту же логику, что и Python assemblyai_transcriber.py
  */
-export async function transcribeAudio(audioData: ArrayBuffer, mimeType: string = 'audio/webm'): Promise<{ text: string, duration: number }> {
+export async function transcribeAudio(
+  audioData: ArrayBuffer,
+  mimeType: string = 'audio/webm',
+  languageCode: string = mapLocaleToAssemblyAiLanguage(DEFAULT_LOCALE),
+  locale: Locale = DEFAULT_LOCALE
+): Promise<{ text: string, duration: number }> {
   const apiKey = process.env.ASSEMBLYAI_API_KEY;
   
   if (!apiKey) {
@@ -69,7 +88,7 @@ export async function transcribeAudio(audioData: ArrayBuffer, mimeType: string =
     // Шаг 2: Запуск транскрипции
     const config: TranscriptionConfig = {
       speaker_labels: true,
-      language_code: 'ru',
+      language_code: resolveAssemblyAiLanguage(languageCode, locale),
       speech_model: 'best',
       punctuate: true,
       format_text: true,
@@ -148,8 +167,9 @@ export async function transcribeAudio(audioData: ArrayBuffer, mimeType: string =
     // Форматируем результат с разделением по говорящим (если есть)
     let transcriptText = '';
     if (resultData.utterances && resultData.utterances.length > 0) {
+      const speakerLabel = getSpeakerLabel(locale);
       transcriptText = resultData.utterances
-        .map((u: any) => `Говорящий ${u.speaker}: ${u.text}`)
+        .map((u: any) => `${speakerLabel} ${u.speaker}: ${u.text}`)
         .join('\n\n');
     } else {
       transcriptText = resultData.text || '';

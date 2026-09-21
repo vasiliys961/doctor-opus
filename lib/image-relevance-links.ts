@@ -3,6 +3,7 @@ export type ImageModalityLike =
   | 'ct'
   | 'mri'
   | 'ultrasound'
+  | 'endoscopy'
   | 'dermatoscopy'
   | 'ecg'
   | 'histology'
@@ -68,6 +69,18 @@ export function getRelevanceBundle(modality: ImageModalityLike, text: string): R
         ],
         generalLinks: [
           { id: 'ug1', title: 'Search ultrasound topics', source: 'Radiopaedia', url: `https://radiopaedia.org/search?lang=us&q=${encodeURIComponent(q(query, 'ultrasound interpretation'))}`, score: 0 },
+        ],
+      };
+    case 'endoscopy':
+      return {
+        title: 'Relevant endoscopy references',
+        hint: 'Quick links for procedure quality indicators and lesion classification terms.',
+        links: [
+          { id: 'en1', title: 'ESGE guidelines', source: 'ESGE', url: 'https://www.esge.com/publications/guidelines/', score: 1 },
+          { id: 'en2', title: 'ASGE Standards of Practice', source: 'ASGE', url: 'https://www.asge.org/home/resources/publications/guidelines', score: 1 },
+        ],
+        generalLinks: [
+          { id: 'eng1', title: 'Search endoscopy topics', source: 'Google', url: siteSearch('esge.com', q(query, 'endoscopy reporting terminology MST')), score: 0 },
         ],
       };
     case 'ecg':

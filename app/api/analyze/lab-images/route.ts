@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
           stream = await analyzeImageOpusTwoStageStreaming(
             languageAwarePrompt,
             images[0],
-            'universal',
+            'lab',
             clinicalContext,
             undefined,
             modelToUse,

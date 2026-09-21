@@ -24,12 +24,19 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'perplexity/sonar': { input: 1.0, output: 1.0 },
 };
 
-// Цена за 1 минуту аудио транскрипции в условных единицах (у.е.)
-// 1 у.е. за минуту — это примерно $0.01 (при PRICE_MULTIPLIER = 100)
-export const AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE = 1.0;
+// AssemblyAI: $0.62 per hour of audio, all in (speaker labels included).
+export const AUDIO_TRANSCRIPTION_USD_PER_HOUR = 0.62;
 
 // Множитель для перевода в условные единицы (USD * 100)
 const PRICE_MULTIPLIER = 100;
+
+export const AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE =
+  (AUDIO_TRANSCRIPTION_USD_PER_HOUR * PRICE_MULTIPLIER) / 60;
+
+export function calculateAudioTranscriptionCost(durationSeconds: number): number {
+  const seconds = Math.max(0, Number(durationSeconds) || 0);
+  return (seconds / 3600) * AUDIO_TRANSCRIPTION_USD_PER_HOUR * PRICE_MULTIPLIER;
+}
 
 export interface CostInfo {
   inputCostUsd: number;
@@ -136,6 +143,38 @@ export function calculateCombinedCost(stages: UsageStage[]) {
     totalTokens: totalPromptTokens + totalCompletionTokens,
     totalCostUsd,
     totalCostUnits,
+  };
+}
+
+export interface TokenUsageTotals {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  total_cost: number;
+}
+
+export function emptyTokenUsage(): TokenUsageTotals {
+  return {
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    total_cost: 0,
+  };
+}
+
+export function addModelUsage(
+  acc: TokenUsageTotals,
+  model: string,
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+): TokenUsageTotals {
+  const prompt = Number(usage?.prompt_tokens) || 0;
+  const completion = Number(usage?.completion_tokens) || 0;
+  const cost = calculateCost(prompt, completion, model);
+  return {
+    prompt_tokens: acc.prompt_tokens + prompt,
+    completion_tokens: acc.completion_tokens + completion,
+    total_tokens: acc.total_tokens + (Number(usage?.total_tokens) || prompt + completion),
+    total_cost: acc.total_cost + cost.totalCostUnits,
   };
 }
 

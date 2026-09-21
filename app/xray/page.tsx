@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -119,10 +118,8 @@ export default function XRayPage() {
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
 
         await handleSSEStream(response, {
-          onChunk: (content, accumulatedText) => {
-            flushSync(() => {
-              setResult(accumulatedText)
-            })
+          onChunk: (_content, accumulatedText) => {
+            setResult(accumulatedText)
           },
           onUsage: (usage) => {
             console.log('📊 [XRAY STREAMING] Получена точная стоимость:', usage.total_cost)

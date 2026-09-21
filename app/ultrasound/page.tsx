@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import AnalysisResult from '@/components/AnalysisResult'
 import AnalysisModeSelector, { AnalysisMode, OptimizedModel } from '@/components/AnalysisModeSelector'
@@ -101,8 +100,8 @@ export default function UltrasoundPage() {
       if (useStream) {
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         await handleSSEStream(response, {
-          onChunk: (content, accumulatedText) => {
-            flushSync(() => setResult(accumulatedText))
+          onChunk: (_content, accumulatedText) => {
+            setResult(accumulatedText)
           },
           onUsage: (usage) => {
             setCurrentCost(usage.total_cost)

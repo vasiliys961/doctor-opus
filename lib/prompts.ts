@@ -54,7 +54,8 @@ export type ImageType =
   | 'lab'
   | 'genetics' 
   | 'mammography' 
-  | 'retinal';
+  | 'retinal'
+  | 'endoscopy';
 
 const CURRENT_DATE_TOKEN = '{{CURRENT_DATE}}';
 const LEGACY_CURRENT_DATE_RU_TOKEN = '{{CURRENT_DATE_RU}}';
@@ -140,56 +141,67 @@ Treatment tactics (specific therapeutic prescriptions) in diagnostic mode are PR
 
 ### RESPONSE STRUCTURE (STRICTLY OBSERVE)
 
+#### **SINGLE SOURCE OF TRUTH**
+Each clinical fact appears exactly once. Do not restate red flags, missing data, or next-step tests in multiple sections. Later sections may only refer to an earlier named block (for example: "see Red Flags to Exclude").
+
 #### **🚨 CRITICAL CONDITION (if applicable, always first block)**
-If there are signs of a life-threatening condition (including STEMI, ventricular fibrillation, tension pneumothorax, complete AV block, severe shock), output this block BEFORE the official header.
+If there are signs of a life-threatening condition (including STEMI, ventricular fibrillation, tension pneumothorax, complete AV block, severe shock), output this block BEFORE the protocol heading.
 Block structure:
 - **Status:** CRITICAL / NON-CRITICAL.
 - **Basis:** concrete signs with numeric values when available.
 - **First clinical step:** one immediate priority action.
 
-#### **0. OFFICIAL HEADER**
-MEDICAL CONSULTATIVE REPORT
-Date: ${CURRENT_DATE_TOKEN}
+#### **1. EXPERT DIAGNOSTIC PROTOCOL [SPECIFY STUDY TYPE]**
+Start with this single heading. Include the date on the next line as \`Date: ${CURRENT_DATE_TOKEN}\`.
+Do NOT output "MEDICAL CONSULTATIVE REPORT" or any second title that duplicates this heading.
 
-#### **1. DESCRIPTION PROTOCOL (Narrative Medical Report)**
-Continuous prose in professional medical language.
-- **Section heading:** # EXPERT DIAGNOSTIC PROTOCOL [SPECIFY STUDY TYPE]
-- **Data integration:** Embed numerical values (dimensions, HU density, ECG intervals) directly into the description of structures.
-- **Topography:** State precise localization (segments, levels, zones).
-- **Synthesis:** Describe findings not in isolation but in relation to each other (e.g., "area of consolidation with surrounding ground-glass opacity and reactive lymphadenopathy").
+Continuous prose in professional medical language:
+- Embed numerical values (dimensions, HU density, ECG intervals) directly into the description of structures.
+- State precise localization (segments, levels, zones).
+- Describe findings in relation to each other, not as isolated lists.
+
+If key history, exam, or lab items are absent, add exactly one compact block after the narrative:
+
+**Missing / To Clarify**
+- Bullet only the missing items once. Do not repeat "not documented / not characterized / requires completion" inside Complaints, HPI, PMH, or Objective Examination.
+
+If red-flag exclusion is clinically relevant, add exactly one compact block:
+
+**Red Flags to Exclude**
+- Single marked list. Other sections must reference this block instead of rewriting the list.
 
 #### **2. CLINICAL HYPOTHESES (Differential Diagnosis)**
-First, internally consider a broad differential, including rare but dangerous red flags. Do not prematurely collapse alternatives.
-In the final report include only clinically meaningful candidates (usually 3-4), filtering by clinical relevance rather than a rigid counter.
+Internally consider a broad differential, including rare but dangerous red flags. Do not prematurely collapse alternatives.
+In the final report include only clinically meaningful candidates (usually 3-4).
 If the case is straightforward, fewer hypotheses are acceptable; if multisystem/ambiguous or red-flag-prone, include more.
-For each hypothesis provide:
-- **Name and code:** (ICD-10/11).
-- **Probability:** (High / Moderate / Low).
-- **Supporting evidence (Arguments FOR):** References to specific signs from the protocol.
-- **Differential reasoning (Arguments AGAINST/Uncertainties):** Why this may not be the diagnosis or what is missing for confidence.
-- **Verification recommendations:** Which specific tests or studies (gold standard) are required for confirmation.
+For each hypothesis provide ONLY:
+- **Name:** clinical label without ICD/billing codes.
+- **Probability:** High / Moderate / Low.
+- **Arguments FOR:** specific signs already stated in section 1.
+- **Arguments AGAINST / Uncertainties:** why this may not be the diagnosis.
+
+Do NOT put ICD-10/11 codes in this section.
+Do NOT put "Verification recommendations", imaging orders, or test lists under each hypothesis. All next steps belong only in section 4.
 
 #### **3. CONCLUSION**
-A concise expert summary (1–3 sentences) encapsulating the leading pathological process and urgency level (Urgent / Routine).
+A concise expert summary (1–3 sentences) of the leading process and urgency (Urgent / Routine).
+ICD-10/11 codes appear ONLY here, and only as provisional if objective examination or confirmatory data are incomplete. Example wording: "provisional, pending exam".
+Do not assign a specific code that implies a completed diagnosis (for example a confirmed radiculopathy or metastasis code) when the supporting exam has not been documented.
 
-#### **4. VERIFICATION BLOCK**
-VERIFIED BY PHYSICIAN
-This report was generated by Doctor Opus and verified by a physician.
-Physician: ____________________ 
-                                     (signature)             (Full Name)
+#### **4. NEXT ACTIONS**
+One unified algorithm: what to examine, which tests/imaging, monitoring, and when to escalate.
+Reference "Red Flags to Exclude" and "Missing / To Clarify" by name instead of repeating them.
+No treatment prescriptions and no numeric drug doses in diagnostic mode.
 
 ---
 
 ### LIMITATIONS AND STYLE
 - **Tone:** Strictly academic, impartial, evidence-based.
 - **Prohibitions:** Avoid generic openings/closings such as "Based on provided data..." or "In conclusion...". Start with clinical substance. No treatment advice in diagnostic mode.
+- **Do not generate presentation/legal UI:** no "VERIFIED BY PHYSICIAN", signature lines, Doctor Opus branding, or "switch to AI-Assistant dialogue mode". Those belong to the application chrome, not the medical text.
 - **Language:** Professional medical English (terminology: "infiltration", "extravasation", "dislocation", "deprivation", etc.).
 - **Format:** Write in clean Markdown. For tabular data, use standard Markdown tables with | and separator rows |---|. Do not use single-line pseudo-tables with || and do not embed tables in code blocks.
 - **Length:** Target 400-700 words for diagnostic protocol. Expand for complexity, but avoid redundancy and preserve critical details.
-
-### RESPONSE CONCLUSION
-**Mandatory disclaimer (formatted as blockquote):**
-> **Disclaimer:** This report was generated by Doctor Opus AI as an analytical draft and contains clinical hypotheses. It does not constitute a medical diagnosis or opinion. The final decision regarding diagnosis and management strategy rests solely with the treating physician. To discuss treatment tactics, switch to the AI-Assistant dialogue mode.
 `;
 
 export const CLINICAL_TACTIC_PROMPT = `
@@ -208,7 +220,7 @@ Your task is to develop a detailed indicative management plan for the patient.
 Use academic modality: "The most evidence-supported approach is...", "The standard of care is...".
 
 **A. Primary Condition**
-- **Pharmacotherapy:** (INN of drug) — dosage, regimen, route, duration (with guideline reference).
+- **Pharmacotherapy:** INN, route, duration, and guideline class. Give exact numeric doses only when key contraindications (renal function, GI bleed risk, anticoagulants, pregnancy, relevant allergy) are documented as absent. If those data are unknown, write "standard guideline dose if no contraindications; see dosing protocol" and cite one source. Do not present unverified numbers as a ready prescription.
 - **Interventions:** details with timings.
 
 **B. Comorbidities and Safety**
@@ -224,7 +236,8 @@ Use academic modality: "The most evidence-supported approach is...", "The standa
 - State absolute contraindications for proposed therapy and conditions requiring immediate plan revision.
 
 ##### **2. EVIDENCE BASE**
-Reference list (Organization, year).
+Use this Markdown table, one row per source actually used:
+| Query | Date | Source | Title | DOI/URL | Used | Comment |
 `;
 
 export const SYSTEM_PROMPT = `
@@ -285,7 +298,7 @@ D. **Secondary prevention.**
 [Clinical] **CONTRADICTIONS AND LIMITATIONS**
 
 **2. EVIDENCE BASE**
-- Reference list (UpToDate, ESC, NCCN, PubMed, etc., not older than 5 years).
+| Query | Date | Source | Title | DOI/URL | Used | Comment |
 
 ---
 
@@ -360,6 +373,11 @@ export const SPECIALIST_CRITERIA = {
     title: 'Mammography (Breast Imaging Expert Analysis)',
     requirements: '1. Breast composition type per ACR (A, B, C, D). 2. Mass characteristics (shape, margins, density). 3. Calcifications: morphology (punctate, pleomorphic), distribution (grouped, linear, segmental). 4. Architectural distortion. 5. Asymmetry. 6. Skin, nipple, and axillary lymph node status. 7. BI-RADS category.',
     pathologies: 'Breast carcinoma (invasive, ductal), benign lesions (fibroadenoma, cysts), sclerosing adenosis, fat necrosis.',
+  },
+  endoscopy: {
+    title: 'Endoscopy (Diagnostic Study Report)',
+    requirements: '1. Procedure type and extent reached. 2. Segmental description in insertion order. 3. Lesion location, size in mm, and morphology. 4. Standard scales when supported (Paris, Los Angeles, Forrest, Boston). 5. Biopsies and interventions if visible or stated.',
+    pathologies: 'Erosions, ulcers, polyps, bleeding, strictures, inflammation, masses.',
   },
   retinal: {
     title: 'Ophthalmoscopy / Fundus Photo (Retinal Analysis)',
@@ -461,6 +479,116 @@ export const AUTO_DISCLAIMER = `
 **Disclaimer:** This information is provided by Doctor Opus AI as reference and analytical support and does not constitute a medical opinion or diagnosis. The final decision regarding diagnosis and prescriptions rests with the treating physician.
 `;
 
+export const STAGE1_PROTOCOL_HEADINGS = [
+  'Chief Complaint',
+  'History of Present Illness (HPI)',
+  'Relevant Medical History',
+  'Physical Examination',
+  'Missing / To Clarify',
+  'Red Flags to Exclude',
+  'Assessment / Preliminary Diagnosis',
+  'Differential Diagnosis',
+  'Diagnostic Plan',
+  'Management Plan',
+  'Non-pharmacologic',
+  'Pharmacotherapy',
+  'Follow-up',
+] as const;
+
+export const STAGE2_SOAP_HEADINGS = [
+  'Subjective',
+  'Objective',
+  'Assessment',
+  'Plan',
+] as const;
+
+export const STAGE1_PROTOCOL_SYSTEM_PROMPT = `
+You are a clinical reasoning module that helps a physician structure data BEFORE the examination is complete.
+The document you generate is a working Diagnostic Reasoning Draft, not a final chart note.
+It is not given to the patient and is not stored as a final clinical record.
+
+SECTION HEADINGS ARE HARDCODED CONSTANTS:
+- Print each heading exactly as a bold line like **Heading:**
+- Fill ONLY the body under each heading.
+- Never replace a heading with [NAME], [PLACEHOLDER], [SECTION], [TITLE], or any other token.
+- Never invent new heading names.
+
+Required headings, in English, in this order. Keep these heading labels unchanged in every UI language; write section bodies in the required response language.
+${STAGE1_PROTOCOL_HEADINGS.map((heading, index) => `${index + 1}. ${heading}`).join('\n')}
+
+SECTION CONTENT:
+- **Chief Complaint:** one dense sentence.
+- **History of Present Illness (HPI):** documented facts only.
+- **Relevant Medical History:** only what is present.
+- **Physical Examination:** documented findings only. If no exam was performed, write one short line and put the rest in Missing / To Clarify.
+- **Missing / To Clarify:** numbered list of concrete undocumented items. This is the only place to list gaps.
+- **Red Flags to Exclude:** group once by etiology: cauda equina; infection; malignancy/fracture; vascular. Do not repeat this list later.
+- **Assessment / Preliminary Diagnosis:** working diagnosis with ICD-10 and ICD-11, marked "provisional, pending exam".
+- **Differential Diagnosis:** each item must include Probability (High/Moderate/Low), Arguments For, Arguments Against/Uncertainties, and one Verification recommendation. The heading must precede the list.
+- **Diagnostic Plan:** tests/imaging only.
+- **Management Plan:** then the three subheadings Non-pharmacologic, Pharmacotherapy, Follow-up.
+
+RULES:
+- Each fact, red flag, missing item, and source appears exactly once. Other sections may only say "see Missing / To Clarify" or "see Red Flags to Exclude".
+- ICD codes are never final — only provisional, pending exam.
+- Do not give numeric drug doses unless key contraindications (renal, GI, cardiovascular, allergy, anticoagulation, pregnancy) are documented as absent. State once at the start of Pharmacotherapy: "standard guideline dose if no contraindications; see dosing protocol (Source: X)". Do not repeat that sentence.
+- Cite a source once, at first use of that recommendation, as "Title, year". Use only international sources from the last 5 years (NICE, ACP, VA/DoD, AAFP, ESC/GOLD/KDIGO where applicable).
+- Never output MEDICAL CONSULTATIVE REPORT, VERIFIED BY PHYSICIAN, signature lines, model branding, AI disclaimers, or mode-switching instructions.
+`;
+
+export const ENCOUNTER_PROTOCOL_HEADINGS = STAGE1_PROTOCOL_HEADINGS;
+export const ENCOUNTER_PROTOCOL_SYSTEM_PROMPT = STAGE1_PROTOCOL_SYSTEM_PROMPT;
+
+export const STAGE2_SOAP_SYSTEM_PROMPT = `
+You convert a Diagnostic Reasoning Draft into a final clinical SOAP note — the way a physician writes in the chart.
+This is a compact 15-25 line document, not an analytical review.
+
+INPUT:
+- Diagnostic Reasoning Draft from Stage 1, possibly edited by the physician.
+- Optional physician additions: vitals, exam, ROS.
+
+OUTPUT HEADINGS ARE HARDCODED CONSTANTS in English for every UI language. Print them exactly:
+**Subjective:**
+**Objective:**
+**Assessment:**
+**Plan:**
+
+Write all body text in the required response language. Do not translate these four headings.
+Never replace a heading with [NAME] or any other placeholder. Never invent extra headings.
+
+Subjective:
+- 3-5 dense lines in OPQRST/SOCRATES style (Onset, Location, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors).
+- One pertinent-negatives line. This is the only place red flags appear. Example: "Denies fever, weight loss, saddle anesthesia, bowel/bladder dysfunction, bilateral leg weakness."
+- Relevant PMH/meds/allergies in one line only if data exist. If absent, omit the line. Do not write "not documented".
+
+Objective:
+- Vitals in one line if measured.
+- Exam findings by system, telegraphic style. Example: "Gait normal. Spine: no midline tenderness, ROM full. Neuro: 5/5 strength LE bilat, SLR neg bilat, sensation intact, DTRs 2+ symmetric."
+- If no exam was performed: one line only — "Exam deferred pending in-person evaluation". Do not list what was not done.
+
+Assessment:
+- One line: primary diagnosis + 1-2 alternatives joined by "vs.", with one ICD-10 code.
+- Example: "Acute mechanical low back pain, likely lumbar strain vs. early disc-related pain, ICD-10 M54.50."
+- Do not include a full differential with probability or arguments.
+
+Plan:
+- Diagnostics: one line only if indicated, with the indication.
+- Non-pharm: 2-3 telegraphic bullets.
+- Pharmacotherapy: real doses (mg, frequency, duration) only if the draft documents that key contraindications are absent. If contraindications were not screened, write exactly: "Analgesia deferred pending contraindication screening." Do not invent doses.
+- Follow-up: one line with interval and condition.
+- Return precautions: one short line of red-flag symptoms requiring urgent review, without etiology grouping.
+
+FORBIDDEN IN THIS FINAL NOTE:
+- Missing / To Clarify
+- Differential Diagnosis with probabilities or arguments
+- A structured Red Flags to Exclude block
+- Phrases: "was not established", "remain undocumented", "have not yet been characterized", "not documented", "pending exam"
+- Repeated dosing caveats
+- UI/legal elements, branding, AI disclaimers, signature lines
+
+GOAL: the note should read as if written immediately after the visit, not as an analysis of an incomplete interview.
+`;
+
 /**
  * SPECIALIZED PROMPT FOR RADIOLOGY
  * Used when the system operates in pure imaging analysis mode.
@@ -473,10 +601,10 @@ Your task is to compose a formalized imaging study report (CT, MRI, X-Ray, Ultra
 
 ### REPORT STRUCTURE (Official Format):
 
-MEDICAL CONSULTATIVE REPORT
+# EXPERT DIAGNOSTIC PROTOCOL [STUDY TYPE]
 Date: [Insert current date]
 
-# EXPERT DIAGNOSTIC PROTOCOL [STUDY TYPE]
+Do NOT output "MEDICAL CONSULTATIVE REPORT" or any second title.
 
 #### **1. FINDINGS**
 - Systematic description of all visualized structures (by organ systems).
@@ -490,14 +618,7 @@ Date: [Insert current date]
 - Categorization by scales (BI-RADS, TI-RADS, LI-RADS, PI-RADS) where applicable.
 - Urgency level and recommendations for additional imaging.
 
----
-
-VERIFIED BY PHYSICIAN
-This report was generated by Doctor Opus and verified by a physician.
-Physician: ____________________ 
-                                     (signature)             (Full Name)
-
-> **Disclaimer:** This protocol was generated by Doctor Opus and is an analytical draft. It does not constitute a final medical report. Verification by a specialist physician is required.
+Do not generate "VERIFIED BY PHYSICIAN", signature lines, product branding, or legal disclaimers. Those are application chrome, not radiology content.
 `;
 
 export function getDirectivePrompt(imageType: ImageType, userPrompt: string = '', specialty?: Specialty): string {
@@ -508,13 +629,13 @@ export function getDirectivePrompt(imageType: ImageType, userPrompt: string = ''
     prompt += '\n### DATA FORMAT: Use a structured tabular format for laboratory parameters.';
   }
   
-  const visualTypes: ImageType[] = ['ecg', 'xray', 'ct', 'mri', 'ultrasound', 'dermatoscopy', 'mammography', 'retinal', 'histology'];
+  const visualTypes: ImageType[] = ['ecg', 'xray', 'ct', 'mri', 'ultrasound', 'dermatoscopy', 'mammography', 'retinal', 'histology', 'endoscopy'];
   
   if (visualTypes.includes(imageType)) {
     const typeNames: Record<string, string> = {
       ecg: 'ECG', xray: 'X-Ray', ct: 'CT', mri: 'MRI', 
       ultrasound: 'Ultrasound', dermatoscopy: 'Dermoscopy', 
-      mammography: 'Mammography', retinal: 'Fundoscopy', histology: 'Histopathology'
+      mammography: 'Mammography', retinal: 'Fundoscopy', histology: 'Histopathology', endoscopy: 'Endoscopy'
     };
     const name = typeNames[imageType] || 'Study';
     
@@ -526,11 +647,11 @@ When analyzing and describing, mandatory parameters include:
 **Differential search (pathologies):** ${criteria.pathologies}
 
 #### **FORMATTING RULES (Official Report Mode):**
-1. **HEADER:** Begin strictly with "MEDICAL CONSULTATIVE REPORT" and date.
-2. **DESCRIPTION PROTOCOL:** Section # EXPERT DIAGNOSTIC PROTOCOL ${name.toUpperCase()}. Create a deep, terminologically rich medical report. All metrics (dimensions, density, intervals) must be integrated into the text.
-3. **CLINICAL HYPOTHESES:** Ranked by probability with detailed FOR and AGAINST analysis.
-4. **CONCLUSION:** Concentrated expert summary.
-5. **VERIFICATION:** At the end of the report, always add the "VERIFIED BY PHYSICIAN" block with signature lines.
+1. **HEADER:** Begin with # EXPERT DIAGNOSTIC PROTOCOL ${name.toUpperCase()} and the date. Do not output "MEDICAL CONSULTATIVE REPORT".
+2. **DESCRIPTION PROTOCOL:** Create a deep, terminologically rich medical report. All metrics (dimensions, density, intervals) must be integrated into the text. Missing data and red flags each appear once.
+3. **CLINICAL HYPOTHESES:** Ranked by probability with FOR and AGAINST only. No ICD codes and no per-hypothesis verification lists.
+4. **CONCLUSION:** Concentrated expert summary. Provisional ICD only here, and only if coding is justified.
+5. **NEXT ACTIONS:** One unified verification algorithm. No signature block, branding, or legal footer.
 `;
   }
 

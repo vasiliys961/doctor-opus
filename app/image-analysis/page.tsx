@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
 import dynamic from 'next/dynamic'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
@@ -132,6 +131,7 @@ export default function ImageAnalysisPage() {
         ct: 'Analyze the CT study and generate a diagnostic protocol.',
         mri: 'Analyze the MRI study and generate a diagnostic protocol.',
         ultrasound: 'Analyze the ultrasound study and generate a diagnostic protocol.',
+        endoscopy: 'Analyze the endoscopic image and generate a diagnostic protocol.',
         dermatoscopy: 'Analyze the dermoscopy image. Describe the structure, colors, borders, and signs of melanoma using ABCDE criteria.',
       }
       const hasSpecializedCompetency = Boolean(modalityPromptMap[imageType])
@@ -263,27 +263,21 @@ export default function ImageAnalysisPage() {
           else modelUsed = MODELS.OPUS
           
           await handleSSEStream(response, {
-            onChunk: (content, accumulatedText) => {
-              flushSync(() => {
-                setResult(accumulatedText)
-              })
+            onChunk: (_content, accumulatedText) => {
+              setResult(accumulatedText)
             },
             onUsage: (usage) => {
               console.log('📊 [IMAGE-ANALYSIS STREAMING] Получена точная стоимость:', usage.total_cost)
-              
-              flushSync(() => {
-                setCurrentCost(usage.total_cost)
-                const modelUsed = usage.model || (analysisMode === 'fast' ? MODELS.GEMINI_3_FLASH : analysisMode === 'optimized' ? MODELS.SONNET : MODELS.OPUS)
-                
-                setModelInfo({ model: modelUsed, mode: analysisMode })
-                setLastAnalysisData({ model: modelUsed, mode: analysisMode })
+              setCurrentCost(usage.total_cost)
+              const modelUsed = usage.model || (analysisMode === 'fast' ? MODELS.GEMINI_3_FLASH : analysisMode === 'optimized' ? MODELS.SONNET : MODELS.OPUS)
+              setModelInfo({ model: modelUsed, mode: analysisMode })
+              setLastAnalysisData({ model: modelUsed, mode: analysisMode })
 
-                logUsage({
-                  section: 'image-analysis',
-                  model: modelUsed,
-                  inputTokens: usage.prompt_tokens,
-                  outputTokens: usage.completion_tokens,
-                })
+              logUsage({
+                section: 'image-analysis',
+                model: modelUsed,
+                inputTokens: usage.prompt_tokens,
+                outputTokens: usage.completion_tokens,
               })
             },
             onError: (error) => {

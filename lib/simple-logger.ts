@@ -23,6 +23,7 @@ const SECTION_NAMES: Record<string, string> = {
   'image-analysis': 'Image Analysis',
   'chat': 'AI Assistant',
   'protocols': 'Clinical Guidelines',
+  'appointment-protocol': 'Appointment Protocol',
 };
 
 interface UsageBySectionData {

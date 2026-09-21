@@ -16,6 +16,13 @@ import { getClientLocale } from '@/lib/i18n/client'
 import { analysisResultComponentMessages } from '@/lib/i18n/ui-client-messages'
 import type { Locale } from '@/lib/i18n/config'
 import { CURRENT_LEGAL_CONSENT_VERSION } from '@/lib/legal-consent'
+import { handleSSEStream, stripStreamingStatusNoise } from '@/lib/streaming-utils'
+import {
+  finalizeDiagnosticReport,
+  getDiagnosticReportUi,
+  isValidDiagnosticReport,
+  resolveDiagnosticReportKind,
+} from '@/lib/diagnostic-report'
 
 interface AnalysisResultProps {
   result: string
@@ -71,20 +78,40 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     reviewed: false,
     responsibility: false,
   })
+  const [diagnosticNote, setDiagnosticNote] = useState('')
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false)
+  const [diagnosticError, setDiagnosticError] = useState('')
+  const [streamPaused, setStreamPaused] = useState(false)
+  const diagnosticKind = resolveDiagnosticReportKind(imageType)
+  const diagnosticUi = diagnosticKind ? getDiagnosticReportUi(diagnosticKind) : null
+
+  useEffect(() => {
+    setDiagnosticNote('')
+    setDiagnosticError('')
+    setDiagnosticLoading(false)
+  }, [imageType])
+
+  useEffect(() => {
+    if (!loading) {
+      setStreamPaused(false)
+      return
+    }
+    const timer = window.setTimeout(() => setStreamPaused(true), 2500)
+    return () => window.clearTimeout(timer)
+  }, [loading, result.length])
 
   const parsedResult = useMemo(() => {
     const marker = '**Draft Clinical Output (Beta)**'
     const source = String(result || '')
     const markerIndex = source.indexOf(marker)
     if (markerIndex === -1) {
-      return { clinicalText: source, hasDraftDisclaimer: false }
+      return { clinicalText: loading ? source : stripStreamingStatusNoise(source), hasDraftDisclaimer: false }
     }
     const before = source.slice(0, markerIndex).replace(/\n*---\s*$/g, '').trimEnd()
-    return { clinicalText: before, hasDraftDisclaimer: true }
-  }, [result])
+    return { clinicalText: loading ? before : stripStreamingStatusNoise(before), hasDraftDisclaimer: true }
+  }, [result, loading])
 
   const PROTOCOL_DRAFT_KEY = 'protocol_draft'
-  const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
 
   useEffect(() => {
     setLocale(getClientLocale())
@@ -448,8 +475,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
         }
       }
 
-      paragraphs.push(new Paragraph({ 
-        border: { top: { color: "000000", space: 1, value: "single", size: 6 } },
+      paragraphs.push(new Paragraph({
         children: [
           new TextRun({ text: "VERIFIED BY PHYSICIAN", bold: true, size: 18 })
         ],
@@ -785,11 +811,10 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     return out.join('\n').trim();
   };
 
-  const handleTransferToProtocol = (useEcgTemplate = false) => {
+  const handleTransferToProtocol = () => {
     const draftText = buildProtocolDraftFromResult(parsedResult.clinicalText);
     const payload = {
       kind: imageType || 'image',
-      templateId: useEcgTemplate ? ECG_FUNCTIONAL_TEMPLATE_ID : undefined,
       rawText: draftText,
       timestamp: new Date().toISOString(),
     };
@@ -798,7 +823,103 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     router.push('/protocol');
   };
 
-  const handleTransferToEcgProtocol = () => handleTransferToProtocol(true);
+  const handleGenerateDiagnosticReport = async () => {
+    const sourceText = parsedResult.clinicalText.trim()
+    if (!sourceText || !diagnosticKind || !diagnosticUi || diagnosticLoading) return
+
+    setDiagnosticLoading(true)
+    setDiagnosticError('')
+    setDiagnosticNote('')
+    try {
+      const payload = { kind: diagnosticKind, sourceText, model: 'haiku', useStreaming: true }
+      const response = await fetch('/api/protocol/diagnostic-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+
+      const streamed = await handleSSEStream(response, {
+        onChunk: (text) => {
+          setDiagnosticNote((prev) => prev + text)
+        },
+        onError: (err) => {
+          setDiagnosticError(err.message || diagnosticUi.error)
+        },
+      })
+
+      const cleaned = finalizeDiagnosticReport(streamed)
+      if (isValidDiagnosticReport(diagnosticKind, cleaned)) {
+        setDiagnosticNote(cleaned)
+        return
+      }
+
+      const retryResponse = await fetch('/api/protocol/diagnostic-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, useStreaming: false }),
+      })
+      const retryData = await retryResponse.json()
+      if (!retryData?.success) {
+        throw new Error(retryData?.error || diagnosticUi.error)
+      }
+      setDiagnosticNote(finalizeDiagnosticReport(String(retryData.report || '')))
+    } catch (error: any) {
+      setDiagnosticError(error?.message || diagnosticUi.error)
+    } finally {
+      setDiagnosticLoading(false)
+    }
+  }
+
+  const handleDownloadDiagnosticReport = async () => {
+    if (!diagnosticNote.trim() || !diagnosticUi || downloading) return
+    setDownloading(true)
+    try {
+      const { Document, Paragraph, TextRun, AlignmentType, Packer } = await import('docx')
+      const fileSaver = await import('file-saver')
+      const saveAs = fileSaver.saveAs || fileSaver.default?.saveAs || fileSaver.default
+      const paragraphs: any[] = [
+        new Paragraph({
+          children: [new TextRun({ text: diagnosticUi.docTitle, bold: true, size: 28 })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: `Date: ${new Date().toLocaleDateString('en-US')}`, size: 20 })],
+          alignment: AlignmentType.RIGHT,
+          spacing: { after: 400 },
+        }),
+      ]
+
+      for (const line of diagnosticNote.split('\n')) {
+        if (!line.trim()) {
+          paragraphs.push(new Paragraph({ text: '' }))
+          continue
+        }
+        const textRuns: any[] = []
+        const boldRegex = /\*\*(.*?)\*\*/g
+        let lastIndex = 0
+        let match
+        while ((match = boldRegex.exec(line)) !== null) {
+          if (match.index > lastIndex) textRuns.push(new TextRun({ text: line.substring(lastIndex, match.index) }))
+          textRuns.push(new TextRun({ text: match[1], bold: true }))
+          lastIndex = match.index + match[0].length
+        }
+        if (lastIndex < line.length) textRuns.push(new TextRun({ text: line.substring(lastIndex) }))
+        paragraphs.push(new Paragraph({
+          children: textRuns.length > 0 ? textRuns : [new TextRun({ text: line })],
+          spacing: { after: 120 },
+        }))
+      }
+
+      const blob = await Packer.toBlob(new Document({ sections: [{ properties: {}, children: paragraphs }] }))
+      saveAs(blob, `${diagnosticUi.filePrefix}_${new Date().toISOString().split('T')[0]}.docx`)
+    } catch (error: any) {
+      alert(`${t.downloadError}: ${error?.message || t.unknownError}`)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   if (!result) {
     if (loading) {
@@ -822,7 +943,9 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           {loading && (
             <div className="flex items-center space-x-2 mt-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
-              <span className="text-sm text-gray-600">{t.loading}</span>
+              <span className="text-sm text-gray-600">
+                {streamPaused ? 'Still generating…' : t.loading}
+              </span>
             </div>
           )}
           {model && (
@@ -864,18 +987,19 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           >
             {copied ? `✓ ${t.copied}` : `📋 ${t.copy}`}
           </button>
-          {!loading && result && imageType === 'ecg' && (
+          {!loading && result && diagnosticKind && diagnosticUi && (
             <button
-              onClick={handleTransferToEcgProtocol}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
-              title={t.ecgProtocol}
+              onClick={handleGenerateDiagnosticReport}
+              disabled={diagnosticLoading}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold disabled:opacity-50"
+              title={diagnosticUi.hint}
             >
-              🫀 {t.ecgProtocol}
+              📄 {diagnosticLoading ? diagnosticUi.generating : diagnosticUi.button}
             </button>
           )}
-          {!loading && result && imageType !== 'ecg' && (
+          {!loading && result && !diagnosticKind && imageType !== 'lab' && (
             <button
-              onClick={() => handleTransferToProtocol(false)}
+              onClick={handleTransferToProtocol}
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-bold"
               title={t.toProtocol}
             >
@@ -1048,6 +1172,40 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
             {parsedResult.clinicalText}
           </ReactMarkdown>
 
+          {diagnosticKind && diagnosticUi && (diagnosticLoading || diagnosticError || diagnosticNote) && (
+            <div id="diagnostic-report" className="mt-8 rounded-xl border border-rose-200 bg-rose-50/40 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-rose-900">{diagnosticUi.title}</h3>
+                  <p className="mt-1 text-xs text-rose-800/80">{diagnosticUi.hint}</p>
+                </div>
+                {diagnosticNote && !diagnosticLoading && (
+                  <button
+                    onClick={handleDownloadDiagnosticReport}
+                    disabled={downloading}
+                    className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm disabled:opacity-50"
+                  >
+                    {downloading ? `⏳ ${t.downloading}` : `📄 ${t.downloadDocx}`}
+                  </button>
+                )}
+              </div>
+              {diagnosticError && (
+                <p className="mt-3 text-sm text-red-700">{diagnosticError}</p>
+              )}
+              {(diagnosticNote || diagnosticLoading) && (
+                <div className="mt-4 rounded-lg border border-rose-100 bg-white p-4">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeSanitize]}
+                    className="[&_p]:mb-2 [&_ul]:list-disc [&_ul]:ml-6 [&_ol]:list-decimal [&_ol]:ml-6 [&_strong]:font-semibold"
+                  >
+                    {diagnosticNote || diagnosticUi.generating}
+                  </ReactMarkdown>
+                </div>
+              )}
+            </div>
+          )}
+
           {parsedResult.hasDraftDisclaimer && (
             <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
               <p className="font-semibold mb-2">⚠️ {draftDisclaimerTitle}</p>
@@ -1065,12 +1223,10 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
           {referenceLinks.length > 0 && (
             <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <h4 className="text-base font-bold text-slate-900">
-                {locale === 'ru' ? '🔗 Релевантные референсы' : '🔗 Relevant references'}
+                🔗 Relevant references
               </h4>
               <p className="mt-1 text-xs text-slate-600">
-                {locale === 'ru'
-                  ? 'Подборка формируется по результату анализа и помогает быстро сверить клинические гипотезы.'
-                  : 'The list is generated from the analysis result and helps quickly validate clinical hypotheses.'}
+                The list is generated from the analysis result and helps quickly validate clinical hypotheses.
               </p>
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {referenceLinks.map((link) => (
@@ -1099,7 +1255,7 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
                       rel="noopener noreferrer"
                       className="inline-flex rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700"
                     >
-                      {locale === 'ru' ? `Открыть ${link.source}` : `Open ${link.source}`}
+                      {`Open ${link.source}`}
                     </a>
                   ))}
                 </div>

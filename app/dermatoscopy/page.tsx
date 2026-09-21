@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -83,10 +82,8 @@ export default function DermatoscopyPage() {
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
 
         await handleSSEStream(response, {
-          onChunk: (content, accumulatedText) => {
-            flushSync(() => {
-              setResult(accumulatedText)
-            })
+          onChunk: (_content, accumulatedText) => {
+            setResult(accumulatedText)
           },
           onUsage: (usage) => {
             console.log('📊 [DERMATOSCOPY STREAMING] Получена точная стоимость:', usage.total_cost)

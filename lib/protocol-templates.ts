@@ -12,40 +12,57 @@ const buildClinicalTemplate = (options: {
   diagnosisHint: string;
   therapyHint: string;
 }) => `**Chief Complaint:**
-(${options.complaintsHint}; single coherent paragraph)
+(${options.complaintsHint})
 
 **History of Present Illness (HPI):**
-(Single coherent paragraph; include timing, progression, aggravating/relieving factors)
+(Documented facts only)
 
 **Relevant Medical History:**
-(Past medical history, medications, allergies, family/social history in one paragraph)
+(Only if present)
 
 **Physical Examination:**
 ${options.examFocus}
-(Do not write "not performed" or "no data"; use standard normal findings when data is missing)
+
+**Missing / To Clarify:**
+(Numbered list of concrete undocumented items)
+
+**Red Flags to Exclude:**
+- Cauda equina:
+- Infection:
+- Malignancy / fracture:
+- Vascular:
 
 **Assessment / Preliminary Diagnosis:**
-(${options.diagnosisHint})
+(${options.diagnosisHint}; ICD-10 and ICD-11, provisional, pending exam)
+
+**Differential Diagnosis:**
+(Each item: Probability, Arguments For, Arguments Against/Uncertainties, Verification recommendation)
 
 **Diagnostic Plan:**
 1. ...
-2. ...
 
 **Management Plan:**
-- Lifestyle and non-pharmacologic recommendations.
-- ${options.therapyHint}
-- Follow-up timing and red flags requiring urgent reassessment.
 
-**Patient Acknowledgment:**
-(Brief statement that recommendations were discussed and understood)`;
+**Non-pharmacologic:**
+- ...
 
-const ECG_FUNCTIONAL_CONCLUSION_TEMPLATE = `ECG REPORT — FUNCTIONAL CONCLUSION
+**Pharmacotherapy:**
+(${options.therapyHint})
 
-Rhythm / Heart Rate: ...
-Cardiac Axis: ...
-Conduction / Intervals: ...
-ST-T Segment Findings: ...
-Conclusion: ...`;
+**Follow-up:**
+(...)`;
+
+const ECG_FUNCTIONAL_CONCLUSION_TEMPLATE = `**Technical Parameters:**
+
+**Findings:**
+
+**Differential Diagnosis:**
+
+**Clinical Correlation Needed:**
+
+**Impression:**
+
+**Recommendations:**`;
 
 export const DEFAULT_TEMPLATES: ProtocolTemplate[] = [
   {
@@ -56,8 +73,8 @@ export const DEFAULT_TEMPLATES: ProtocolTemplate[] = [
     content: buildClinicalTemplate({
       complaintsHint: 'General internal medicine complaints: pain, fever, dyspnea, fatigue, weakness',
       examFocus: 'General appearance: Lymph nodes: Skin: Mucous membranes: HR: BP: RR: Heart: Lungs: Abdomen: Liver/Spleen: Kidneys/CVA tenderness: Bowel/urinary status: Edema: Neurological screening:',
-      diagnosisHint: 'Diagnosis aligned with ICD-10/11 and current clinical presentation',
-      therapyHint: 'Pharmacotherapy using international generic names, with dose, route, frequency, and duration'
+      diagnosisHint: 'Working diagnosis from current findings. ICD-10/11 only here; mark provisional if exam is incomplete',
+      therapyHint: 'Pharmacotherapy using international generic names. Exact doses only if key contraindications are documented as absent; otherwise standard guideline dose with one source'
     })
   },
   {
@@ -324,72 +341,49 @@ export const DEFAULT_TEMPLATES: ProtocolTemplate[] = [
     name: '🩻 Radiologist (Report)',
     specialist: 'Radiologist',
     description: 'Structured radiology interpretation template.',
-    content: `**Indication:**
-(Clinical reason for imaging; one coherent paragraph)
+    content: `**Clinical History / Indication:**
 
-**Region and Technique:**
-(Region, projections/sequences, and relevant technical parameters)
+**Comparison:**
+
+**Technique:**
 
 **Findings:**
-(Detailed objective description with localization, dimensions, density/signal, margins, and associated findings; if normal, provide clear normal descriptors)
 
 **Impression:**
-(Concise diagnostic summary in radiologic terms)
 
-**Recommendations:**
-(Follow-up imaging, correlation studies, or specialist referral as indicated)`
+**Recommendations:**`
   },
   {
     id: 'ultrasound',
     name: '🔍 Ultrasound (Report)',
     specialist: 'Ultrasound Physician',
     description: 'Structured ultrasound reporting template.',
-    content: `**Indication:**
-(Clinical reason for ultrasound; one coherent paragraph)
+    content: `**Examination Type / Indication:**
 
-**Exam Area:**
-(Examined organ/system)
-
-**Technical Parameters:**
-(Probe type, key modes such as B-mode/Doppler if relevant)
+**Technique:**
 
 **Findings:**
-(Detailed morphology with measurements in mm/cm, echogenicity, echotexture, margins, vascularity; if normal, document normal descriptors)
 
 **Impression:**
-(Concise summary of principal findings)
 
-**Risk Category / Score (if applicable):**
-(e.g., TI-RADS, BI-RADS, IOTA)
-
-**Recommendations:**
-(Follow-up, additional imaging, biopsy, or referral as indicated)`
+**Recommendations:**`
   },
   {
     id: 'endoscopy',
     name: '🧪 Endoscopist (Report)',
     specialist: 'Endoscopist',
     description: 'Stepwise structured endoscopy report template.',
-    content: `**Indication:**
-(Clinical indication and working diagnosis)
+    content: `**Procedure / Indication:**
 
-**Premedication / Sedation:**
-(Type and tolerance)
+**Procedure Details:**
 
-**Endoscopic Findings:**
-(Stepwise description with localization and lesion dimensions; include landmarks and distance markers where relevant)
+**Findings:**
 
-**Biopsy / Samples:**
-(Site and number, if obtained)
+**Biopsies / Interventions Performed:**
 
-**Rapid Test Results:**
-(e.g., H. pylori if performed)
+**Endoscopic Diagnosis:**
 
-**Conclusion:**
-(Endoscopic diagnosis with grading/classification if applicable)
-
-**Recommendations:**
-(Histology follow-up, eradication plan, surveillance interval, escalation criteria)`
+**Recommendations:**`
   },
   {
     id: 'universal',
@@ -399,8 +393,8 @@ export const DEFAULT_TEMPLATES: ProtocolTemplate[] = [
     content: buildClinicalTemplate({
       complaintsHint: 'Primary reason for visit and key symptom burden',
       examFocus: 'General appearance: Lymph nodes: Skin/mucosa: HR/BP/RR: Heart: Lungs: Abdomen: Liver/Spleen: Renal/CVA: Bowel/urinary status: Edema: Neurological screening:',
-      diagnosisHint: 'Most likely diagnosis with ICD-10/11 alignment based on current findings',
-      therapyHint: 'Guideline-based treatment plan with generic naming, dosing, and follow-up checkpoints'
+      diagnosisHint: 'Most likely diagnosis. ICD-10/11 only here; mark provisional if exam is incomplete',
+      therapyHint: 'Guideline-based treatment with generic naming. Exact doses only if key contraindications are documented as absent'
     })
   }
 ];

@@ -19,6 +19,31 @@ const MEDICAL_EXCEPTIONS = [
   'Терапия', 'Согласие', 'Пациент', 'Врач', 'Клиника', 'Больница', 'Доктор'
 ];
 
+const ENGLISH_TITLE_STOPWORDS = new Set(['of', 'and', 'the', 'to', 'or', 'for', 'with', 'in']);
+
+const ENGLISH_MEDICAL_TITLE_WORDS = new Set([
+  'Assessment', 'Allergy', 'American', 'Acknowledgment', 'Base', 'Chief',
+  'Clarify', 'College', 'Complaint', 'Complaints', 'Diagnosis', 'Diagnostic',
+  'Differential', 'Discussion', 'Education', 'Evidence', 'Examination',
+  'Exclude', 'Family', 'Flags', 'Follow', 'Guidelines', 'History', 'Illness',
+  'Internal', 'Management', 'Medical', 'Medication', 'Medicine', 'Missing',
+  'National', 'Non', 'Objective', 'Organization', 'Past', 'Patient',
+  'Pharmacologic', 'Pharmacotherapy', 'Physical', 'Physicians', 'Plan',
+  'Present', 'Preliminary', 'Reassessment', 'Recommendations', 'Red',
+  'Relevant', 'Social', 'Society', 'UpToDate',
+]);
+
+function isEnglishMedicalTitlePhrase(match: string): boolean {
+  const words = match
+    .split(/[\s/-]+/)
+    .map((word) => word.replace(/[^A-Za-z]/g, ''))
+    .filter((word) => word.length > 1 && !ENGLISH_TITLE_STOPWORDS.has(word.toLowerCase()));
+
+  if (words.length < 2) return false;
+  const medicalCount = words.filter((word) => ENGLISH_MEDICAL_TITLE_WORDS.has(word)).length;
+  return medicalCount >= 2;
+}
+
 /**
  * Анонимизирует текст, удаляя всю PHI (Protected Health Information)
  * @param text Исходный текст
@@ -39,10 +64,10 @@ export function anonymizeText(text: string): string {
     return hasException ? match : '[ФИО]';
   });
 
-  // 2. ФИО латинские (John Smith)
+  // 2. ФИО латинские (John Smith). Не трогаем Title Case заголовки протокола и названия гайдлайнов.
   result = result.replace(
     /\b([A-Z][a-z]{2,20})\s+([A-Z][a-z]{2,20})(\s+[A-Z][a-z]{2,20})?\b/g,
-    '[NAME]'
+    (match) => (isEnglishMedicalTitlePhrase(match) ? match : '[NAME]')
   );
 
   // 3. Даты рождения (различные форматы)

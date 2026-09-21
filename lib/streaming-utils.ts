@@ -2,6 +2,47 @@
  * Утилиты для обработки Server-Sent Events (SSE) streaming
  */
 
+export function stripStreamingStatusNoise(text: string): string {
+  return String(text || '')
+    .replace(/^#+\s*(PREPARING|FAST|EXPERT).*$/gim, '')
+    .replace(/^>\s*\*?Stage\s*[12]:.*$/gim, '')
+    .replace(/^>\s*.+\.\.\.\s*$/gm, '')
+    .replace(/^✅\s*\*\*Data (extracted|verified):\*\*.*$/gim, '')
+    .replace(/^Data extracted:.*$/gim, '')
+    .replace(/^>\s*Primary model .*$/gim, '')
+    .replace(/^[·.\s]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+export function createStreamRenderer(setText: (text: string) => void) {
+  let latest = ''
+  let frame = 0
+
+  return {
+    push(text: string) {
+      latest = text
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        setText(latest)
+      })
+    },
+    flush(text?: string) {
+      if (frame) {
+        cancelAnimationFrame(frame)
+        frame = 0
+      }
+      if (text !== undefined) latest = text
+      setText(latest)
+    },
+  }
+}
+
+export function isStreamingStatusOnly(text: string): boolean {
+  return stripStreamingStatusNoise(text).length < 40
+}
+
 export interface StreamingHandler {
   onChunk: (content: string, accumulatedText: string) => void
   onUsage?: (usage: { total_cost: number; prompt_tokens: number; completion_tokens: number; model?: string }) => void
@@ -23,6 +64,33 @@ export async function handleSSEStream(
   const reader = response.body?.getReader()
   const decoder = new TextDecoder()
   let accumulatedText = ''
+  let pendingDelta = ''
+  let frame = 0
+  const canBatch = typeof requestAnimationFrame === 'function'
+
+  const flushChunks = () => {
+    if (frame) {
+      cancelAnimationFrame(frame)
+      frame = 0
+    }
+    if (!pendingDelta) return
+    const delta = pendingDelta
+    pendingDelta = ''
+    handler.onChunk(delta, accumulatedText)
+  }
+
+  const emitChunk = (delta: string) => {
+    pendingDelta += delta
+    if (!canBatch) {
+      flushChunks()
+      return
+    }
+    if (frame) return
+    frame = requestAnimationFrame(() => {
+      frame = 0
+      flushChunks()
+    })
+  }
 
   if (!reader) {
     console.error('❌ [STREAMING UTILS] Failed to create reader for streaming')
@@ -41,10 +109,8 @@ export async function handleSSEStream(
       
       if (done) {
         console.log('📡 [STREAMING UTILS] Поток завершён, всего чанков:', chunkCount)
-        // Обрабатываем оставшийся буфер
         if (buffer.trim()) {
-          console.log('📡 [STREAMING UTILS] Обрабатываем оставшийся буфер:', buffer.substring(0, 200))
-          accumulatedText = processBuffer(buffer, handler, accumulatedText)
+          accumulatedText = processBuffer(buffer, handler, accumulatedText, emitChunk)
           buffer = ''
         }
         break
@@ -60,20 +126,17 @@ export async function handleSSEStream(
       
       buffer += chunk
 
-      // Обрабатываем полные строки (SSE формат использует \n или \r\n)
       const lines = buffer.split(/\r?\n/)
-      buffer = lines.pop() || '' // Последняя строка может быть неполной
+      buffer = lines.pop() || ''
 
       for (const line of lines) {
-        console.log('📡 [STREAMING UTILS] Обработка строки:', line.substring(0, 50))
         const result = processSSELine(line, handler, accumulatedText)
         if (result.content) {
           accumulatedText += result.content
-          console.log('📡 [STREAMING UTILS] Получен контент:', result.content.length, 'символов, всего:', accumulatedText.length)
-          handler.onChunk(result.content, accumulatedText)
+          emitChunk(result.content)
         }
         if (result.done) {
-          console.log('📡 [STREAMING UTILS] Получен сигнал [DONE]')
+          flushChunks()
           if (handler.onComplete) {
             handler.onComplete(accumulatedText)
           }
@@ -82,6 +145,7 @@ export async function handleSSEStream(
       }
     }
 
+    flushChunks()
     console.log('✅ [STREAMING UTILS] Итого получено:', accumulatedText.length, 'символов, чанков:', chunkCount)
     
     if (handler.onComplete) {
@@ -95,6 +159,11 @@ export async function handleSSEStream(
 
     return accumulatedText
   } catch (error: any) {
+    if (frame) {
+      cancelAnimationFrame(frame)
+      frame = 0
+    }
+    pendingDelta = ''
     console.error('❌ [STREAMING UTILS] Ошибка обработки потока:', error)
     if (handler.onError) {
       handler.onError(error)
@@ -153,17 +222,19 @@ function processSSELine(
           content = json.choices[0].message.content
         }
       } else if (json.error) {
-        // Если пришла ошибка в JSON
-        console.error('❌ [STREAMING UTILS] Ошибка от OpenRouter:', json.error)
-        throw new Error(json.error.message || 'Ошибка OpenRouter')
+        const message = typeof json.error === 'string'
+          ? json.error
+          : (json.error.message || 'LLM provider error')
+        throw new Error(message)
       }
 
       return { content, done: false }
     } catch (e) {
-      // Если это не JSON, возможно это просто текст
+      if (!(e instanceof SyntaxError)) {
+        throw e
+      }
       if (data && data.length > 0 && !data.includes('[DONE]')) {
         console.warn('⚠️ [STREAMING UTILS] Ошибка парсинга JSON:', e, 'data:', data.substring(0, 100))
-        // Пробуем добавить как текст напрямую
         return { content: data, done: false }
       }
       return { content: '', done: false }
@@ -200,7 +271,8 @@ function processSSELine(
 function processBuffer(
   buffer: string,
   handler: StreamingHandler,
-  accumulatedText: string
+  accumulatedText: string,
+  emitChunk: (delta: string) => void
 ): string {
   const lines = buffer.split(/\r?\n/)
   let resultText = accumulatedText
@@ -209,7 +281,7 @@ function processBuffer(
       const result = processSSELine(line, handler, resultText)
       if (result.content) {
         resultText += result.content
-        handler.onChunk(result.content, resultText)
+        emitChunk(result.content)
       }
     }
   }

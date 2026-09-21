@@ -9,7 +9,8 @@ export type ImageModality =
   | 'ecg' 
   | 'histology' 
   | 'retinal' 
-  | 'mammography' 
+  | 'mammography'
+  | 'endoscopy'
   | 'universal'
 
 interface ModalitySelectorProps {
@@ -30,6 +31,7 @@ export default function ModalitySelector({ value, onChange, disabled = false }: 
     { value: 'histology', label: 'Histology', icon: '🧪' },
     { value: 'retinal', label: 'Ophthalmology', icon: '👁️' },
     { value: 'mammography', label: 'Mammography', icon: '🎀' },
+    { value: 'endoscopy', label: 'Endoscopy', icon: '🔭' },
   ]
 
   return (
