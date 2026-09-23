@@ -101,6 +101,19 @@ Herhangi bir şablonu iş akışınıza göre özelleştirebilirsiniz. Özelleş
 
 ---
 
+## 🗣️ Tıbbi çevirmen
+
+Ana sayfadan açın. Siz konuşursunuz; hasta çeviriyi duyar.
+
+1. Kendi dilinizi ve hastanın dilini seçin.
+2. **Başlat** düğmesine basın ve mikrofona izin verin. Kulaklık kullanın.
+3. Sağ sütun hastanın duyduğudur. **Durdur** kimin konuştuğunu değiştirir. **Bitir** oturumu kapatır.
+4. Bir doz, sayı veya klinik terim uyuşmayabilir ise kendiniz kontrol edin. Metin kendiliğinden düzeltilmez.
+
+**Maliyet:** Mikrofon açıkken dakika başına 5,1 kredi. Klinik protokol için konuşma kaydı ayrıdır: saat başına 62 kredi.
+
+---
+
 ## 🧮 Tıbbi Hesaplayıcılar
 
 Entegre bir üçüncü taraf hesaplayıcı setini başlatır. İstemci tarafında çalışır — kredi tüketilmez, veri iletilmez.
@@ -343,6 +356,8 @@ Gelişmiş yapay zeka modelleri kullanıldığında krediler tüketilir. Basit r
 | Optimize edilmiş analiz (Sonnet 5) | ~0.8 – 1.5 kr. |
 | Uzman Onaylı (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 kr. |
 | PDF sayfası (Görüntü işleme) | Sayfa başına ~0.3 kr. |
+| Tıbbi çevirmen | Mikrofon açıkken dakika başına 5,1 kr. |
+| Klinik protokol için konuşma kaydı | Sesin saati başına 62 kr. |
 | Yerel kopyalayıcı / hesaplayıcılar | Ücretsiz |
 
 **Paketler:**

@@ -101,6 +101,19 @@ You can customize any template to match your workflow. The customized version ca
 
 ---
 
+## 🗣️ Medical Translator
+
+Open it from the home page. You speak; the patient hears the translation.
+
+1. Choose your language and the patient’s language.
+2. Press **Start** and allow the microphone. Use headphones.
+3. The right column is what the patient hears. **Stop** switches who speaks. **End** closes the session.
+4. If a dose, number, or clinical term may not match, check it yourself. The text is not corrected automatically.
+
+**Cost:** 5.1 credits per minute while the microphone is on. Recording a conversation for the clinical protocol is separate: 62 credits per hour.
+
+---
+
 ## 🧮 Medical Calculators
 
 Launches an integrated third-party calculator suite. Runs client-side — no credits consumed, no data transmitted.
@@ -343,6 +356,8 @@ Credits are consumed when using advanced AI models. Simple reference lookups and
 | Optimized analysis (Sonnet 5) | ~0.8 – 1.5 cr. |
 | Expert Validated (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 cr. |
 | PDF page (Vision processing) | ~0.3 cr. per page |
+| Medical Translator | 5.1 cr. per minute while the microphone is on |
+| Conversation recording for a clinical protocol | 62 cr. per hour of audio |
 | Local copier / calculators | Free |
 
 **Packages:**

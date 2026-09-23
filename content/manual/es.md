@@ -101,6 +101,19 @@ Puede personalizar cualquier plantilla para que coincida con su flujo de trabajo
 
 ---
 
+## 🗣️ Traductor médico
+
+Ábralo desde el inicio. Usted habla; el paciente oye la traducción.
+
+1. Elija su idioma y el idioma del paciente.
+2. Pulse **Iniciar** y permita el micrófono. Use auriculares.
+3. La columna derecha es lo que oye el paciente. **Detener** cambia quién habla. **Terminar** cierra la sesión.
+4. Si una dosis, un número o un término clínico puede no coincidir, revíselo usted. El texto no se corrige solo.
+
+**Costo:** 5,1 créditos por minuto con el micrófono encendido. Grabar la conversación para el protocolo clínico es aparte: 62 créditos por hora.
+
+---
+
 ## 🧮 Calculadoras Médicas
 
 Inicia una suite integrada de calculadoras de terceros. Se ejecuta en el lado del cliente: no consume créditos ni se transmiten datos.
@@ -343,6 +356,8 @@ Los créditos se consumen al utilizar modelos de IA avanzados. Las consultas de 
 | Análisis optimizado (Sonnet 5) | ~0.8 – 1.5 cr. |
 | Validado por Experto (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 cr. |
 | Página PDF (Procesamiento de visión) | ~0.3 cr. por página |
+| Traductor médico | 5,1 cr. por minuto con el micrófono encendido |
+| Grabación de la conversación para el protocolo clínico | 62 cr. por hora de audio |
 | Copiadora local / calculadoras | Gratis |
 
 **Paquetes:**

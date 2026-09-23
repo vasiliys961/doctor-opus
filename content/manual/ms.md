@@ -101,6 +101,19 @@ Anda boleh menyesuaikan mana-mana templat untuk memadankan aliran kerja anda. Ve
 
 ---
 
+## 🗣️ Penterjemah perubatan
+
+Buka dari laman utama. Anda bercakap; pesakit mendengar terjemahan.
+
+1. Pilih bahasa anda dan bahasa pesakit.
+2. Tekan **Mula** dan benarkan mikrofon. Gunakan fon kepala.
+3. Lajur kanan ialah apa yang didengar pesakit. **Henti** menukar siapa yang bercakap. **Tamat** menutup sesi.
+4. Jika dos, nombor atau istilah klinikal mungkin tidak sepadan, semak sendiri. Teks tidak dibetulkan secara automatik.
+
+**Kos:** 5.1 kredit seminit semasa mikrofon dihidupkan. Rakaman perbualan untuk protokol klinikal adalah berasingan: 62 kredit sejam.
+
+---
+
 ## 🧮 Kalkulator Perubatan
 
 Melancarkan set kalkulator pihak ketiga yang bersepadu. Berjalan pada sisi pelanggan — tiada kredit digunakan, tiada data dihantar.
@@ -343,6 +356,8 @@ Kredit digunakan apabila menggunakan model AI lanjutan. Carian rujukan mudah dan
 | Analisis dioptimumkan (Sonnet 5) | ~0.8 – 1.5 kr. |
 | Pengesahan Pakar (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 kr. |
 | Halaman PDF (Pemprosesan Visi) | ~0.3 kr. setiap halaman |
+| Penterjemah perubatan | 5.1 kr. seminit semasa mikrofon dihidupkan |
+| Rakaman perbualan untuk protokol klinikal | 62 kr. sejam audio |
 | Penyalin tempatan / kalkulator | Percuma |
 
 **Pakej:**

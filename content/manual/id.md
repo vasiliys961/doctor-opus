@@ -101,6 +101,19 @@ Anda dapat menyesuaikan templat apa pun agar sesuai dengan alur kerja Anda. Vers
 
 ---
 
+## 🗣️ Penerjemah medis
+
+Buka dari beranda. Anda berbicara; pasien mendengar terjemahan.
+
+1. Pilih bahasa Anda dan bahasa pasien.
+2. Tekan **Mulai** dan izinkan mikrofon. Gunakan headphone.
+3. Kolom kanan adalah yang didengar pasien. **Berhenti** mengganti siapa yang berbicara. **Akhiri** menutup sesi.
+4. Jika dosis, angka, atau istilah klinis mungkin tidak cocok, periksa sendiri. Teks tidak dikoreksi otomatis.
+
+**Biaya:** 5,1 kredit per menit selama mikrofon menyala. Merekam percakapan untuk protokol klinis terpisah: 62 kredit per jam.
+
+---
+
 ## 🧮 Kalkulator Medis
 
 Meluncurkan rangkaian kalkulator pihak ketiga yang terintegrasi. Berjalan di sisi klien — tidak mengonsumsi kredit, tidak ada data yang dikirimkan.
@@ -343,6 +356,8 @@ Kredit dikonsumsi saat menggunakan model AI tingkat lanjut. Pencarian referensi 
 | Analisis dioptimalkan (Sonnet 5) | ~0.8 – 1.5 kr. |
 | Validasi Ahli (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 kr. |
 | Halaman PDF (Pemrosesan visi) | ~0.3 kr. per halaman |
+| Penerjemah medis | 5,1 kr. per menit selama mikrofon menyala |
+| Rekaman percakapan untuk protokol klinis | 62 kr. per jam audio |
 | Penyalin lokal / kalkulator | Gratis |
 
 **Paket:**

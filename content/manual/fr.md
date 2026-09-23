@@ -101,6 +101,19 @@ Vous pouvez personnaliser n'importe quel modèle pour l'adapter à votre flux de
 
 ---
 
+## 🗣️ Traducteur médical
+
+Ouvrez-le depuis l’accueil. Vous parlez ; le patient entend la traduction.
+
+1. Choisissez votre langue et celle du patient.
+2. Appuyez sur **Démarrer** et autorisez le microphone. Utilisez un casque.
+3. La colonne de droite est ce que le patient entend. **Arrêter** change qui parle. **Terminer** ferme la session.
+4. Si une dose, un nombre ou un terme clinique peut ne pas correspondre, vérifiez-le vous-même. Le texte n’est pas corrigé automatiquement.
+
+**Coût :** 5,1 crédits par minute tant que le microphone est ouvert. Enregistrer la conversation pour le protocole clinique est distinct : 62 crédits par heure.
+
+---
+
 ## 🧮 Calculateurs Médicaux
 
 Lance une suite de calculateurs tiers intégrée. S'exécute côté client — aucun crédit consommé, aucune donnée transmise.
@@ -343,6 +356,8 @@ Les crédits sont consommés lors de l'utilisation de modèles d'IA avancés. Le
 | Analyse optimisée (Sonnet 5) | ~0,8 – 1,5 cr. |
 | Validé par Expert (Opus 5.5 / GPT-5.6 Terra) | ~1,5 – 3,5 cr. |
 | Page PDF (Traitement Vision) | ~0,3 cr. par page |
+| Traducteur médical | 5,1 cr. par minute tant que le microphone est ouvert |
+| Enregistrement de la conversation pour le protocole clinique | 62 cr. par heure d’audio |
 | Copieur local / calculateurs | Gratuit |
 
 **Forfaits :**

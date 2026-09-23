@@ -40,8 +40,18 @@ This repository branch (`en-version-global`) is the English/global product. Prod
 ### 🎙️ Voice-to-Protocol
 - **In-browser dictation:** Web Speech API, language follows the selected UI locale.
 - **Audio file transcription:** Optional server STT (AssemblyAI by default; Yandex/Polza depending on env).
+- **Recording cost:** 62 credits per hour of conversation audio. This is separate from the live translator.
 - **Export:** Generate professional reports in **Word (.docx)** format, ready to print and sign.
 - **Templates:** 26 specialty-specific templates (Cardiology, Neurology, Orthopedics, etc.) following SOAP / H&P structure.
+
+### 🗣️ Medical Translator
+Live speech translation for a doctor–patient visit at `/translate`. The doctor speaks one language; the patient hears the translation in another. Stop swaps who speaks. End closes the session.
+
+- **Engine:** OpenAI `gpt-realtime-translate` over WebRTC. The browser never calls OpenAI directly; the server exchanges the session on `/api/realtime-translate`.
+- **Transcripts:** The source column is filled by `gpt-realtime-whisper`. The spoken translation and the “patient hears” column come from the translation model.
+- **Languages:** 13 spoken targets (English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, Korean, Hindi, Indonesian, Vietnamese). Arabic, Turkish, Ukrainian, Malay, and Polish can be heard as input, but cannot be selected as the voice the patient hears.
+- **Clinical check:** After each phrase, doses, numbers, negations, and clinical terms are compared with the source. A mismatch shows a warning only. The audio and the wording are not rewritten.
+- **Cost:** 5.1 credits per minute while the microphone is on (translation plus source transcript). The charge is deducted from the account balance during the session. Requires `OPENAI_API_KEY` and a signed-in user.
 
 ### 🌍 Localization & Clinical Workspace
 - **UI locales:** English plus Spanish, French, Arabic, Hindi, Portuguese (Brazil), Indonesian, Malay, Turkish, Chinese.
@@ -66,6 +76,7 @@ This repository branch (`en-version-global`) is the English/global product. Prod
 | Auth | NextAuth v4 (JWT Strategy) |
 | Payments | Direct USDT TRC20 flow (Trust Wallet + txHash confirmation) |
 | Voice | Browser SpeechRecognition + optional server STT (AssemblyAI / Yandex / Polza) |
+| Live translation | OpenAI `gpt-realtime-translate` (WebRTC) and `gpt-realtime-whisper` |
 | Deployment | VPS + Docker Compose + Nginx |
 
 ---
@@ -75,6 +86,7 @@ This repository branch (`en-version-global`) is the English/global product. Prod
 ### Requirements
 - **Node.js 20.x** or higher
 - **Polza** and/or **OpenRouter** API key
+- **OpenAI** API key for the Medical Translator (`OPENAI_API_KEY`)
 - **PostgreSQL** database (Neon or local Docker)
 
 ### 1. Install
@@ -99,6 +111,7 @@ POSTGRES_URL=your_postgres_connection_string
 NEXTAUTH_SECRET=random_32_char_string
 NEXTAUTH_URL=http://localhost:3000
 ASSEMBLYAI_API_KEY=your_key
+OPENAI_API_KEY=your_openai_key
 MIGRATION_SECRET=random_32_char_string
 ENCRYPTION_SALT=random_32_char_string
 TRUST_WALLET_TRC20_ADDRESS=your_trust_wallet_trc20_address
@@ -221,7 +234,7 @@ doctor-opus/
 └── docker-compose*.yml  # App and local Postgres profiles
 ```
 
-Main clinical routes live under `app/` (`chat`, `protocol`, `ct`, `mri`, `xray`, `ultrasound`, `ecg`, `lab`, `genetic`, `library`, `links`, `devices`, `subscription`, and others).
+Main clinical routes live under `app/` (`chat`, `translate`, `protocol`, `ct`, `mri`, `xray`, `ultrasound`, `ecg`, `lab`, `genetic`, `library`, `links`, `devices`, `subscription`, and others).
 
 ---
 
