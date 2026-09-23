@@ -214,7 +214,7 @@ curl -X POST https://doctor-opus.ru/api/billing/deduct \
     "amount": 5.5,
     "operation": "Тест анализа ЭКГ",
     "metadata": {
-      "model": "anthropic/claude-opus-5",
+      "model": "anthropic/claude-opus-5.5",
       "tokens": {"input": 1000, "output": 500}
     }
   }'

@@ -500,7 +500,7 @@ export default function ImageAnalysisPage() {
         content={{
           fast: "Two-stage screening (structured image description then clinical interpretation). Provides a concise conclusion and risk signal — convenient for initial review and triage.",
           optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and cost for most medical studies.",
-          validated: "Most accurate expert analysis (Gemini JSON + Opus 5) — recommended for critical and complex cases; the most resource-intensive mode.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 5.5) — recommended for critical and complex cases; the most resource-intensive mode.",
           extra: [
             "⭐ Recommended mode: «Optimized» (Gemini + Sonnet) — best balance of cost and quality for most medical images.",
             "💡 The system supports: ECG, X-Ray, CT, MRI, Ultrasound, Dermatoscopy, Histology, Ophthalmology, Mammography. DICOM format supported.",

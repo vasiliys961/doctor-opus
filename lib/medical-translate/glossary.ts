@@ -1,0 +1,187 @@
+/**
+ * Small, extendable vocabulary for the realtime medical translator.
+ *
+ * This is not a prompt and it is not sent to the speech model.
+ * gpt-realtime-translate does not accept custom instructions.
+ * The fidelity check uses these forms only to compare a finished
+ * transcript with its translation.
+ *
+ * Add a form when a real conversation shows a gap. Keep each list short.
+ */
+
+export type GlossaryEntry = {
+  id: string
+  forms: readonly string[]
+  /** Meanings a short form must not be expanded into without the source saying so. */
+  expansions?: readonly string[]
+  ambiguous?: boolean
+}
+
+export const MEDICAL_GLOSSARY = {
+  drugs: [
+    { id: 'metoprolol', forms: ['метопролол', 'metoprolol', '美托洛尔', 'メトプロロール'] },
+    { id: 'penicillin', forms: ['пенициллин', 'penicil', '青霉素', 'ペニシリン'] },
+    { id: 'aspirin', forms: ['аспирин', 'aspirin'] },
+    { id: 'ibuprofen', forms: ['ибупрофен', 'ibuprofen'] },
+    { id: 'paracetamol', forms: ['парацетамол', 'paracetamol', 'acetaminophen'] },
+    { id: 'amoxicillin', forms: ['амоксициллин', 'amoxicillin'] },
+    { id: 'warfarin', forms: ['варфарин', 'warfarin'] },
+    { id: 'insulin', forms: ['инсулин', 'insulin'] },
+    { id: 'lisinopril', forms: ['лизиноприл', 'lisinopril'] },
+    { id: 'enalapril', forms: ['эналаприл', 'enalapril'] },
+    { id: 'amlodipine', forms: ['амлодипин', 'amlodipine'] },
+    { id: 'bisoprolol', forms: ['бисопролол', 'bisoprolol'] },
+    { id: 'atorvastatin', forms: ['аторвастатин', 'atorvastatin'] },
+    { id: 'clopidogrel', forms: ['клопидогрел', 'clopidogrel'] },
+    { id: 'omeprazole', forms: ['омепразол', 'omeprazole'] },
+    { id: 'losartan', forms: ['лозартан', 'losartan'] },
+    { id: 'metformin', forms: ['метформин', 'metformin'] },
+    { id: 'salbutamol', forms: ['сальбутамол', 'salbutamol', 'albuterol'] },
+  ],
+  terms: [
+    { id: 'dyspnea', forms: ['одыш', 'dyspnea', 'shortness of breath', 'short of breath', 'disnea', 'dispneia', 'essoufflement', 'dyspnee', '呼吸困难', '呼吸困難', '息切れ'] },
+    { id: 'edema', forms: ['отек', 'edema', 'oedeme', '水肿', '浮腫'] },
+    { id: 'myocardial-infarction', forms: ['инфаркт', 'myocardial infarction', 'heart attack', 'infarto', 'infarctus', 'enfarte', '心肌梗死', '心肌梗塞', '心筋梗塞'] },
+    { id: 'arrhythmia', forms: ['аритм', 'arrhythmia', 'фибрилляц', 'fibrillation', 'arritmi', 'arythmi', '心律失常', '不整脈'] },
+    { id: 'anticoagulant', forms: ['антикоагулянт', 'anticoagulant', 'anticoagul', '抗凝'] },
+    { id: 'hypertension', forms: ['гипертенз', 'hypertension', 'hipertens', '高血压', '高血圧'] },
+    { id: 'hypotension', forms: ['гипотенз', 'hypotension', 'hipotens', '低血压', '低血圧'] },
+    { id: 'glucose', forms: ['глюкоз', 'glucose', 'blood sugar', 'glucos', 'glicose', 'glicem', 'glycem', '血糖'] },
+    { id: 'allergy', forms: ['аллерги', 'allerg', 'alergi', '过敏', 'アレルギー'] },
+    { id: 'angina', forms: ['стенокард', 'angin', '心绞痛', '狭心症'] },
+    { id: 'paresthesia', forms: ['парестез', 'paresthesia'] },
+  ],
+  abbreviations: [
+    { id: 'bp', forms: ['bp', 'blood pressure', 'артериальное давление', 'давление'] },
+    { id: 'hr', forms: ['hr', 'heart rate', 'чсс', 'пульс'] },
+    { id: 'ecg', forms: ['ecg', 'ekg', 'экг', 'электрокардиограм'] },
+    { id: 'ct', forms: ['ct', 'кт'] },
+    { id: 'mri', forms: ['mri', 'мрт'] },
+    { id: 'cbc', forms: ['cbc', 'оак'] },
+    { id: 'hb', forms: ['hb', 'hgb', 'гемоглобин'] },
+    { id: 'inr', forms: ['inr', 'мно'] },
+    { id: 'spo2', forms: ['spo2', 'сатурац'] },
+    { id: 'icu', forms: ['icu', 'орит'] },
+    { id: 'er', forms: ['er', 'ed', 'приемн'] },
+    { id: 'bid', forms: ['bid', 'twice a day', 'twice daily', 'два раза в день', 'dos veces al dia', 'deux fois par jour', 'duas vezes por dia', '每天两次', '一日两次', '1日2回'] },
+    { id: 'tid', forms: ['tid', 'three times a day', 'три раза в день', 'tres veces al dia', 'trois fois par jour', '每天三次'] },
+    { id: 'qid', forms: ['qid', 'four times a day', 'четыре раза в день'] },
+    { id: 'prn', forms: ['prn', 'as needed', 'при необходимости', 'по необходимости', 'si es necesario', 'au besoin', 'se necessario', '必要时', '必要時'] },
+    {
+      id: 'ms',
+      forms: ['ms'],
+      expansions: ['multiple sclerosis', 'рассеянный склероз', 'morphine sulfate'],
+      ambiguous: true,
+    },
+    {
+      id: 'cp',
+      forms: ['cp'],
+      expansions: ['cerebral palsy', 'chest pain', 'детский церебральный'],
+      ambiguous: true,
+    },
+  ],
+  anatomy: [
+    { id: 'heart', forms: ['сердц', 'heart'] },
+    { id: 'lung', forms: ['легк', 'lung'] },
+    { id: 'arm', forms: ['рук', 'arm', 'hand'] },
+    { id: 'pulmonary-artery', forms: ['легочной артери', 'pulmonary artery'] },
+  ],
+  units: [
+    { id: 'mcg', forms: ['мкг', 'mcg', 'ug', '微克', 'マイクログラム'] },
+    { id: 'mg', forms: ['мг', 'mg', '毫克', 'ミリグラム'] },
+    { id: 'g', forms: ['г', 'g', '克'] },
+    { id: 'ml', forms: ['мл', 'ml', '毫升', 'ミリリットル'] },
+    { id: 'iu', forms: ['ме', 'iu'] },
+    {
+      id: 'mmol_l',
+      forms: ['ммоль/л', 'mmol/l', 'ммоль на литр', 'mmol per liter', 'mmol per litre'],
+    },
+    { id: 'mg_dl', forms: ['мг/дл', 'mg/dl'] },
+    { id: 'bpm', forms: ['bpm', 'уд/мин', 'ударов в минуту'] },
+    { id: 'mmhg', forms: ['mmhg', 'мм рт. ст.', 'мм рт.ст.'] },
+    { id: 'celsius', forms: ['celsius', 'градус', 'grados', 'degres', 'graus', '度'] },
+  ],
+  phrases: [
+    { id: 'pulmonary-embolism', forms: ['тромбоэмбол', 'pulmonary embolism', 'embolia pulmonar', 'embolie pulmonaire', '肺栓塞', '肺塞栓'] },
+  ],
+} as const satisfies Record<string, readonly GlossaryEntry[]>
+
+export type GlossaryCategory = keyof typeof MEDICAL_GLOSSARY
+
+const DIAGNOSIS_IDS = new Set([
+  'angina',
+  'hypertension',
+  'hypotension',
+  'arrhythmia',
+  'paresthesia',
+  'myocardial-infarction',
+  'pulmonary-embolism',
+])
+
+export function diagnosisEntries(): readonly GlossaryEntry[] {
+  return [...MEDICAL_GLOSSARY.terms, ...MEDICAL_GLOSSARY.phrases].filter((entry) => DIAGNOSIS_IDS.has(entry.id))
+}
+
+export function isCjkText(value: string): boolean {
+  return /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}/u.test(value)
+}
+
+export function normalizeMedicalText(text: string): string {
+  return text
+    .replace(/℃/g, ' celsius ')
+    .replace(/°\s*c\b/gi, ' celsius ')
+    .replace(/mm\s*hg/gi, 'mmhg')
+    .replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xff10 + 0x30))
+    .replace(/œ/gi, 'oe')
+    .replace(/\b([dlnj])['’]/gi, '$1 ')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[áàâãä]/g, 'a')
+    .replace(/[éèêë]/g, 'e')
+    .replace(/[íìîï]/g, 'i')
+    .replace(/[óòôõö]/g, 'o')
+    .replace(/[úùûü]/g, 'u')
+    .replace(/ñ/g, 'n')
+    .replace(/ç/g, 'c')
+    .replace(/₂/g, '2')
+    .replace(/μ/g, 'u')
+    .replace(/[’']/g, '')
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function formPattern(form: string): string {
+  const needle = normalizeMedicalText(form).trim()
+  if (isCjkText(needle)) return escapeRegExp(needle)
+  const parts = needle.split(/\s+/).map(escapeRegExp)
+  const body = parts.join('\\s+')
+  const lastIsShort = parts[parts.length - 1].length <= 3 && parts.length === 1
+  const inflected = lastIsShort ? body : `${body}[\\p{L}\\p{N}]*`
+  return `(?:^|[^\\p{L}\\p{N}])${inflected}(?=$|[^\\p{L}\\p{N}])`
+}
+
+/** True when a glossary form appears, including a Russian inflection of a single word. */
+export function textHasForm(text: string, form: string): boolean {
+  const needle = normalizeMedicalText(form).trim()
+  if (!needle) return false
+  return new RegExp(formPattern(form), 'iu').test(normalizeMedicalText(text))
+}
+
+export function entryAppears(text: string, forms: readonly string[]): boolean {
+  return forms.some((form) => textHasForm(text, form))
+}
+
+export function formSpans(text: string, form: string): Array<{ start: number; end: number }> {
+  const hay = normalizeMedicalText(text)
+  const needle = normalizeMedicalText(form).trim().split(/\s+/)[0] ?? ''
+  const spans: Array<{ start: number; end: number }> = []
+  for (const match of hay.matchAll(new RegExp(formPattern(form), 'giu'))) {
+    const rawStart = match.index ?? 0
+    const local = needle ? match[0].indexOf(needle) : 0
+    const start = rawStart + (local >= 0 ? local : 0)
+    spans.push({ start, end: rawStart + match[0].length })
+  }
+  return spans
+}

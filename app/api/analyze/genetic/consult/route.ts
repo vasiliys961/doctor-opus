@@ -17,7 +17,7 @@ const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4; // 0.4 единицы за 1000 т
 const MIN_CONSULT_COST = 2;
 const MAX_CONSULT_COST = 20;
 const GPT_54_MODEL = 'openai/gpt-5.6-terra';
-const OPUS_FALLBACK_MODEL = 'anthropic/claude-opus-5';
+const OPUS_FALLBACK_MODEL = 'anthropic/claude-opus-5.5';
 
 function shouldFallbackFromGpt54(status: number, errorText: string): boolean {
   const normalized = errorText.toLowerCase();
@@ -301,7 +301,7 @@ Write physician-to-physician: professional, precise, clinically actionable, no f
 
     const consultModel =
       model === 'gpt52' ? GPT_54_MODEL :
-      mode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5';
+      mode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5.5';
 
     const runOpenRouter = async (targetModel: string) => {
       const payload: any = {

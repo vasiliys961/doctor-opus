@@ -22,7 +22,7 @@ const RECOMMENDATION_TEXT: Record<
     lines: [
       'Use Optimized mode (Gemini JSON + Claude Sonnet 5) as the default for most studies.',
       'Use Fast mode for quick triage and initial screening.',
-      'Use Expert Validated (Gemini JSON + Claude Opus 5) for critical or complex cases.',
+      'Use Expert Validated (Gemini JSON + Claude Opus 5.5) for critical or complex cases.',
       'If Claude is unavailable in your region, switch to GPT-5.6 Terra in Optimized mode.',
     ],
   },

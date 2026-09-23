@@ -4,7 +4,8 @@
 
 // Цены моделей в USD за 1M токенов (актуальные цены OpenRouter - обновлено 05.01.2026)
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  'anthropic/claude-opus-5': { input: 5.0, output: 25.0 },
+  'anthropic/claude-opus-5.5': { input: 4.0, output: 20.0 },
+  'anthropic/claude-opus-5': { input: 5.0, output: 25.0 }, // Legacy key for historical logs
   'anthropic/claude-opus-4.6': { input: 5.0, output: 25.0 },
   'anthropic/claude-fable-5': { input: 10.0, output: 50.0 }, // Legacy key for historical logs
   'anthropic/claude-fable-5.1': { input: 10.0, output: 50.0 },
@@ -27,8 +28,25 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
 // AssemblyAI: $0.62 per hour of audio, all in (speaker labels included).
 export const AUDIO_TRANSCRIPTION_USD_PER_HOUR = 0.62;
 
+// OpenAI realtime translation. Both run while the microphone is open.
+// https://developers.openai.com/api/docs/pricing
+export const REALTIME_TRANSLATE_USD_PER_MINUTE = 0.034;
+export const REALTIME_WHISPER_USD_PER_MINUTE = 0.017;
+
 // Множитель для перевода в условные единицы (USD * 100)
 const PRICE_MULTIPLIER = 100;
+
+export const REALTIME_TRANSLATION_CREDITS_PER_MINUTE =
+  (REALTIME_TRANSLATE_USD_PER_MINUTE + REALTIME_WHISPER_USD_PER_MINUTE) * PRICE_MULTIPLIER;
+
+export function realtimeTranslationCredits(seconds: number): number {
+  const safeSeconds = Math.max(0, Number(seconds) || 0);
+  return Math.round((safeSeconds / 60) * REALTIME_TRANSLATION_CREDITS_PER_MINUTE * 100) / 100;
+}
+
+/** Visit-protocol recording (AssemblyAI). Not the realtime translator. */
+export const AUDIO_TRANSCRIPTION_CREDITS_PER_HOUR =
+  Math.round(AUDIO_TRANSCRIPTION_USD_PER_HOUR * PRICE_MULTIPLIER);
 
 export const AUDIO_TRANSCRIPTION_PRICE_PER_MINUTE =
   (AUDIO_TRANSCRIPTION_USD_PER_HOUR * PRICE_MULTIPLIER) / 60;
@@ -62,11 +80,13 @@ function getModelPricing(model: string): { input: number; output: number } {
     return MODEL_PRICING[model];
   }
   
-  // Поиск по частичному совпадению
-  for (const [key, pricing] of Object.entries(MODEL_PRICING)) {
-    if (key.toLowerCase().includes(modelLower) || modelLower.includes(key.toLowerCase())) {
-      return pricing;
-    }
+  // Самый длинный ключ, который целиком входит в имя модели.
+  // Иначе claude-opus-5 совпадёт с claude-opus-5.5.
+  const partial = Object.entries(MODEL_PRICING)
+    .filter(([key]) => modelLower.includes(key.toLowerCase()))
+    .sort((a, b) => b[0].length - a[0].length)[0];
+  if (partial) {
+    return partial[1];
   }
   
   // Дефолтные цены по типу модели

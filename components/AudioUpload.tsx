@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { calculateAudioTranscriptionCost } from '@/lib/cost-calculator'
+import { AUDIO_TRANSCRIPTION_CREDITS_PER_HOUR, calculateAudioTranscriptionCost } from '@/lib/cost-calculator'
 import { getClientLocale } from '@/lib/i18n/client'
 import { mapLocaleToAssemblyAiLanguage } from '@/lib/i18n/stt-language'
 import type { Locale } from '@/lib/i18n/config'
@@ -68,7 +68,7 @@ const AUDIO_UPLOAD_TEXT: Record<Locale, {
     privacyHint: 'Do not dictate patient names, addresses, or ID data. Audio is transcribed by AssemblyAI.',
     duration: 'Duration',
     cost: 'STT cost',
-    costByDuration: 'STT is billed by conversation duration ($0.62 per hour of audio).',
+    costByDuration: 'STT is billed by conversation duration ({rate} credits per hour of audio).',
     estimatedStt: (cost) => `Estimated STT: ${cost.toFixed(2)} cr`,
     httpsRequired: 'Microphone access requires HTTPS (or localhost).',
     micDenied: 'Microphone access was denied. Allow the microphone for this site and reload.',
@@ -93,7 +93,7 @@ const AUDIO_UPLOAD_TEXT: Record<Locale, {
     privacyHint: 'No dicte nombres, direcciones ni identificadores. El audio se transcribe con AssemblyAI.',
     duration: 'Duración',
     cost: 'Costo STT',
-    costByDuration: 'El STT se cobra por la duración de la conversación (US$ 0,62 por hora de audio).',
+    costByDuration: 'El STT se cobra por la duración de la conversación ({rate} créditos por hora de audio).',
     estimatedStt: (cost) => `STT estimado: ${cost.toFixed(2)} cr`,
     httpsRequired: 'El micrófono requiere HTTPS (o localhost).',
     micDenied: 'Acceso al micrófono denegado. Permítalo para este sitio y recargue.',
@@ -118,7 +118,7 @@ const AUDIO_UPLOAD_TEXT: Record<Locale, {
     privacyHint: 'Ne dictez pas de noms, adresses ou identifiants. L’audio est transcrit par AssemblyAI.',
     duration: 'Durée',
     cost: 'Coût STT',
-    costByDuration: 'Le STT est facturé selon la durée de la conversation (0,62 $ par heure d’audio).',
+    costByDuration: 'Le STT est facturé selon la durée de la conversation ({rate} crédits par heure d’audio).',
     estimatedStt: (cost) => `STT estimé : ${cost.toFixed(2)} cr`,
     httpsRequired: 'Le microphone nécessite HTTPS (ou localhost).',
     micDenied: 'Accès au microphone refusé. Autorisez-le pour ce site et rechargez.',
@@ -143,7 +143,7 @@ const AUDIO_UPLOAD_TEXT: Record<Locale, {
     privacyHint: 'لا تملِ أسماء المرضى أو العناوين أو بيانات الهوية. يتم التفريغ عبر AssemblyAI.',
     duration: 'المدة',
     cost: 'تكلفة التفريغ',
-    costByDuration: 'يُحسب التفريغ حسب مدة المحادثة (0.62$ لكل ساعة صوت).',
+    costByDuration: 'يُحسب التفريغ حسب مدة المحادثة ({rate} رصيدًا لكل ساعة صوت).',
     estimatedStt: (cost) => `تقدير التفريغ: ${cost.toFixed(2)} cr`,
     httpsRequired: 'يحتاج الميكروفون إلى HTTPS (أو localhost).',
     micDenied: 'تم رفض الوصول إلى الميكروفون. اسمح به لهذا الموقع ثم أعد التحميل.',
@@ -168,7 +168,7 @@ const AUDIO_UPLOAD_TEXT: Record<Locale, {
     privacyHint: 'रोगी का नाम, पता या पहचान न बोलें। ऑडियो AssemblyAI से ट्रांस्क्राइब होता है।',
     duration: 'अवधि',
     cost: 'STT लागत',
-    costByDuration: 'STT बातचीत की अवधि के अनुसार लगता है ($0.62 प्रति घंटा ऑडियो)।',
+    costByDuration: 'STT बातचीत की अवधि के अनुसार लगता है ({rate} क्रेडिट प्रति घंटा ऑडियो)।',
     estimatedStt: (cost) => `अनुमानित STT: ${cost.toFixed(2)} cr`,
     httpsRequired: 'माइक्रोफ़ोन के लिए HTTPS (या localhost) चाहिए।',
     micDenied: 'माइक्रोफ़ोन की अनुमति नहीं मिली। साइट के लिए अनुमति दें और रीलोड करें।',
@@ -193,7 +193,7 @@ const AUDIO_UPLOAD_TEXT: Record<Locale, {
     privacyHint: 'Não dite nomes, endereços ou documentos. O áudio é transcrito pela AssemblyAI.',
     duration: 'Duração',
     cost: 'Custo STT',
-    costByDuration: 'O STT é cobrado pela duração da conversa (US$ 0,62 por hora de áudio).',
+    costByDuration: 'O STT é cobrado pela duração da conversa ({rate} créditos por hora de áudio).',
     estimatedStt: (cost) => `STT estimado: ${cost.toFixed(2)} cr`,
     httpsRequired: 'O microfone exige HTTPS (ou localhost).',
     micDenied: 'Acesso ao microfone negado. Permita para este site e recarregue.',
@@ -218,7 +218,7 @@ const AUDIO_UPLOAD_TEXT: Record<Locale, {
     privacyHint: 'Jangan sebut nama, alamat, atau identitas pasien. Audio ditranskripsi AssemblyAI.',
     duration: 'Durasi',
     cost: 'Biaya STT',
-    costByDuration: 'STT ditagih sesuai durasi percakapan ($0,62 per jam audio).',
+    costByDuration: 'STT ditagih sesuai durasi percakapan ({rate} kredit per jam audio).',
     estimatedStt: (cost) => `Perkiraan STT: ${cost.toFixed(2)} cr`,
     httpsRequired: 'Mikrofon memerlukan HTTPS (atau localhost).',
     micDenied: 'Akses mikrofon ditolak. Izinkan untuk situs ini lalu muat ulang.',
@@ -243,7 +243,7 @@ const AUDIO_UPLOAD_TEXT: Record<Locale, {
     privacyHint: 'Jangan sebut nama, alamat atau ID pesakit. Audio ditranskripsi oleh AssemblyAI.',
     duration: 'Tempoh',
     cost: 'Kos STT',
-    costByDuration: 'STT dicaj mengikut tempoh perbualan (AS$0.62 sejam audio).',
+    costByDuration: 'STT dicaj mengikut tempoh perbualan ({rate} kredit sejam audio).',
     estimatedStt: (cost) => `Anggaran STT: ${cost.toFixed(2)} cr`,
     httpsRequired: 'Mikrofon memerlukan HTTPS (atau localhost).',
     micDenied: 'Akses mikrofon ditolak. Benarkan untuk laman ini lalu muat semula.',
@@ -268,7 +268,7 @@ const AUDIO_UPLOAD_TEXT: Record<Locale, {
     privacyHint: 'Hasta adı, adres veya kimlik bilgisi dikte etmeyin. Ses AssemblyAI ile yazıya dökülür.',
     duration: 'Süre',
     cost: 'STT maliyeti',
-    costByDuration: 'STT, görüşme süresine göre ücretlendirilir (saatlik ses 0,62 $).',
+    costByDuration: 'STT, görüşme süresine göre ücretlendirilir (saatlik ses {rate} kredi).',
     estimatedStt: (cost) => `Tahmini STT: ${cost.toFixed(2)} cr`,
     httpsRequired: 'Mikrofon için HTTPS (veya localhost) gerekir.',
     micDenied: 'Mikrofon erişimi reddedildi. Bu site için izin verip yenileyin.',
@@ -293,7 +293,7 @@ const AUDIO_UPLOAD_TEXT: Record<Locale, {
     privacyHint: '请勿口述患者姓名、地址或身份信息。音频由 AssemblyAI 转写。',
     duration: '时长',
     cost: '转写费用',
-    costByDuration: '语音转写按对话时长计费（每小时音频 0.62 美元）。',
+    costByDuration: '语音转写按对话时长计费（每小时音频 {rate} 积分）。',
     estimatedStt: (cost) => `预计转写：${cost.toFixed(2)} cr`,
     httpsRequired: '麦克风需要 HTTPS（或 localhost）。',
     micDenied: '麦克风权限被拒绝。请允许后刷新页面。',
@@ -326,6 +326,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const [locale, setLocale] = useState<Locale>('en')
   const t = AUDIO_UPLOAD_TEXT[locale] || AUDIO_UPLOAD_TEXT.en
+  const costByDuration = t.costByDuration.replace('{rate}', String(AUDIO_TRANSCRIPTION_CREDITS_PER_HOUR))
 
   const releaseWakeLock = () => {
     wakeLockRef.current?.release().catch(() => undefined)
@@ -667,7 +668,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
                 {t.estimatedStt(calculateAudioTranscriptionCost(recordingTime))}
               </p>
               <p className="text-xs text-gray-500 max-w-md mx-auto">
-                {t.costByDuration}
+                {costByDuration}
               </p>
               <button
                 onClick={stopRecording}
@@ -707,7 +708,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
                 {t.maxSize(maxSize)}
               </p>
               <p className="text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mt-2">
-                {t.costByDuration}
+                {costByDuration}
               </p>
               <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
                 {t.privacyHint}
@@ -736,7 +737,7 @@ export default function AudioUpload({ onTranscribe, accept = 'audio/*', maxSize 
               ✕
             </button>
           </div>
-          <p className="mt-1 text-[11px] text-indigo-600">{t.costByDuration}</p>
+          <p className="mt-1 text-[11px] text-indigo-600">{costByDuration}</p>
         </div>
       )}
     </div>

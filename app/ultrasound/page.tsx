@@ -87,7 +87,7 @@ export default function UltrasoundPage() {
       // Подбор модели
       const targetModelId = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
                           analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') :
-                          'anthropic/claude-opus-5';
+                          'anthropic/claude-opus-5.5';
       formData.append('model', targetModelId);
 
       const response = await fetch('/api/analyze/image', {

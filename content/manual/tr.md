@@ -53,7 +53,7 @@ Platformun temel zekasıdır. Açık uçlu klinik diyalog, vaka tartışması, a
 
 **Mevcut modeller (açılır menü):**
 - **GPT-5.6 Terra** — Görüntüleme, MR ve genel klinik soruların %80'i için en iyisidir. Öz ve verimlidir.
-- **Claude Opus 5** — En derin muhakeme yeteneği. Karmaşık vakalar, genetik ve nadir patolojiler için en iyisidir. Daha yavaş, daha yüksek maliyetlidir.
+- **Claude Opus 5.5** — En derin muhakeme yeteneği. Karmaşık vakalar, genetik ve nadir patolojiler için en iyisidir. Daha yavaş, daha yüksek maliyetlidir.
 - **Claude Sonnet 5** — Dengeli. Hızlı konsültasyonlar ve kırık değerlendirmesi için mükemmeldir.
 - **Gemini 3 Flash** — En hızlısı. Hızlı referans ve veri çıkarma için idealdir.
 
@@ -214,7 +214,7 @@ Bir laboratuvar raporu yükleyin (PDF, Excel, CSV veya kağıt formun fotoğraf�
 **İş akışı:**
 1. Dosyayı yükleyin.
 2. **Aşama 1 (Çıkarma):** Gemini 3 Flash, rapordan rsID'leri ve genotipleri çıkarır.
-3. **Aşama 2 (Yorumlama):** Claude Opus 5, klinik risk yorumu sağlar.
+3. **Aşama 2 (Yorumlama):** Claude Opus 5.5, klinik risk yorumu sağlar.
 4. Takip soruları için Genetik uzmanı ile diyaloğa devam edin.
 
 Göndermeden önce daima anonimleştirin (önizleme ekranında isim ve adres otomatik olarak karartılır).
@@ -341,7 +341,7 @@ Gelişmiş yapay zeka modelleri kullanıldığında krediler tüketilir. Basit r
 |---|---|
 | Hızlı analiz (Gemini 3 Flash) | ~0.3 – 0.8 kr. |
 | Optimize edilmiş analiz (Sonnet 5) | ~0.8 – 1.5 kr. |
-| Uzman Onaylı (Opus 5 / GPT-5.6 Terra) | ~1.5 – 3.5 kr. |
+| Uzman Onaylı (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 kr. |
 | PDF sayfası (Görüntü işleme) | Sayfa başına ~0.3 kr. |
 | Yerel kopyalayıcı / hesaplayıcılar | Ücretsiz |
 
@@ -368,5 +368,5 @@ Her isteğin tam maliyeti, analiz tamamlandıktan hemen sonra sonuç bloğunda g
 - Kişisel Kitaplık için **metin araması yapılabilir PDF'ler** kullanın (resim taramaları değil).
 - EKG için: Aritmi detayları için Optimize Edilmiş modda **Claude Sonnet 5** kullanın.
 - Kırıklar için: **Claude Sonnet 5** diğer modellerden daha iyi performans gösterir (%83 doğruluk).
-- Karmaşık genetik veya nadir patolojiler için: **Claude Opus 5** (Uzman Onaylı mod) kullanın.
+- Karmaşık genetik veya nadir patolojiler için: **Claude Opus 5.5** (Uzman Onaylı mod) kullanın.
 - Sistem, geri bildirimlerinizle zamanla gelişir — lütfen testlerden sonra yapay zeka yanıtlarını oylayın.

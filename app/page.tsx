@@ -113,6 +113,48 @@ export default async function HomePage() {
           </div>
         </div>
       </div>
+
+      <div className="mb-6 sm:mb-8">
+        <div className="flex flex-col gap-3 rounded-2xl border border-secondary-300 bg-secondary-50 px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold text-primary-900 sm:text-lg">{home.translatorTitle}</h2>
+            <p className="mt-0.5 text-xs text-primary-800 sm:text-sm">
+              {home.translatorSubtitle}
+            </p>
+          </div>
+          <Link
+            href="/translate"
+            className="inline-flex shrink-0 items-center justify-center rounded-full bg-primary-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-600"
+          >
+            {home.translatorOpen}
+          </Link>
+        </div>
+      </div>
+
+      <section className="mb-6 sm:mb-8 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+          <h2 className="text-base font-bold text-sky-950 sm:text-lg">{home.freeToolsTitle}</h2>
+          <p className="text-xs text-sky-800 sm:text-sm">{home.freeToolsNote}</p>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Link
+            href="/manual"
+            className="flex flex-col rounded-xl border border-sky-200 bg-white px-4 py-3 transition-colors hover:border-sky-400"
+          >
+            <span className="text-sm font-bold text-primary-900">📘 {home.freeGuideTitle}</span>
+            <span className="mt-1 text-xs text-slate-600 sm:text-sm">{home.freeGuideText}</span>
+            <span className="mt-3 text-sm font-semibold text-sky-800">{home.freeGuideOpen}</span>
+          </Link>
+          <Link
+            href="/calculators"
+            className="flex flex-col rounded-xl border border-sky-200 bg-white px-4 py-3 transition-colors hover:border-sky-400"
+          >
+            <span className="text-sm font-bold text-primary-900">🧮 {home.freeCalcTitle}</span>
+            <span className="mt-1 text-xs text-slate-600 sm:text-sm">{home.freeCalcText}</span>
+            <span className="mt-3 text-sm font-semibold text-sky-800">{home.freeCalcOpen}</span>
+          </Link>
+        </div>
+      </section>
       
       <hr className="my-6 sm:my-8 border-primary-200" />
       
@@ -174,14 +216,6 @@ export default async function HomePage() {
           >
             🎬 {home.quickActions.video}
           </Link>
-          <a
-            href="/calculators"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 border-2 border-indigo-200 hover:border-indigo-400 text-indigo-900 font-semibold py-3 sm:py-4 px-2 sm:px-4 rounded-lg text-center transition-all text-sm sm:text-base touch-manipulation"
-          >
-            🧮 {home.quickActions.calculators}
-          </a>
         </div>
       </div>
       

@@ -14,8 +14,8 @@ import { DEFAULT_TEMPLATES, ProtocolTemplate } from '@/lib/protocol-templates'
 import { UNIVERSAL_SPECIALIST_TEMPLATES } from '@/lib/prompts'
 import { MODELS } from '@/lib/openrouter'
 import { handleSSEStream } from '@/lib/streaming-utils'
-import { logUsage } from '@/lib/simple-logger'
-import { calculateCost } from '@/lib/cost-calculator'
+import { logUsage, recordUsageCost } from '@/lib/simple-logger'
+import { AUDIO_TRANSCRIPTION_CREDITS_PER_HOUR, calculateCost } from '@/lib/cost-calculator'
 import { saveDocument, getDocumentChunks, searchLibraryLocal } from '@/lib/library-db'
 import { anonymizeText } from '@/lib/anonymization'
 import { finalizeProtocolDocument } from '@/lib/protocol-presentation'
@@ -937,7 +937,7 @@ export default function ProtocolPage() {
                 {t.conversationHint}
               </p>
               <p className="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-2">
-                {t.conversationCostHint}
+                {t.conversationCostHint.replace('{rate}', String(AUDIO_TRANSCRIPTION_CREDITS_PER_HOUR))}
               </p>
               <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
                 {t.conversationStartHint}
@@ -958,7 +958,14 @@ export default function ProtocolPage() {
               </label>
               <AudioUpload
                 onTranscribe={(transcript, meta) => {
-                  if (meta?.cost) setCostPart('stt', meta.cost, 'add')
+                  if (meta?.cost) {
+                    setCostPart('stt', meta.cost, 'add')
+                    recordUsageCost({
+                      section: 'appointment-protocol',
+                      model: 'assemblyai',
+                      costUnits: meta.cost,
+                    })
+                  }
                   if (meta?.duration || meta?.cost) {
                     setConversationStats((prev) => ({
                       duration: prev.duration + (Number(meta.duration) || 0),
@@ -1031,7 +1038,7 @@ export default function ProtocolPage() {
             <select value={model} onChange={(e) => setModel(e.target.value as any)} className="px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
               <option value="sonnet">🤖 Sonnet 5</option>
               <option value="gpt52">🚀 GPT-5.6 Terra</option>
-              <option value="opus">🧠 Opus 5</option>
+              <option value="opus">🧠 Opus 5.5</option>
               <option value="gemini">⚡ Gemini 3.8 Flash</option>
             </select>
           </div>

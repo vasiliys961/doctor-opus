@@ -24,6 +24,7 @@ const SECTION_NAMES: Record<string, string> = {
   'chat': 'AI Assistant',
   'protocols': 'Clinical Guidelines',
   'appointment-protocol': 'Appointment Protocol',
+  'translator': 'Medical Translator',
 };
 
 interface UsageBySectionData {
@@ -110,6 +111,41 @@ export function logUsage(params: {
     console.log(`📊 [USAGE] Logged: ${sectionName}, ${params.model}, ${costInfo.totalCostUnits.toFixed(2)} cr.`);
   } catch (error) {
     console.error('❌ [USAGE] Error logging usage:', error);
+  }
+}
+
+/**
+ * Add a credit amount to section statistics without a second balance deduction.
+ * The server has already charged the account.
+ */
+export function recordUsageCost(params: {
+  section: string;
+  model: string;
+  costUnits: number;
+  countCall?: boolean;
+}): void {
+  try {
+    if (typeof window === 'undefined') return;
+    const costUnits = Number(params.costUnits);
+    if (!Number.isFinite(costUnits) || costUnits <= 0) return;
+
+    checkAndResetMonth();
+    const savedData = localStorage.getItem('usageBySections');
+    const data: UsageBySectionData = normalizeSectionData(savedData ? JSON.parse(savedData) : {});
+    const sectionName = SECTION_NAMES[params.section] || params.section;
+    if (!data[params.section]) {
+      data[params.section] = { sectionName, calls: 0, costUnits: 0, models: {} };
+    }
+    data[params.section].sectionName = sectionName;
+    data[params.section].costUnits += costUnits;
+    if (params.countCall !== false) data[params.section].calls += 1;
+    if (!data[params.section].models[params.model]) {
+      data[params.section].models[params.model] = 0;
+    }
+    if (params.countCall !== false) data[params.section].models[params.model] += 1;
+    localStorage.setItem('usageBySections', JSON.stringify(data));
+  } catch (error) {
+    console.error('❌ [USAGE] Error recording usage cost:', error);
   }
 }
 

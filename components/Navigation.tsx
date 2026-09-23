@@ -19,6 +19,19 @@ export default function Navigation({ locale }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const ui = uiMessages[locale]
 
+  const freeBadge: Record<Locale, string> = {
+    en: 'Free',
+    es: 'Gratis',
+    fr: 'Gratuit',
+    ar: 'مجاناً',
+    hi: 'मुफ़्त',
+    'pt-BR': 'Grátis',
+    id: 'Gratis',
+    ms: 'Percuma',
+    tr: 'Ücretsiz',
+    'zh-CN': '免费',
+  }
+
   const pageLabels: Record<string, Record<Locale, string>> = {
     home: { en: '🏠 Home', es: '🏠 Inicio', fr: '🏠 Accueil', ar: '🏠 الرئيسية', hi: '🏠 होम', 'pt-BR': '🏠 Início', id: '🏠 Beranda', ms: '🏠 Utama', tr: '🏠 Ana sayfa', 'zh-CN': '🏠 首页' },
     manual: { en: '📘 Physician Guide', es: '📘 Guía médica', fr: '📘 Guide médecin', ar: '📘 دليل الطبيب', hi: '📘 डॉक्टर गाइड', 'pt-BR': '📘 Guia médico', id: '📘 Panduan dokter', ms: '📘 Panduan doktor', tr: '📘 Hekim rehberi', 'zh-CN': '📘 医师指南' },
@@ -191,6 +204,8 @@ export default function Navigation({ locale }: Props) {
                 )
               }
 
+              const openWithoutAccount = page.key === 'manual' || page.key === 'calculators'
+
               return (
                 <Link
                   key={page.href}
@@ -208,11 +223,18 @@ export default function Navigation({ locale }: Props) {
                   className={`block w-full text-left py-2.5 px-4 rounded-lg transition-all touch-manipulation text-sm ${
                     isActive
                       ? 'bg-primary-500 text-white font-bold shadow-md ring-2 ring-primary-300'
+                      : openWithoutAccount
+                      ? 'bg-sky-50 text-sky-950 hover:bg-white hover:shadow-sm ring-1 ring-sky-200'
                       : 'bg-white/95 text-gray-800 hover:bg-white hover:shadow-sm active:bg-primary-50'
                   }`}
                 >
-                  <span className="flex items-center gap-3">
-                    {pageLabels[page.key][locale]}
+                  <span className="flex items-center justify-between gap-3">
+                    <span>{pageLabels[page.key][locale]}</span>
+                    {openWithoutAccount && !isActive && (
+                      <span className="shrink-0 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                        {freeBadge[locale]}
+                      </span>
+                    )}
                   </span>
                 </Link>
               )
@@ -237,7 +259,7 @@ export default function Navigation({ locale }: Props) {
             <p className="font-semibold mb-1">Clinical Assistant v3.50</p>
             <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">{ui.clinicalEdition}</p>
             <ul className="space-y-1 text-xs opacity-70">
-              <li>• Opus 5 + Fable 5.1 + Gemini 3.8 Flash</li>
+              <li>• Opus 5.5 + Fable 5.1 + Gemini 3.8 Flash</li>
               <li>• DICOM Viewer + Measure</li>
               <li>• Multi-modal (Images + Labs)</li>
               <li>• Trend Analysis & RAG</li>

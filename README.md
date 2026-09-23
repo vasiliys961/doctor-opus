@@ -22,7 +22,7 @@ This repository branch (`en-version-global`) is the English/global product. Prod
 ### 🤖 Advanced AI Analysis
 - **LLM routing:** Polza AI as the primary OpenAI-compatible gateway, with automatic fallback to OpenRouter on network/provider errors.
 - **Multi-model Council:**
-- **Claude Opus 5:** Deep reasoning for complex clinical cases and genomics.
+- **Claude Opus 5.5:** Deep reasoning for complex clinical cases and genomics.
 - **Claude Sonnet 5:** Strong default for fractures, skeletal pathology, and routine optimized analysis.
 - **GPT-5.6 Terra:** Fast working model for X-Ray, MRI, CT, and general clinical analysis.
 - **Gemini 3.8 Flash:** High-speed Stage 1 extraction (JSON/OCR) and screening.

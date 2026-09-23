@@ -53,7 +53,7 @@ The core intelligence of the platform. Supports open-ended clinical dialogue, ca
 
 **Available models (dropdown):**
 - **GPT-5.6 Terra** — Best for 80% of imaging, MRI, and general clinical questions. Concise and efficient.
-- **Claude Opus 5** — Deepest reasoning. Best for complex cases, genetics, and rare pathologies. Slower, higher cost.
+- **Claude Opus 5.5** — Deepest reasoning. Best for complex cases, genetics, and rare pathologies. Slower, higher cost.
 - **Claude Sonnet 5** — Balanced. Excellent for quick consultations and fracture assessment.
 - **Gemini 3 Flash** — Fastest. Ideal for quick reference and data extraction.
 
@@ -214,7 +214,7 @@ Upload a genetic report in **.VCF** format (raw lab output) or **PDF**.
 **Workflow:**
 1. Upload file
 2. **Stage 1 (Extract):** Gemini 3 Flash extracts rsIDs and genotypes from the report
-3. **Stage 2 (Interpret):** Claude Opus 5 provides clinical risk interpretation
+3. **Stage 2 (Interpret):** Claude Opus 5.5 provides clinical risk interpretation
 4. Continue dialogue with the Genetics specialist for follow-up questions
 
 Always anonymize before submitting (name and address auto-redacted on the preview screen).
@@ -341,7 +341,7 @@ Credits are consumed when using advanced AI models. Simple reference lookups and
 |---|---|
 | Fast analysis (Gemini 3 Flash) | ~0.3 – 0.8 cr. |
 | Optimized analysis (Sonnet 5) | ~0.8 – 1.5 cr. |
-| Expert Validated (Opus 5 / GPT-5.6 Terra) | ~1.5 – 3.5 cr. |
+| Expert Validated (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 cr. |
 | PDF page (Vision processing) | ~0.3 cr. per page |
 | Local copier / calculators | Free |
 
@@ -368,5 +368,5 @@ Exact cost of each request is shown in the result block immediately after analys
 - Use **text-searchable PDFs** (not image scans) for the Personal Library
 - For ECG: use **Claude Sonnet 5** in Optimized mode for arrhythmia detail
 - For fractures: **Claude Sonnet 5** outperforms other models (83% accuracy)
-- For complex genetics or rare pathology: use **Claude Opus 5** (Expert Validated mode)
+- For complex genetics or rare pathology: use **Claude Opus 5.5** (Expert Validated mode)
 - The system improves over time through your feedback — please rate AI responses after tests

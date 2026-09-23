@@ -53,7 +53,7 @@ La inteligencia central de la plataforma. Admite diálogo clínico abierto, disc
 
 **Modelos disponibles (menú desplegable):**
 - **GPT-5.6 Terra** — El mejor para el 80% de imágenes, RM y preguntas clínicas generales. Conciso y eficiente.
-- **Claude Opus 5** — Razonamiento más profundo. Ideal para casos complejos, genética y patologías raras. Más lento, mayor costo.
+- **Claude Opus 5.5** — Razonamiento más profundo. Ideal para casos complejos, genética y patologías raras. Más lento, mayor costo.
 - **Claude Sonnet 5** — Equilibrado. Excelente para consultas rápidas y evaluación de fracturas.
 - **Gemini 3 Flash** — El más rápido. Ideal para referencia rápida y extracción de datos.
 
@@ -214,7 +214,7 @@ Cargue un informe genético en formato **.VCF** (resultado bruto de laboratorio)
 **Flujo de trabajo:**
 1. Cargar archivo
 2. **Etapa 1 (Extraer):** Gemini 3 Flash extrae rsIDs y genotipos del informe
-3. **Etapa 2 (Interpretar):** Claude Opus 5 proporciona la interpretación del riesgo clínico
+3. **Etapa 2 (Interpretar):** Claude Opus 5.5 proporciona la interpretación del riesgo clínico
 4. Continúe el diálogo con el especialista en Genética para preguntas de seguimiento
 
 Anonimice siempre antes de enviar (el nombre y la dirección se redactan automáticamente en la pantalla de vista previa).
@@ -341,7 +341,7 @@ Los créditos se consumen al utilizar modelos de IA avanzados. Las consultas de 
 |---|---|
 | Análisis rápido (Gemini 3 Flash) | ~0.3 – 0.8 cr. |
 | Análisis optimizado (Sonnet 5) | ~0.8 – 1.5 cr. |
-| Validado por Experto (Opus 5 / GPT-5.6 Terra) | ~1.5 – 3.5 cr. |
+| Validado por Experto (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 cr. |
 | Página PDF (Procesamiento de visión) | ~0.3 cr. por página |
 | Copiadora local / calculadoras | Gratis |
 
@@ -368,5 +368,5 @@ El costo exacto de cada solicitud se muestra en el bloque de resultados inmediat
 - Utilice **PDFs con búsqueda de texto** (no escaneos de imágenes) para la Biblioteca Personal
 - Para ECG: use **Claude Sonnet 5** en modo Optimizado para detalles de arritmias
 - Para fracturas: **Claude Sonnet 5** supera a otros modelos (83% de precisión)
-- Para genética compleja o patología rara: use **Claude Opus 5** (modo Validado por Experto)
+- Para genética compleja o patología rara: use **Claude Opus 5.5** (modo Validado por Experto)
 - El sistema mejora con el tiempo gracias a sus comentarios; por favor, califique las respuestas de la IA después de las pruebas

@@ -71,7 +71,7 @@ export default function AnalysisModeSelector({
     {
       value: 'validated',
       label: '🧠 Expert Validated',
-      description: 'Gemini JSON + Opus 5 (for complex cases, Fable 5.1 may be offered)',
+      description: 'Gemini JSON + Opus 5.5 (for complex cases, Fable 5.1 may be offered)',
       icon: '🧠'
     }
   ]

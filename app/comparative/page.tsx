@@ -137,7 +137,7 @@ export default function ComparativeAnalysisPage() {
         ? 'google/gemini-3.8-flash' 
         : mode === 'optimized' 
           ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra')
-          : 'anthropic/claude-opus-5'
+          : 'anthropic/claude-opus-5.5'
       
       const formData = new FormData()
       formData.append('file', images[0].file)
@@ -213,7 +213,7 @@ export default function ComparativeAnalysisPage() {
         content={{
           fast: "Fast comparison of main findings across multiple images.",
           optimized: "Recommended mode: «Optimized» (Gemini JSON → Sonnet) — optimal for before/after comparison.",
-          validated: "Two-stage analysis (Gemini JSON → Opus 5) — most accurate assessment of HU dynamics and structural changes.",
+          validated: "Two-stage analysis (Gemini JSON → Opus 5.5) — most accurate assessment of HU dynamics and structural changes.",
           extra: [
             "⭐ Recommended mode: «Optimized» (Gemini JSON → Sonnet) — optimal for before/after comparison.",
             "⏰ Use 'Over Time' mode to analyze disease progression.",

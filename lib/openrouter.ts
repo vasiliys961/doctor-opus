@@ -19,8 +19,8 @@ const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 // Актуальные модели (последние флагманы 2025-2026)
 export const MODELS = {
-  OPUS: 'anthropic/claude-opus-5',                         // Claude Opus 5
-  OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 5, rollback: VALIDATED_OPUS_MODEL=4.7
+  OPUS: 'anthropic/claude-opus-5.5',                         // Claude Opus 5.5
+  OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 5.5, rollback: VALIDATED_OPUS_MODEL=4.7
   SONNET: 'anthropic/claude-sonnet-5',                   // Claude Sonnet 5
   GPT_5_2: 'openai/gpt-5.6-terra',                  // GPT-5.6 Terra (legacy key name kept for compatibility)
   GROK_4_5: 'x-ai/grok-4.5',                         // xAI Grok 4.5
@@ -227,7 +227,7 @@ export async function analyzeImage(options: VisionRequestOptions): Promise<strin
       if (isDocumentScan) {
         model = MODELS.GEMINI_3_FLASH; // Gemini 3 Flash — дешевле и лучше для сканирования
       } else {
-        model = MODELS.OPUS; // Opus 5 для точного анализа
+        model = MODELS.OPUS; // Opus 5.5 для точного анализа
       }
     }
   }

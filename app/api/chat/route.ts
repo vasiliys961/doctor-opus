@@ -127,7 +127,7 @@ function logProviderAccessDiagnostics(params: {
 function mapOpenRouterToAnthropicModel(selectedModel: string): string {
   const explicitFallback = process.env.ANTHROPIC_FALLBACK_MODEL?.trim();
   if (explicitFallback) return explicitFallback;
-  if (selectedModel.includes('opus')) return 'claude-opus-5';
+  if (selectedModel.includes('opus')) return 'claude-opus-5.5';
   if (selectedModel.includes('sonnet')) return 'claude-sonnet-5';
   return 'claude-sonnet-5';
 }

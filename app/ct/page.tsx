@@ -140,7 +140,7 @@ export default function CTPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-5');
+        formData.append('model', 'anthropic/claude-opus-5.5');
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3.8-flash');
       }
@@ -162,7 +162,7 @@ export default function CTPage() {
         
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
-                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
+                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5.5';
 
         await handleSSEStream(response, {
           onChunk: (_content, accumulatedText) => {
@@ -203,7 +203,7 @@ export default function CTPage() {
         if (data.success) {
           setResult(data.result)
           setAnalysisStep('description_complete')
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5');
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5.5');
           setCurrentCost(data.cost || 1.5)
           setModelInfo({ model: modelUsed, mode: analysisMode });
 
@@ -269,11 +269,11 @@ export default function CTPage() {
         content={{
           fast: "Two-stage CT screening (structured HU density and structure description, then clinical interpretation). Provides a concise conclusion and overall risk signal.",
           optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and quality for CT studies.",
-          validated: "Most accurate expert analysis (Gemini JSON + Opus 5) — recommended for critical and complex cases.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 5.5) — recommended for critical and complex cases.",
           extra: [
             "✅ **GPT-5.6 Terra**: BEST choice for 80% of CT studies (general analysis, CT anatomy).",
             "🦴 **Claude Sonnet 5**: EXCEPTION — BEST results on fractures and fine structures.",
-            "⚠️ **Claude Opus 5**: NOT recommended for this section (weaker model for imaging).",
+            "⚠️ **Claude Opus 5.5**: NOT recommended for this section (weaker model for imaging).",
             "📸 You can upload CT images, take a photo, or use a URL.",
             "🔄 Streaming mode lets you see the model's reasoning in real time.",
             "💾 Results can be saved to patient context and exported to a report."

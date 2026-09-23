@@ -53,7 +53,7 @@ Inti kecerdasan dari platform ini. Mendukung dialog klinis terbuka, diskusi kasu
 
 **Model yang tersedia (dropdown):**
 - **GPT-5.6 Terra** — Terbaik untuk 80% pencitraan, MRI, dan pertanyaan klinis umum. Ringkas dan efisien.
-- **Claude Opus 5** — Penalaran terdalam. Terbaik untuk kasus kompleks, genetika, dan patologi langka. Lebih lambat, biaya lebih tinggi.
+- **Claude Opus 5.5** — Penalaran terdalam. Terbaik untuk kasus kompleks, genetika, dan patologi langka. Lebih lambat, biaya lebih tinggi.
 - **Claude Sonnet 5** — Seimbang. Sangat baik untuk konsultasi cepat dan penilaian fraktur.
 - **Gemini 3 Flash** — Tercepat. Ideal untuk referensi cepat dan ekstraksi data.
 
@@ -214,7 +214,7 @@ Unggah laporan genetik dalam format **.VCF** (hasil lab mentah) atau **PDF**.
 **Alur kerja:**
 1. Unggah file
 2. **Tahap 1 (Ekstrak):** Gemini 3 Flash mengekstrak rsID dan genotipe dari laporan
-3. **Tahap 2 (Interpretasi):** Claude Opus 5 memberikan interpretasi risiko klinis
+3. **Tahap 2 (Interpretasi):** Claude Opus 5.5 memberikan interpretasi risiko klinis
 4. Lanjutkan dialog dengan spesialis Genetika untuk pertanyaan lanjutan
 
 Selalu anonimkan sebelum mengirim (nama dan alamat dihapus otomatis pada layar pratinjau).
@@ -341,7 +341,7 @@ Kredit dikonsumsi saat menggunakan model AI tingkat lanjut. Pencarian referensi 
 |---|---|
 | Analisis cepat (Gemini 3 Flash) | ~0.3 – 0.8 kr. |
 | Analisis dioptimalkan (Sonnet 5) | ~0.8 – 1.5 kr. |
-| Validasi Ahli (Opus 5 / GPT-5.6 Terra) | ~1.5 – 3.5 kr. |
+| Validasi Ahli (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 kr. |
 | Halaman PDF (Pemrosesan visi) | ~0.3 kr. per halaman |
 | Penyalin lokal / kalkulator | Gratis |
 
@@ -368,5 +368,5 @@ Biaya pasti dari setiap permintaan ditampilkan di blok hasil segera setelah anal
 - Gunakan **PDF yang teksnya dapat dicari** (bukan scan gambar) untuk Perpustakaan Pribadi
 - Untuk EKG: gunakan **Claude Sonnet 5** dalam mode Dioptimalkan untuk detail aritmia
 - Untuk fraktur: **Claude Sonnet 5** mengungguli model lain (akurasi 83%)
-- Untuk genetika kompleks atau patologi langka: gunakan **Claude Opus 5** (mode Validasi Ahli)
+- Untuk genetika kompleks atau patologi langka: gunakan **Claude Opus 5.5** (mode Validasi Ahli)
 - Sistem meningkat seiring waktu melalui umpan balik Anda — harap beri peringkat respons AI setelah pengujian

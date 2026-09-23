@@ -1465,7 +1465,7 @@ export default function ChatPage() {
               disabled={loading}
             >
               <option value="gpt52">🚀 GPT-5.6 Terra</option>
-              <option value="opus">🧠 Opus 5</option>
+              <option value="opus">🧠 Opus 5.5</option>
               <option value="sonnet">🤖 Sonnet 5</option>
               <option value="fable">🧩 Fable 5.1</option>
               <option value="gemini">⚡ Gemini 3.8 Flash</option>

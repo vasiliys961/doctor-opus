@@ -54,10 +54,10 @@ export async function POST(request: NextRequest) {
     const base64Image = buffer.toString('base64');
 
     console.log('  - Изображение конвертировано в base64, размер:', base64Image.length);
-    console.log('🎯 [ECG ANALYSIS] Используется модель: Opus 5 (точный анализ)');
+    console.log('🎯 [ECG ANALYSIS] Используется модель: Opus 5.5 (точный анализ)');
 
     // ЭКГ всегда анализируется через Opus для максимальной точности
-    const modelUsed = 'anthropic/claude-opus-5';
+    const modelUsed = 'anthropic/claude-opus-5.5';
 
     if (useStreaming) {
       console.log('📡 [ECG STREAMING] Запуск streaming анализа');

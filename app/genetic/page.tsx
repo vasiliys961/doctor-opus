@@ -46,7 +46,7 @@ export default function GeneticPage() {
   const [chatLoading, setChatLoading] = useState(false)
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([])
   const [chatFiles, setChatFiles] = useState<File[]>([])
-  const [modelType, setModelType] = useState<'opus' | 'gpt52'>('opus') // Opus 5 по умолчанию для лучшего качества
+  const [modelType, setModelType] = useState<'opus' | 'gpt52'>('opus') // Opus 5.5 по умолчанию для лучшего качества
   const [totalCost, setTotalCost] = useState<number>(0)
   const [lastModelUsed, setLastModelUsed] = useState<string>('')
   const [isAnonymous, setIsAnonymous] = useState(false)
@@ -394,7 +394,7 @@ export default function GeneticPage() {
             setResult(accumulatedText)
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.6-terra' : 'anthropic/claude-opus-5');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.6-terra' : 'anthropic/claude-opus-5.5');
             logUsage({
               section: 'genetic',
               model: model,
@@ -457,7 +457,7 @@ export default function GeneticPage() {
         // Логирование использования (этап консультации)
         logUsage({
           section: 'genetic',
-          model: 'anthropic/claude-opus-5',
+          model: 'anthropic/claude-opus-5.5',
           inputTokens: 4000, // примерное значение для консультации
           outputTokens: 3000,
         })
@@ -545,7 +545,7 @@ export default function GeneticPage() {
             })
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.6-terra' : 'anthropic/claude-opus-5');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.6-terra' : 'anthropic/claude-opus-5.5');
             logUsage({
               section: 'chat',
               model: model,
@@ -954,7 +954,7 @@ export default function GeneticPage() {
                 }`}
               >
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-base">🧠 Opus 5</span>
+                  <span className="text-base">🧠 Opus 5.5</span>
                   <span className="text-[10px] uppercase opacity-60 font-bold">{t.modelExpertMax}</span>
                 </div>
               </button>
@@ -974,7 +974,7 @@ export default function GeneticPage() {
       <AnalysisResult 
         result={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
         loading={loading} 
-        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.6-terra' : 'anthropic/claude-opus-5')}
+        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.6-terra' : 'anthropic/claude-opus-5.5')}
         mode="genetic"
         cost={totalCost}
         images={file?.type.startsWith('image/') ? [URL.createObjectURL(file)] : []}

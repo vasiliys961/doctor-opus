@@ -287,7 +287,7 @@ export default function SubscriptionPage() {
               <p className="text-[10px] text-gray-500">Standard clinical analyses</p>
             </div>
             <div className="border border-gray-200 rounded-lg p-4">
-              <p className="font-semibold text-gray-800 mb-1">🧠 Expert (Opus 5)</p>
+              <p className="font-semibold text-gray-800 mb-1">🧠 Expert (Opus 5.5)</p>
               <p className="text-teal-600 font-bold">~10 – 20 cr.</p>
               <p className="text-[10px] text-gray-500">Complex cases, high-risk modalities</p>
             </div>

@@ -53,7 +53,7 @@ Teras kecerdasan platform ini. Menyokong dialog klinikal terbuka, perbincangan k
 
 **Model yang tersedia (dropdown):**
 - **GPT-5.6 Terra** — Terbaik untuk 80% pengimejan, MRI, dan soalan klinikal umum. Ringkas dan cekap.
-- **Claude Opus 5** — Penaakulan paling mendalam. Terbaik untuk kes kompleks, genetik, dan patologi jarang berlaku. Lebih perlahan, kos lebih tinggi.
+- **Claude Opus 5.5** — Penaakulan paling mendalam. Terbaik untuk kes kompleks, genetik, dan patologi jarang berlaku. Lebih perlahan, kos lebih tinggi.
 - **Claude Sonnet 5** — Seimbang. Cemerlang untuk perundingan pantas dan penilaian patah tulang.
 - **Gemini 3 Flash** — Paling pantas. Ideal untuk rujukan pantas dan pengekstrakan data.
 
@@ -214,7 +214,7 @@ Muat naik laporan genetik dalam format **.VCF** (output makmal mentah) atau **PD
 **Aliran kerja:**
 1. Muat naik fail
 2. **Tahap 1 (Ekstrak):** Gemini 3 Flash mengekstrak rsID dan genotip daripada laporan
-3. **Tahap 2 (Tafsir):** Claude Opus 5 menyediakan tafsiran risiko klinikal
+3. **Tahap 2 (Tafsir):** Claude Opus 5.5 menyediakan tafsiran risiko klinikal
 4. Teruskan dialog dengan pakar Genetik untuk soalan susulan
 
 Sentiasa jadikan tanpa nama sebelum menghantar (nama dan alamat dipadam secara automatik pada skrin pratonton).
@@ -341,7 +341,7 @@ Kredit digunakan apabila menggunakan model AI lanjutan. Carian rujukan mudah dan
 |---|---|
 | Analisis pantas (Gemini 3 Flash) | ~0.3 – 0.8 kr. |
 | Analisis dioptimumkan (Sonnet 5) | ~0.8 – 1.5 kr. |
-| Pengesahan Pakar (Opus 5 / GPT-5.6 Terra) | ~1.5 – 3.5 kr. |
+| Pengesahan Pakar (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 kr. |
 | Halaman PDF (Pemprosesan Visi) | ~0.3 kr. setiap halaman |
 | Penyalin tempatan / kalkulator | Percuma |
 
@@ -368,5 +368,5 @@ Kos tepat bagi setiap permintaan ditunjukkan dalam blok keputusan sejurus selepa
 - Gunakan **PDF yang boleh dicari teks** (bukan imbasan imej) untuk Perpustakaan Peribadi
 - Untuk ECG: gunakan **Claude Sonnet 5** dalam mod Optimized untuk perincian aritmia
 - Untuk patah tulang: **Claude Sonnet 5** mengatasi model lain (ketepatan 83%)
-- Untuk genetik kompleks atau patologi jarang: gunakan **Claude Opus 5** (mod Expert Validated)
+- Untuk genetik kompleks atau patologi jarang: gunakan **Claude Opus 5.5** (mod Expert Validated)
 - Sistem bertambah baik dari semasa ke semasa melalui maklum balas anda — sila nilaikan respons AI selepas ujian

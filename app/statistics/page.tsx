@@ -9,6 +9,7 @@ import type { Locale } from '@/lib/i18n/config'
 
 // Цены моделей (для расчета условных единиц за 1M токенов)
 const MODEL_PRICING = {
+  'anthropic/claude-opus-5.5': { input: 4.0, output: 20.0 },
   'anthropic/claude-opus-5': { input: 5.0, output: 25.0 },
   'anthropic/claude-fable-5': { input: 10.0, output: 50.0 },
   'anthropic/claude-fable-5.1': { input: 10.0, output: 50.0 },
@@ -112,10 +113,9 @@ export default function StatisticsPage() {
   }
 
   const calculateModelCost = (inputTokens: number, outputTokens: number, model: string): number => {
-    const modelKey = Object.keys(MODEL_PRICING).find(key => 
-      model.toLowerCase().includes(key.toLowerCase()) || 
-      key.toLowerCase().includes(model.toLowerCase())
-    )
+    const modelKey = Object.keys(MODEL_PRICING)
+      .filter(key => model.toLowerCase().includes(key.toLowerCase()))
+      .sort((a, b) => b.length - a.length)[0]
 
     if (!modelKey) {
       // Дефолтные цены для неизвестных моделей

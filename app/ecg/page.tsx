@@ -64,7 +64,7 @@ export default function ECGPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo(analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
-                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5');
+                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5.5');
           return;
         }
         (window as any)._currentCacheKey = cacheKey;
@@ -84,7 +84,7 @@ export default function ECGPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-5');
+        formData.append('model', 'anthropic/claude-opus-5.5');
       } else if (analysisMode === 'fast') {
         formData.append('model', 'google/gemini-3.8-flash');
       }
@@ -107,7 +107,7 @@ export default function ECGPage() {
 
           const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
           const modelUsed = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
-                          analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
+                          analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5.5';
           setModelInfo(modelUsed)
 
           await handleSSEStream(response, {
@@ -175,7 +175,7 @@ export default function ECGPage() {
             saveToCache((window as any)._currentCacheKey, data.result, analysisMode);
           }
 
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5')
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5.5')
           setModelInfo(modelUsed)
           
           const cost = data.cost || 1.0;
@@ -226,9 +226,9 @@ export default function ECGPage() {
         content={{
           fast: "Two-stage ECG screening (detailed compact waveform description, then clinical interpretation). Provides a concise conclusion and risk assessment — ideal for quick initial review.",
           optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of depth and quality for ECG waveform analysis.",
-          validated: "Most accurate expert analysis (Gemini JSON + Opus 5) — recommended for critical and complex cases.",
+          validated: "Most accurate expert analysis (Gemini JSON + Opus 5.5) — recommended for critical and complex cases.",
           extra: [
-            "💡 GPT-5.6 Terra is recommended for fast analyses; Opus 5 for complex cases.",
+            "💡 GPT-5.6 Terra is recommended for fast analyses; Opus 5.5 for complex cases.",
             "⭐ Recommended mode: «Optimized» (Gemini + Sonnet) — best balance of accuracy and quality for ECG analysis.",
             "📸 You can upload an ECG file, take a photo with a camera, or use a URL.",
             "🔄 Streaming mode lets you see the model's reasoning in real time.",
