@@ -70,7 +70,9 @@ describe('medical fidelity phrases', () => {
       'abbreviations',
       'anatomy',
       'drugs',
+      'laterality',
       'phrases',
+      'routes',
       'terms',
       'units',
     ])
@@ -95,6 +97,148 @@ describe('medical fidelity phrases', () => {
       'Dyspnea started about two hours ago.'
     )
     expectFaithful('Я перенёс инфаркт пять лет назад.', 'I had a heart attack five years ago.')
+  })
+
+  it('shows the dose pair when 5 mg becomes 50 mg and stays quiet when the dose matches', () => {
+    const changed = assessMedicalFidelity({
+      source: 'Take 5 mg twice a day.',
+      translation: 'Принимайте 50 мг два раза в день.',
+    })
+    const dose = changed.findings.find((finding) => finding.code === 'number')
+    expect(dose?.sourceFragment).toMatch(/5/)
+    expect(dose?.translationFragment).toMatch(/50/)
+    expect(dose?.sourceFragment).not.toMatch(/50/)
+    expect(
+      assessMedicalFidelity({
+        source: 'Take 5 mg twice a day.',
+        translation: 'Принимайте 5 мг два раза в день.',
+      }).findings
+    ).toEqual([])
+  })
+
+  it('names a negation mismatch without inventing a fragment', () => {
+    const report = assessMedicalFidelity({
+      source: 'I have never had an allergy to penicillin.',
+      translation: 'У меня была аллергия на пенициллин.',
+    })
+    const negation = report.findings.find((finding) => finding.code === 'negation')
+    expect(negation).toBeTruthy()
+    expect(negation?.sourceFragment).toBeUndefined()
+    expect(negation?.translationFragment).toBeUndefined()
+  })
+
+  it('flags a swapped side or body site and keeps a faithful pair', () => {
+    const swappedSide = assessMedicalFidelity({
+      source: 'Pain in the left knee.',
+      translation: 'Боль в правом колене.',
+    })
+    expect(swappedSide.findings.map((finding) => finding.code)).toContain('laterality')
+    expect(swappedSide.findings.find((finding) => finding.code === 'laterality')?.sourceFragment).toBe('left')
+    expect(
+      assessMedicalFidelity({
+        source: 'Pain in the left knee.',
+        translation: 'Боль в левом колене.',
+      }).findings
+    ).toEqual([])
+    expect(
+      assessMedicalFidelity({
+        source: 'Pain in the left knee.',
+        translation: 'Боль в левом плече.',
+      }).findings.map((finding) => finding.code)
+    ).toContain('anatomy')
+    expect(
+      assessMedicalFidelity({
+        source: 'Pain in the knee and the shoulder.',
+        translation: 'Боль в плече.',
+      }).findings.map((finding) => finding.code)
+    ).not.toContain('anatomy')
+  })
+
+  it('flags a changed route only when a known drug is in the utterance', () => {
+    expect(
+      assessMedicalFidelity({
+        source: 'Take metoprolol orally.',
+        translation: 'Вводите метопролол внутривенно.',
+      }).findings.map((finding) => finding.code)
+    ).toContain('route')
+    expect(
+      assessMedicalFidelity({
+        source: 'Take metoprolol orally.',
+        translation: 'Принимайте метопролол внутрь.',
+      }).findings
+    ).toEqual([])
+    expect(
+      assessMedicalFidelity({
+        source: 'Take it orally.',
+        translation: 'Вводите внутривенно.',
+      }).findings.map((finding) => finding.code)
+    ).not.toContain('route')
+  })
+
+  it('flags before and after exertion without linking a bare duration', () => {
+    expect(
+      assessMedicalFidelity({
+        source: 'Shortness of breath after exercise.',
+        translation: 'Одышка до нагрузки.',
+      }).findings.map((finding) => finding.code)
+    ).toContain('relation')
+    expect(
+      assessMedicalFidelity({
+        source: 'Shortness of breath after exercise.',
+        translation: 'Одышка после нагрузки.',
+      }).findings
+    ).toEqual([])
+    expect(
+      assessMedicalFidelity({
+        source: 'The pain started three days ago.',
+        translation: 'Боль началась три дня назад.',
+      }).findings.map((finding) => finding.code)
+    ).not.toContain('relation')
+  })
+
+  it('catches a side, site, route, or order in the other translator languages', () => {
+    expect(
+      assessMedicalFidelity({
+        source: 'Dolor en la rodilla izquierda.',
+        translation: 'Douleur au genou droit.',
+      }).findings.map((finding) => finding.code)
+    ).toContain('laterality')
+    expect(
+      assessMedicalFidelity({
+        source: '左膝疼痛。',
+        translation: '右膝が痛い。',
+      }).findings.map((finding) => finding.code)
+    ).toContain('laterality')
+    expect(
+      assessMedicalFidelity({
+        source: 'Dolor en el hígado.',
+        translation: 'Schmerz in der Niere.',
+      }).findings.map((finding) => finding.code)
+    ).toContain('anatomy')
+    expect(
+      assessMedicalFidelity({
+        source: 'Metoprolol por vía oral.',
+        translation: 'Metoprolol intravenös.',
+      }).findings.map((finding) => finding.code)
+    ).toContain('route')
+    expect(
+      assessMedicalFidelity({
+        source: '息切れは運動後です。',
+        translation: 'Khó thở trước khi vận động.',
+      }).findings.map((finding) => finding.code)
+    ).toContain('relation')
+    expect(
+      assessMedicalFidelity({
+        source: 'Bạn phải nghỉ.',
+        translation: 'You must rest.',
+      }).findings.map((finding) => finding.code)
+    ).not.toContain('laterality')
+  })
+
+  it('returns no findings for an empty or incomplete transcript', () => {
+    expect(assessMedicalFidelity({ source: '', translation: '5 mg' }).findings).toEqual([])
+    expect(assessMedicalFidelity({ source: '   ', translation: '' }).findings).toEqual([])
+    expect(assessMedicalFidelity({ source: 'Take 5 mg.', translation: '' }).findings).toEqual([])
   })
 
   it('flags a changed dose, unit, and frequency', () => {

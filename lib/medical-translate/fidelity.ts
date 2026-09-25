@@ -27,11 +27,19 @@ export type FidelityCode =
   | 'term'
   | 'diagnosis'
   | 'abbreviation'
+  | 'laterality'
+  | 'route'
+  | 'anatomy'
+  | 'relation'
 
 export type FidelityFinding = {
   severity: 'critical' | 'important'
   code: FidelityCode
   detail: string
+  /** Short span taken from the source utterance. Omitted when the match is not unique. */
+  sourceFragment?: string
+  /** Short span taken from the translation. Omitted when the match is not unique. */
+  translationFragment?: string
 }
 
 export type MedicalFidelityReport = {
@@ -47,6 +55,7 @@ export type MedicalFidelityInput = {
 type Quantity = {
   value: string
   unit: string
+  surface: string
 }
 
 const NUMBER_WORDS: Record<string, string> = {
@@ -56,7 +65,6 @@ const NUMBER_WORDS: Record<string, string> = {
   одного: '1',
   одной: '1',
   one: '1',
-  once: '1',
   два: '2',
   две: '2',
   двух: '2',
@@ -328,7 +336,8 @@ function extractQuantities(raw: string): Quantity[] {
   const claim = (start: number, end: number, value: string, unit: string) => {
     if (!value || overlaps(taken, start, end)) return
     taken.push({ start, end })
-    found.push({ value, unit })
+    const surface = text.slice(start, end).replace(/\s+/g, ' ').trim()
+    found.push({ value, unit, surface })
   }
 
   const bp =
@@ -444,7 +453,7 @@ function mismatchCode(item: Quantity, others: Quantity[]): FidelityCode {
 
 function compareQuantities(source: Quantity[], target: Quantity[]): FidelityFinding[] {
   const used = new Set<number>()
-  const findings: FidelityFinding[] = []
+  const unmatchedSource: Quantity[] = []
   for (const item of source) {
     const index = target.findIndex(
       (candidate, candidateIndex) =>
@@ -454,20 +463,38 @@ function compareQuantities(source: Quantity[], target: Quantity[]): FidelityFind
       used.add(index)
       continue
     }
-    findings.push({
-      severity: 'critical',
-      code: mismatchCode(item, target),
-      detail: `${item.value} ${item.unit}`,
-    })
+    unmatchedSource.push(item)
   }
-  for (let index = 0; index < target.length; index += 1) {
-    if (used.has(index)) continue
-    const item = target[index]
-    findings.push({
-      severity: 'critical',
-      code: mismatchCode(item, source),
-      detail: `extra ${item.value} ${item.unit}`,
-    })
+  const unmatchedTarget = target.filter((_, index) => !used.has(index))
+  const findings: FidelityFinding[] = []
+  const groups = new Set([...unmatchedSource, ...unmatchedTarget].map((item) => family(item.unit)))
+  for (const group of groups) {
+    const left = unmatchedSource.filter((item) => family(item.unit) === group)
+    const right = unmatchedTarget.filter((item) => family(item.unit) === group)
+    if (left.length === 1 && right.length === 1 && left[0].surface && right[0].surface) {
+      findings.push({
+        severity: 'critical',
+        code: mismatchCode(left[0], right),
+        detail: `${left[0].value} ${left[0].unit}`,
+        sourceFragment: left[0].surface,
+        translationFragment: right[0].surface,
+      })
+      continue
+    }
+    for (const item of left) {
+      findings.push({
+        severity: 'critical',
+        code: mismatchCode(item, right),
+        detail: `${item.value} ${item.unit}`,
+      })
+    }
+    for (const item of right) {
+      findings.push({
+        severity: 'critical',
+        code: mismatchCode(item, left),
+        detail: `extra ${item.value} ${item.unit}`,
+      })
+    }
   }
   return findings
 }
@@ -531,8 +558,15 @@ function anchorNegated(text: string, forms: readonly string[]): boolean | null {
 
 function pushUnique(findings: FidelityFinding[], finding: FidelityFinding): void {
   const key = `${finding.severity}:${finding.code}`
-  if (findings.some((item) => `${item.severity}:${item.code}` === key)) return
-  findings.push(finding)
+  const index = findings.findIndex((item) => `${item.severity}:${item.code}` === key)
+  if (index < 0) {
+    findings.push(finding)
+    return
+  }
+  const current = findings[index]
+  if (!current.sourceFragment && finding.sourceFragment && finding.translationFragment) {
+    findings[index] = finding
+  }
 }
 
 function drugIds(text: string): string[] {
@@ -574,6 +608,93 @@ function hasNumericHedge(text: string): boolean {
   const cjk = /(?:大约|大概|約)\s*[0-9一二两三兩]/u
   const after = new RegExp(`${amount}\\s*(?:左右|くらい|ぐらい)`, 'iu')
   return latin.test(normalized) || cjk.test(normalized) || after.test(normalized)
+}
+
+function matchedForm(text: string, forms: readonly string[]): string | undefined {
+  return forms.find((form) => textHasForm(text, form))
+}
+
+function singleEntry(text: string, entries: readonly GlossaryEntry[]): { id: string; surface: string } | null {
+  const hits = entries.flatMap((entry) => {
+    const surface = matchedForm(text, entry.forms)
+    return surface ? [{ id: entry.id, surface }] : []
+  })
+  if (hits.length !== 1) return null
+  return hits[0]
+}
+
+const AFTER_LOAD = [
+  'after exercise', 'after exertion', 'после нагрузки', 'после физической нагрузки',
+  'despues del ejercicio', 'despues del esfuerzo', 'apres l effort', 'apres l exercice',
+  'nach belastung', 'nach dem training', 'dopo lo sforzo', 'dopo l esercizio',
+  'apos o exercicio', 'depois do exercicio', '运动后', '運動後', '労作後', '운동 후',
+  'व्यायाम के बाद', 'setelah olahraga', 'sau khi vận động', 'بعد المجهود',
+  'egzersizden sonra', 'після навантаження', 'selepas senaman', 'po wysiłku',
+]
+const BEFORE_LOAD = [
+  'before exercise', 'before exertion', 'до нагрузки', 'до физической нагрузки',
+  'antes del ejercicio', 'antes del esfuerzo', 'avant l effort', 'avant l exercice',
+  'vor belastung', 'vor dem training', 'prima dello sforzo', 'prima dellesercizio',
+  'antes do exercicio', '运动前', '労作前', '운동 전',
+  'व्यायाम से पहले', 'sebelum olahraga', 'trước khi vận động', 'قبل المجهود',
+  'egzersizden önce', 'до навантаження', 'sebelum senaman', 'przed wysiłkiem',
+]
+
+function compareClinical(source: string, translation: string): FidelityFinding[] {
+  const findings: FidelityFinding[] = []
+  const sourceSide = singleEntry(source, MEDICAL_GLOSSARY.laterality)
+  const translatedSide = singleEntry(translation, MEDICAL_GLOSSARY.laterality)
+  if (sourceSide && translatedSide && sourceSide.id !== translatedSide.id) {
+    findings.push({
+      severity: 'critical',
+      code: 'laterality',
+      detail: `${sourceSide.id}->${translatedSide.id}`,
+      sourceFragment: sourceSide.surface,
+      translationFragment: translatedSide.surface,
+    })
+  }
+
+  const sourceSite = singleEntry(source, MEDICAL_GLOSSARY.anatomy)
+  const translatedSite = singleEntry(translation, MEDICAL_GLOSSARY.anatomy)
+  if (sourceSite && translatedSite && sourceSite.id !== translatedSite.id) {
+    findings.push({
+      severity: 'critical',
+      code: 'anatomy',
+      detail: `${sourceSite.id}->${translatedSite.id}`,
+      sourceFragment: sourceSite.surface,
+      translationFragment: translatedSite.surface,
+    })
+  }
+
+  const sourceHasDrug = drugIds(source).length > 0
+  const sourceRoute = singleEntry(source, MEDICAL_GLOSSARY.routes)
+  const translatedRoute = singleEntry(translation, MEDICAL_GLOSSARY.routes)
+  if (sourceHasDrug && sourceRoute && translatedRoute && sourceRoute.id !== translatedRoute.id) {
+    findings.push({
+      severity: 'critical',
+      code: 'route',
+      detail: `${sourceRoute.id}->${translatedRoute.id}`,
+      sourceFragment: sourceRoute.surface,
+      translationFragment: translatedRoute.surface,
+    })
+  }
+
+  const sourceAfter = matchedForm(source, AFTER_LOAD)
+  const sourceBefore = matchedForm(source, BEFORE_LOAD)
+  const translatedAfter = matchedForm(translation, AFTER_LOAD)
+  const translatedBefore = matchedForm(translation, BEFORE_LOAD)
+  const sourceOrder = sourceAfter && !sourceBefore ? 'after' : sourceBefore && !sourceAfter ? 'before' : null
+  const translatedOrder = translatedAfter && !translatedBefore ? 'after' : translatedBefore && !translatedAfter ? 'before' : null
+  if (sourceOrder && translatedOrder && sourceOrder !== translatedOrder) {
+    findings.push({
+      severity: 'important',
+      code: 'relation',
+      detail: `${sourceOrder}->${translatedOrder}`,
+      sourceFragment: sourceOrder === 'after' ? sourceAfter : sourceBefore,
+      translationFragment: translatedOrder === 'after' ? translatedAfter : translatedBefore,
+    })
+  }
+  return findings
 }
 
 function uncertain(text: string): boolean {
@@ -637,6 +758,10 @@ export function assessMedicalFidelity(input: MedicalFidelityInput): MedicalFidel
     const sourceHasShort = entry.forms.some((form) => form.length <= 4 && hasMarker(source, form))
     if (!sourceHasShort || entryAppears(translation, entry.forms)) continue
     pushUnique(findings, { severity: 'important', code: 'abbreviation', detail: entry.id })
+  }
+
+  for (const finding of compareClinical(source, translation)) {
+    pushUnique(findings, finding)
   }
 
   const prn = MEDICAL_GLOSSARY.abbreviations.find((entry) => entry.id === 'prn')

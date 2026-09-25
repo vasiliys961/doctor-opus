@@ -79,12 +79,28 @@ export const MEDICAL_GLOSSARY = {
       expansions: ['cerebral palsy', 'chest pain', 'детский церебральный'],
       ambiguous: true,
     },
-  ],
+  ] as GlossaryEntry[],
   anatomy: [
-    { id: 'heart', forms: ['сердц', 'heart'] },
-    { id: 'lung', forms: ['легк', 'lung'] },
-    { id: 'arm', forms: ['рук', 'arm', 'hand'] },
+    { id: 'heart', forms: ['сердц', 'серце', 'heart', 'corazon', 'coeur', 'herz', 'cuore', '心脏', '心臓', '심장', 'हृदय', 'jantung', 'tim', 'قلب', 'kalp', 'serce'] },
+    { id: 'lung', forms: ['легк', 'леген', 'lung', 'pulmones', 'el pulmon', 'poumon', 'lunge', 'polmone', '肺部', '肺', '폐', 'फेफड़', 'paru', 'phổi', 'رئة', 'akciğer', 'płuco'] },
+    { id: 'arm', forms: ['рук', 'рука', 'arm', 'hand', 'brazo', 'le bras', 'au bras', 'braccio', '手臂', '腕', '팔', 'बांह', 'lengan', 'cánh tay', 'ذراع', 'kol', 'ramię'] },
     { id: 'pulmonary-artery', forms: ['легочной артери', 'pulmonary artery'] },
+    { id: 'knee', forms: ['колен', 'колін', 'knee', 'rodilla', 'genou', 'knie', 'ginocchio', 'joelho', '膝盖', '膝', '무릎', 'घुटन', 'lutut', 'đầu gối', 'ركبة', 'diz', 'kolano'] },
+    { id: 'shoulder', forms: ['плеч', 'shoulder', 'hombro', 'epaule', 'schulter', 'spalla', 'ombro', '肩膀', '肩', '어깨', 'कंध', 'bahu', 'bả vai', 'كتف', 'omuz', 'bark'] },
+    { id: 'liver', forms: ['печен', 'печін', 'liver', 'higado', 'foie', 'leber', 'fegato', 'figado', '肝脏', '肝臓', '간', 'यकृत', 'hati', 'gan', 'كبد', 'karaciğer', 'wątroba'] },
+    { id: 'kidney', forms: ['почк', 'нирк', 'kidney', 'rinon', 'reins', 'niere', 'i reni', 'rim', 'rins', '肾脏', '腎臓', '신장', 'गुर्द', 'ginjal', 'thận', 'كلية', 'böbrek', 'buah pinggang', 'nerka'] },
+  ],
+  laterality: [
+    { id: 'left', forms: ['left', 'лево', 'левый', 'левая', 'левое', 'левой', 'левом', 'левую', 'izquierd', 'gauche', 'links', 'sinistra', 'sinistro', 'esquerd', '左侧', '左边', '左側', '左', '왼쪽', '좌측', 'बाईं', 'बायां', 'kiri', 'bên trái', 'أيسر', 'يسار', 'sol', 'ліви', 'ліво', 'lewy', 'lewa', 'lewe'] },
+    { id: 'right', forms: ['right', 'право', 'правый', 'правая', 'правое', 'правой', 'правом', 'правую', 'derech', 'droit', 'rechts', 'destra', 'direit', '右侧', '右边', '右側', '右', '오른쪽', '우측', 'दाईं', 'दायां', 'kanan', 'bên phải', 'أيمن', 'يمين', 'sağ', 'правий', 'права', 'праве', 'prawy', 'prawa', 'prawe'] },
+    { id: 'bilateral', forms: ['bilateral', 'both sides', 'двусторон', 'bilateral', 'bilatéral', 'beidseitig', 'bilaterale', '双侧', '両側', '양쪽', 'दोनों तरफ़', 'kedua sisi', 'hai bên', 'كلا الجانبين', 'iki taraf', 'двосторон', 'kedua-dua belah', 'obustron'] },
+  ],
+  routes: [
+    { id: 'oral', forms: ['orally', 'by mouth', 'per os', 'внутрь', 'пероральн', 'via oral', 'por la boca', 'voie orale', 'durch den mund', 'per bocca', 'pela boca', '口服', '経口', '경구', 'मुंह से', 'diminum', 'đường uống', 'عن طريق الفم', 'ağızdan', 'перорально', 'melalui mulut', 'doustnie'] },
+    { id: 'intravenous', forms: ['intravenously', 'intravenous', 'внутривенн', 'intravenos', 'intraveineus', 'endovenos', '静脉', '静脈', '정맥', 'नस में', 'intravena', 'tĩnh mạch', 'عن طريق الوريد', 'damardan', 'внутрішньовен', 'dożylnie'] },
+    { id: 'intramuscular', forms: ['intramuscularly', 'intramuscular', 'внутримышечн', 'intramusculaire', 'intramuskulär', 'intramuscolare', '肌肉注射', '筋肉', '근육', 'मांसपेशी', 'suntikan otot', 'tiêm bắp', 'في العضل', 'kas içine', 'внутрішньомʼязов', 'domięśniow'] },
+    { id: 'subcutaneous', forms: ['subcutaneously', 'subcutaneous', 'подкожн', 'subcutan', 'sous-cutan', 'sottocutan', 'subkutan', '皮下', '피하', 'bawah kulit', 'تحت الجلد', 'deri altına', 'підшкірн', 'podskórn'] },
+    { id: 'topical', forms: ['topically', 'topical', 'местно', 'наружно', 'topica', 'topique', 'äußerlich', '外用', '외용', 'oleskan', 'bôi ngoài', 'موضعي', 'haricen', 'зовнішньо', 'miejscowo'] },
   ],
   units: [
     { id: 'mcg', forms: ['мкг', 'mcg', 'ug', '微克', 'マイクログラム'] },
@@ -143,6 +159,7 @@ export function normalizeMedicalText(text: string): string {
     .replace(/[úùûü]/g, 'u')
     .replace(/ñ/g, 'n')
     .replace(/ç/g, 'c')
+    .replace(/ß/g, 'ss')
     .replace(/₂/g, '2')
     .replace(/μ/g, 'u')
     .replace(/[’']/g, '')

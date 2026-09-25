@@ -5,6 +5,10 @@ import type { Locale } from '@/lib/i18n/config'
 import { translatorUi, type TranslatorUi } from '@/lib/i18n/translator-ui'
 import { REALTIME_TRANSLATION_CREDITS_PER_MINUTE } from '@/lib/cost-calculator'
 import { recordUsageCost } from '@/lib/simple-logger'
+import { fidelityDisplayLines, fidelityLineText } from '@/lib/medical-translate/fidelity-notice'
+import { TurnGuard } from '@/lib/realtime-turn'
+import { playTranslateCue, translationCue, unlockTranslateCue } from '@/lib/translate-cue'
+import type { FidelityFinding } from '@/lib/medical-translate/fidelity'
 import {
   RealtimeTranslator,
   TRANSLATOR_LANGUAGES,
@@ -14,6 +18,51 @@ import {
   type MedicalFidelityReport,
   type TranslatePhase,
 } from '@/lib/realtime-translate'
+
+function FidelityAlert({
+  copy,
+  findings,
+  roleLabel,
+  languageLabel,
+}: {
+  copy: TranslatorUi
+  findings: FidelityFinding[]
+  roleLabel: string
+  languageLabel?: string
+}) {
+  const lines = fidelityDisplayLines({ findings })
+  const critical = lines.some((line) => line.severity === 'critical')
+  return (
+    <div
+      role={critical ? 'alert' : 'status'}
+      className={
+        critical
+          ? 'mt-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm leading-relaxed text-red-950'
+          : 'mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950'
+      }
+    >
+      <p className="font-semibold">
+        {critical ? copy.fidelityCritical : copy.fidelityReview}
+        {' · '}
+        {roleLabel}
+        {languageLabel ? ` · ${languageLabel}` : ''}
+      </p>
+      <ul className="mt-1 list-disc pl-5">
+        {lines.map((line) => (
+          <li key={`${line.severity}:${line.code}:${line.sourceFragment ?? ''}:${line.translationFragment ?? ''}`} className="break-words">
+            {fidelityLineText(copy.fidelityCode[line.code] ?? copy.fidelityWarning, line.sourceFragment, line.translationFragment)}
+          </li>
+        ))}
+      </ul>
+      {critical ? (
+        <>
+          <p className="mt-1 font-semibold">{copy.fidelityConfirm}</p>
+          <p>{copy.fidelityAskRepeat}</p>
+        </>
+      ) : null}
+    </div>
+  )
+}
 
 function describeError(error: unknown, copy: TranslatorUi): string {
   if (!(error instanceof TranslatorError)) return copy.errors.generic
@@ -58,13 +107,17 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
   const [sourceTranscript, setSourceTranscript] = useState('')
   const [translatedTranscript, setTranslatedTranscript] = useState('')
   const [fidelity, setFidelity] = useState<MedicalFidelityReport | null>(null)
+  const [warningRole, setWarningRole] = useState('')
+  const [warningLanguage, setWarningLanguage] = useState('')
+  const [cueOn, setCueOn] = useState(true)
+  const [columnFlash, setColumnFlash] = useState<'start' | 'end' | null>(null)
   const [voicePlaying, setVoicePlaying] = useState(false)
   const [voiceBlocked, setVoiceBlocked] = useState(false)
   const [sessionCredits, setSessionCredits] = useState(0)
   const [speaker, setSpeaker] = useState<'doctor' | 'patient' | null>(null)
   const [handingOver, setHandingOver] = useState(false)
   const speakerRef = useRef<'doctor' | 'patient' | null>(null)
-  const handoffToken = useRef(0)
+  const turns = useRef(new TurnGuard())
   const accruedMs = useRef(0)
   const runningSince = useRef<number | null>(null)
   const billedMs = useRef(0)
@@ -74,6 +127,8 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
   const countedTranslatorCall = useRef(false)
   const copyRef = useRef(copy)
   copyRef.current = copy
+  const cueOnRef = useRef(true)
+  cueOnRef.current = cueOn
 
   const doctor = useMemo(
     () => findTranslatorLanguage(doctorLanguage),
@@ -97,6 +152,7 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
   }
 
   const stopForBilling = (message: string) => {
+    turns.current.close()
     billingBlocked.current = true
     clientRef.current?.disconnect()
     setPhase('error')
@@ -188,7 +244,7 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
   }
 
   const end = () => {
-    handoffToken.current += 1
+    turns.current.close()
     rememberSpeaker(null)
     setHandingOver(false)
     clientRef.current?.disconnect()
@@ -196,15 +252,18 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
     setVoicePlaying(false)
     setVoiceBlocked(false)
     setFidelity(null)
+    setSourceTranscript('')
+    setTranslatedTranscript('')
   }
 
-  const begin = async (source: string, target: string) => {
+  const begin = async (source: string, target: string, keepWarning = false) => {
     setError('')
     setSourceTranscript('')
     setTranslatedTranscript('')
-    setFidelity(null)
+    if (!keepWarning) setFidelity(null)
     setVoicePlaying(false)
     setVoiceBlocked(false)
+    const epoch = turns.current.capturedEpoch()
     try {
       await clientRef.current?.connect({
         sourceLanguage: source,
@@ -212,7 +271,23 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
         onPhase: setPhase,
         onSourceTranscript: setSourceTranscript,
         onTranslatedTranscript: setTranslatedTranscript,
-        onFidelity: setFidelity,
+        onUtteranceEnd: () => {
+          if (cueOnRef.current) playTranslateCue('end')
+          setColumnFlash('end')
+        },
+        onFidelity: (report) => {
+          if (!turns.current.acceptsFidelity(epoch)) return
+          if (!report) {
+            setFidelity(null)
+            return
+          }
+          const ui = copyRef.current
+          const patientSpeaking = speakerRef.current === 'patient'
+          const code = patientSpeaking ? languagesRef.current.doctor : languagesRef.current.patient
+          setWarningRole(patientSpeaking ? ui.doctorHears : ui.translation)
+          setWarningLanguage(findTranslatorLanguage(code)?.label ?? '')
+          setFidelity(report)
+        },
         onVoiceOutput: (playing) => {
           setVoicePlaying(playing)
           setVoiceBlocked(!playing)
@@ -228,6 +303,7 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
   }
 
   const start = async () => {
+    unlockTranslateCue()
     setError('')
     try {
       const response = await fetch('/api/realtime-translate/usage', {
@@ -269,21 +345,24 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
       setError(copy.turnUnspeakable)
       return
     }
-    const token = handoffToken.current + 1
-    handoffToken.current = token
+    const token = turns.current.startHandoff()
+    if (token === null) return
     setHandingOver(true)
     setError('')
     clientRef.current?.muteInput()
     try {
       await clientRef.current?.whenQuiet()
-      if (token !== handoffToken.current) return
-      await begin(source, target)
-      if (token !== handoffToken.current) return
+      if (!turns.current.isHandoff(token)) return
+      await begin(source, target, true)
+      if (!turns.current.isHandoff(token)) return
       rememberSpeaker(next)
     } catch {
-      if (token === handoffToken.current) rememberSpeaker(current)
+      if (turns.current.isHandoff(token)) rememberSpeaker(current)
     } finally {
-      if (token === handoffToken.current) setHandingOver(false)
+      if (turns.current.isHandoff(token)) {
+        turns.current.finishHandoff(token)
+        setHandingOver(false)
+      }
     }
   }
 
@@ -297,10 +376,22 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
   }
 
   const enableSound = async () => {
+    unlockTranslateCue()
     const playing = await clientRef.current?.resumePlayback()
     setVoicePlaying(Boolean(playing))
     setVoiceBlocked(!playing)
   }
+
+  const phaseRef = useRef(phase)
+  useEffect(() => {
+    const cue = translationCue(phaseRef.current, phase)
+    phaseRef.current = phase
+    if (!cue) return
+    if (cueOnRef.current) playTranslateCue(cue)
+    setColumnFlash(cue)
+    const timer = window.setTimeout(() => setColumnFlash(null), 700)
+    return () => window.clearTimeout(timer)
+  }, [phase])
 
   const voiceLive = active && (voicePlaying || phase === 'listening' || phase === 'translating')
   const patientTurn = speaker === 'patient'
@@ -315,24 +406,11 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{copy.title}</h1>
           <p className="mt-1 text-sm text-slate-600">{copy.subtitle}</p>
         </div>
-        <div
-          role="status"
-          aria-live="polite"
-          className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ${phaseClass(phase)}`}
-        >
-          <span
-            className={`h-2 w-2 rounded-full ${
-              phase === 'translating' || phase === 'listening' ? 'bg-current animate-pulse' : 'bg-current'
-            }`}
-            aria-hidden
-          />
-          {copy.phase[phase]}
-        </div>
       </div>
 
-      <p className="mt-3 text-sm text-slate-600">{copy.intro}</p>
+      <p className="mt-2 text-sm text-slate-600">{copy.intro}</p>
 
-      <div className="mt-6 grid grid-cols-1 items-end gap-4 sm:grid-cols-[1fr_auto_1fr]">
+      <div className="mt-3 grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_auto_1fr]">
         <label className="block text-sm font-medium text-slate-800">
           {copy.doctorLanguage}
           <span className="mt-0.5 block text-xs font-normal text-slate-500">{copy.doctorHint}</span>
@@ -389,7 +467,7 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
         </label>
       </div>
 
-      <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950">
+      <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950">
         {heardOnly.map((language) => language.label).join(', ')}: {copy.voiceOnly}
       </p>
 
@@ -398,12 +476,36 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
       )}
 
       {(active || handingOver) && (
-        <p className="mt-6 rounded-lg bg-teal-700 px-4 py-3 text-base font-semibold text-white" role="status">
+        <p className="mt-3 rounded-lg bg-teal-700 px-4 py-3 text-base font-semibold text-white" role="status">
           {handingOver ? copy.handingOver : patientTurn ? copy.patientSpeaking : copy.doctorSpeaking}
         </p>
       )}
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
+      <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-700">
+        {copy.openaiNotice}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div
+        role="status"
+        aria-live="polite"
+        className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ${phaseClass(phase)}`}
+      >
+        <span
+          className={`h-2 w-2 rounded-full ${
+            phase === 'translating' || phase === 'listening' ? 'bg-current animate-pulse' : 'bg-current'
+          }`}
+          aria-hidden
+        />
+        {copy.phase[phase]}
+      </div>
+      <button
+        type="button"
+        onClick={() => setCueOn((on) => !on)}
+        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800"
+        aria-pressed={cueOn}
+      >
+        {cueOn ? copy.cueOn : copy.cueOff}
+      </button>
         <button
           type="button"
           onClick={start}
@@ -445,7 +547,7 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
       )}
 
       <div
-        className={`mt-6 flex flex-col gap-2 rounded-xl px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between ${
+        className={`mt-3 flex flex-col gap-2 rounded-xl px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between ${
           voiceLive ? 'bg-teal-50 text-teal-950 ring-1 ring-teal-200' : 'bg-slate-50 text-slate-600'
         }`}
       >
@@ -474,13 +576,13 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
       </div>
       <p className="mt-2 text-xs text-slate-500">{copy.headphones}</p>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-800">
             {patientTurn ? copy.patientSaid : copy.sourceSpeech}
             {heardLanguage ? ` · ${heardLanguage.label}` : ''}
           </h2>
-          <p className="mt-2 min-h-28 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-800">
+          <p className="mt-1 min-h-16 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-800">
             {sourceTranscript || (patientTurn ? copy.patientSourceEmpty : copy.sourceEmpty)}
           </p>
         </div>
@@ -489,13 +591,24 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
             {patientTurn ? copy.doctorHears : copy.translation}
             {spokenLanguage ? ` · ${spokenLanguage.label}` : ''}
           </h2>
-          <p className="mt-2 min-h-28 whitespace-pre-wrap rounded-lg bg-teal-50/60 p-3 text-sm text-slate-800">
+          <p
+            className={`mt-1 min-h-16 whitespace-pre-wrap rounded-lg p-3 text-sm text-slate-800 transition-colors ${
+              columnFlash === 'start'
+                ? 'bg-sky-100 ring-2 ring-sky-500'
+                : columnFlash === 'end'
+                  ? 'bg-teal-50 ring-2 ring-teal-500'
+                  : 'bg-teal-50/60'
+            }`}
+          >
             {translatedTranscript || (patientTurn ? copy.doctorHearsEmpty : copy.translationEmpty)}
           </p>
-          {fidelity && (
-            <p role="status" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950">
-              {copy.fidelityWarning}
-            </p>
+          {fidelity && fidelity.findings.length > 0 && (
+            <FidelityAlert
+              copy={copy}
+              findings={fidelity.findings}
+              roleLabel={warningRole}
+              languageLabel={warningLanguage}
+            />
           )}
         </div>
       </div>

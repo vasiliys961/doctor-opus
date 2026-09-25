@@ -100,6 +100,7 @@ export interface RealtimeTranslateOptions {
   onTranslatedTranscript?: (text: string) => void
   onVoiceOutput?: (playing: boolean) => void
   onFidelity?: (report: MedicalFidelityReport | null) => void
+  onUtteranceEnd?: () => void
   onError?: (error: TranslatorError) => void
 }
 
@@ -192,6 +193,8 @@ export class RealtimeTranslator {
   private listenTimer: ReturnType<typeof setTimeout> | null = null
   private lostTimer: ReturnType<typeof setTimeout> | null = null
   private fidelityTimer: ReturnType<typeof setTimeout> | null = null
+  private endCueTimer: ReturnType<typeof setTimeout> | null = null
+  private phraseDoneAt = 0
   private lastOutputAt = 0
 
   async connect(options: RealtimeTranslateOptions): Promise<void> {
@@ -419,9 +422,12 @@ export class RealtimeTranslator {
     if (this.listenTimer) clearTimeout(this.listenTimer)
     if (this.lostTimer) clearTimeout(this.lostTimer)
     if (this.fidelityTimer) clearTimeout(this.fidelityTimer)
+    if (this.endCueTimer) clearTimeout(this.endCueTimer)
     this.listenTimer = null
     this.lostTimer = null
     this.fidelityTimer = null
+    this.endCueTimer = null
+    this.phraseDoneAt = 0
     this.abort?.abort()
     this.abort = null
     this.localStream?.getTracks().forEach((track) => track.stop())
@@ -477,6 +483,7 @@ export class RealtimeTranslator {
     if (outputDelta) {
       if (!this.outputOpen) {
         this.outputOpen = true
+        this.phraseDoneAt = 0
         options.onFidelity?.(null)
       }
       this.translatedText += event.delta
@@ -484,6 +491,14 @@ export class RealtimeTranslator {
       this.markTranslating(options, alive)
     } else if (outputAudio) {
       this.markTranslating(options, alive)
+      if (this.phraseDoneAt > 0 && Date.now() - this.phraseDoneAt < 2500) {
+        this.scheduleUtteranceEnd(options, alive)
+      }
+    }
+
+    if (event.type === 'session.output_audio.done' || (event.type === 'session.output_transcript.done' && event.transcript)) {
+      if (event.type === 'session.output_transcript.done') this.phraseDoneAt = Date.now()
+      this.scheduleUtteranceEnd(options, alive)
     }
 
     if (event.type === 'session.output_transcript.done' && event.transcript) {
@@ -493,6 +508,16 @@ export class RealtimeTranslator {
       this.outputOpen = false
       this.queueFidelity(options, alive)
     }
+  }
+
+  private scheduleUtteranceEnd(options: RealtimeTranslateOptions, alive: () => boolean): void {
+    if (this.endCueTimer) clearTimeout(this.endCueTimer)
+    this.endCueTimer = setTimeout(() => {
+      this.endCueTimer = null
+      this.phraseDoneAt = 0
+      if (!alive()) return
+      options.onUtteranceEnd?.()
+    }, 400)
   }
 
   private queueFidelity(options: RealtimeTranslateOptions, alive: () => boolean): void {

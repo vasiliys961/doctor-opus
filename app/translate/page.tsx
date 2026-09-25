@@ -8,8 +8,8 @@ export default async function TranslatePage() {
   const copy = translatorUi[locale]
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-8">
-      <div className="mb-4">
+    <div className="container mx-auto max-w-3xl px-4 py-4">
+      <div className="mb-2">
         <Link href="/" className="text-sm font-medium text-teal-700 hover:text-teal-800">
           {copy.backHome}
         </Link>
