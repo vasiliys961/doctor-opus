@@ -161,7 +161,7 @@ export default function AnalysisModeSelector({
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
-                GPT-5.6 Terra ⚡️
+                GPT-5.6 Sol ⚡️
                 <div className="text-[9px] font-normal opacity-80">Deeper reasoning for complex cases</div>
               </button>
             </div>

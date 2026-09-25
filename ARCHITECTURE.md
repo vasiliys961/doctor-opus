@@ -127,7 +127,7 @@ User uploads image
        ▼
 [API] /api/analyze/image  (Next.js Route Handler)
   ├─ Stage 1: Gemini 3 Flash → structured JSON description
-  └─ Stage 2: Selected model (Sonnet 5 / Opus 5.5 / GPT-5.6 Terra) → clinical directive
+  └─ Stage 2: Selected model (Sonnet 5 / Opus 5.5 / GPT-5.6 Sol) → clinical directive
        │
        ▼ SSE stream
 [Browser] AnalysisResult.tsx
@@ -146,7 +146,7 @@ Physician dictates / types unsorted notes
        │
        ▼
 [API] /api/analyze/protocol
-  └─ Selected specialty template (SOAP / H&P) + GPT-5.6 Terra or Sonnet 5
+  └─ Selected specialty template (SOAP / H&P) + GPT-5.6 Sol or Sonnet 5
        │
        ▼
 Structured clinical note (.docx export)
@@ -216,12 +216,12 @@ feedback (id, user_id, analysis_type, specialty, correctness,
 
 | Use Case | Recommended Model | Reason |
 |---|---|---|
-| General X-Ray / MRI | GPT-5.6 Terra | Best visual accuracy (80% of cases) |
+| General X-Ray / MRI | GPT-5.6 Sol | Best visual accuracy (80% of cases) |
 | Fractures / Bone pathology | Claude Sonnet 5 | 83% accuracy on skeletal studies |
 | Complex cases / Genetics | Claude Opus 5.5 | Deep clinical reasoning |
 | OCR / Data extraction | Gemini 3 Flash | Speed + cost efficiency |
 | Clinical guidelines search | Claude Opus 5.5 | Synthesis + evidence depth |
-| Voice protocol generation | GPT-5.6 Terra or Sonnet 5 | Structured output quality |
+| Voice protocol generation | GPT-5.6 Sol or Sonnet 5 | Structured output quality |
 
 ---
 

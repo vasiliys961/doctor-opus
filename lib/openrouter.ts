@@ -22,7 +22,7 @@ export const MODELS = {
   OPUS: 'anthropic/claude-opus-5.5',                         // Claude Opus 5.5
   OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 5.5, rollback: VALIDATED_OPUS_MODEL=4.7
   SONNET: 'anthropic/claude-sonnet-5',                   // Claude Sonnet 5
-  GPT_5_2: 'openai/gpt-5.6-terra',                  // GPT-5.6 Terra (legacy key name kept for compatibility)
+  GPT_5_2: 'openai/gpt-5.6-sol',                    // GPT-5.6 Sol (legacy key name kept for compatibility)
   GROK_4_5: 'x-ai/grok-4.5',                         // xAI Grok 4.5
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
@@ -485,7 +485,7 @@ export async function analyzeImageOpusTwoStage(options: {
     const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
     const directiveCriteria = getDirectivePrompt(imageType, prompt, specialty);
     
-    // Шаг 2: Целевая модель (Opus, Sonnet или GPT-5.6 Terra)
+    // Шаг 2: Целевая модель (Opus, Sonnet или GPT-5.6 Sol)
     const textModel = options.targetModel || MODELS.SONNET;
     let stage2ModelUsed = textModel;
     const fallbackModel = getStage2FallbackModel(textModel);

@@ -52,7 +52,7 @@ Semasa menyimpan hasil AI ke rekod pesakit:
 Teras kecerdasan platform ini. Menyokong dialog klinikal terbuka, perbincangan kes, diagnosis pembezaan, tinjauan literatur, dan analisis pelbagai fail.
 
 **Model yang tersedia (dropdown):**
-- **GPT-5.6 Terra** — Terbaik untuk 80% pengimejan, MRI, dan soalan klinikal umum. Ringkas dan cekap.
+- **GPT-5.6 Sol** — Terbaik untuk 80% pengimejan, MRI, dan soalan klinikal umum. Ringkas dan cekap.
 - **Claude Opus 5.5** — Penaakulan paling mendalam. Terbaik untuk kes kompleks, genetik, dan patologi jarang berlaku. Lebih perlahan, kos lebih tinggi.
 - **Claude Sonnet 5** — Seimbang. Cemerlang untuk perundingan pantas dan penilaian patah tulang.
 - **Gemini 3 Flash** — Paling pantas. Ideal untuk rujukan pantas dan pengekstrakan data.
@@ -97,7 +97,7 @@ Menukar imlak tidak berstruktur atau nota bertaip kepada nota klinikal berstrukt
 
 Anda boleh menyesuaikan mana-mana templat untuk memadankan aliran kerja anda. Versi yang disesuaikan boleh disematkan sebagai standard peribadi anda.
 
-**Model disyorkan:** GPT-5.6 Terra atau Claude Sonnet 5.
+**Model disyorkan:** GPT-5.6 Sol atau Claude Sonnet 5.
 
 ---
 
@@ -107,7 +107,7 @@ Buka dari laman utama. Anda bercakap; pesakit mendengar terjemahan.
 
 1. Pilih bahasa anda dan bahasa pesakit.
 2. Tekan **Mula** dan benarkan mikrofon. Gunakan fon kepala.
-3. Lajur kanan ialah apa yang didengar pesakit. **Henti** menukar siapa yang bercakap. **Tamat** menutup sesi.
+3. Lajur kanan ialah apa yang pendengar dengar. **Sekarang pesakit** menyerahkan mikrofon kepada pesakit. **Sekarang doktor** mengembalikannya. Bahasa kekal seperti pilihan anda. **Tamat** menutup sesi.
 4. Jika dos, nombor atau istilah klinikal mungkin tidak sepadan, semak sendiri. Teks tidak dibetulkan secara automatik.
 
 **Kos:** 5.1 kredit seminit semasa mikrofon dihidupkan. Rakaman perbualan untuk protokol klinikal adalah berasingan: 62 kredit sejam.
@@ -149,7 +149,7 @@ Selepas menerima keputusan, anda boleh meneruskan perbualan dengan soalan susula
 - **Digital Caliper:** Seret penanda biru untuk mengukur selang PR, QRS, QT. Kalibrasi menggunakan grid ECG (1 saat = 5 kotak besar pada 25 mm/s)
 - **Search Library:** Selepas analisis, klik untuk mencari kes atau huraian yang sepadan dalam perpustakaan PDF peribadi anda
 
-**Model disyorkan:** GPT-5.6 Terra (umum) · Claude Sonnet 5 (perincian aritmia)
+**Model disyorkan:** GPT-5.6 Sol (umum) · Claude Sonnet 5 (perincian aritmia)
 
 ---
 
@@ -164,7 +164,7 @@ Muat naik imej tunggal atau berbilang (folder atau siri DICOM). Tambah konteks k
 
 **Mod perbandingan:** Dayakan **Before/After** untuk membandingkan dua titik masa atau pandangan secara bersebelahan.
 
-**Model terbaik:** GPT-5.6 Terra (80% kes) · Claude Sonnet 5 (patah tulang, ketepatan 83%)
+**Model terbaik:** GPT-5.6 Sol (80% kes) · Claude Sonnet 5 (patah tulang, ketepatan 83%)
 
 ---
 
@@ -354,7 +354,7 @@ Kredit digunakan apabila menggunakan model AI lanjutan. Carian rujukan mudah dan
 |---|---|
 | Analisis pantas (Gemini 3 Flash) | ~0.3 – 0.8 kr. |
 | Analisis dioptimumkan (Sonnet 5) | ~0.8 – 1.5 kr. |
-| Pengesahan Pakar (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 kr. |
+| Pengesahan Pakar (Opus 5.5 / GPT-5.6 Sol) | ~1.5 – 3.5 kr. |
 | Halaman PDF (Pemprosesan Visi) | ~0.3 kr. setiap halaman |
 | Penterjemah perubatan | 5.1 kr. seminit semasa mikrofon dihidupkan |
 | Rakaman perbualan untuk protokol klinikal | 62 kr. sejam audio |

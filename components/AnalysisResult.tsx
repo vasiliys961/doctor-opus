@@ -325,7 +325,8 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
     if (modelName.includes('opus-5')) return '🧠 Opus 5'
     if (modelName.includes('opus')) return '🧠 Opus'
     if (modelName.includes('sonnet')) return '🤖 Sonnet 5'
-    if (modelName.includes('gpt-5')) return '🚀 GPT-5.6 Terra'
+    if (modelName.includes('gpt-5.6-terra')) return '🚀 GPT-5.6 Terra'
+    if (modelName.includes('gpt-5')) return '🚀 GPT-5.6 Sol'
     if (modelName.includes('fable')) return '🧬 Fable 5.1'
     if (modelName.includes('gemini') || modelName.includes('flash')) return '⚡ Gemini 3.8 Flash'
     return modelName

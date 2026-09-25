@@ -6,7 +6,7 @@ import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } fr
 import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider'
 import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language'
 
-const PRIMARY_MODEL = 'openai/gpt-5.6-terra'
+const PRIMARY_MODEL = 'openai/gpt-5.6-sol'
 const FALLBACK_MODEL = 'anthropic/claude-sonnet-5'
 
 function shouldFallbackFromGpt54(status: number, errorText: string): boolean {

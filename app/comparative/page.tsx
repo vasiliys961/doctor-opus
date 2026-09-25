@@ -136,7 +136,7 @@ export default function ComparativeAnalysisPage() {
       const modelToUse = mode === 'fast' 
         ? 'google/gemini-3.8-flash' 
         : mode === 'optimized' 
-          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra')
+          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol')
           : 'anthropic/claude-opus-5.5'
       
       const formData = new FormData()

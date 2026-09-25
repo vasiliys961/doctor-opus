@@ -52,7 +52,7 @@ When saving an AI result to a patient record:
 The core intelligence of the platform. Supports open-ended clinical dialogue, case discussion, differential diagnosis, literature review, and multi-file analysis.
 
 **Available models (dropdown):**
-- **GPT-5.6 Terra** — Best for 80% of imaging, MRI, and general clinical questions. Concise and efficient.
+- **GPT-5.6 Sol** — Best for 80% of imaging, MRI, and general clinical questions. Concise and efficient.
 - **Claude Opus 5.5** — Deepest reasoning. Best for complex cases, genetics, and rare pathologies. Slower, higher cost.
 - **Claude Sonnet 5** — Balanced. Excellent for quick consultations and fracture assessment.
 - **Gemini 3 Flash** — Fastest. Ideal for quick reference and data extraction.
@@ -97,7 +97,7 @@ Converts unstructured dictation or typed notes into a structured, specialty-spec
 
 You can customize any template to match your workflow. The customized version can be pinned as your personal standard.
 
-**Recommended models:** GPT-5.6 Terra or Claude Sonnet 5.
+**Recommended models:** GPT-5.6 Sol or Claude Sonnet 5.
 
 ---
 
@@ -107,7 +107,7 @@ Open it from the home page. You speak; the patient hears the translation.
 
 1. Choose your language and the patient’s language.
 2. Press **Start** and allow the microphone. Use headphones.
-3. The right column is what the patient hears. **Stop** switches who speaks. **End** closes the session.
+3. The right column is what the listener hears. **Now the patient** passes the microphone to the patient. **Now the doctor** passes it back. The languages stay as you set them. **End** closes the session.
 4. If a dose, number, or clinical term may not match, check it yourself. The text is not corrected automatically.
 
 **Cost:** 5.1 credits per minute while the microphone is on. Recording a conversation for the clinical protocol is separate: 62 credits per hour.
@@ -149,7 +149,7 @@ After receiving results, you can continue the conversation with follow-up questi
 - **Digital Caliper:** Drag blue markers to measure PR, QRS, QT intervals. Calibrate using the ECG grid (1 sec = 5 large cells at 25 mm/s)
 - **Search Library:** After analysis, click to find matching cases or descriptions in your personal PDF library
 
-**Recommended models:** GPT-5.6 Terra (general) · Claude Sonnet 5 (arrhythmia detail)
+**Recommended models:** GPT-5.6 Sol (general) · Claude Sonnet 5 (arrhythmia detail)
 
 ---
 
@@ -164,7 +164,7 @@ Upload single or multiple images (folder or DICOM series). Add clinical context 
 
 **Comparison mode:** Enable **Before/After** to compare two time points or views side-by-side.
 
-**Best models:** GPT-5.6 Terra (80% of cases) · Claude Sonnet 5 (fractures, 83% accuracy)
+**Best models:** GPT-5.6 Sol (80% of cases) · Claude Sonnet 5 (fractures, 83% accuracy)
 
 ---
 
@@ -354,7 +354,7 @@ Credits are consumed when using advanced AI models. Simple reference lookups and
 |---|---|
 | Fast analysis (Gemini 3 Flash) | ~0.3 – 0.8 cr. |
 | Optimized analysis (Sonnet 5) | ~0.8 – 1.5 cr. |
-| Expert Validated (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 cr. |
+| Expert Validated (Opus 5.5 / GPT-5.6 Sol) | ~1.5 – 3.5 cr. |
 | PDF page (Vision processing) | ~0.3 cr. per page |
 | Medical Translator | 5.1 cr. per minute while the microphone is on |
 | Conversation recording for a clinical protocol | 62 cr. per hour of audio |

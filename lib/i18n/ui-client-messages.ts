@@ -1507,7 +1507,7 @@ const subscriptionFallback: SubscriptionPageMessages = {
   clinics: 'For Clinics and Medical Centers',
   modelUsageTitle: 'How models affect cost',
   modelUsageFast: 'Fast Analysis uses Gemini 3.8 Flash for routine screening and lowest cost.',
-  modelUsageOptimized: 'Optimized mode uses Sonnet 5 or GPT-5.6 Terra for balanced quality/cost.',
+  modelUsageOptimized: 'Optimized mode uses Sonnet 5 or GPT-5.6 Sol for balanced quality/cost.',
   modelUsageExpert: 'Expert Validated mode uses Opus 5.5 for high-risk and complex interpretation.',
   modelUsageConsilium: 'Consilium escalates difficult disagreement cases to Fable 5.1 debate rounds, which increases total credit usage only for those complex branches.',
 };

@@ -52,7 +52,7 @@ Ao salvar um resultado de IA no prontuário do paciente:
 A inteligência central da plataforma. Suporta diálogo clínico aberto, discussão de casos, diagnóstico diferencial, revisão de literatura e análise de múltiplos arquivos.
 
 **Modelos disponíveis (menu suspenso):**
-- **GPT-5.6 Terra** — Melhor para 80% de imagens, RM e questões clínicas gerais. Conciso e eficiente.
+- **GPT-5.6 Sol** — Melhor para 80% de imagens, RM e questões clínicas gerais. Conciso e eficiente.
 - **Claude Opus 5.5** — Raciocínio mais profundo. Melhor para casos complexos, genética e patologias raras. Mais lento, custo mais elevado.
 - **Claude Sonnet 5** — Equilibrado. Excelente para consultas rápidas e avaliação de fraturas.
 - **Gemini 3 Flash** — Mais rápido. Ideal para referência rápida e extração de dados.
@@ -97,7 +97,7 @@ Converte ditados não estruturados ou notas digitadas em uma nota clínica estru
 
 Você pode personalizar qualquer modelo para corresponder ao seu fluxo de trabalho. A versão personalizada pode ser fixada como seu padrão pessoal.
 
-**Modelos recomendados:** GPT-5.6 Terra ou Claude Sonnet 5.
+**Modelos recomendados:** GPT-5.6 Sol ou Claude Sonnet 5.
 
 ---
 
@@ -107,7 +107,7 @@ Abra pelo início. Você fala; o paciente ouve a tradução.
 
 1. Escolha o seu idioma e o idioma do paciente.
 2. Pressione **Iniciar** e permita o microfone. Use fones.
-3. A coluna da direita é o que o paciente ouve. **Parar** troca quem fala. **Encerrar** fecha a sessão.
+3. A coluna da direita é o que quem escuta ouve. **Agora o paciente** passa o microfone ao paciente. **Agora o médico** devolve. Os idiomas ficam como você escolheu. **Encerrar** fecha a sessão.
 4. Se uma dose, um número ou um termo clínico pode não corresponder, confira você mesmo. O texto não é corrigido sozinho.
 
 **Custo:** 5,1 créditos por minuto com o microfone ligado. Gravar a conversa para o protocolo clínico é separado: 62 créditos por hora.
@@ -149,7 +149,7 @@ Após receber os resultados, você pode continuar a conversa com perguntas de ac
 - **Compasso Digital:** Arraste os marcadores azuis para medir intervalos PR, QRS, QT. Calibre usando a grade do ECG (1 seg = 5 quadrados grandes a 25 mm/s)
 - **Biblioteca de Busca:** Após a análise, clique para encontrar casos ou descrições correspondentes em sua biblioteca pessoal de PDFs
 
-**Modelos recomendados:** GPT-5.6 Terra (geral) · Claude Sonnet 5 (detalhes de arritmia)
+**Modelos recomendados:** GPT-5.6 Sol (geral) · Claude Sonnet 5 (detalhes de arritmia)
 
 ---
 
@@ -164,7 +164,7 @@ Carregue imagens únicas ou múltiplas (pasta ou série DICOM). Adicione context
 
 **Modo de comparação:** Ative **Antes/Depois** para comparar dois pontos no tempo ou visualizações lado a lado.
 
-**Melhores modelos:** GPT-5.6 Terra (80% dos casos) · Claude Sonnet 5 (fraturas, 83% de precisão)
+**Melhores modelos:** GPT-5.6 Sol (80% dos casos) · Claude Sonnet 5 (fraturas, 83% de precisão)
 
 ---
 
@@ -354,7 +354,7 @@ Créditos são consumidos ao usar modelos de IA avançados. Consultas de referê
 |---|---|
 | Análise rápida (Gemini 3 Flash) | ~0.3 – 0.8 cr. |
 | Análise otimizada (Sonnet 5) | ~0.8 – 1.5 cr. |
-| Validada por Especialista (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 cr. |
+| Validada por Especialista (Opus 5.5 / GPT-5.6 Sol) | ~1.5 – 3.5 cr. |
 | Página de PDF (Processamento de visão) | ~0.3 cr. por página |
 | Tradutor médico | 5,1 cr. por minuto com o microfone ligado |
 | Gravação da conversa para o protocolo clínico | 62 cr. por hora de áudio |

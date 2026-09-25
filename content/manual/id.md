@@ -52,7 +52,7 @@ Saat menyimpan hasil AI ke rekam pasien:
 Inti kecerdasan dari platform ini. Mendukung dialog klinis terbuka, diskusi kasus, diagnosis banding, tinjauan literatur, dan analisis multi-file.
 
 **Model yang tersedia (dropdown):**
-- **GPT-5.6 Terra** — Terbaik untuk 80% pencitraan, MRI, dan pertanyaan klinis umum. Ringkas dan efisien.
+- **GPT-5.6 Sol** — Terbaik untuk 80% pencitraan, MRI, dan pertanyaan klinis umum. Ringkas dan efisien.
 - **Claude Opus 5.5** — Penalaran terdalam. Terbaik untuk kasus kompleks, genetika, dan patologi langka. Lebih lambat, biaya lebih tinggi.
 - **Claude Sonnet 5** — Seimbang. Sangat baik untuk konsultasi cepat dan penilaian fraktur.
 - **Gemini 3 Flash** — Tercepat. Ideal untuk referensi cepat dan ekstraksi data.
@@ -97,7 +97,7 @@ Mengonversi dikte tidak terstruktur atau catatan yang diketik menjadi catatan kl
 
 Anda dapat menyesuaikan templat apa pun agar sesuai dengan alur kerja Anda. Versi yang disesuaikan dapat disematkan sebagai standar pribadi Anda.
 
-**Model yang direkomendasikan:** GPT-5.6 Terra atau Claude Sonnet 5.
+**Model yang direkomendasikan:** GPT-5.6 Sol atau Claude Sonnet 5.
 
 ---
 
@@ -107,7 +107,7 @@ Buka dari beranda. Anda berbicara; pasien mendengar terjemahan.
 
 1. Pilih bahasa Anda dan bahasa pasien.
 2. Tekan **Mulai** dan izinkan mikrofon. Gunakan headphone.
-3. Kolom kanan adalah yang didengar pasien. **Berhenti** mengganti siapa yang berbicara. **Akhiri** menutup sesi.
+3. Kolom kanan adalah yang didengar pendengar. **Sekarang pasien** mengoper mikrofon ke pasien. **Sekarang dokter** mengembalikannya. Bahasa tetap seperti yang Anda pilih. **Akhiri** menutup sesi.
 4. Jika dosis, angka, atau istilah klinis mungkin tidak cocok, periksa sendiri. Teks tidak dikoreksi otomatis.
 
 **Biaya:** 5,1 kredit per menit selama mikrofon menyala. Merekam percakapan untuk protokol klinis terpisah: 62 kredit per jam.
@@ -149,7 +149,7 @@ Setelah menerima hasil, Anda dapat melanjutkan percakapan dengan pertanyaan lanj
 - **Jangka Digital:** Seret penanda biru untuk mengukur interval PR, QRS, QT. Kalibrasi menggunakan kisi EKG (1 detik = 5 kotak besar pada 25 mm/s)
 - **Cari Perpustakaan:** Setelah analisis, klik untuk menemukan kasus atau deskripsi yang cocok di perpustakaan PDF pribadi Anda
 
-**Model yang direkomendasikan:** GPT-5.6 Terra (umum) · Claude Sonnet 5 (detail aritmia)
+**Model yang direkomendasikan:** GPT-5.6 Sol (umum) · Claude Sonnet 5 (detail aritmia)
 
 ---
 
@@ -164,7 +164,7 @@ Unggah satu atau beberapa gambar (folder atau seri DICOM). Tambahkan konteks kli
 
 **Mode perbandingan:** Aktifkan **Sebelum/Sesudah** untuk membandingkan dua titik waktu atau sudut pandang secara berdampingan.
 
-**Model terbaik:** GPT-5.6 Terra (80% kasus) · Claude Sonnet 5 (fraktur, akurasi 83%)
+**Model terbaik:** GPT-5.6 Sol (80% kasus) · Claude Sonnet 5 (fraktur, akurasi 83%)
 
 ---
 
@@ -354,7 +354,7 @@ Kredit dikonsumsi saat menggunakan model AI tingkat lanjut. Pencarian referensi 
 |---|---|
 | Analisis cepat (Gemini 3 Flash) | ~0.3 – 0.8 kr. |
 | Analisis dioptimalkan (Sonnet 5) | ~0.8 – 1.5 kr. |
-| Validasi Ahli (Opus 5.5 / GPT-5.6 Terra) | ~1.5 – 3.5 kr. |
+| Validasi Ahli (Opus 5.5 / GPT-5.6 Sol) | ~1.5 – 3.5 kr. |
 | Halaman PDF (Pemrosesan visi) | ~0.3 kr. per halaman |
 | Penerjemah medis | 5,1 kr. per menit selama mikrofon menyala |
 | Rekaman percakapan untuk protokol klinis | 62 kr. per jam audio |

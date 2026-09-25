@@ -24,7 +24,7 @@ This repository branch (`en-version-global`) is the English/global product. Prod
 - **Multi-model Council:**
 - **Claude Opus 5.5:** Deep reasoning for complex clinical cases and genomics.
 - **Claude Sonnet 5:** Strong default for fractures, skeletal pathology, and routine optimized analysis.
-- **GPT-5.6 Terra:** Fast working model for X-Ray, MRI, CT, and general clinical analysis.
+- **GPT-5.6 Sol:** Fast working model for X-Ray, MRI, CT, and general clinical analysis.
 - **Gemini 3.8 Flash:** High-speed Stage 1 extraction (JSON/OCR) and screening.
 - **Two-stage Workflow:** Structured data extraction (JSON) → Clinical directive generation.
 - **Streaming (SSE):** Real-time token-by-token output for immediate feedback.
@@ -45,7 +45,7 @@ This repository branch (`en-version-global`) is the English/global product. Prod
 - **Templates:** 26 specialty-specific templates (Cardiology, Neurology, Orthopedics, etc.) following SOAP / H&P structure.
 
 ### 🗣️ Medical Translator
-Live speech translation for a doctor–patient visit at `/translate`. The doctor speaks one language; the patient hears the translation in another. Stop swaps who speaks. End closes the session.
+Live speech translation for a doctor–patient visit at `/translate`. The doctor speaks one language; the patient hears the translation in another. The language lists stay fixed. **Now the patient** passes the microphone to the patient, and **Now the doctor** passes it back. End closes the session.
 
 - **Engine:** OpenAI `gpt-realtime-translate` over WebRTC. The browser never calls OpenAI directly; the server exchanges the session on `/api/realtime-translate`.
 - **Transcripts:** The source column is filled by `gpt-realtime-whisper`. The spoken translation and the “patient hears” column come from the translation model.

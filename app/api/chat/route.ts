@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Terra включена по умолчанию; для быстрого отката можно выставить ALLOW_GPT52_CHAT=false.
+    // Sol включена по умолчанию; для быстрого отката можно выставить ALLOW_GPT52_CHAT=false.
     const allowGpt52Chat = process.env.ALLOW_GPT52_CHAT !== 'false';
     const selectedModel = (model === 'gpt52' || model === MODELS.GPT_5_2)
       ? (allowGpt52Chat ? MODELS.GPT_5_2 : MODELS.SONNET)

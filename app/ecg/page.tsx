@@ -64,7 +64,7 @@ export default function ECGPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo(analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
-                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5.5');
+                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol') : 'anthropic/claude-opus-5.5');
           return;
         }
         (window as any)._currentCacheKey = cacheKey;
@@ -81,7 +81,7 @@ export default function ECGPage() {
       formData.append('isAnonymous', isAnonymous.toString())
 
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-5.5');
@@ -105,7 +105,7 @@ export default function ECGPage() {
             throw new Error(`API error: ${response.status} - ${errorText}`)
           }
 
-          const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
+          const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol';
           const modelUsed = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
                           analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5.5';
           setModelInfo(modelUsed)
@@ -228,7 +228,7 @@ export default function ECGPage() {
           optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of depth and quality for ECG waveform analysis.",
           validated: "Most accurate expert analysis (Gemini JSON + Opus 5.5) — recommended for critical and complex cases.",
           extra: [
-            "💡 GPT-5.6 Terra is recommended for fast analyses; Opus 5.5 for complex cases.",
+            "💡 GPT-5.6 Sol is recommended for fast analyses; Opus 5.5 for complex cases.",
             "⭐ Recommended mode: «Optimized» (Gemini + Sonnet) — best balance of accuracy and quality for ECG analysis.",
             "📸 You can upload an ECG file, take a photo with a camera, or use a URL.",
             "🔄 Streaming mode lets you see the model's reasoning in real time.",

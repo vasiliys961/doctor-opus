@@ -176,7 +176,7 @@ export default function LabPage() {
           body: JSON.stringify({
             images: processedImages,
             mode: mode,
-            model: mode === 'fast' ? 'google/gemini-3.8-flash' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5.5'),
+            model: mode === 'fast' ? 'google/gemini-3.8-flash' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol') : 'anthropic/claude-opus-5.5'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
             prompt: REQUEST_PROMPTS.lab.allPages,
@@ -259,7 +259,7 @@ export default function LabPage() {
           body: JSON.stringify({
             images: pdfImages,
             mode: mode,
-            model: mode === 'fast' ? 'google/gemini-3.8-flash' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5.5'),
+            model: mode === 'fast' ? 'google/gemini-3.8-flash' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol') : 'anthropic/claude-opus-5.5'),
             useStreaming: useStreaming,
             isAnonymous: isAnonymous,
             prompt: REQUEST_PROMPTS.lab.allPages,
@@ -321,7 +321,7 @@ export default function LabPage() {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('mode', mode)
-        const targetModelId = mode === 'fast' ? 'google/gemini-3.8-flash' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra') : 'anthropic/claude-opus-5.5');
+        const targetModelId = mode === 'fast' ? 'google/gemini-3.8-flash' : (mode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol') : 'anthropic/claude-opus-5.5');
         formData.append('model', targetModelId)
         formData.append('useStreaming', useStreaming.toString())
         formData.append('isAnonymous', isAnonymous.toString())

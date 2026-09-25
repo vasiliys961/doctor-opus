@@ -394,7 +394,7 @@ export default function GeneticPage() {
             setResult(accumulatedText)
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.6-terra' : 'anthropic/claude-opus-5.5');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.6-sol' : 'anthropic/claude-opus-5.5');
             logUsage({
               section: 'genetic',
               model: model,
@@ -545,7 +545,7 @@ export default function GeneticPage() {
             })
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.6-terra' : 'anthropic/claude-opus-5.5');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-5.6-sol' : 'anthropic/claude-opus-5.5');
             logUsage({
               section: 'chat',
               model: model,
@@ -941,7 +941,7 @@ export default function GeneticPage() {
                 }`}
               >
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-base">🚀 GPT-5.6 Terra</span>
+                  <span className="text-base">🚀 GPT-5.6 Sol</span>
                   <span className="text-[10px] uppercase opacity-60 font-bold">{t.modelBestValue}</span>
                 </div>
               </button>
@@ -974,7 +974,7 @@ export default function GeneticPage() {
       <AnalysisResult 
         result={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
         loading={loading} 
-        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.6-terra' : 'anthropic/claude-opus-5.5')}
+        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-5.6-sol' : 'anthropic/claude-opus-5.5')}
         mode="genetic"
         cost={totalCost}
         images={file?.type.startsWith('image/') ? [URL.createObjectURL(file)] : []}

@@ -138,7 +138,7 @@ export default function MRIPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-5.5');
@@ -161,7 +161,7 @@ export default function MRIPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5.5';
 
@@ -272,7 +272,7 @@ export default function MRIPage() {
           optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and quality for MRI studies.",
           validated: "Most accurate expert analysis (Gemini JSON + Opus 5.5) — recommended for critical and complex cases.",
           extra: [
-            "✅ **GPT-5.6 Terra**: BEST choice for 80% of MRI studies (general analysis, anatomy).",
+            "✅ **GPT-5.6 Sol**: BEST choice for 80% of MRI studies (general analysis, anatomy).",
             "🦴 **Claude Sonnet 5**: EXCEPTION — BEST results on fractures and bone injuries.",
             "⚠️ **Claude Opus 5.5**: NOT recommended for this section (weaker model for imaging).",
             "📸 You can upload MRI images, take a photo, or use a URL.",

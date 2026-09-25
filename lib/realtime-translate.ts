@@ -192,6 +192,7 @@ export class RealtimeTranslator {
   private listenTimer: ReturnType<typeof setTimeout> | null = null
   private lostTimer: ReturnType<typeof setTimeout> | null = null
   private fidelityTimer: ReturnType<typeof setTimeout> | null = null
+  private lastOutputAt = 0
 
   async connect(options: RealtimeTranslateOptions): Promise<void> {
     const invalid = this.validate(options)
@@ -209,6 +210,7 @@ export class RealtimeTranslator {
     this.translatedText = ''
     this.completedSources = []
     this.outputOpen = false
+    this.lastOutputAt = 0
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -299,6 +301,22 @@ export class RealtimeTranslator {
   disconnect(): void {
     this.generation += 1
     this.release()
+  }
+
+  muteInput(): void {
+    this.localStream?.getAudioTracks().forEach((track) => {
+      track.enabled = false
+    })
+  }
+
+  async whenQuiet(timeoutMs = 8000): Promise<void> {
+    const generation = this.generation
+    const started = Date.now()
+    if (this.lastOutputAt === 0) return
+    while (this.generation === generation && Date.now() - this.lastOutputAt < TRANSLATING_IDLE_MS) {
+      if (Date.now() - started >= timeoutMs) return
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    }
   }
 
   async resumePlayback(): Promise<boolean> {
@@ -425,6 +443,7 @@ export class RealtimeTranslator {
 
   private markTranslating(options: RealtimeTranslateOptions, alive: () => boolean): void {
     if (!alive()) return
+    this.lastOutputAt = Date.now()
     options.onPhase?.('translating')
     if (this.listenTimer) clearTimeout(this.listenTimer)
     this.listenTimer = setTimeout(() => {

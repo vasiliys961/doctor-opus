@@ -61,6 +61,10 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
   const [voicePlaying, setVoicePlaying] = useState(false)
   const [voiceBlocked, setVoiceBlocked] = useState(false)
   const [sessionCredits, setSessionCredits] = useState(0)
+  const [speaker, setSpeaker] = useState<'doctor' | 'patient' | null>(null)
+  const [handingOver, setHandingOver] = useState(false)
+  const speakerRef = useRef<'doctor' | 'patient' | null>(null)
+  const handoffToken = useRef(0)
   const accruedMs = useRef(0)
   const runningSince = useRef<number | null>(null)
   const billedMs = useRef(0)
@@ -178,7 +182,15 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
     }
   }, [])
 
+  const rememberSpeaker = (next: 'doctor' | 'patient' | null) => {
+    speakerRef.current = next
+    setSpeaker(next)
+  }
+
   const end = () => {
+    handoffToken.current += 1
+    rememberSpeaker(null)
+    setHandingOver(false)
     clientRef.current?.disconnect()
     setPhase('stopped')
     setVoicePlaying(false)
@@ -187,9 +199,6 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
   }
 
   const begin = async (source: string, target: string) => {
-    languagesRef.current = { doctor: source, patient: target }
-    setDoctorLanguage(source)
-    setPatientLanguage(target)
     setError('')
     setSourceTranscript('')
     setTranslatedTranscript('')
@@ -214,6 +223,7 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
       setPhase('error')
       setError(describeError(connectError, copy))
       setVoicePlaying(false)
+      throw connectError
     }
   }
 
@@ -240,17 +250,41 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
     billingBlocked.current = false
     countedTranslatorCall.current = false
     setSessionCredits(0)
-    void begin(doctorLanguage, patientLanguage)
+    rememberSpeaker('doctor')
+    setHandingOver(false)
+    void begin(languagesRef.current.doctor, languagesRef.current.patient).catch(() => {
+      rememberSpeaker(null)
+    })
   }
 
-  const stop = () => {
+  const passTurn = async () => {
+    if (handingOver) return
+    if (phase !== 'listening' && phase !== 'translating') return
+    const current = speakerRef.current === 'patient' ? 'patient' : 'doctor'
+    const next = current === 'doctor' ? 'patient' : 'doctor'
     const { doctor, patient } = languagesRef.current
-    const nextTarget = findTranslatorLanguage(doctor)
-    if (!nextTarget?.outputCode || doctor === patient) {
-      end()
+    const source = next === 'doctor' ? doctor : patient
+    const target = next === 'doctor' ? patient : doctor
+    if (!findTranslatorLanguage(target)?.outputCode) {
+      setError(copy.turnUnspeakable)
       return
     }
-    void begin(patient, doctor)
+    const token = handoffToken.current + 1
+    handoffToken.current = token
+    setHandingOver(true)
+    setError('')
+    clientRef.current?.muteInput()
+    try {
+      await clientRef.current?.whenQuiet()
+      if (token !== handoffToken.current) return
+      await begin(source, target)
+      if (token !== handoffToken.current) return
+      rememberSpeaker(next)
+    } catch {
+      if (token === handoffToken.current) rememberSpeaker(current)
+    } finally {
+      if (token === handoffToken.current) setHandingOver(false)
+    }
   }
 
   const swap = () => {
@@ -269,6 +303,10 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
   }
 
   const voiceLive = active && (voicePlaying || phase === 'listening' || phase === 'translating')
+  const patientTurn = speaker === 'patient'
+  const canPassTurn = (phase === 'listening' || phase === 'translating') && !handingOver && (patientTurn || doctorCanSpeak)
+  const heardLanguage = patientTurn ? patient : doctor
+  const spokenLanguage = patientTurn ? doctor : patient
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -359,27 +397,34 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
         <p className="mt-2 text-sm text-amber-800">{copy.sameLanguage}</p>
       )}
 
+      {(active || handingOver) && (
+        <p className="mt-6 rounded-lg bg-teal-700 px-4 py-3 text-base font-semibold text-white" role="status">
+          {handingOver ? copy.handingOver : patientTurn ? copy.patientSpeaking : copy.doctorSpeaking}
+        </p>
+      )}
+
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={start}
-          disabled={!canStart}
+          disabled={!canStart || handingOver}
           className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
           {copy.start}
         </button>
         <button
           type="button"
-          onClick={stop}
-          disabled={!active}
-          className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          onClick={() => void passTurn()}
+          disabled={!canPassTurn}
+          className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          title={!doctorCanSpeak ? copy.turnUnspeakable : undefined}
         >
-          {copy.stop}
+          {patientTurn ? copy.nowDoctor : copy.nowPatient}
         </button>
         <button
           type="button"
           onClick={end}
-          disabled={!active}
+          disabled={!active && !handingOver}
           className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
         >
           {copy.end}
@@ -412,7 +457,7 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
               <span className={phase === 'translating' ? 'inline-block animate-pulse' : ''} aria-hidden>
                 🔊{' '}
               </span>
-              {copy.voiceSpoken}
+              {patientTurn ? copy.voiceForDoctor : copy.voiceSpoken}
               {phase === 'translating' ? ` ${copy.voiceNow}` : ''}
             </>
           )}
@@ -432,20 +477,20 @@ export default function RealtimeTranslatorPanel({ locale }: { locale: Locale }) 
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-800">
-            {copy.sourceSpeech}
-            {doctor ? ` · ${doctor.label}` : ''}
+            {patientTurn ? copy.patientSaid : copy.sourceSpeech}
+            {heardLanguage ? ` · ${heardLanguage.label}` : ''}
           </h2>
           <p className="mt-2 min-h-28 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-800">
-            {sourceTranscript || copy.sourceEmpty}
+            {sourceTranscript || (patientTurn ? copy.patientSourceEmpty : copy.sourceEmpty)}
           </p>
         </div>
         <div>
           <h2 className="text-sm font-semibold text-slate-800">
-            {copy.translation}
-            {patient ? ` · ${patient.label}` : ''}
+            {patientTurn ? copy.doctorHears : copy.translation}
+            {spokenLanguage ? ` · ${spokenLanguage.label}` : ''}
           </h2>
           <p className="mt-2 min-h-28 whitespace-pre-wrap rounded-lg bg-teal-50/60 p-3 text-sm text-slate-800">
-            {translatedTranscript || copy.translationEmpty}
+            {translatedTranscript || (patientTurn ? copy.doctorHearsEmpty : copy.translationEmpty)}
           </p>
           {fidelity && (
             <p role="status" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950">

@@ -579,7 +579,7 @@ export default function SpirometryDevice({ onStatusChange }: SpirometryDevicePro
               🔄 {t.newStudy}
             </button>
           </div>
-          <AnalysisResult result={analysisResult} model="openai/gpt-5.6-terra" mode="optimized" images={[]} />
+          <AnalysisResult result={analysisResult} model="openai/gpt-5.6-sol" mode="optimized" images={[]} />
         </div>
       )}
     </div>

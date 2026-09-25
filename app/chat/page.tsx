@@ -1464,7 +1464,7 @@ export default function ChatPage() {
               className="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
               disabled={loading}
             >
-              <option value="gpt52">🚀 GPT-5.6 Terra</option>
+              <option value="gpt52">🚀 GPT-5.6 Sol</option>
               <option value="opus">🧠 Opus 5.5</option>
               <option value="sonnet">🤖 Sonnet 5</option>
               <option value="fable">🧩 Fable 5.1</option>

@@ -1037,7 +1037,7 @@ export default function ProtocolPage() {
             </label>
             <select value={model} onChange={(e) => setModel(e.target.value as any)} className="px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
               <option value="sonnet">🤖 Sonnet 5</option>
-              <option value="gpt52">🚀 GPT-5.6 Terra</option>
+              <option value="gpt52">🚀 GPT-5.6 Sol</option>
               <option value="opus">🧠 Opus 5.5</option>
               <option value="gemini">⚡ Gemini 3.8 Flash</option>
             </select>
