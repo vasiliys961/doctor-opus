@@ -7,17 +7,20 @@ import Link from 'next/link'
 
 // Цены моделей (для расчета условных единиц за 1M токенов)
 const MODEL_PRICING = {
+  'anthropic/claude-opus-5.5': { input: 4.0, output: 20.0 },
+  'anthropic/claude-opus-5': { input: 5.0, output: 25.0 },
   'anthropic/claude-opus-4.6': { input: 5.0, output: 25.0 },
   'anthropic/claude-opus-4.8': { input: 5.0, output: 25.0 },
-  'anthropic/claude-opus-5': { input: 5.0, output: 25.0 },
   'anthropic/claude-fable-5': { input: 10.0, output: 50.0 },
   'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
-  'anthropic/claude-sonnet-5.5': { input: 3.0, output: 15.0 },
+  'anthropic/claude-sonnet-5.5': { input: 2.0, output: 10.0 },
   'anthropic/claude-sonnet-5': { input: 3.0, output: 15.0 },
-  'openai/gpt-6.1-sol': { input: 2.5, output: 15.0 },
+  'openai/gpt-6.1-sol': { input: 2.0, output: 10.0 },
   'openai/gpt-5.6-terra': { input: 2.5, output: 15.0 },
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
+  'google/gemini-3.8-flash': { input: 0.50, output: 3.00 },
   'google/gemini-3-flash-preview': { input: 0.50, output: 3.00 },
+  'google/gemini-3.1-pro-preview': { input: 2.00, output: 12.00 },
   'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },
 }
 
@@ -137,15 +140,17 @@ export default function StatisticsPage() {
   }
 
   const calculateModelCost = (inputTokens: number, outputTokens: number, model: string): number => {
-    const modelKey = Object.keys(MODEL_PRICING).find(key => 
-      model.toLowerCase().includes(key.toLowerCase()) || 
-      key.toLowerCase().includes(model.toLowerCase())
-    )
+    const modelLower = model.toLowerCase()
+    const modelKey = Object.keys(MODEL_PRICING)
+      .filter(key => modelLower.includes(key.toLowerCase()))
+      .sort((a, b) => b.length - a.length)[0]
 
     if (!modelKey) {
       // Дефолтные цены для неизвестных моделей
       if (model.toLowerCase().includes('opus')) {
         return ((inputTokens / 1_000_000) * 15.0 + (outputTokens / 1_000_000) * 75.0) * PRICE_MULTIPLIER
+      } else if (model.toLowerCase().includes('sonnet-5.5')) {
+        return ((inputTokens / 1_000_000) * 2.0 + (outputTokens / 1_000_000) * 10.0) * PRICE_MULTIPLIER
       } else if (model.toLowerCase().includes('sonnet')) {
         return ((inputTokens / 1_000_000) * 3.0 + (outputTokens / 1_000_000) * 15.0) * PRICE_MULTIPLIER
       } else {

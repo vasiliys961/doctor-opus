@@ -118,9 +118,9 @@ export default function UltrasoundPage() {
       formData.append('maskImage', maskImage.toString())
 
       // Подбор модели
-      const targetModelId = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
+      const targetModelId = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
                            analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol') :
-                           'anthropic/claude-opus-5';
+                           'anthropic/claude-opus-5.5';
       formData.append('model', targetModelId);
 
       const response = await postAnalyzeImageWithModelConsent({ formData, mode: analysisMode })
@@ -303,7 +303,7 @@ export default function UltrasoundPage() {
         content={{
           fast: "быстрый разбор УЗИ-снимков или захваченных кадров петли.",
           optimized: "рекомендуемый режим для детальной оценки эхо-структур.",
-          validated: "экспертный анализ сложных случаев (Gemini + Opus).",
+          validated: "экспертный анализ сложных случаев (Gemini 3.8 + Opus 5.5).",
           extra: [
             "📹 **Cine-loop**: Вы можете загрузить видео УЗИ и захватить конкретные кадры для анализа.",
             "🖱️ Используйте «Ручной захват» для точного выбора момента (например, раскрытие клапана).",

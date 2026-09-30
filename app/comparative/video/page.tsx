@@ -423,11 +423,11 @@ export default function VideoComparisonPage() {
       if (data.success) {
         setResult(data.result || 'Анализ выполнен')
         setCurrentCost(data.cost || 0)
-        setModel(data.model || 'google/gemini-3-flash-preview')
+        setModel(data.model || 'google/gemini-3.8-flash')
         
         logUsage({
           section: 'video-comparison-frames',
-          model: data.model || 'google/gemini-3-flash-preview',
+          model: data.model || 'google/gemini-3.8-flash',
           inputTokens: data.usage?.prompt_tokens || 0,
           outputTokens: data.usage?.completion_tokens || 0,
         })

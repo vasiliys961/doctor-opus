@@ -46,9 +46,9 @@ const specialtyMap: Record<string, Specialty> = {
 const getDisplayModelName = (model: ChatModel) => {
   if (model === 'gpt52') return 'openai/gpt-6.1-sol';
   if (model === 'sonnet') return 'anthropic/claude-sonnet-5.5';
-  if (model === 'opus') return 'anthropic/claude-opus-5';
+  if (model === 'opus') return 'anthropic/claude-opus-5.5';
   if (model === 'fable') return 'anthropic/claude-fable-5';
-  if (model === 'gemini') return 'google/gemini-3-flash-preview';
+  if (model === 'gemini') return 'google/gemini-3.8-flash';
   return model;
 };
 
@@ -186,7 +186,7 @@ export default function ChatPage() {
       return {
         model: 'sonnet',
         title: 'Стандартный чат-режим',
-        reason: 'Для большинства рабочих вопросов Sonnet дает хороший баланс скорости и глубины.',
+        reason: 'Для большинства рабочих вопросов Sonnet 5.5 дает хороший баланс скорости и глубины.',
       }
     }
 
@@ -222,10 +222,10 @@ export default function ChatPage() {
   }, [consiliumMode, message, selectedFiles.length, specialty, triageSuggestion, useLibrary])
   const chatModelLabelMap: Record<ChatModel, string> = {
     gpt52: 'GPT-6.1 Sol',
-    opus: 'Opus 5',
+    opus: 'Opus 5.5',
     fable: 'Fable 5',
     sonnet: 'Sonnet 5.5',
-    gemini: 'Gemini 3.1',
+    gemini: 'Gemini 3.8',
   }
 
   // Загружаем PDF.js v3 из локальных файлов (public/pdfjs/)
@@ -1713,10 +1713,10 @@ export default function ChatPage() {
               disabled={loading}
             >
               <option value="gpt52">🚀 GPT-6.1 Sol</option>
-              <option value="opus">🧠 Opus 5</option>
+              <option value="opus">🧠 Opus 5.5</option>
               <option value="fable">🚀 Fable 5 (дороже)</option>
               <option value="sonnet">🤖 Sonnet 5.5</option>
-              <option value="gemini">⚡ Gemini 3.1</option>
+              <option value="gemini">⚡ Gemini 3.8</option>
             </select>
           </div>
           {chatModelRecommendation && (

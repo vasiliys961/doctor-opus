@@ -113,7 +113,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
 - Извлекай данные ТОЧНО как они указаны в таблице`;
 
     // Используем Gemini 3.0 Flash для извлечения JSON
-    let extractionModel = 'google/gemini-3-flash-preview';
+    let extractionModel = 'google/gemini-3.8-flash';
     const allExtractedData: string[] = [];
     let totalTokens = 0;
     let successCount = 0;
@@ -210,7 +210,7 @@ CYP2D6;rs1065852;AA;нормальный метаболизм
                 lastError
               );
               // Пробуем другую модель если текущая не работает
-              if (retries === 3 && extractionModel === 'google/gemini-3-flash-preview') {
+              if (retries === 3 && extractionModel === 'google/gemini-3.8-flash') {
                 console.log(`🔄 [GENETIC IMAGES] Пробуем альтернативную модель для страницы ${pageNumber}...`);
                 extractionPayload.model = 'google/gemini-1.5-flash';
                 continue; // Повторяем с новой моделью

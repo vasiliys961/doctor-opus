@@ -115,12 +115,12 @@ export default function AnalysisResult({ result, loading = false, model, mode, i
   const getModelDisplayName = (modelName?: string) => {
     if (!modelName) return null
     if (modelName.includes('fable')) return '🚀 Fable 5'
-    if (modelName.includes('opus')) return '🧠 Opus 5'
+    if (modelName.includes('opus')) return '🧠 Opus 5.5'
     if (modelName.includes('sonnet-5.5')) return '🤖 Sonnet 5.5'
     if (modelName.includes('sonnet')) return '🤖 Sonnet 5'
     if (modelName.includes('gpt-6.1')) return '🚀 GPT-6.1 Sol'
     if (modelName.includes('gpt-5.6-terra')) return '🚀 GPT-5.6 Terra'
-    if (modelName.includes('gemini') || modelName.includes('flash')) return '⚡ Gemini 3.1'
+    if (modelName.includes('gemini') || modelName.includes('flash')) return '⚡ Gemini 3.8'
     return modelName
   }
 

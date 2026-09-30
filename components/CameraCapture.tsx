@@ -407,7 +407,7 @@ export default function CameraCapture() {
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
             🧠 Результат анализа
-            <span className="text-xs font-normal text-gray-400">Gemini + Claude Sonnet 5.5</span>
+            <span className="text-xs font-normal text-gray-400">Gemini 3.8 + Claude Sonnet 5.5</span>
           </h3>
           <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap leading-relaxed">
             {result}

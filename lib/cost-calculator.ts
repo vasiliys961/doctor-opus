@@ -4,23 +4,25 @@
 
 // Цены моделей в USD за 1M токенов (актуальные цены OpenRouter - обновлено 05.01.2026)
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  'anthropic/claude-opus-4.6': { input: 5.0, output: 25.0 },
-  'anthropic/claude-opus-4.7': { input: 5.0, output: 25.0 },
+  'anthropic/claude-opus-5.5': { input: 4.0, output: 20.0 },
+  'anthropic/claude-opus-5': { input: 5.0, output: 25.0 }, // Исторические логи
   'anthropic/claude-opus-4.8': { input: 5.0, output: 25.0 },
-  'anthropic/claude-opus-5': { input: 5.0, output: 25.0 },
+  'anthropic/claude-opus-4.7': { input: 5.0, output: 25.0 },
+  'anthropic/claude-opus-4.6': { input: 5.0, output: 25.0 }, // Исторические логи
   'anthropic/claude-fable-5': { input: 10.0, output: 50.0 },
   'sakana/fugu-ultra': { input: 5.0, output: 30.0 },
   'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
-  'anthropic/claude-sonnet-5.5': { input: 3.0, output: 15.0 },
+  'anthropic/claude-sonnet-5.5': { input: 2.0, output: 10.0 },
   'anthropic/claude-sonnet-5': { input: 3.0, output: 15.0 }, // Исторические логи
   'openai/gpt-5.2-chat': { input: 2.5, output: 10.0 }, // Legacy pricing key (for historical logs)
-  'openai/gpt-6.1-sol': { input: 2.5, output: 15.0 },
+  'openai/gpt-6.1-sol': { input: 2.0, output: 10.0 },
   'openai/gpt-5.6-terra': { input: 2.5, output: 15.0 }, // Исторические логи
   'x-ai/grok-4.5': { input: 2.0, output: 6.0 }, // Grok 4.5 (xAI pricing)
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
   'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },
-  'google/gemini-3-flash-preview': { input: 0.50, output: 3.00 },
-  'google/gemini-3.1-pro-preview': { input: 2.00, output: 12.00 },
+  'google/gemini-3.8-flash': { input: 0.50, output: 3.00 },
+  'google/gemini-3-flash-preview': { input: 0.50, output: 3.00 }, // Исторические логи
+  'google/gemini-3.1-pro-preview': { input: 2.00, output: 12.00 }, // Исторические логи
   'perplexity/sonar': { input: 1.0, output: 1.0 },
 };
 
@@ -55,20 +57,26 @@ function getModelPricing(model: string): { input: number; output: number } {
     return MODEL_PRICING[model];
   }
   
-  // Поиск по частичному совпадению
-  for (const [key, pricing] of Object.entries(MODEL_PRICING)) {
-    if (key.toLowerCase().includes(modelLower) || modelLower.includes(key.toLowerCase())) {
-      return pricing;
-    }
+  // Самый длинный ключ, который целиком входит в имя модели.
+  // Иначе claude-opus-5 совпадёт с claude-opus-5.5 и посчитает старый тариф.
+  const partial = Object.entries(MODEL_PRICING)
+    .filter(([key]) => modelLower.includes(key.toLowerCase()))
+    .sort((a, b) => b[0].length - a[0].length)[0];
+  if (partial) {
+    return partial[1];
   }
   
   // Дефолтные цены по типу модели
   if (modelLower.includes('opus')) {
     return { input: 15.0, output: 75.0 };
+  } else if (modelLower.includes('sonnet-5.5')) {
+    return { input: 2.0, output: 10.0 };
   } else if (modelLower.includes('sonnet')) {
     return { input: 3.0, output: 15.0 };
   } else if (modelLower.includes('haiku')) {
     return { input: 0.25, output: 1.25 };
+  } else if (modelLower.includes('gemini-3.8')) {
+    return { input: 0.50, output: 3.00 };
   } else if (modelLower.includes('gemini-3.1-pro')) {
     return { input: 2.00, output: 12.00 };
   } else if (modelLower.includes('gemini-3-pro')) {

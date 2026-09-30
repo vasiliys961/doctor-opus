@@ -341,7 +341,7 @@ export default function ImageAnalysisPage() {
           setResult(cachedResult);
           setLoading(false);
           setModelInfo({ 
-            model: analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol') : 'anthropic/claude-opus-5',
+            model: analysisMode === 'fast' ? 'google/gemini-3.8-flash' : analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol') : 'anthropic/claude-opus-5.5',
             mode: analysisMode + ' (из кэша)' 
           });
           return;
@@ -410,7 +410,7 @@ export default function ImageAnalysisPage() {
       } else if (analysisMode === 'validated') {
         // Не фиксируем версию на клиенте: backend сам выберет validated-модель (4.8/4.7 по env).
       } else if (analysisMode === 'fast') {
-        formData.append('model', 'google/gemini-3-flash-preview');
+        formData.append('model', 'google/gemini-3.8-flash');
       }
 
       if (useStream) {
@@ -442,10 +442,10 @@ export default function ImageAnalysisPage() {
           
           // Определяем модель для отображения в UI
           let modelUsed = ''
-          if (analysisMode === 'fast') modelUsed = 'google/gemini-3-flash-preview'
+          if (analysisMode === 'fast') modelUsed = 'google/gemini-3.8-flash'
           else if (analysisMode === 'optimized') {
             modelUsed = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol'
-          } else modelUsed = 'anthropic/claude-opus-5'
+          } else modelUsed = 'anthropic/claude-opus-5.5'
           
           await handleSSEStream(response, {
             onChunk: (content, accumulatedText) => {
@@ -460,10 +460,10 @@ export default function ImageAnalysisPage() {
                 setCurrentCost(usage.total_cost)
                 const modelUsed = usage.model || (
                   analysisMode === 'fast'
-                    ? 'google/gemini-3-flash-preview'
+                    ? 'google/gemini-3.8-flash'
                     : analysisMode === 'optimized'
                       ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol')
-                      : 'anthropic/claude-opus-5'
+                      : 'anthropic/claude-opus-5.5'
                 )
                 
                 setModelInfo({ model: modelUsed, mode: analysisMode })
@@ -511,7 +511,7 @@ export default function ImageAnalysisPage() {
 
           logUsage({
             section: imageType !== 'universal' ? imageType : 'image-analysis',
-            model: data.model || 'anthropic/claude-opus-5',
+            model: data.model || 'anthropic/claude-opus-5.5',
             inputTokens: 2000,
             outputTokens: 1500,
           })
@@ -610,9 +610,9 @@ export default function ImageAnalysisPage() {
         content={{
           fast: "двухэтапный скрининг (сначала краткое структурированное описание исследования, затем текстовый разбор), даёт компактное заключение и общий сигнал риска, удобен для первичного просмотра и триажа.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5.5) — идеальный баланс точности и цены для большинства медицинских исследований.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 5) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 5.5) — рекомендуется для критических и сложных случаев; самый дорогой режим.",
           extra: [
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс цены и качества для большинства медицинских изображений.",
+            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini 3.8 + Sonnet 5.5) — идеальный баланс цены и качества для большинства медицинских изображений.",
             "💡 Система автоматически определяет тип изображения: ЭКГ, Рентген, КТ, МРТ, УЗИ, Дерматоскопия, Гистология, Офтальмология, Маммография. Поддерживается формат DICOM.",
             "📸 Вы можете загрузить файл или сделать фото с камеры.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
@@ -757,12 +757,12 @@ export default function ImageAnalysisPage() {
                       )}
                       
                       {parsingLabs && (
-                        <span className="text-[10px] text-indigo-600 animate-pulse font-bold">⌛ Оцифровка Gemini 3.1...</span>
+                        <span className="text-[10px] text-indigo-600 animate-pulse font-bold">⌛ Оцифровка Gemini 3.8...</span>
                       )}
                     </div>
                     
                     {!labFile && !labsContext && (
-                      <span className="text-[10px] text-indigo-600">ИИ автоматически извлечет показатели (Gemini 3.1)</span>
+                      <span className="text-[10px] text-indigo-600">ИИ автоматически извлечет показатели (Gemini 3.8)</span>
                     )}
                     {labsContext && (
                       <div className="relative">

@@ -458,7 +458,7 @@ export default function VideoPage() {
       if (data.success) {
         setResult(data.result || 'Анализ выполнен')
         setCurrentCost(data.cost || 0)
-        setModel(data.model || 'google/gemini-3-flash-preview')
+        setModel(data.model || 'google/gemini-3.8-flash')
         setMode(data.mode || 'fast')
         setStage1TechnicalData('')
         setShowTechnicalData(false)
@@ -466,7 +466,7 @@ export default function VideoPage() {
         // Логирование использования
         logUsage({
           section: 'video-frames',
-          model: data.model || 'google/gemini-3-flash-preview',
+          model: data.model || 'google/gemini-3.8-flash',
           inputTokens: data.usage?.prompt_tokens || 0, 
           outputTokens: data.usage?.completion_tokens || 0,
         })
@@ -532,13 +532,13 @@ export default function VideoPage() {
         setStage1TechnicalData(data.description || '')
         setShowTechnicalData(false)
         setCurrentCost(data.cost || 0)
-        setModel(data.model || 'google/gemini-3-flash-preview')
+        setModel(data.model || 'google/gemini-3.8-flash')
         setMode('fast')
         
         // Логирование использования
         logUsage({
           section: 'video-full',
-          model: data.model || 'google/gemini-3-flash-preview',
+          model: data.model || 'google/gemini-3.8-flash',
           inputTokens: data.usage?.prompt_tokens || 5000, 
           outputTokens: data.usage?.completion_tokens || 4000,
         })
@@ -594,8 +594,8 @@ export default function VideoPage() {
       
       <AnalysisTips 
         content={{
-          fast: "двухэтапный скрининг (сначала структурированное описание видео через Gemini Vision, затем текстовый разбор через Gemini Flash), даёт компактное заключение и общий сигнал риска.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 5) — рекомендуется для детального клинического разбора видеоматериалов; самый дорогой режим.",
+          fast: "скрининг через Gemini 3.8: структурированное описание видео и компактное заключение с общим сигналом риска.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 5.5) — рекомендуется для детального клинического разбора видеоматериалов; самый дорогой режим.",
           extra: [
             "🛡️ Видео автоматически обрабатывается: система извлекает 5-12 ключевых кадров (адаптивно по длине видео).",
             "🔒 Каждый кадр анонимизируется: черные полосы по краям (10% верх, 8% низ, 12% с боков).",

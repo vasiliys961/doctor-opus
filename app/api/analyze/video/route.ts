@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
 
     // Рассчитываем стоимость
     let cost = 0;
-    const model = 'google/gemini-3-flash-preview';
+    const model = 'google/gemini-3.8-flash';
     if (usage) {
       const costInfo = calculateCost(usage.prompt_tokens, usage.completion_tokens, model);
       cost = costInfo.totalCostUnits;

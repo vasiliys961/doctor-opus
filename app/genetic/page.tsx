@@ -288,7 +288,7 @@ export default function GeneticPage() {
 
         setExtractedData(extractionData.extractedData || '')
         
-        const ocrModel = extractionData.ocrModel || 'google/gemini-3-flash-preview';
+        const ocrModel = extractionData.ocrModel || 'google/gemini-3.8-flash';
         logUsage({
           section: 'genetic',
           model: ocrModel,
@@ -319,7 +319,7 @@ export default function GeneticPage() {
         setExtractedData(extractionData.extractedData || '')
         logUsage({
           section: 'genetic',
-          model: 'google/gemini-3-flash-preview',
+          model: 'google/gemini-3.8-flash',
           inputTokens: 3000,
           outputTokens: 2000,
         })
@@ -388,7 +388,7 @@ export default function GeneticPage() {
             setResult(accumulatedText)
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-6.1-sol' : 'anthropic/claude-opus-5');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-6.1-sol' : 'anthropic/claude-opus-5.5');
             logUsage({
               section: 'genetic',
               model: model,
@@ -451,7 +451,7 @@ export default function GeneticPage() {
         // Логирование использования (этап консультации)
         logUsage({
           section: 'genetic',
-          model: 'anthropic/claude-opus-5',
+          model: 'anthropic/claude-opus-5.5',
           inputTokens: 4000, // примерное значение для консультации
           outputTokens: 3000,
         })
@@ -539,7 +539,7 @@ export default function GeneticPage() {
             })
           },
           onUsage: (usage) => {
-            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-6.1-sol' : 'anthropic/claude-opus-5');
+            const model = usage.model || (modelType === 'gpt52' ? 'openai/gpt-6.1-sol' : 'anthropic/claude-opus-5.5');
             logUsage({
               section: 'chat',
               model: model,
@@ -613,9 +613,9 @@ export default function GeneticPage() {
         title="Как работает генетический анализ"
         content={{
           fast: "первый этап: извлечение данных из сложных отчетов и VCF‑файлов. Мы используем специализированные алгоритмы для корректного чтения rsID и генотипов.",
-          validated: "второй этап: экспертное мнение «Ассистента-генетика» (Claude Opus 5) — самый точный клинический разбор рисков; экспертный режим.",
+          validated: "второй этап: экспертное мнение «Ассистента-генетика» (Claude Opus 5.5) — самый точный клинический разбор рисков; экспертный режим.",
           extra: [
-            "⭐ Рекомендуемый режим: «Экспертный» (Opus 5) — максимально глубокий анализ генетических данных.",
+            "⭐ Рекомендуемый режим: «Экспертный» (Opus 5.5) — максимально глубокий анализ генетических данных.",
             "🚀 Альтернатива: «GPT-6.1 Sol» — отличный баланс скорости, мощности и стоимости.",
             "👤 Рекомендуется добавить клинический контекст для более точной интерпретации результатов.",
             "💬 После получения заключения вы можете продолжить диалог с генетиком для уточнения деталей.",
@@ -742,7 +742,7 @@ export default function GeneticPage() {
                     className="flex-1 px-6 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-lg"
                   >
                     <span className="block text-base">🚀 Быстрое извлечение</span>
-                    <span className="block text-[10px] font-normal opacity-80 mt-0.5">PDF → Gemini → данные</span>
+                    <span className="block text-[10px] font-normal opacity-80 mt-0.5">PDF → Gemini 3.8 → данные</span>
                   </button>
                   
                   {pdfjsReady && (
@@ -938,7 +938,7 @@ export default function GeneticPage() {
                 }`}
               >
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-base">🧠 Opus 5</span>
+                  <span className="text-base">🧠 Opus 5.5</span>
                   <span className="text-[10px] uppercase opacity-60 font-bold">Экспертный (Макс. качество)</span>
                 </div>
               </button>
@@ -958,7 +958,7 @@ export default function GeneticPage() {
       <AnalysisResult 
         result={chatHistory.length > 0 ? chatHistory[chatHistory.length - 1]?.content || result : result} 
         loading={loading} 
-        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-6.1-sol' : 'anthropic/claude-opus-5')}
+        model={lastModelUsed || (modelType === 'gpt52' ? 'openai/gpt-6.1-sol' : 'anthropic/claude-opus-5.5')}
         mode="genetic"
         cost={totalCost}
         images={file?.type.startsWith('image/') ? [URL.createObjectURL(file)] : []}

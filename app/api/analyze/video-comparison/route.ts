@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       mimeType2: video2.type,
     });
 
-    const model = 'google/gemini-3-flash-preview';
+    const model = 'google/gemini-3.8-flash';
     let cost = 0;
     if (usage) {
       const costInfo = calculateCost(usage.prompt_tokens, usage.completion_tokens, model);

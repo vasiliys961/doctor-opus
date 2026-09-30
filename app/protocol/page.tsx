@@ -155,11 +155,11 @@ export default function ProtocolPage() {
     }
   }, [conversationTranscriptText, rawText, stabilityMode, strictTemplateMode])
   const protocolModelLabelMap: Record<ProtocolModel, string> = {
-    gpt52: 'GPT-5.4',
+    gpt52: 'GPT-6.1 Sol',
     grok45: 'Grok 4.5',
     sonnet: 'Sonnet 5.5',
-    opus: 'Opus 5',
-    gemini: 'Gemini 3.1',
+    opus: 'Opus 5.5',
+    gemini: 'Gemini 3.8',
   }
 
   // Универсальные промпты
@@ -1784,11 +1784,11 @@ export default function ProtocolPage() {
               </span>
             </label>
             <select value={model} onChange={(e) => setModel(e.target.value as any)} className="w-full md:w-auto px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
-              <option value="gpt52">🚀 GPT-5.4 (быстрее)</option>
+              <option value="gpt52">🚀 GPT-6.1 Sol (быстрее)</option>
               <option value="grok45">🧪 Grok 4.5 (beta)</option>
               <option value="sonnet">🤖 Sonnet 5.5 (детальнее, но медленнее)</option>
-              <option value="opus">🧠 Opus 5</option>
-              <option value="gemini">⚡ Gemini 3.1</option>
+              <option value="opus">🧠 Opus 5.5</option>
+              <option value="gemini">⚡ Gemini 3.8</option>
             </select>
           </div>
           {protocolModelRecommendation && (

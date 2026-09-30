@@ -32,7 +32,7 @@ const STUDY_TYPES: { id: StudyType; icon: string; label: string; prompt: string;
     placeholder: 'Пример: Пациент 45 лет, образование на спине, заметил рост и изменение цвета в последние 3 месяца.',
     tipFast: 'двухэтапный скрининг — структурированное описание структуры и цвета, затем оценка риска.',
     tipOpt: 'рекомендуемый режим (Gemini JSON + Sonnet 5.5) — идеальный баланс точности и качества для дерматоскопии.',
-    tipVal: 'самый точный экспертный анализ (Gemini JSON + Opus 5) — рекомендуется для атипичных и сложных образований.',
+    tipVal: 'самый точный экспертный анализ (Gemini JSON + Opus 5.5) — рекомендуется для атипичных и сложных образований.',
   },
   {
     id: 'wound',
@@ -247,9 +247,9 @@ export default function DermatoscopyPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-5');
+        formData.append('model', 'anthropic/claude-opus-5.5');
       } else if (analysisMode === 'fast') {
-        formData.append('model', 'google/gemini-3-flash-preview');
+        formData.append('model', 'google/gemini-3.8-flash');
       }
 
       if (useStream && (analysisMode === 'validated' || analysisMode === 'optimized' || analysisMode === 'fast')) {
@@ -266,8 +266,8 @@ export default function DermatoscopyPage() {
         
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
         
-        const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
+        const modelUsed = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
+                        analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5.5';
 
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
@@ -306,7 +306,7 @@ export default function DermatoscopyPage() {
         if (data.success) {
           setResult(data.result)
           
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5');
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5.5');
           const inputTokens = 2000;
           const outputTokens = Math.ceil(data.result.length / 4);
           const costInfo = calculateCost(inputTokens, outputTokens, modelUsed);
@@ -370,7 +370,7 @@ export default function DermatoscopyPage() {
           optimized: current.tipOpt,
           validated: current.tipVal,
           extra: [
-            `⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества.`,
+            `⭐ Рекомендуемый режим: «Оптимизированный» (Gemini 3.8 + Sonnet 5.5) — идеальный баланс точности и качества.`,
             "📸 Загрузите снимок, сделайте фото или используйте ссылку.",
             "🔄 Streaming‑режим позволяет видеть ход рассуждений модели в реальном времени.",
             "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."

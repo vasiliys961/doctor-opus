@@ -13,14 +13,14 @@ const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 // Актуальные модели (последние флагманы 2025-2026)
 const MODELS = {
-  OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6 (default)
-  OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 5, rollback: VALIDATED_OPUS_MODEL=4.7
+  OPUS: 'anthropic/claude-opus-5.5',                       // Claude Opus 5.5
+  OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 5.5, rollback: VALIDATED_OPUS_MODEL=5
   SONNET: 'anthropic/claude-sonnet-5.5',                   // Claude Sonnet 5.5
   GPT_5_2: 'openai/gpt-6.1-sol',                  // GPT-6.1 Sol (legacy key name kept for compatibility)
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
-  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
-  GEMINI_3_PRO: 'google/gemini-3.1-pro-preview'          // Gemini 3.1 Pro Preview
+  GEMINI_3_FLASH: 'google/gemini-3.8-flash',       // Gemini 3 Flash Preview
+  GEMINI_3_PRO: 'google/gemini-3.8-flash'          // Gemini 3.8 Pro Preview
 };
 
 function isNetworkStage2Error(error: any): boolean {

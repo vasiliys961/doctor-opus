@@ -325,12 +325,12 @@ export default function DocumentPage() {
       if (data.success) {
         setResult(data.result)
         setCurrentCost(data.cost || 0)
-        setModel(data.model || 'google/gemini-3-flash-preview')
+        setModel(data.model || 'google/gemini-3.8-flash')
         setMode('fast')
 
         logUsage({
           section: 'document',
-          model: data.model || 'google/gemini-3-flash-preview',
+          model: data.model || 'google/gemini-3.8-flash',
           inputTokens: data.usage?.prompt_tokens || 1500,
           outputTokens: data.usage?.completion_tokens || 800,
         })
@@ -386,9 +386,9 @@ export default function DocumentPage() {
         <AnalysisTips 
           title="Советы по сканированию документов"
           content={{
-            fast: scanMode === 'ai' ? "используется модель Gemini 3.1 Flash — она идеально подходит для быстрого и точного извлечения текста." : "локальный режим позволяет моментально создать качественный цифровой скан без отправки данных в сеть.",
+            fast: scanMode === 'ai' ? "используется модель Gemini 3.8 Flash — она идеально подходит для быстрого и точного извлечения текста." : "локальный режим позволяет моментально создать качественный цифровой скан без отправки данных в сеть.",
             extra: scanMode === 'ai' ? [
-              "⭐ Рекомендуемый режим: Gemini 3.1 Flash — лучший баланс скорости распознавания текста и стоимости.",
+              "⭐ Рекомендуемый режим: Gemini 3.8 Flash — лучший баланс скорости распознавания текста и стоимости.",
               "🛡️ В режиме ИИ обязательно используйте тумблер анонимизации для защиты ПД.",
               "🔍 Система сохраняет структуру документа: таблицы переводятся в Markdown."
             ] : [

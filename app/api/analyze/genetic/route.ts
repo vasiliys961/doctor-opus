@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
 MTHFR;rs1801133;CT;сниженная активность фермента
 APOE;rs429358;CC;высокий риск болезни Альцгеймера`;
 
-        const extractionModel = 'google/gemini-3-flash-preview';
+        const extractionModel = 'google/gemini-3.8-flash';
 
         const extractionPayload = {
           model: extractionModel,
@@ -235,7 +235,7 @@ APOE;rs429358;CC;высокий риск болезни Альцгеймера`;
 MTHFR;rs1801133;CT;сниженная активность фермента, умеренно повышенный гомоцистеин
 APOE;rs429358;CC;генотип E4/E4, высокий риск болезни Альцгеймера`;
 
-      const extractionModel = 'google/gemini-3-flash-preview';
+      const extractionModel = 'google/gemini-3.8-flash';
 
       const extractionPayload = {
         model: extractionModel,

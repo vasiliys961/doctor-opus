@@ -14,7 +14,7 @@ import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
 const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 const MODELS = {
-  GEMINI_3_FLASH: 'google/gemini-3-flash-preview',
+  GEMINI_3_FLASH: 'google/gemini-3.8-flash',
 } as const;
 
 export interface AnalyzeVideoOptions {

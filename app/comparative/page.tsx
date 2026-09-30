@@ -198,10 +198,10 @@ export default function ComparativeAnalysisPage() {
       }
 
       const modelToUse = mode === 'fast' 
-        ? 'google/gemini-3-flash-preview' 
+        ? 'google/gemini-3.8-flash' 
         : mode === 'optimized' 
           ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol')
-          : 'anthropic/claude-opus-5'
+          : 'anthropic/claude-opus-5.5'
       
       const formData = new FormData()
       formData.append('file', images[0].file)
@@ -271,10 +271,10 @@ export default function ComparativeAnalysisPage() {
       <AnalysisTips 
         content={{
           fast: "быстрое сравнение основных признаков на нескольких изображениях.",
-          optimized: "рекомендуемый режим: «Оптимизированный» (Gemini JSON → Sonnet) — оптимально для сравнения 'было/стало'.",
-          validated: "двухэтапный разбор (Gemini JSON → Opus 5) — максимально точная оценка динамики HU и структурных изменений.",
+          optimized: "рекомендуемый режим: «Оптимизированный» (Gemini 3.8 JSON → Sonnet 5.5) — оптимально для сравнения 'было/стало'.",
+          validated: "двухэтапный разбор (Gemini 3.8 JSON → Opus 5.5) — максимально точная оценка динамики HU и структурных изменений.",
           extra: [
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini JSON → Sonnet) — оптимально для сравнения 'было/стало'.",
+            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini 3.8 JSON → Sonnet 5.5) — оптимально для сравнения 'было/стало'.",
             "⏰ Используйте режим 'Динамика во времени' для анализа прогрессирования.",
             "📍 Режим 'По локализации' подходит для сравнения снимков разных органов."
           ]
@@ -435,7 +435,7 @@ export default function ComparativeAnalysisPage() {
           <div className="flex items-center gap-2 mb-2">
             <span className={`inline-flex h-2.5 w-2.5 rounded-full ${triageUi.badgeClassName}`} />
             <span className="font-bold">Автосортировка: {triageUi.label}</span>
-            <span className="text-xs opacity-80">Gemini 3.1 Flash</span>
+            <span className="text-xs opacity-80">Gemini 3.8 Flash</span>
           </div>
           <p className="text-sm mb-2">{triage.summary}</p>
           {triage.deviations.length > 0 && (

@@ -97,8 +97,8 @@ export default function ECGPage() {
           console.log('📦 [CACHE] Найдено в кэше ЭКГ, пропускаем запрос');
           setResult(cachedResult);
           setLoading(false);
-          setModelInfo(analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol') : 'anthropic/claude-opus-5');
+          setModelInfo(analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
+                        analysisMode === 'optimized' ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol') : 'anthropic/claude-opus-5.5');
           return;
         }
         // Сохраняем ключ для записи после завершения
@@ -123,9 +123,9 @@ export default function ECGPage() {
         const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
-        formData.append('model', 'anthropic/claude-opus-5');
+        formData.append('model', 'anthropic/claude-opus-5.5');
       } else if (analysisMode === 'fast') {
-        formData.append('model', 'google/gemini-3-flash-preview');
+        formData.append('model', 'google/gemini-3.8-flash');
       }
 
       if (useStream) {
@@ -145,8 +145,8 @@ export default function ECGPage() {
           }
 
           const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
-          const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
-                          analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
+          const modelUsed = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
+                          analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5.5';
           setModelInfo(modelUsed)
 
           await handleSSEStream(response, {
@@ -218,7 +218,7 @@ export default function ECGPage() {
             saveToCache((window as any)._currentCacheKey, data.result, analysisMode);
           }
 
-          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 'anthropic/claude-opus-5')
+          const modelUsed = data.model || (analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 'anthropic/claude-opus-5.5')
           setModelInfo(modelUsed)
           
           const cost = data.cost || 1.0;
@@ -321,10 +321,10 @@ export default function ECGPage() {
         content={{
           fast: "двухэтапный скрининг ЭКГ (сначала детализированное, но компактное описание кривой, затем текстовый разбор), даёт краткое заключение и оценку риска, удобно для быстрого первичного просмотра.",
           optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5.5) — идеальный баланс глубины и качества для анализа кривых ЭКГ.",
-          validated: "самый точный экспертный анализ (Gemini JSON + Opus 5) — рекомендуется для критических и сложных случаев.",
+          validated: "самый точный экспертный анализ (Gemini JSON + Opus 5.5) — рекомендуется для критических и сложных случаев.",
           extra: [
-            "💡 Рекомендуется GPT-6.1 Sol для быстрых анализов и Opus для сложных случаев.",
-            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini + Sonnet) — идеальный баланс точности и качества для анализа кривых ЭКГ.",
+            "💡 Рекомендуется GPT-6.1 Sol для быстрых анализов и Opus 5.5 для сложных случаев.",
+            "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini 3.8 + Sonnet 5.5) — идеальный баланс точности и качества для анализа кривых ЭКГ.",
             "📸 Вы можете загрузить файл с ЭКГ, сделать фото с камеры или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
             "💾 Результаты можно сохранить в контекст пациента и экспортировать в отчёт."

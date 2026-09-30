@@ -437,9 +437,9 @@ export default function SerialDeviceManager() {
 
       // Выбираем модели по пресету
       const presetConfig = {
-        fast:   { mode: 'fast',      model: 'google/gemini-3-flash-preview',    extractor: 'google/gemini-3-flash-preview' },
-        best:   { mode: 'optimized', model: 'openai/gpt-6.1-sol',             extractor: 'google/gemini-3-pro-preview' },
-        expert: { mode: 'validated', model: 'anthropic/claude-opus-5',         extractor: 'google/gemini-3-pro-preview' },
+        fast:   { mode: 'fast',      model: 'google/gemini-3.8-flash',    extractor: 'google/gemini-3.8-flash' },
+        best:   { mode: 'optimized', model: 'openai/gpt-6.1-sol',             extractor: 'google/gemini-3.8-flash' },
+        expert: { mode: 'validated', model: 'anthropic/claude-opus-5.5',         extractor: 'google/gemini-3.8-flash' },
       }
       const cfg = presetConfig[analysisPreset]
       setAnalysisModelUsed(cfg.model)
@@ -675,7 +675,7 @@ export default function SerialDeviceManager() {
                     id: 'fast',
                     icon: '⚡',
                     label: 'Быстрый',
-                    desc: 'Gemini Flash',
+                    desc: 'Gemini 3.8',
                     sub: 'Скрининг, быстрый ответ',
                     color: 'yellow',
                   },
@@ -683,7 +683,7 @@ export default function SerialDeviceManager() {
                     id: 'best',
                     icon: '⭐',
                     label: 'Лучший',
-                    desc: 'Gemini Pro → GPT-6.1 Sol',
+                    desc: 'Gemini 3.8 → GPT-6.1 Sol',
                     sub: 'Рекомендуется для ЭКГ',
                     color: 'indigo',
                   },
@@ -691,7 +691,7 @@ export default function SerialDeviceManager() {
                     id: 'expert',
                     icon: '🧠',
                     label: 'Экспертный',
-                    desc: 'Gemini Pro → Opus 5',
+                    desc: 'Gemini 3.8 → Opus 5.5',
                     sub: 'Сложные и критические случаи',
                     color: 'purple',
                   },
@@ -738,9 +738,9 @@ export default function SerialDeviceManager() {
           <div className="text-5xl mb-4">🧠</div>
           <h3 className="text-xl font-bold text-gray-800 mb-2">Анализирую ЭКГ...</h3>
           <p className="text-gray-500">
-            {analysisPreset === 'fast'   && 'Gemini Flash обрабатывает и формирует заключение'}
-            {analysisPreset === 'best'   && 'Gemini Pro извлекает данные → GPT-6.1 Sol формирует заключение'}
-            {analysisPreset === 'expert' && 'Gemini Pro извлекает данные → Claude Opus формирует заключение'}
+            {analysisPreset === 'fast'   && 'Gemini 3.8 обрабатывает и формирует заключение'}
+            {analysisPreset === 'best'   && 'Gemini 3.8 извлекает данные → GPT-6.1 Sol формирует заключение'}
+            {analysisPreset === 'expert' && 'Gemini 3.8 извлекает данные → Opus 5.5 формирует заключение'}
           </p>
           <div className="mt-6 flex justify-center">
             <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
