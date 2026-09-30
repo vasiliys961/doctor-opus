@@ -11,9 +11,11 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'anthropic/claude-fable-5': { input: 10.0, output: 50.0 },
   'sakana/fugu-ultra': { input: 5.0, output: 30.0 },
   'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
-  'anthropic/claude-sonnet-5': { input: 3.0, output: 15.0 },
+  'anthropic/claude-sonnet-5.5': { input: 3.0, output: 15.0 },
+  'anthropic/claude-sonnet-5': { input: 3.0, output: 15.0 }, // Исторические логи
   'openai/gpt-5.2-chat': { input: 2.5, output: 10.0 }, // Legacy pricing key (for historical logs)
-  'openai/gpt-5.6-terra': { input: 2.5, output: 15.0 }, // GPT-5.6 Terra (update from GPT-5.2 path)
+  'openai/gpt-6.1-sol': { input: 2.5, output: 15.0 },
+  'openai/gpt-5.6-terra': { input: 2.5, output: 15.0 }, // Исторические логи
   'x-ai/grok-4.5': { input: 2.0, output: 6.0 }, // Grok 4.5 (xAI pricing)
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
   'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },

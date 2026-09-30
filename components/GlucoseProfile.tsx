@@ -591,7 +591,7 @@ export default function GlucoseProfile() {
                   🔄 Повторный анализ
                 </button>
               </div>
-              <AnalysisResult result={analysisResult} model="openai/gpt-5.6-terra" mode="optimized" images={agpDataUrl ? [agpDataUrl] : []} />
+              <AnalysisResult result={analysisResult} model="openai/gpt-6.1-sol" mode="optimized" images={agpDataUrl ? [agpDataUrl] : []} />
             </div>
           )}
         </>

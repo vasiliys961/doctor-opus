@@ -59,8 +59,8 @@ export default function AnalysisModeSelector({
   }
 
   const optimizedModelLabelMap: Record<OptimizedModel, string> = {
-    sonnet: 'Claude Sonnet 5',
-    gpt52: 'GPT-5.6 Terra',
+    sonnet: 'Claude Sonnet 5.5',
+    gpt52: 'GPT-6.1 Sol',
   }
 
   const isRecommendationApplied = recommendation
@@ -195,7 +195,7 @@ export default function AnalysisModeSelector({
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
-                Claude Sonnet 5
+                Claude Sonnet 5.5
                 <div className="text-[9px] font-normal opacity-80">Стандарт (90 сек)</div>
               </button>
               <button
@@ -207,7 +207,7 @@ export default function AnalysisModeSelector({
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
-                GPT-5.6 Terra ⚡️
+                GPT-6.1 Sol ⚡️
                 <div className="text-[9px] font-normal opacity-80">Тест-драйв (15 сек)</div>
               </button>
             </div>

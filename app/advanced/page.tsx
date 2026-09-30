@@ -117,7 +117,7 @@ export default function AdvancedAnalysisPage() {
       const modelToUse = mode === 'fast' 
         ? 'google/gemini-3-flash-preview' 
         : mode === 'optimized' 
-          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra')
+          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol')
           : 'anthropic/claude-opus-5'
       
       const formData = new FormData()
@@ -176,7 +176,7 @@ export default function AdvancedAnalysisPage() {
       <AnalysisTips 
         content={{
           fast: "базовый скрининг основного изображения с учетом контекста.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5) — лучший выбор для анализа снимков с описанием.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5.5) — лучший выбор для анализа снимков с описанием.",
           validated: "двухэтапный экспертный анализ (Gemini JSON + Opus 5) — объединяет точность зрения Gemini и клинический интеллект Opus.",
           extra: [
             "⭐ Рекомендуемый режим: «Оптимизированный» (Gemini JSON + Sonnet) — лучший выбор для анализа снимков с описанием.",

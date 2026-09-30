@@ -15,8 +15,8 @@ const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 const MODELS = {
   OPUS: 'anthropic/claude-opus-4.6',                       // Claude Opus 4.6 (default)
   OPUS_VALIDATED: getValidatedOpusModel(),                 // Default: Opus 5, rollback: VALIDATED_OPUS_MODEL=4.7
-  SONNET: 'anthropic/claude-sonnet-5',                   // Claude Sonnet 5
-  GPT_5_2: 'openai/gpt-5.6-terra',                  // GPT-5.6 Terra (legacy key name kept for compatibility)
+  SONNET: 'anthropic/claude-sonnet-5.5',                   // Claude Sonnet 5.5
+  GPT_5_2: 'openai/gpt-6.1-sol',                  // GPT-6.1 Sol (legacy key name kept for compatibility)
   HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
   GEMINI_3_FLASH: 'google/gemini-3-flash-preview',       // Gemini 3 Flash Preview
@@ -439,7 +439,7 @@ export async function analyzeImageOpusTwoStageStreaming(
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
       // Обновляем статус перед запуском второй модели
-      const stage2Header = `\n> *Stage 2: Clinical analysis via ${model.includes('opus') ? 'Opus' : 'Sonnet 5'}...*\n\n---\n\n`;
+      const stage2Header = `\n> *Stage 2: Clinical analysis via ${model.includes('opus') ? 'Opus' : 'Sonnet 5.5'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT, STRATEGIC_SYSTEM_PROMPT } = await import('./prompts');
@@ -671,8 +671,8 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: summaryLine } }] })}\n\n`));
       
       const stage2Header = isComparative
-        ? `\n> *Stage 2: Detailed clinical comparison via ${model.includes('opus') ? 'Opus' : 'Sonnet 5'}...*\n\n---\n\n`
-        : `\n> *Stage 2: Detailed series analysis via ${model.includes('opus') ? 'Opus' : 'Sonnet 5'}...*\n\n---\n\n`;
+        ? `\n> *Stage 2: Detailed clinical comparison via ${model.includes('opus') ? 'Opus' : 'Sonnet 5.5'}...*\n\n---\n\n`
+        : `\n> *Stage 2: Detailed series analysis via ${model.includes('opus') ? 'Opus' : 'Sonnet 5.5'}...*\n\n---\n\n`;
       await writer.write(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: stage2Header } }] })}\n\n`));
 
       const { getDirectivePrompt, RADIOLOGY_PROTOCOL_PROMPT } = await import('./prompts');

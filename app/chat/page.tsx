@@ -44,8 +44,8 @@ const specialtyMap: Record<string, Specialty> = {
 };
 
 const getDisplayModelName = (model: ChatModel) => {
-  if (model === 'gpt52') return 'openai/gpt-5.6-terra';
-  if (model === 'sonnet') return 'anthropic/claude-sonnet-5';
+  if (model === 'gpt52') return 'openai/gpt-6.1-sol';
+  if (model === 'sonnet') return 'anthropic/claude-sonnet-5.5';
   if (model === 'opus') return 'anthropic/claude-opus-5';
   if (model === 'fable') return 'anthropic/claude-fable-5';
   if (model === 'gemini') return 'google/gemini-3-flash-preview';
@@ -221,10 +221,10 @@ export default function ChatPage() {
     }
   }, [consiliumMode, message, selectedFiles.length, specialty, triageSuggestion, useLibrary])
   const chatModelLabelMap: Record<ChatModel, string> = {
-    gpt52: 'GPT-5.6 Terra',
+    gpt52: 'GPT-6.1 Sol',
     opus: 'Opus 5',
     fable: 'Fable 5',
-    sonnet: 'Sonnet 5',
+    sonnet: 'Sonnet 5.5',
     gemini: 'Gemini 3.1',
   }
 
@@ -649,7 +649,7 @@ export default function ChatPage() {
 
     try {
       // ВАЖНО: отправляем на сервер ключ модели (sonnet/gpt52/opus/gemini/fable),
-      // а не строковый id провайдера. Сервер сам выберет актуальный id (например Sonnet 5).
+      // а не строковый id провайдера. Сервер сам выберет актуальный id (например Sonnet 5.5).
       const modelName = model
       const displayModelName = getDisplayModelName(model)
 
@@ -1712,10 +1712,10 @@ export default function ChatPage() {
               className="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
               disabled={loading}
             >
-              <option value="gpt52">🚀 GPT-5.6 Terra</option>
+              <option value="gpt52">🚀 GPT-6.1 Sol</option>
               <option value="opus">🧠 Opus 5</option>
               <option value="fable">🚀 Fable 5 (дороже)</option>
-              <option value="sonnet">🤖 Sonnet 5</option>
+              <option value="sonnet">🤖 Sonnet 5.5</option>
               <option value="gemini">⚡ Gemini 3.1</option>
             </select>
           </div>

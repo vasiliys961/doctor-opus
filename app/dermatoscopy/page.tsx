@@ -31,7 +31,7 @@ const STUDY_TYPES: { id: StudyType; icon: string; label: string; prompt: string;
     prompt: 'Проанализируйте дерматоскопическое изображение. Опишите структуру, цвета, границы, признаки меланомы по ABCDE критериям.',
     placeholder: 'Пример: Пациент 45 лет, образование на спине, заметил рост и изменение цвета в последние 3 месяца.',
     tipFast: 'двухэтапный скрининг — структурированное описание структуры и цвета, затем оценка риска.',
-    tipOpt: 'рекомендуемый режим (Gemini JSON + Sonnet 5) — идеальный баланс точности и качества для дерматоскопии.',
+    tipOpt: 'рекомендуемый режим (Gemini JSON + Sonnet 5.5) — идеальный баланс точности и качества для дерматоскопии.',
     tipVal: 'самый точный экспертный анализ (Gemini JSON + Opus 5) — рекомендуется для атипичных и сложных образований.',
   },
   {
@@ -244,7 +244,7 @@ export default function DermatoscopyPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-5');
@@ -264,7 +264,7 @@ export default function DermatoscopyPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
         
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';

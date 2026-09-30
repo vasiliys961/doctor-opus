@@ -183,7 +183,7 @@ export default function MRIPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-5');
@@ -203,7 +203,7 @@ export default function MRIPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-terra';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3-flash-preview' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5';
 
@@ -347,11 +347,11 @@ export default function MRIPage() {
       <AnalysisTips 
         content={{
           fast: "двухэтапный скрининг (сначала структурированное описание последовательностей, затем текстовый разбор), даёт компактное заключение и общий сигнал риска.",
-          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5) — идеальный баланс точности и качества для МРТ‑исследований.",
+          optimized: "рекомендуемый режим (Gemini JSON + Sonnet 5.5) — идеальный баланс точности и качества для МРТ‑исследований.",
           validated: "самый точный экспертный анализ (Gemini JSON + Opus 5) — рекомендуется для критических и сложных случаев.",
           extra: [
-            "✅ **GPT-5.6 Terra**: ЛУЧШИЙ выбор для 80% исследований (общий анализ, МРТ).",
-            "🦴 **Claude Sonnet 5**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах и костных травмах.",
+            "✅ **GPT-6.1 Sol**: ЛУЧШИЙ выбор для 80% исследований (общий анализ, МРТ).",
+            "🦴 **Claude Sonnet 5.5**: ИСКЛЮЧЕНИЕ! ЛУЧШИЙ результат на переломах и костных травмах.",
             "🧠 **Claude Opus 5**: экспертный режим для сложных и спорных случаев с максимальной глубиной разбора.",
             "📸 Вы можете загрузить снимки МРТ, сделать фото или использовать ссылку.",
             "🔄 Streaming‑режим помогает видеть ход рассуждений модели в реальном времени.",
