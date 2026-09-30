@@ -23,8 +23,8 @@ This repository branch (`en-version-global`) is the English/global product. Prod
 - **LLM routing:** Polza AI as the primary OpenAI-compatible gateway, with automatic fallback to OpenRouter on network/provider errors.
 - **Multi-model Council:**
 - **Claude Opus 5.5:** Deep reasoning for complex clinical cases and genomics.
-- **Claude Sonnet 5:** Strong default for fractures, skeletal pathology, and routine optimized analysis.
-- **GPT-5.6 Sol:** Fast working model for X-Ray, MRI, CT, and general clinical analysis.
+- **Claude Sonnet 5.5:** Strong default for fractures, skeletal pathology, and routine optimized analysis.
+- **GPT-6.1 Sol:** Fast working model for X-Ray, MRI, CT, and general clinical analysis.
 - **Gemini 3.8 Flash:** High-speed Stage 1 extraction (JSON/OCR) and screening.
 - **Two-stage Workflow:** Structured data extraction (JSON) → Clinical directive generation.
 - **Streaming (SSE):** Real-time token-by-token output for immediate feedback.

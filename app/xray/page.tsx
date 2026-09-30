@@ -85,7 +85,7 @@ export default function XRayPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-5.5');
@@ -113,7 +113,7 @@ export default function XRayPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5.5';
 
@@ -233,11 +233,11 @@ export default function XRayPage() {
         recommendationProfile="imaging"
         content={{
           fast: "Two-stage X-Ray screening (structured image description then clinical interpretation). Provides a concise conclusion and risk signal — ideal for initial review and triage.",
-          optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and quality for X-Ray analysis.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 5.5) — ideal balance of accuracy and quality for X-Ray analysis.",
           validated: "Most accurate expert analysis (Gemini JSON + Opus 5.5) — recommended for critical and complex cases.",
           extra: [
-            "✅ **GPT-5.6 Sol**: BEST choice for 80% of X-Ray cases (general analysis, MRI).",
-            "🦴 **Claude Sonnet 5**: EXCEPTION — BEST results on fractures (83% accuracy).",
+            "✅ **GPT-6.1 Sol**: BEST choice for 80% of X-Ray cases (general analysis, MRI).",
+            "🦴 **Claude Sonnet 5.5**: EXCEPTION — BEST results on fractures (83% accuracy).",
             "⚠️ **Claude Opus 5.5**: NOT recommended for this section (weakest model for imaging).",
             "📸 You can upload an X-Ray file, take a photo with a camera, or use a URL.",
             "🔄 Streaming mode lets you see the model's reasoning in real time.",

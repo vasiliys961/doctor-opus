@@ -52,9 +52,9 @@ Lors de l'enregistrement d'un résultat IA dans le dossier patient :
 L'intelligence centrale de la plateforme. Prend en charge le dialogue clinique ouvert, la discussion de cas, le diagnostic différentiel, la revue de littérature et l'analyse multi-fichiers.
 
 **Modèles disponibles (menu déroulant) :**
-- **GPT-5.6 Sol** — Idéal pour 80 % de l'imagerie, de l'IRM et des questions cliniques générales. Concis et efficace.
+- **GPT-6.1 Sol** — Idéal pour 80 % de l'imagerie, de l'IRM et des questions cliniques générales. Concis et efficace.
 - **Claude Opus 5.5** — Raisonnement le plus approfondi. Idéal pour les cas complexes, la génétique et les pathologies rares. Plus lent, coût plus élevé.
-- **Claude Sonnet 5** — Équilibré. Excellent pour les consultations rapides et l'évaluation des fractures.
+- **Claude Sonnet 5.5** — Équilibré. Excellent pour les consultations rapides et l'évaluation des fractures.
 - **Gemini 3 Flash** — Le plus rapide. Idéal pour les références rapides et l'extraction de données.
 
 **L'assistant peut :**
@@ -97,7 +97,7 @@ Convertit une dictée non structurée ou des notes tapées en une note clinique 
 
 Vous pouvez personnaliser n'importe quel modèle pour l'adapter à votre flux de travail. La version personnalisée peut être épinglée comme votre standard personnel.
 
-**Modèles recommandés :** GPT-5.6 Sol ou Claude Sonnet 5.
+**Modèles recommandés :** GPT-6.1 Sol ou Claude Sonnet 5.5.
 
 ---
 
@@ -149,7 +149,7 @@ Après avoir reçu les résultats, vous pouvez poursuivre la conversation avec d
 - **Pied à coulisse numérique :** Faites glisser les marqueurs bleus pour mesurer les intervalles PR, QRS, QT. Calibrez à l'aide de la grille ECG (1 sec = 5 grands carreaux à 25 mm/s)
 - **Recherche en bibliothèque :** Après l'analyse, cliquez pour trouver des cas ou des descriptions correspondants dans votre bibliothèque PDF personnelle
 
-**Modèles recommandés :** GPT-5.6 Sol (général) · Claude Sonnet 5 (détails des arythmies)
+**Modèles recommandés :** GPT-6.1 Sol (général) · Claude Sonnet 5.5 (détails des arythmies)
 
 ---
 
@@ -164,7 +164,7 @@ Téléchargez une ou plusieurs images (dossier ou série DICOM). Ajoutez le cont
 
 **Mode comparaison :** Activez **Avant/Après** pour comparer deux points temporels ou vues côte à côte.
 
-**Meilleurs modèles :** GPT-5.6 Sol (80 % des cas) · Claude Sonnet 5 (fractures, 83 % de précision)
+**Meilleurs modèles :** GPT-6.1 Sol (80 % des cas) · Claude Sonnet 5.5 (fractures, 83 % de précision)
 
 ---
 
@@ -353,8 +353,8 @@ Les crédits sont consommés lors de l'utilisation de modèles d'IA avancés. Le
 | Opération | Coût en crédits (approx.) |
 |---|---|
 | Analyse rapide (Gemini 3 Flash) | ~0,3 – 0,8 cr. |
-| Analyse optimisée (Sonnet 5) | ~0,8 – 1,5 cr. |
-| Validé par Expert (Opus 5.5 / GPT-5.6 Sol) | ~1,5 – 3,5 cr. |
+| Analyse optimisée (Sonnet 5.5) | ~0,8 – 1,5 cr. |
+| Validé par Expert (Opus 5.5 / GPT-6.1 Sol) | ~1,5 – 3,5 cr. |
 | Page PDF (Traitement Vision) | ~0,3 cr. par page |
 | Traducteur médical | 5,1 cr. par minute tant que le microphone est ouvert |
 | Enregistrement de la conversation pour le protocole clinique | 62 cr. par heure d’audio |
@@ -381,7 +381,7 @@ Le coût exact de chaque requête est affiché dans le bloc de résultat immédi
 
 - Ajoutez toujours le **contexte clinique** (Motif, Histoire, Antécédents clés) — cela améliore considérablement la pertinence et la précision.
 - Utilisez des **PDF avec texte consultable** (pas de scans d'images) pour la Bibliothèque Personnelle.
-- Pour l'ECG : utilisez **Claude Sonnet 5** en mode Optimisé pour les détails des arythmies.
-- Pour les fractures : **Claude Sonnet 5** surpasse les autres modèles (83 % de précision).
+- Pour l'ECG : utilisez **Claude Sonnet 5.5** en mode Optimisé pour les détails des arythmies.
+- Pour les fractures : **Claude Sonnet 5.5** surpasse les autres modèles (83 % de précision).
 - Pour la génétique complexe ou les pathologies rares : utilisez **Claude Opus 5.5** (mode Validé par Expert).
 - Le système s'améliore au fil du temps grâce à vos retours — veuillez évaluer les réponses de l'IA après les tests.

@@ -52,9 +52,9 @@ Al guardar un resultado de IA en la ficha del paciente:
 La inteligencia central de la plataforma. Admite diálogo clínico abierto, discusión de casos, diagnóstico diferencial, revisión de literatura y análisis de múltiples archivos.
 
 **Modelos disponibles (menú desplegable):**
-- **GPT-5.6 Sol** — El mejor para el 80% de imágenes, RM y preguntas clínicas generales. Conciso y eficiente.
+- **GPT-6.1 Sol** — El mejor para el 80% de imágenes, RM y preguntas clínicas generales. Conciso y eficiente.
 - **Claude Opus 5.5** — Razonamiento más profundo. Ideal para casos complejos, genética y patologías raras. Más lento, mayor costo.
-- **Claude Sonnet 5** — Equilibrado. Excelente para consultas rápidas y evaluación de fracturas.
+- **Claude Sonnet 5.5** — Equilibrado. Excelente para consultas rápidas y evaluación de fracturas.
 - **Gemini 3 Flash** — El más rápido. Ideal para referencia rápida y extracción de datos.
 
 **El asistente puede:**
@@ -97,7 +97,7 @@ Convierte dictados no estructurados o notas escritas en una nota clínica estruc
 
 Puede personalizar cualquier plantilla para que coincida con su flujo de trabajo. La versión personalizada puede fijarse como su estándar personal.
 
-**Modelos recomendados:** GPT-5.6 Sol o Claude Sonnet 5.
+**Modelos recomendados:** GPT-6.1 Sol o Claude Sonnet 5.5.
 
 ---
 
@@ -149,7 +149,7 @@ Tras recibir los resultados, puede continuar la conversación con preguntas de s
 - **Calibrador Digital:** Arrastre los marcadores azules para medir intervalos PR, QRS, QT. Calibre usando la cuadrícula del ECG (1 seg = 5 cuadros grandes a 25 mm/s)
 - **Buscar en Biblioteca:** Tras el análisis, haga clic para encontrar casos o descripciones coincidentes en su biblioteca PDF personal
 
-**Modelos recomendados:** GPT-5.6 Sol (general) · Claude Sonnet 5 (detalle de arritmias)
+**Modelos recomendados:** GPT-6.1 Sol (general) · Claude Sonnet 5.5 (detalle de arritmias)
 
 ---
 
@@ -164,7 +164,7 @@ Cargue imágenes individuales o múltiples (carpeta o serie DICOM). Añada conte
 
 **Modo de comparación:** Active **Antes/Después** para comparar dos puntos en el tiempo o vistas lado a lado.
 
-**Mejores modelos:** GPT-5.6 Sol (80% de los casos) · Claude Sonnet 5 (fracturas, 83% de precisión)
+**Mejores modelos:** GPT-6.1 Sol (80% de los casos) · Claude Sonnet 5.5 (fracturas, 83% de precisión)
 
 ---
 
@@ -353,8 +353,8 @@ Los créditos se consumen al utilizar modelos de IA avanzados. Las consultas de 
 | Operación | Costo en créditos (aprox.) |
 |---|---|
 | Análisis rápido (Gemini 3 Flash) | ~0.3 – 0.8 cr. |
-| Análisis optimizado (Sonnet 5) | ~0.8 – 1.5 cr. |
-| Validado por Experto (Opus 5.5 / GPT-5.6 Sol) | ~1.5 – 3.5 cr. |
+| Análisis optimizado (Sonnet 5.5) | ~0.8 – 1.5 cr. |
+| Validado por Experto (Opus 5.5 / GPT-6.1 Sol) | ~1.5 – 3.5 cr. |
 | Página PDF (Procesamiento de visión) | ~0.3 cr. por página |
 | Traductor médico | 5,1 cr. por minuto con el micrófono encendido |
 | Grabación de la conversación para el protocolo clínico | 62 cr. por hora de audio |
@@ -381,7 +381,7 @@ El costo exacto de cada solicitud se muestra en el bloque de resultados inmediat
 
 - Añada siempre **contexto clínico** (Motivo de consulta, HPI, antecedentes clave); mejora significativamente la relevancia y precisión
 - Utilice **PDFs con búsqueda de texto** (no escaneos de imágenes) para la Biblioteca Personal
-- Para ECG: use **Claude Sonnet 5** en modo Optimizado para detalles de arritmias
-- Para fracturas: **Claude Sonnet 5** supera a otros modelos (83% de precisión)
+- Para ECG: use **Claude Sonnet 5.5** en modo Optimizado para detalles de arritmias
+- Para fracturas: **Claude Sonnet 5.5** supera a otros modelos (83% de precisión)
 - Para genética compleja o patología rara: use **Claude Opus 5.5** (modo Validado por Experto)
 - El sistema mejora con el tiempo gracias a sus comentarios; por favor, califique las respuestas de la IA después de las pruebas

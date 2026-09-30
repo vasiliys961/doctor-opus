@@ -52,9 +52,9 @@ Semasa menyimpan hasil AI ke rekod pesakit:
 Teras kecerdasan platform ini. Menyokong dialog klinikal terbuka, perbincangan kes, diagnosis pembezaan, tinjauan literatur, dan analisis pelbagai fail.
 
 **Model yang tersedia (dropdown):**
-- **GPT-5.6 Sol** — Terbaik untuk 80% pengimejan, MRI, dan soalan klinikal umum. Ringkas dan cekap.
+- **GPT-6.1 Sol** — Terbaik untuk 80% pengimejan, MRI, dan soalan klinikal umum. Ringkas dan cekap.
 - **Claude Opus 5.5** — Penaakulan paling mendalam. Terbaik untuk kes kompleks, genetik, dan patologi jarang berlaku. Lebih perlahan, kos lebih tinggi.
-- **Claude Sonnet 5** — Seimbang. Cemerlang untuk perundingan pantas dan penilaian patah tulang.
+- **Claude Sonnet 5.5** — Seimbang. Cemerlang untuk perundingan pantas dan penilaian patah tulang.
 - **Gemini 3 Flash** — Paling pantas. Ideal untuk rujukan pantas dan pengekstrakan data.
 
 **Pembantu boleh:**
@@ -97,7 +97,7 @@ Menukar imlak tidak berstruktur atau nota bertaip kepada nota klinikal berstrukt
 
 Anda boleh menyesuaikan mana-mana templat untuk memadankan aliran kerja anda. Versi yang disesuaikan boleh disematkan sebagai standard peribadi anda.
 
-**Model disyorkan:** GPT-5.6 Sol atau Claude Sonnet 5.
+**Model disyorkan:** GPT-6.1 Sol atau Claude Sonnet 5.5.
 
 ---
 
@@ -149,7 +149,7 @@ Selepas menerima keputusan, anda boleh meneruskan perbualan dengan soalan susula
 - **Digital Caliper:** Seret penanda biru untuk mengukur selang PR, QRS, QT. Kalibrasi menggunakan grid ECG (1 saat = 5 kotak besar pada 25 mm/s)
 - **Search Library:** Selepas analisis, klik untuk mencari kes atau huraian yang sepadan dalam perpustakaan PDF peribadi anda
 
-**Model disyorkan:** GPT-5.6 Sol (umum) · Claude Sonnet 5 (perincian aritmia)
+**Model disyorkan:** GPT-6.1 Sol (umum) · Claude Sonnet 5.5 (perincian aritmia)
 
 ---
 
@@ -164,7 +164,7 @@ Muat naik imej tunggal atau berbilang (folder atau siri DICOM). Tambah konteks k
 
 **Mod perbandingan:** Dayakan **Before/After** untuk membandingkan dua titik masa atau pandangan secara bersebelahan.
 
-**Model terbaik:** GPT-5.6 Sol (80% kes) · Claude Sonnet 5 (patah tulang, ketepatan 83%)
+**Model terbaik:** GPT-6.1 Sol (80% kes) · Claude Sonnet 5.5 (patah tulang, ketepatan 83%)
 
 ---
 
@@ -353,8 +353,8 @@ Kredit digunakan apabila menggunakan model AI lanjutan. Carian rujukan mudah dan
 | Operasi | Kos kredit (anggaran) |
 |---|---|
 | Analisis pantas (Gemini 3 Flash) | ~0.3 – 0.8 kr. |
-| Analisis dioptimumkan (Sonnet 5) | ~0.8 – 1.5 kr. |
-| Pengesahan Pakar (Opus 5.5 / GPT-5.6 Sol) | ~1.5 – 3.5 kr. |
+| Analisis dioptimumkan (Sonnet 5.5) | ~0.8 – 1.5 kr. |
+| Pengesahan Pakar (Opus 5.5 / GPT-6.1 Sol) | ~1.5 – 3.5 kr. |
 | Halaman PDF (Pemprosesan Visi) | ~0.3 kr. setiap halaman |
 | Penterjemah perubatan | 5.1 kr. seminit semasa mikrofon dihidupkan |
 | Rakaman perbualan untuk protokol klinikal | 62 kr. sejam audio |
@@ -381,7 +381,7 @@ Kos tepat bagi setiap permintaan ditunjukkan dalam blok keputusan sejurus selepa
 
 - Sentiasa tambah **konteks klinikal** (CC, HPI, PMH utama) — ia meningkatkan kaitan dan ketepatan secara ketara
 - Gunakan **PDF yang boleh dicari teks** (bukan imbasan imej) untuk Perpustakaan Peribadi
-- Untuk ECG: gunakan **Claude Sonnet 5** dalam mod Optimized untuk perincian aritmia
-- Untuk patah tulang: **Claude Sonnet 5** mengatasi model lain (ketepatan 83%)
+- Untuk ECG: gunakan **Claude Sonnet 5.5** dalam mod Optimized untuk perincian aritmia
+- Untuk patah tulang: **Claude Sonnet 5.5** mengatasi model lain (ketepatan 83%)
 - Untuk genetik kompleks atau patologi jarang: gunakan **Claude Opus 5.5** (mod Expert Validated)
 - Sistem bertambah baik dari semasa ke semasa melalui maklum balas anda — sila nilaikan respons AI selepas ujian

@@ -282,7 +282,7 @@ export default function SubscriptionPage() {
               <p className="text-[10px] text-gray-500">Routine screening tasks</p>
             </div>
             <div className="border border-gray-200 rounded-lg p-4">
-              <p className="font-semibold text-gray-800 mb-1">⭐ Optimized (Sonnet 5)</p>
+              <p className="font-semibold text-gray-800 mb-1">⭐ Optimized (Sonnet 5.5)</p>
               <p className="text-teal-600 font-bold">~5 – 12 cr.</p>
               <p className="text-[10px] text-gray-500">Standard clinical analyses</p>
             </div>

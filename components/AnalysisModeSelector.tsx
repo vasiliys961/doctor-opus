@@ -149,7 +149,7 @@ export default function AnalysisModeSelector({
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
-                Claude Sonnet 5
+                Claude Sonnet 5.5
                 <div className="text-[9px] font-normal opacity-80">Recommended: best speed/quality balance</div>
               </button>
               <button
@@ -161,7 +161,7 @@ export default function AnalysisModeSelector({
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
-                GPT-5.6 Sol ⚡️
+                GPT-6.1 Sol ⚡️
                 <div className="text-[9px] font-normal opacity-80">Deeper reasoning for complex cases</div>
               </button>
             </div>

@@ -12,11 +12,11 @@ export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 // Примерные тарифы OpenRouter за 1000 токенов в условных единицах (для отображения)
-const PRICE_UNITS_PER_1K_TOKENS_SONNET = 2.0; // 2 единицы за 1000 токенов Claude Sonnet 5
+const PRICE_UNITS_PER_1K_TOKENS_SONNET = 2.0; // 2 единицы за 1000 токенов Claude Sonnet 5.5
 const PRICE_UNITS_PER_1K_TOKENS_GEMINI = 0.4; // 0.4 единицы за 1000 токенов Gemini Flash
 const MIN_CONSULT_COST = 2;
 const MAX_CONSULT_COST = 20;
-const GPT_54_MODEL = 'openai/gpt-5.6-sol';
+const GPT_54_MODEL = 'openai/gpt-6.1-sol';
 const OPUS_FALLBACK_MODEL = 'anthropic/claude-opus-5.5';
 
 function shouldFallbackFromGpt54(status: number, errorText: string): boolean {
@@ -71,7 +71,7 @@ function estimateConsultCost(params: {
  * На основе уже выполненного извлечения, клинического контекста и вопроса пользователя.
  * Поддерживается два режима:
  *  - fast      → Gemini (дешевле, короче)
- *  - professor → Claude Sonnet 5 (подробное экспертное заключение)
+ *  - professor → Claude Sonnet 5.5 (подробное экспертное заключение)
  */
 export async function POST(request: NextRequest) {
   let billedAmount = 0;

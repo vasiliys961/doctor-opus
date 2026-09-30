@@ -52,9 +52,9 @@ Bir yapay zeka sonucunu hasta kaydına kaydederken:
 Platformun temel zekasıdır. Açık uçlu klinik diyalog, vaka tartışması, ayırıcı tanı, literatür taraması ve çoklu dosya analizini destekler.
 
 **Mevcut modeller (açılır menü):**
-- **GPT-5.6 Sol** — Görüntüleme, MR ve genel klinik soruların %80'i için en iyisidir. Öz ve verimlidir.
+- **GPT-6.1 Sol** — Görüntüleme, MR ve genel klinik soruların %80'i için en iyisidir. Öz ve verimlidir.
 - **Claude Opus 5.5** — En derin muhakeme yeteneği. Karmaşık vakalar, genetik ve nadir patolojiler için en iyisidir. Daha yavaş, daha yüksek maliyetlidir.
-- **Claude Sonnet 5** — Dengeli. Hızlı konsültasyonlar ve kırık değerlendirmesi için mükemmeldir.
+- **Claude Sonnet 5.5** — Dengeli. Hızlı konsültasyonlar ve kırık değerlendirmesi için mükemmeldir.
 - **Gemini 3 Flash** — En hızlısı. Hızlı referans ve veri çıkarma için idealdir.
 
 **Asistan şunları yapabilir:**
@@ -97,7 +97,7 @@ Yapılandırılmamış dikteyi veya yazılı notları, branşa özel yapılandı
 
 Herhangi bir şablonu iş akışınıza göre özelleştirebilirsiniz. Özelleştirilmiş sürüm, kişisel standardınız olarak sabitlenebilir.
 
-**Önerilen modeller:** GPT-5.6 Sol veya Claude Sonnet 5.
+**Önerilen modeller:** GPT-6.1 Sol veya Claude Sonnet 5.5.
 
 ---
 
@@ -149,7 +149,7 @@ Sonuçları aldıktan sonra, bağlam dahilinde takip sorularıyla görüşmeye d
 - **Dijital Kumpas:** PR, QRS, QT aralıklarını ölçmek için mavi işaretçileri sürükleyin. EKG ızgarasını kullanarak kalibre edin (25 mm/sn'de 1 sn = 5 büyük kare).
 - **Kitaplıkta Ara:** Analizden sonra, kişisel PDF kitaplığınızda eşleşen vakaları veya açıklamaları bulmak için tıklayın.
 
-**Önerilen modeller:** GPT-5.6 Sol (genel) · Claude Sonnet 5 (aritmi detayları)
+**Önerilen modeller:** GPT-6.1 Sol (genel) · Claude Sonnet 5.5 (aritmi detayları)
 
 ---
 
@@ -164,7 +164,7 @@ Tekli veya çoklu görüntüler yükleyin (klasör veya DICOM serisi). Önemli �
 
 **Karşılaştırma modu:** İki zaman noktasını veya görünümü yan yana karşılaştırmak için **Önce/Sonra** özelliğini etkinleştirin.
 
-**En iyi modeller:** GPT-5.6 Sol (vakaların %80'i) · Claude Sonnet 5 (kırıklar, %83 doğruluk)
+**En iyi modeller:** GPT-6.1 Sol (vakaların %80'i) · Claude Sonnet 5.5 (kırıklar, %83 doğruluk)
 
 ---
 
@@ -353,8 +353,8 @@ Gelişmiş yapay zeka modelleri kullanıldığında krediler tüketilir. Basit r
 | İşlem | Kredi Maliyeti (yaklaşık) |
 |---|---|
 | Hızlı analiz (Gemini 3 Flash) | ~0.3 – 0.8 kr. |
-| Optimize edilmiş analiz (Sonnet 5) | ~0.8 – 1.5 kr. |
-| Uzman Onaylı (Opus 5.5 / GPT-5.6 Sol) | ~1.5 – 3.5 kr. |
+| Optimize edilmiş analiz (Sonnet 5.5) | ~0.8 – 1.5 kr. |
+| Uzman Onaylı (Opus 5.5 / GPT-6.1 Sol) | ~1.5 – 3.5 kr. |
 | PDF sayfası (Görüntü işleme) | Sayfa başına ~0.3 kr. |
 | Tıbbi çevirmen | Mikrofon açıkken dakika başına 5,1 kr. |
 | Klinik protokol için konuşma kaydı | Sesin saati başına 62 kr. |
@@ -381,7 +381,7 @@ Her isteğin tam maliyeti, analiz tamamlandıktan hemen sonra sonuç bloğunda g
 
 - Daima **klinik bağlam** (Şikayet, Hikaye, önemli Özgeçmiş) ekleyin — bu, alaka düzeyini ve doğruluğu önemli ölçüde artırır.
 - Kişisel Kitaplık için **metin araması yapılabilir PDF'ler** kullanın (resim taramaları değil).
-- EKG için: Aritmi detayları için Optimize Edilmiş modda **Claude Sonnet 5** kullanın.
-- Kırıklar için: **Claude Sonnet 5** diğer modellerden daha iyi performans gösterir (%83 doğruluk).
+- EKG için: Aritmi detayları için Optimize Edilmiş modda **Claude Sonnet 5.5** kullanın.
+- Kırıklar için: **Claude Sonnet 5.5** diğer modellerden daha iyi performans gösterir (%83 doğruluk).
 - Karmaşık genetik veya nadir patolojiler için: **Claude Opus 5.5** (Uzman Onaylı mod) kullanın.
 - Sistem, geri bildirimlerinizle zamanla gelişir — lütfen testlerden sonra yapay zeka yanıtlarını oylayın.

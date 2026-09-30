@@ -137,7 +137,7 @@ export default function CTPage() {
 
       // Добавляем конкретную модель для оптимизированного режима
       if (analysisMode === 'optimized') {
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
         formData.append('model', targetModelId);
       } else if (analysisMode === 'validated') {
         formData.append('model', 'anthropic/claude-opus-5.5');
@@ -160,7 +160,7 @@ export default function CTPage() {
         // Используем универсальную функцию обработки streaming
         const { handleSSEStream } = await import('@/lib/streaming-utils')
         
-        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol';
+        const targetModelId = optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol';
         const modelUsed = analysisMode === 'fast' ? 'google/gemini-3.8-flash' : 
                         analysisMode === 'optimized' ? targetModelId : 'anthropic/claude-opus-5.5';
 
@@ -268,11 +268,11 @@ export default function CTPage() {
         recommendationProfile="imaging"
         content={{
           fast: "Two-stage CT screening (structured HU density and structure description, then clinical interpretation). Provides a concise conclusion and overall risk signal.",
-          optimized: "Recommended mode (Gemini JSON + Sonnet 5) — ideal balance of accuracy and quality for CT studies.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 5.5) — ideal balance of accuracy and quality for CT studies.",
           validated: "Most accurate expert analysis (Gemini JSON + Opus 5.5) — recommended for critical and complex cases.",
           extra: [
-            "✅ **GPT-5.6 Sol**: BEST choice for 80% of CT studies (general analysis, CT anatomy).",
-            "🦴 **Claude Sonnet 5**: EXCEPTION — BEST results on fractures and fine structures.",
+            "✅ **GPT-6.1 Sol**: BEST choice for 80% of CT studies (general analysis, CT anatomy).",
+            "🦴 **Claude Sonnet 5.5**: EXCEPTION — BEST results on fractures and fine structures.",
             "⚠️ **Claude Opus 5.5**: NOT recommended for this section (weaker model for imaging).",
             "📸 You can upload CT images, take a photo, or use a URL.",
             "🔄 Streaming mode lets you see the model's reasoning in real time.",

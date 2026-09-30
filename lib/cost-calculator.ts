@@ -9,10 +9,12 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'anthropic/claude-opus-4.6': { input: 5.0, output: 25.0 },
   'anthropic/claude-fable-5': { input: 10.0, output: 50.0 }, // Legacy key for historical logs
   'anthropic/claude-fable-5.1': { input: 10.0, output: 50.0 },
-  'anthropic/claude-sonnet-5': { input: 3.0, output: 15.0 },
+  'anthropic/claude-sonnet-5.5': { input: 3.0, output: 15.0 },
+  'anthropic/claude-sonnet-5': { input: 3.0, output: 15.0 }, // Исторические логи
   'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
   'anthropic/claude-sonnet-4.6': { input: 3.0, output: 15.0 },
-  'openai/gpt-5.6-sol': { input: 2.0, output: 10.0 },
+  'openai/gpt-6.1-sol': { input: 2.0, output: 10.0 },
+  'openai/gpt-5.6-sol': { input: 2.0, output: 10.0 }, // Исторические логи
   'openai/gpt-5.6-terra': { input: 2.0, output: 12.0 }, // Исторические логи; текущий тариф OpenRouter
   'openai/gpt-5.2': { input: 2.5, output: 10.0 },
   'openai/gpt-5.4': { input: 2.5, output: 10.0 }, // GPT-5.4 (мощнее и дешевле Sonnet 4.6)

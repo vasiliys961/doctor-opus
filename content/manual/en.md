@@ -52,9 +52,9 @@ When saving an AI result to a patient record:
 The core intelligence of the platform. Supports open-ended clinical dialogue, case discussion, differential diagnosis, literature review, and multi-file analysis.
 
 **Available models (dropdown):**
-- **GPT-5.6 Sol** — Best for 80% of imaging, MRI, and general clinical questions. Concise and efficient.
+- **GPT-6.1 Sol** — Best for 80% of imaging, MRI, and general clinical questions. Concise and efficient.
 - **Claude Opus 5.5** — Deepest reasoning. Best for complex cases, genetics, and rare pathologies. Slower, higher cost.
-- **Claude Sonnet 5** — Balanced. Excellent for quick consultations and fracture assessment.
+- **Claude Sonnet 5.5** — Balanced. Excellent for quick consultations and fracture assessment.
 - **Gemini 3 Flash** — Fastest. Ideal for quick reference and data extraction.
 
 **The assistant can:**
@@ -97,7 +97,7 @@ Converts unstructured dictation or typed notes into a structured, specialty-spec
 
 You can customize any template to match your workflow. The customized version can be pinned as your personal standard.
 
-**Recommended models:** GPT-5.6 Sol or Claude Sonnet 5.
+**Recommended models:** GPT-6.1 Sol or Claude Sonnet 5.5.
 
 ---
 
@@ -149,7 +149,7 @@ After receiving results, you can continue the conversation with follow-up questi
 - **Digital Caliper:** Drag blue markers to measure PR, QRS, QT intervals. Calibrate using the ECG grid (1 sec = 5 large cells at 25 mm/s)
 - **Search Library:** After analysis, click to find matching cases or descriptions in your personal PDF library
 
-**Recommended models:** GPT-5.6 Sol (general) · Claude Sonnet 5 (arrhythmia detail)
+**Recommended models:** GPT-6.1 Sol (general) · Claude Sonnet 5.5 (arrhythmia detail)
 
 ---
 
@@ -164,7 +164,7 @@ Upload single or multiple images (folder or DICOM series). Add clinical context 
 
 **Comparison mode:** Enable **Before/After** to compare two time points or views side-by-side.
 
-**Best models:** GPT-5.6 Sol (80% of cases) · Claude Sonnet 5 (fractures, 83% accuracy)
+**Best models:** GPT-6.1 Sol (80% of cases) · Claude Sonnet 5.5 (fractures, 83% accuracy)
 
 ---
 
@@ -353,8 +353,8 @@ Credits are consumed when using advanced AI models. Simple reference lookups and
 | Operation | Credit cost (approx.) |
 |---|---|
 | Fast analysis (Gemini 3 Flash) | ~0.3 – 0.8 cr. |
-| Optimized analysis (Sonnet 5) | ~0.8 – 1.5 cr. |
-| Expert Validated (Opus 5.5 / GPT-5.6 Sol) | ~1.5 – 3.5 cr. |
+| Optimized analysis (Sonnet 5.5) | ~0.8 – 1.5 cr. |
+| Expert Validated (Opus 5.5 / GPT-6.1 Sol) | ~1.5 – 3.5 cr. |
 | PDF page (Vision processing) | ~0.3 cr. per page |
 | Medical Translator | 5.1 cr. per minute while the microphone is on |
 | Conversation recording for a clinical protocol | 62 cr. per hour of audio |
@@ -381,7 +381,7 @@ Exact cost of each request is shown in the result block immediately after analys
 
 - Always add **clinical context** (CC, HPI, key PMH) — it significantly improves relevance and accuracy
 - Use **text-searchable PDFs** (not image scans) for the Personal Library
-- For ECG: use **Claude Sonnet 5** in Optimized mode for arrhythmia detail
-- For fractures: **Claude Sonnet 5** outperforms other models (83% accuracy)
+- For ECG: use **Claude Sonnet 5.5** in Optimized mode for arrhythmia detail
+- For fractures: **Claude Sonnet 5.5** outperforms other models (83% accuracy)
 - For complex genetics or rare pathology: use **Claude Opus 5.5** (Expert Validated mode)
 - The system improves over time through your feedback — please rate AI responses after tests

@@ -81,7 +81,7 @@ Additional files: ${additionalFiles.length}`
       const modelToUse = mode === 'fast' 
         ? 'google/gemini-3.8-flash' 
         : mode === 'optimized' 
-          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5' : 'openai/gpt-5.6-sol')
+          ? (optimizedModel === 'sonnet' ? 'anthropic/claude-sonnet-5.5' : 'openai/gpt-6.1-sol')
           : 'anthropic/claude-opus-5.5'
       
       const formData = new FormData()
@@ -142,7 +142,7 @@ Additional files: ${additionalFiles.length}`
         recommendationProfile="imaging"
         content={{
           fast: "Basic screening of the main image with context.",
-          optimized: "Recommended mode (Gemini JSON + Sonnet 5) — best choice for image analysis with clinical description.",
+          optimized: "Recommended mode (Gemini JSON + Sonnet 5.5) — best choice for image analysis with clinical description.",
           validated: "Two-stage expert analysis (Gemini JSON + Opus 5.5) — combining Gemini's visual accuracy and Opus's clinical intelligence.",
           extra: [
             "⭐ Recommended mode: «Optimized» (Gemini JSON + Sonnet) — best choice for image analysis with clinical description.",

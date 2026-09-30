@@ -8,8 +8,8 @@ import { getSpirometryMessages } from '@/lib/i18n/spirometry'
 import { postLlmChatCompletionsWithFallback } from '@/lib/llm-provider'
 import { appendLanguageInstruction, getForcedLanguageInstructionForRequest } from '@/lib/i18n/llm-response-language'
 
-const PRIMARY_MODEL = 'openai/gpt-5.6-sol'
-const FALLBACK_MODEL = 'anthropic/claude-sonnet-5'
+const PRIMARY_MODEL = 'openai/gpt-6.1-sol'
+const FALLBACK_MODEL = 'anthropic/claude-sonnet-5.5'
 
 function shouldFallbackFromPrimaryModel(status: number, errorText: string): boolean {
   const normalized = (errorText || '').toLowerCase()

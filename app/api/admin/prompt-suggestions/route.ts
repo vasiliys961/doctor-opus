@@ -99,7 +99,7 @@ ${casesText}
 
       const response = await postLlmChatCompletionsWithFallback(
         {
-          model: 'anthropic/claude-sonnet-5',
+          model: 'anthropic/claude-sonnet-5.5',
           messages: [{ role: 'user', content: prompt }],
           max_tokens: 1000,
           temperature: 0.2,
