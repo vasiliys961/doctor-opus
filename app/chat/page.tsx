@@ -47,7 +47,7 @@ const getDisplayModelName = (model: ChatModel) => {
   if (model === 'gpt52') return 'openai/gpt-6.1-sol';
   if (model === 'sonnet') return 'anthropic/claude-sonnet-5.5';
   if (model === 'opus') return 'anthropic/claude-opus-5.5';
-  if (model === 'fable') return 'anthropic/claude-fable-5';
+  if (model === 'fable') return 'anthropic/claude-fable-5.1';
   if (model === 'gemini') return 'google/gemini-3.8-flash';
   return model;
 };
@@ -223,7 +223,7 @@ export default function ChatPage() {
   const chatModelLabelMap: Record<ChatModel, string> = {
     gpt52: 'GPT-6.1 Sol',
     opus: 'Opus 5.5',
-    fable: 'Fable 5',
+    fable: 'Fable 5.1',
     sonnet: 'Sonnet 5.5',
     gemini: 'Gemini 3.8',
   }
@@ -1323,7 +1323,7 @@ export default function ChatPage() {
           <div className="border-t border-indigo-200 px-4 sm:px-5 py-3 text-xs sm:text-sm text-indigo-900 bg-indigo-50/60 rounded-b-2xl">
             Опишите кейс и/или приложите файлы (фото заключений, снимков, документы) как обычно. Простой кейс без
             расхождений во мнениях занимает ~1 минуту и стоит ~19 у.е. Если специальности разошлись во мнении (или
-            скептик заметил red flag) — консилиум автоматически эскалируется в полный цикл дебатов на Fable 5
+            скептик заметил red flag) — консилиум автоматически эскалируется в полный цикл дебатов на Fable 5.1
             (углублённое клиническое рассуждение): ещё 3–6 минут и до ~154 у.е. суммарно. Это существенно дороже
             обычного сообщения в чате.
           </div>
@@ -1714,7 +1714,7 @@ export default function ChatPage() {
             >
               <option value="gpt52">🚀 GPT-6.1 Sol</option>
               <option value="opus">🧠 Opus 5.5</option>
-              <option value="fable">🚀 Fable 5 (дороже)</option>
+              <option value="fable">🚀 Fable 5.1 (дороже)</option>
               <option value="sonnet">🤖 Sonnet 5.5</option>
               <option value="gemini">⚡ Gemini 3.8</option>
             </select>
@@ -1779,7 +1779,7 @@ export default function ChatPage() {
             onClick={() => { setModel('fable'); setTriageSuggestion(null) }}
             className="ml-auto rounded-full bg-amber-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-amber-700"
           >
-            Переключить на Fable 5
+            Переключить на Fable 5.1
           </button>
           <button
             type="button"

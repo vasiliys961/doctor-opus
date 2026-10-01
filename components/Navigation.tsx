@@ -224,12 +224,12 @@ export default function Navigation() {
             <p className="font-semibold mb-1">Клинический Ассистент v3.50</p>
             <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Клиническая версия</p>
             <ul className="space-y-1 text-xs opacity-70">
-              <li>• Opus 5.5 / Fable 5 + Gemini 3.8</li>
+              <li>• Opus 5.5 / Fable 5.1 + Gemini 3.8</li>
               <li>• Подсказка «Рекомендуем модель» (без автопереключения)</li>
               <li>• Просмотр DICOM + измерения</li>
               <li>• Мультимодальный анализ (изображения + документы)</li>
               <li>• Анализ динамики и RAG</li>
-              <li className="text-amber-300 font-semibold">• Fable 5: до ~x2 к цене Opus</li>
+              <li className="text-amber-300 font-semibold">• Fable 5.1: до ~x2 к цене Opus</li>
               <li className="text-teal-400 font-bold mt-2">🛡️ Поддержка клинических решений</li>
             </ul>
             <div className="mt-3 p-2 rounded border border-primary-600 bg-primary-900/40">
@@ -241,7 +241,7 @@ export default function Navigation() {
               >
                 <option value="auto">Auto (рекомендовать Fable при сложном кейсе)</option>
                 <option value="opus">Всегда Opus 5.5</option>
-                <option value="fable">Всегда Fable 5 (дороже)</option>
+                <option value="fable">Всегда Fable 5.1 (дороже)</option>
               </select>
             </div>
           </div>

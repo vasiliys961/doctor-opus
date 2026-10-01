@@ -70,7 +70,7 @@ async function callOpenRouterOnce(params: {
         ],
         max_tokens: maxTokens,
         temperature: 0.2,
-        // Без ограничения effort часть "thinking"-моделей (особенно Fable 5) тратит
+        // Без ограничения effort часть "thinking"-моделей (особенно Fable 5.1) тратит
         // весь бюджет max_tokens на невидимые reasoning-токены, обрезая финальный
         // ответ (включая обязательный JSON-хвост с гипотезами) — см. llm-client.ts
         // историю правок. reasoning.effort=low оставляет модели достаточно места

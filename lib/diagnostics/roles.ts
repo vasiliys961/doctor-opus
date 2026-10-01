@@ -17,7 +17,7 @@ export interface DiagnosticRoleConfig {
 
 /**
  * Модель для ролей, где нужна максимальная клиническая глубина рассуждения
- * (Dr. Hypothesis, Dr. Challenger, Dr. Checklist): Fable 5 по бенчмарку
+ * (Dr. Hypothesis, Dr. Challenger, Dr. Checklist): Fable 5.1 по бенчмарку
  * HealthBench Professional превосходит Opus (+9 п.п.) и GPT-5.5 (+14 п.п.) —
  * у Fugu Ultra (мультиагентный оркестратор Sakana, резервная модель ниже)
  * заявленной медицинской компетенции нет вообще, только косвенные научные
@@ -28,7 +28,7 @@ function getConsiliumDebateModel(): string {
   const raw = String(process.env.CONSILIUM_DEBATE_MODEL || '').trim().toLowerCase();
   if (!raw) return MODELS.FABLE_5;
   if (raw === 'opus' || raw === MODELS.OPUS_VALIDATED.toLowerCase()) return MODELS.OPUS_VALIDATED;
-  if (raw === 'fable' || raw === 'fable-5' || raw === MODELS.FABLE_5.toLowerCase()) return MODELS.FABLE_5;
+  if (raw === 'fable' || raw === 'fable-5' || raw === 'fable-5.1' || raw === 'anthropic/claude-fable-5' || raw === MODELS.FABLE_5.toLowerCase()) return MODELS.FABLE_5;
   return raw; // Разрешаем указать произвольный ID модели OpenRouter напрямую.
 }
 
@@ -36,7 +36,7 @@ const CONSILIUM_DEBATE_MODEL = getConsiliumDebateModel();
 // Fugu Ultra — автоматический технический фоллбек (не выбор пользователя): если основная
 // модель дебатов недоступна (сбой провайдера, временные ограничения и т.п.), см. llm-client.ts.
 const CONSILIUM_DEBATE_FALLBACK_MODEL = MODELS.FUGU_ULTRA;
-// Fable 5 — модель с "thinking"-режимом, которая при недостаточном max_tokens тратит
+// Fable 5.1 — модель с "thinking"-режимом, которая при недостаточном max_tokens тратит
 // весь бюджет на невидимые reasoning-токены и обрезает финальный ответ (проверено на
 // реальном прогоне: completion_tokens упирался ровно в max_tokens). effort=low экономит
 // этот бюджет для видимого ответа, максимально широкие max_tokens ниже — доп. запас.

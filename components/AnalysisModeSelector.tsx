@@ -98,7 +98,7 @@ export default function AnalysisModeSelector({
     {
       value: 'validated',
       label: '🧠 С валидацией',
-      description: 'Gemini JSON + Opus 5.5 (для сложных кейсов может быть предложен Fable 5)',
+      description: 'Gemini JSON + Opus 5.5 (для сложных кейсов может быть предложен Fable 5.1)',
       icon: '🧠'
     }
   ]
@@ -219,7 +219,7 @@ export default function AnalysisModeSelector({
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
           <p className="text-xs text-blue-900">
             <strong>💡 Экспертный режим:</strong> по умолчанию используется Opus 5.5. Для сложных случаев система может
-            предложить перейти на Fable 5 с явным подтверждением и показом разницы в стоимости.
+            предложить перейти на Fable 5.1 с явным подтверждением и показом разницы в стоимости.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
@@ -253,7 +253,7 @@ export default function AnalysisModeSelector({
                   : 'bg-white text-blue-900 border-blue-200 hover:bg-blue-100'
               } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              Всегда Fable 5
+              Всегда Fable 5.1
             </button>
           </div>
         </div>

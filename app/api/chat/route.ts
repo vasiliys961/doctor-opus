@@ -162,7 +162,7 @@ function estimateChatCost(params: {
   totalFileBytes: number;
 }): number {
   const modelBase =
-    params.selectedModel === 'anthropic/claude-fable-5' ? 4.4 :
+    params.selectedModel === MODELS.FABLE_5 || params.selectedModel === 'anthropic/claude-fable-5' ? 4.4 :
     (params.selectedModel === MODELS.OPUS || params.selectedModel === MODELS.OPUS_VALIDATED) ? 2.2 :
     params.selectedModel === MODELS.SONNET ? 1.3 :
     params.selectedModel === MODELS.GPT_5_2 ? 1.4 : 0.9;
@@ -291,8 +291,8 @@ export async function POST(request: NextRequest) {
       ? (allowGpt52Chat ? MODELS.GPT_5_2 : MODELS.SONNET)
       : (model === 'sonnet' || model === MODELS.SONNET) 
         ? MODELS.SONNET 
-        : (model === 'fable' || model === 'anthropic/claude-fable-5')
-          ? 'anthropic/claude-fable-5'
+        : (model === 'fable' || model === 'anthropic/claude-fable-5' || model === MODELS.FABLE_5)
+          ? MODELS.FABLE_5
         : (model && (model === 'gemini' || model.includes('gemini')))
           ? MODELS.GEMINI_3_FLASH
       : MODELS.OPUS_VALIDATED;

@@ -27,7 +27,7 @@ export const MODELS = {
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
   GEMINI_3_FLASH: 'google/gemini-3.8-flash',       // Gemini 3 Flash Preview
   GEMINI_3_PRO: 'google/gemini-3.8-flash',         // Gemini 3.8 Pro Preview
-  FABLE_5: 'anthropic/claude-fable-5',                   // Claude Fable 5 — глубина рассуждений (HealthBench Professional)
+  FABLE_5: 'anthropic/claude-fable-5.1',                   // Claude Fable 5.1 — глубина рассуждений (HealthBench Professional)
   FUGU_ULTRA: 'sakana/fugu-ultra',                       // Sakana Fugu Ultra — резервная модель без прямых мед. бенчмарков
 };
 
