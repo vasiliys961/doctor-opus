@@ -75,6 +75,9 @@ Thumbs.db
 *.temp
 *.bak
 
+# Local UI mockups, kept on disk and out of the repo
+preview/
+
 # Nginx SSL
 nginx/ssl/
 
