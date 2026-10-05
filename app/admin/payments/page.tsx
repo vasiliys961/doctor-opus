@@ -35,6 +35,7 @@ interface PaidUser {
   paid_count: number
   total_units: string
   last_paid_at: string
+  current_balance: string | null
 }
 
 interface DbInfo {
@@ -490,6 +491,7 @@ export default function AdminPaymentsPage() {
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email</th>
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Оплат</th>
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Сумма единиц</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Текущий баланс</th>
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Последняя оплата</th>
                     <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Доначислить</th>
                   </tr>
@@ -500,6 +502,7 @@ export default function AdminPaymentsPage() {
                       <td className="px-4 py-3 text-sm text-slate-800 font-medium">{u.email}</td>
                       <td className="px-4 py-3 text-sm text-slate-700">{u.paid_count}</td>
                       <td className="px-4 py-3 text-sm text-slate-700">{parseFloat(u.total_units).toFixed(0)} ед.</td>
+                      <td className="px-4 py-3 text-sm text-indigo-600 font-bold">{u.current_balance != null && u.current_balance !== '' ? `${parseFloat(u.current_balance).toFixed(1)} ед.` : '—'}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDate(u.last_paid_at)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">
                         <div className="flex flex-wrap gap-2">

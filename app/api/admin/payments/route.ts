@@ -201,12 +201,14 @@ export async function GET(request: NextRequest) {
             GROUP BY ct.email
           )
           SELECT
-            email,
-            SUM(event_count)::int AS paid_count,
-            COALESCE(SUM(units_total), 0)::numeric AS total_units,
-            MAX(event_at) AS last_paid_at
-          FROM user_events
-          GROUP BY email
+            ue.email,
+            SUM(ue.event_count)::int AS paid_count,
+            COALESCE(SUM(ue.units_total), 0)::numeric AS total_units,
+            MAX(ue.event_at) AS last_paid_at,
+            MAX(ub.balance) AS current_balance
+          FROM user_events ue
+          LEFT JOIN user_balances ub ON lower(ub.email) = lower(ue.email)
+          GROUP BY ue.email
           ORDER BY last_paid_at DESC
           LIMIT 200
         `
@@ -237,12 +239,14 @@ export async function GET(request: NextRequest) {
             GROUP BY ct.email
           )
           SELECT
-            email,
-            SUM(event_count)::int AS paid_count,
-            COALESCE(SUM(units_total), 0)::numeric AS total_units,
-            MAX(event_at) AS last_paid_at
-          FROM user_events
-          GROUP BY email
+            ue.email,
+            SUM(ue.event_count)::int AS paid_count,
+            COALESCE(SUM(ue.units_total), 0)::numeric AS total_units,
+            MAX(ue.event_at) AS last_paid_at,
+            MAX(ub.balance) AS current_balance
+          FROM user_events ue
+          LEFT JOIN user_balances ub ON lower(ub.email) = lower(ue.email)
+          GROUP BY ue.email
           ORDER BY last_paid_at DESC
           LIMIT 200
         `;
