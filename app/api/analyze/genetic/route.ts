@@ -9,8 +9,9 @@ import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from '@/lib/llm-provider';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 const gunzipAsync = promisify(gunzip);
 
 // Примерные стоимости моделей в единицах за 1000 токенов
@@ -76,13 +77,20 @@ export async function POST(request: NextRequest) {
     }
     billedAmount = estimatedCost;
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      console.error('❌ [GENETIC] OPENROUTER_API_KEY не настроен');
-      return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
-        { status: 500 }
-      );
+    let apiKey = '';
+    const needsModel = file.type.startsWith('image/')
+      || file.type === 'application/pdf'
+      || file.name.toLowerCase().endsWith('.pdf');
+    if (needsModel) {
+      try {
+        apiKey = getLlmApiKey();
+      } catch (error: any) {
+        console.error('❌ [GENETIC] LLM-ключ не настроен');
+        return NextResponse.json(
+          { success: false, error: error?.message || 'LLM_API_KEY не настроен' },
+          { status: 500 }
+        );
+      }
     }
 
     console.log(

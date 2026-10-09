@@ -4,12 +4,13 @@ import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, refundChargedBalanceOnFailure } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from '@/lib/llm-provider';
 
 // Максимальное время выполнения запроса (5 минут)
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 // Примерные тарифы OpenRouter за 1000 токенов в условных единицах (для отображения)
 const PRICE_UNITS_PER_1K_TOKENS_SONNET = 2.0; // 2 единицы за 1000 токенов Claude Sonnet 5.5
@@ -84,10 +85,12 @@ export async function POST(request: NextRequest) {
     billingEmail = userEmail;
     billingGuestKey = guestKey;
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    let apiKey: string;
+    try {
+      apiKey = getLlmApiKey();
+    } catch (error: any) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: error?.message || 'LLM_API_KEY не настроен' },
         { status: 500 }
       );
     }

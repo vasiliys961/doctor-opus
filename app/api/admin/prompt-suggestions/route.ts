@@ -8,8 +8,9 @@ import {
   updateSuggestionStatus,
   getRejectedFeedback,
 } from '@/lib/database';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from '@/lib/llm-provider';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 const SPECIALTIES = ['ЭКГ', 'Дерматоскопия', 'УЗИ', 'Рентген', 'КТ', 'МРТ', 'Лаборатория'];
 
@@ -71,8 +72,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-      if (!apiKey) throw new Error('OPENROUTER_API_KEY не настроен');
+      const apiKey = getLlmApiKey();
 
       const casesText = cases
         .map((c: any, i: number) => {

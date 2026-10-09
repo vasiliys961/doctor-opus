@@ -8,6 +8,7 @@ import {
   analyzeMultipleImagesWithJSONStreaming,
   analyzeImageOpusTwoStageStreaming
 } from '@/lib/openrouter-streaming';
+import { getLlmApiKey } from '@/lib/llm-provider';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
@@ -81,10 +82,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    try {
+      getLlmApiKey();
+    } catch (error: any) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
+        { success: false, error: error?.message || 'LLM_API_KEY не настроен' },
         { status: 500 }
       );
     }

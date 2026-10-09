@@ -3,8 +3,9 @@ import { MODELS } from '@/lib/openrouter';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from '@/lib/llm-provider';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 const LABS_ANALYSIS_COST = 1.5;
 
 export async function POST(req: Request) {
@@ -46,9 +47,11 @@ export async function POST(req: Request) {
     const base64 = Buffer.from(bytes).toString('base64');
     const mimeType = file.type || 'image/png';
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
+    let apiKey: string;
+    try {
+      apiKey = getLlmApiKey();
+    } catch (error: any) {
+      return NextResponse.json({ error: error?.message || 'LLM_API_KEY не настроен' }, { status: 500 });
     }
 
     const payload = {

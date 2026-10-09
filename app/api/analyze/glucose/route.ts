@@ -3,8 +3,8 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getRateLimitKey } from '@/lib/rate-limiter'
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing'
+import { getLlmApiKey, getLlmChatCompletionsUrl } from '@/lib/llm-provider'
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const PRIMARY_MODEL = 'openai/gpt-6.1-sol'
 const FALLBACK_MODEL = 'anthropic/claude-sonnet-5.5'
 
@@ -114,11 +114,18 @@ ${file ? '\nПредоставлен AGP-график (см. изображен�
       messages.push({ role: 'user', content: prompt })
     }
 
+    let apiKey: string
+    try {
+      apiKey = getLlmApiKey()
+    } catch (error: any) {
+      return NextResponse.json({ success: false, error: error?.message || 'LLM_API_KEY не настроен' }, { status: 500 })
+    }
+
     const runRequest = async (model: string) => {
-      return fetch('https://openrouter.ai/api/v1/chat/completions', {
+      return fetch(getLlmChatCompletionsUrl(), {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': process.env.NEXTAUTH_URL || 'https://doctor-opus.ru',
           'X-Title': 'Doctor Opus — Glucose Profile',

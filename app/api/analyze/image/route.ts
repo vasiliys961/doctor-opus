@@ -12,6 +12,7 @@ import {
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
+import { getLlmApiKey } from '@/lib/llm-provider';
 import { anonymizeImageBuffer, compressImageBuffer, ensureVisionSupportedImage, enhanceMedicalImageBuffer } from "@/lib/server-image-processing";
 import { extractDicomMetadata, formatDicomMetadataForAI } from '@/lib/dicom-service';
 import { processDicomJs } from "@/lib/dicom-processor";
@@ -209,8 +210,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) return NextResponse.json({ success: false, error: 'OPENROUTER_API_KEY not set' }, { status: 500 });
+    try {
+      getLlmApiKey();
+    } catch (error: any) {
+      return NextResponse.json({ success: false, error: error?.message || 'LLM_API_KEY не настроен' }, { status: 500 });
+    }
 
     const formData = await request.formData();
     const mode = (formData.get('mode') as string) || 'optimized';

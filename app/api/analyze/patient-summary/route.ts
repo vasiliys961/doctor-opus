@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from '@/lib/llm-provider';
 
 export const maxDuration = 300;
 
@@ -43,8 +44,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) return NextResponse.json({ success: false, error: 'API key not set' }, { status: 500 });
+    let apiKey: string;
+    try {
+      apiKey = getLlmApiKey();
+    } catch (error: any) {
+      return NextResponse.json({ success: false, error: error?.message || 'LLM_API_KEY не настроен' }, { status: 500 });
+    }
 
     const prompt = `Ты — экспертный интеллектуальный ассистент с компетенциями профессора медицины. 
 Твоя задача — проанализировать историю обследований пациента ${patientName || ''} и составить краткое, профессиональное «Клиническое резюме» (Case Summary).
@@ -61,7 +66,7 @@ ${history.map((h: any) => `[${h.date}] ${h.type.toUpperCase()}: ${h.conclusion.s
 
 ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.`;
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLlmChatCompletionsUrl(), {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,

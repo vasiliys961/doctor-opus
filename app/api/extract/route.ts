@@ -10,6 +10,7 @@ import { anonymizeText } from '@/lib/anonymization';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { getLlmApiKey } from '@/lib/llm-provider';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 
 const gunzipAsync = promisify(gunzip);
@@ -47,10 +48,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    try {
+      getLlmApiKey();
+    } catch (error: any) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: error?.message || 'LLM_API_KEY не настроен' },
         { status: 500 }
       );
     }

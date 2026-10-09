@@ -9,6 +9,7 @@ import { detectFileType } from '@/lib/file-extractor';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { anonymizeText } from "@/lib/anonymization";
+import { getLlmApiKey } from '@/lib/llm-provider';
 import { anonymizeImageBuffer } from "@/lib/server-image-processing";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
@@ -64,10 +65,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    try {
+      getLlmApiKey();
+    } catch (error: any) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY is not configured' },
+        { success: false, error: error?.message || 'LLM_API_KEY не настроен' },
         { status: 500 }
       );
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeTwoVideosTwoStage } from '@/lib/video';
+import { getLlmApiKey } from '@/lib/llm-provider';
 import { calculateCost } from '@/lib/cost-calculator';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -17,10 +18,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    try {
+      getLlmApiKey();
+    } catch (error: any) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: error?.message || 'LLM_API_KEY не настроен' },
         { status: 500 }
       );
     }

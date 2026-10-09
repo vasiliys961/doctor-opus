@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeVideoTwoStage } from '@/lib/video';
+import { getLlmApiKey } from '@/lib/llm-provider';
 import { calculateCost } from '@/lib/cost-calculator';
 import { anonymizeText } from '@/lib/anonymization';
 import { getServerSession } from "next-auth/next";
@@ -26,13 +27,14 @@ export async function POST(request: NextRequest) {
     }
 
     // ... (код проверки API ключа и файла остается прежним)
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      console.error('OPENROUTER_API_KEY не найден в переменных окружения');
+    try {
+      getLlmApiKey();
+    } catch (error: any) {
+      console.error('LLM-ключ не найден в переменных окружения');
       return NextResponse.json(
         {
           success: false,
-          error: 'OPENROUTER_API_KEY не настроен. Проверьте .env.local.',
+          error: error?.message || 'LLM_API_KEY не настроен',
         },
         { status: 500 },
       );

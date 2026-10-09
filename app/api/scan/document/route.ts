@@ -6,8 +6,9 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from '@/lib/llm-provider';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 // Модели для сканирования документов (Gemini Flash, Haiku или Llama)
 const DOCUMENT_SCAN_MODELS = [
@@ -67,9 +68,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      throw new Error('OPENROUTER_API_KEY не настроен');
+    let apiKey: string;
+    try {
+      apiKey = getLlmApiKey();
+    } catch (error: any) {
+      throw new Error(error?.message || 'LLM_API_KEY не настроен');
     }
 
     const arrayBuffer = await file.arrayBuffer();

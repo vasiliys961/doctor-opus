@@ -6,8 +6,9 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
 import { getRateLimitKey } from '@/lib/rate-limiter';
+import { getLlmApiKey, getLlmChatCompletionsUrl } from '@/lib/llm-provider';
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
 function shouldFallbackFromGpt54(status: number, errorText: string): boolean {
   const normalized = (errorText || '').toLowerCase();
@@ -69,10 +70,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    let apiKey: string;
+    try {
+      apiKey = getLlmApiKey();
+    } catch (error: any) {
       return NextResponse.json(
-        { success: false, error: 'OPENROUTER_API_KEY не настроен' },
+        { success: false, error: error?.message || 'LLM_API_KEY не настроен' },
         { status: 500 }
       );
     }
