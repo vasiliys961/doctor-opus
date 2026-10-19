@@ -783,8 +783,10 @@ ${evidencePriorityDirective}
       return new Response(deferredStrictStream, {
         headers: {
           'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
+          'Cache-Control': 'no-cache, no-transform',
           'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+          'Content-Encoding': 'none',
           'X-Resolved-Model': MODEL,
         },
       });
@@ -805,8 +807,10 @@ ${evidencePriorityDirective}
       return new Response(sanitizedStream, {
         headers: {
           'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
+          'Cache-Control': 'no-cache, no-transform',
           'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+          'Content-Encoding': 'none',
           'X-Resolved-Model': resolvedModel,
         },
       });
