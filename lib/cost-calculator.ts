@@ -18,7 +18,8 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'openai/gpt-5.2-chat': { input: 2.5, output: 10.0 }, // Legacy pricing key (for historical logs)
   'openai/gpt-6.1-sol': { input: 2.0, output: 10.0 },
   'openai/gpt-5.6-terra': { input: 2.5, output: 15.0 }, // Исторические логи
-  'x-ai/grok-4.5': { input: 2.0, output: 6.0 }, // Grok 4.5 (xAI pricing)
+  'x-ai/grok-4.7': { input: 2.0, output: 6.0 }, // Grok 4.7 (xAI pricing)
+  'x-ai/grok-4.5': { input: 2.0, output: 6.0 }, // Исторические логи
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
   'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },
   'google/gemini-3.8-flash': { input: 0.50, output: 3.00 },

@@ -738,14 +738,16 @@ ${evidencePriorityDirective}
 
 Стиль: строго профессиональный, клинически и технически точный. Язык: русский.`;
 
-    const allowGrok45Protocol = process.env.ALLOW_GROK45_PROTOCOL !== 'false';
-    const effectiveModel = model === 'grok45' && !allowGrok45Protocol ? 'sonnet' : model;
+    const allowGrokProtocol =
+      process.env.ALLOW_GROK47_PROTOCOL !== 'false' &&
+      process.env.ALLOW_GROK45_PROTOCOL !== 'false';
+    const effectiveModel = model === 'grok45' && !allowGrokProtocol ? 'sonnet' : model;
     const MODEL = effectiveModel === 'opus'
       ? MODELS.OPUS_VALIDATED
       : effectiveModel === 'gpt52'
         ? PROTOCOL_GPT52_MODEL
         : effectiveModel === 'grok45'
-          ? MODELS.GROK_4_5
+          ? MODELS.GROK_4_7
           : effectiveModel === 'gemini'
             ? MODELS.GEMINI_3_FLASH
             : MODELS.SONNET;

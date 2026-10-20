@@ -156,7 +156,7 @@ export default function ProtocolPage() {
   }, [conversationTranscriptText, rawText, stabilityMode, strictTemplateMode])
   const protocolModelLabelMap: Record<ProtocolModel, string> = {
     gpt52: 'GPT-6.1 Sol',
-    grok45: 'Grok 4.5',
+    grok45: 'Grok 4.7',
     sonnet: 'Sonnet 5.5',
     opus: 'Opus 5.5',
     gemini: 'Gemini 3.8',
@@ -521,7 +521,7 @@ export default function ProtocolPage() {
       'opus': MODELS.OPUS_VALIDATED,
       'sonnet': MODELS.SONNET,
       'gpt52': PROTOCOL_GPT52_MODEL,
-      'grok45': MODELS.GROK_4_5,
+      'grok45': MODELS.GROK_4_7,
       'gemini': MODELS.GEMINI_3_FLASH
     };
 
@@ -1785,7 +1785,7 @@ export default function ProtocolPage() {
             </label>
             <select value={model} onChange={(e) => setModel(e.target.value as any)} className="w-full md:w-auto px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
               <option value="gpt52">🚀 GPT-6.1 Sol (быстрее)</option>
-              <option value="grok45">🧪 Grok 4.5 (beta)</option>
+              <option value="grok45">🧪 Grok 4.7 (beta)</option>
               <option value="sonnet">🤖 Sonnet 5.5 (детальнее, но медленнее)</option>
               <option value="opus">🧠 Opus 5.5</option>
               <option value="gemini">⚡ Gemini 3.8</option>
