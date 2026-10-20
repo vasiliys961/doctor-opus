@@ -183,8 +183,14 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
   let buffer = '';
   let streamCompleted = false;
 
+  const findDelimiter = (source: string): { index: number; length: number } | null => {
+    const match = source.match(/\r\n\r\n|\n\n/);
+    if (!match || match.index === undefined) return null;
+    return { index: match.index, length: match[0].length };
+  };
+
   const sanitizeEventBlock = (block: string): { text: string; hasDone: boolean } => {
-    const lines = block.split('\n');
+    const lines = block.split(/\r?\n/);
     let hasDone = false;
     const sanitizedLines = lines.map((line) => {
       if (!line.startsWith('data: ')) return line;
@@ -220,10 +226,10 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
-          let delimiterIndex = buffer.indexOf('\n\n');
-          while (delimiterIndex !== -1) {
-            const eventBlock = buffer.slice(0, delimiterIndex);
-            buffer = buffer.slice(delimiterIndex + 2);
+          let delimiter = findDelimiter(buffer);
+          while (delimiter) {
+            const eventBlock = buffer.slice(0, delimiter.index);
+            buffer = buffer.slice(delimiter.index + delimiter.length);
             const sanitized = sanitizeEventBlock(eventBlock);
             if (sanitized.text) {
               controller.enqueue(encoder.encode(`${sanitized.text}\n\n`));
@@ -232,7 +238,7 @@ function sanitizeProtocolSse(stream: ReadableStream<Uint8Array>): ReadableStream
               streamCompleted = true;
               controller.enqueue(encoder.encode('data: [DONE]\n\n'));
             }
-            delimiterIndex = buffer.indexOf('\n\n');
+            delimiter = findDelimiter(buffer);
           }
         }
 
