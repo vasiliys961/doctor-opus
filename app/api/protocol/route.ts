@@ -302,22 +302,39 @@ function buildDeferredStrictProtocolSse(params: {
 }): ReadableStream<Uint8Array> {
   const { initialModel, generate } = params;
   const encoder = new TextEncoder();
+  let closed = false;
+  let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+
+  const stopKeepAlive = () => {
+    if (keepAliveInterval) clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+  };
+
+  const closeStream = (controller: ReadableStreamDefaultController<Uint8Array>) => {
+    if (closed) return;
+    closed = true;
+    stopKeepAlive();
+    try {
+      controller.close();
+    } catch {
+      // Поток уже закрыт браузером или прокси.
+    }
+  };
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      let closed = false;
       const safeEnqueue = (payload: string) => {
         if (closed) return;
-        controller.enqueue(encoder.encode(payload));
-      };
-      const closeStream = () => {
-        if (closed) return;
-        closed = true;
-        controller.close();
+        try {
+          controller.enqueue(encoder.encode(payload));
+        } catch {
+          closed = true;
+          stopKeepAlive();
+        }
       };
 
       // Keep-alive снижает риск 504 на прокси/браузерном ожидании при длинной генерации.
-      const keepAliveInterval = setInterval(() => {
+      keepAliveInterval = setInterval(() => {
         safeEnqueue(': keep-alive\n\n');
       }, 10000);
 
@@ -363,10 +380,13 @@ function buildDeferredStrictProtocolSse(params: {
           safeEnqueue(`data: ${JSON.stringify({ error: { message } })}\n\n`);
           safeEnqueue('data: [DONE]\n\n');
         } finally {
-          clearInterval(keepAliveInterval);
-          closeStream();
+          closeStream(controller);
         }
       })();
+    },
+    cancel() {
+      closed = true;
+      stopKeepAlive();
     },
   });
 }
