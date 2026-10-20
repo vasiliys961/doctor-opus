@@ -524,6 +524,12 @@ async function enforceStrictTemplateOutput(params: {
     }
   }
 
+  const crossModelFallbackEnabled = process.env.PROTOCOL_STRICT_CROSS_MODEL_FALLBACK === 'true';
+  if (!crossModelFallbackEnabled) {
+    console.warn(`[PROTOCOL] Strict template guard: output invalid on ${primaryModel}, keep primary model result`);
+    return { text: bestEffortText, model: primaryModel };
+  }
+
   const fallbackModel = MODELS.SONNET;
   console.warn(`[PROTOCOL] Strict template guard: output invalid on ${primaryModel}, retry on ${fallbackModel}`);
   try {
@@ -768,9 +774,15 @@ ${evidencePriorityDirective}
             : MODELS.SONNET;
     const protocolFallbackModel = effectiveModel === 'grok45' ? MODELS.SONNET : null;
     
-    // В strict-режиме выполняем двухшаговую генерацию (черновик -> коррекция),
-    // даже если клиент запросил streaming. Иначе модель может "уезжать" в свободный формат.
-    if (useStreaming && isStrictTemplateMode && !isEcgFunctionalConclusion) {
+    // По умолчанию streaming не блокируем: иначе пользователь получает весь текст одним куском.
+    // Двухшаговый deferred strict-режим включается только явным env-флагом.
+    const useDeferredStrictStreaming =
+      useStreaming &&
+      isStrictTemplateMode &&
+      !isEcgFunctionalConclusion &&
+      process.env.PROTOCOL_DEFERRED_STRICT_STREAM === 'true';
+
+    if (useDeferredStrictStreaming) {
       const deferredStrictStream = buildDeferredStrictProtocolSse({
         initialModel: MODEL,
         generate: async () => {
