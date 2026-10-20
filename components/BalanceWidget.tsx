@@ -107,7 +107,7 @@ export default function BalanceWidget() {
   }
 
   // Единый источник VIP для UI: серверная сессия (не зависит от localStorage/клиентского env).
-  const isSessionUnlimited = Boolean((session?.user as any)?.isVip || (session?.user as any)?.isAdmin)
+  const isSessionUnlimited = Boolean((session?.user as any)?.isVip)
 
   // Специальный виджет для безлимитного доступа
   if (isSessionUnlimited || balance?.isUnlimited) {
