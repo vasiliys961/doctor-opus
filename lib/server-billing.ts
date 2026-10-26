@@ -56,9 +56,10 @@ export async function checkAndDeductBalance(
   }
 
   const SOFT_LIMIT = BILLING_CONFIG.softLimit;
-  const client = await getDbClient();
+  let client: Awaited<ReturnType<typeof getDbClient>> | null = null;
 
   try {
+    client = await getDbClient();
     await client.query('BEGIN');
 
     // Блокируем строку для эксклюзивного доступа
@@ -110,7 +111,9 @@ export async function checkAndDeductBalance(
 
     return { allowed: true, balanceAfter: newBalance };
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch {}
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch {}
+    }
     console.error('❌ [SERVER-BILLING] Error:', error);
     if (isFailOpenEnabled()) {
       // Режим совместимости: разрешаем операцию даже при сбое биллинга.
@@ -118,7 +121,9 @@ export async function checkAndDeductBalance(
     }
     return { allowed: false, error: 'Сервис биллинга временно недоступен. Попробуйте снова позже.' };
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }
 
@@ -142,9 +147,10 @@ export async function checkAndDeductGuestBalance(
   }
 
   const SOFT_LIMIT = BILLING_CONFIG.softLimit;
-  const client = await getDbClient();
+  let client: Awaited<ReturnType<typeof getDbClient>> | null = null;
 
   try {
+    client = await getDbClient();
     await client.query('BEGIN');
 
     await client.query(`
@@ -206,14 +212,18 @@ export async function checkAndDeductGuestBalance(
     await client.query('COMMIT');
     return { allowed: true, balanceAfter: newBalance };
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch {}
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch {}
+    }
     console.error('❌ [SERVER-BILLING] Guest adjustment error:', error);
     if (isFailOpenEnabled()) {
       return { allowed: true };
     }
     return { allowed: false, error: 'Сервис биллинга временно недоступен. Попробуйте снова позже.' };
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }
 

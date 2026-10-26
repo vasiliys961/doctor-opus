@@ -23,6 +23,37 @@ const MODELS = {
   GEMINI_3_PRO: 'google/gemini-3.8-flash'          // Gemini 3.8 Pro Preview
 };
 
+const IMAGE_STAGE2_SINGLE_MAX_TOKENS = Number(process.env.IMAGE_STAGE2_SINGLE_MAX_TOKENS || 10000);
+const IMAGE_STAGE2_MULTI_MAX_TOKENS = Number(process.env.IMAGE_STAGE2_MULTI_MAX_TOKENS || 14000);
+const IMAGE_STAGE2_VALIDATED_MAX_TOKENS = Number(process.env.IMAGE_STAGE2_VALIDATED_MAX_TOKENS || 12000);
+
+function buildConclusionFirstOutputContract(): string {
+  return `
+ОБЯЗАТЕЛЬНЫЙ ФОРМАТ ОТВЕТА (КРИТИЧНО):
+1) СРАЗУ в начале дай краткое ЗАКЛЮЧЕНИЕ (до 6 пунктов), без длинного вступления.
+2) Первая строка: "Статус: КРИТИЧЕСКОЕ" или "Статус: НЕ КРИТИЧЕСКОЕ".
+3) Если ответ может не поместиться, сначала выдай:
+   - статус,
+   - ключевые находки,
+   - клинический вывод,
+   - первый клинический шаг.
+   И только потом расширяй детали.
+4) Не повторяй одно и то же разными формулировками.
+5) Пиши компактно, клинически по делу.`;
+}
+
+async function writeSseErrorAndDone(
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  encoder: TextEncoder,
+  error: unknown
+): Promise<void> {
+  const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+  try {
+    await writer.write(encoder.encode(`data: ${JSON.stringify({ error: message })}\n\n`));
+    await writer.write(encoder.encode('data: [DONE]\n\n'));
+  } catch {}
+}
+
 function isNetworkStage2Error(error: any): boolean {
   const message = String(error?.message || '').toLowerCase();
   return (
@@ -341,7 +372,7 @@ ${directivePrompt}`;
       }
     } catch (error: any) {
       console.error('Fast Stream Error:', error);
-      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
+      await writeSseErrorAndDone(writer, encoder, error);
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       try { await writer.close(); } catch {}
@@ -451,7 +482,9 @@ export async function analyzeImageOpusTwoStageStreaming(
 ### TECHNICAL IMAGE DATA (JSON):
 ${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
-${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.`;
+${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.
+
+${buildConclusionFirstOutputContract()}`;
 
       // Настройка системного промпта
       const { TITAN_CONTEXTS } = await import('./prompts');
@@ -487,7 +520,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
                 ]
               }
             ],
-            max_tokens: 8000, // Оптимизировано: одно изображение, достаточно для экспертного протокола
+            max_tokens: IMAGE_STAGE2_SINGLE_MAX_TOKENS,
             temperature: 0.1,
             stream: true,
             stream_options: { include_usage: true }
@@ -565,7 +598,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
 
     } catch (error: any) {
       console.error('Optimized Stream Error:', error);
-      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
+      await writeSseErrorAndDone(writer, encoder, error);
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       if (loadingInterval) clearInterval(loadingInterval);
@@ -683,7 +716,9 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
 ### ${isComparative ? 'COMPARATIVE IMAGE DATA' : 'DATA FROM MULTIPLE IMAGES OF A SINGLE STUDY'} (JSON):
 ${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
-${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.`;
+${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE REPORT.
+
+${buildConclusionFirstOutputContract()}`;
 
       // Настройка системного промпта
       const { TITAN_CONTEXTS } = await import('./prompts');
@@ -745,7 +780,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
                 { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
                 { role: 'user', content: contentItems }
               ],
-              max_tokens: 12000, // Оптимизировано: множественные изображения, сравнительный анализ
+              max_tokens: IMAGE_STAGE2_MULTI_MAX_TOKENS,
               temperature: 0.1,
               stream: true,
               stream_options: { include_usage: true }
@@ -804,7 +839,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
 
     } catch (error: any) {
       console.error('Multi-Optimized Stream Error:', error);
-      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
+      await writeSseErrorAndDone(writer, encoder, error);
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       if (loadingInterval) clearInterval(loadingInterval);
@@ -908,7 +943,9 @@ export async function analyzeMultipleImagesWithJSONStreaming(
 ### СТРУКТУРИРОВАННЫЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЙ (JSON):
 ${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
-${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE EXPERT REPORT.`;
+${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''}ANALYZE THE DATA AND GENERATE A COMPLETE EXPERT REPORT.
+
+${buildConclusionFirstOutputContract()}`;
 
       const { TITAN_CONTEXTS } = await import('./prompts');
       // Выбираем системный промпт: для первого сообщения - полная директива, для диалога - краткий режим
@@ -969,7 +1006,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
                 { role: 'system', content: resolvePromptRuntimeVars(systemPrompt) },
                 { role: 'user', content: contentItems }
               ],
-              max_tokens: 10000, // Оптимизировано: validated режим с JSON-контекстом
+              max_tokens: IMAGE_STAGE2_VALIDATED_MAX_TOKENS,
               temperature: 0.1,
               stream: true,
               stream_options: { include_usage: true }
@@ -1026,7 +1063,7 @@ ${clinicalContext ? `### PATIENT CLINICAL CONTEXT:\n${clinicalContext}\n\n` : ''
       }
     } catch (error: any) {
       console.error('Multi-Validated Stream Error:', error);
-      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
+      await writeSseErrorAndDone(writer, encoder, error);
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       if (loadingInterval) clearInterval(loadingInterval);
@@ -1193,8 +1230,8 @@ export async function sendTextRequestStreaming(
         mode: 'chat'
       });
 
-      const REQUEST_TIMEOUT_MS = 45000;
-      const MAX_RETRIES = 2;
+      const REQUEST_TIMEOUT_MS = Number(process.env.LLM_STREAM_TIMEOUT_MS || 45000);
+      const MAX_RETRIES = Number(process.env.LLM_STREAM_MAX_RETRIES || 4);
       let response: Response | null = null;
       let modelUsed = model;
 
@@ -1292,7 +1329,7 @@ export async function sendTextRequestStreaming(
     } catch (error: any) {
       if (heartbeat) clearInterval(heartbeat);
       console.error(`❌ [TEXT STREAM ERROR]:`, error);
-      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
+      await writeSseErrorAndDone(writer, encoder, error);
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       try { await writer.close(); } catch {}
@@ -1400,7 +1437,7 @@ export async function analyzeImageStreaming(
       }
     } catch (error: any) {
       console.error(`❌ [IMAGE STREAM ERROR]:`, error);
-      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
+      await writeSseErrorAndDone(writer, encoder, error);
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       try { await writer.close(); } catch {}
@@ -1507,7 +1544,7 @@ export async function analyzeMultipleImagesStreaming(
       }
     } catch (error: any) {
       console.error(`❌ [MULTI-IMAGE STREAM ERROR]:`, error);
-      try { await writer.write(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`)); } catch {}
+      await writeSseErrorAndDone(writer, encoder, error);
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       try { await writer.close(); } catch {}

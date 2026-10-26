@@ -21,6 +21,14 @@ import { checkRateLimit, RATE_LIMIT_BILLING, getRateLimitKey } from '@/lib/rate-
 
 export const dynamic = 'force-dynamic';
 
+function isDbConfigured(): boolean {
+  return Boolean(process.env.POSTGRES_URL || process.env.DATABASE_URL);
+}
+
+function isFailOpenEnabled(): boolean {
+  return process.env.BILLING_FAIL_OPEN === 'true';
+}
+
 /**
  * GET /api/billing/balance
  * Получение текущего баланса пользователя
@@ -37,6 +45,15 @@ export async function GET(request: NextRequest) {
     }
 
     const email = session.user.email;
+
+    if (!isDbConfigured()) {
+      return NextResponse.json({
+        success: true,
+        balance: 0,
+        totalSpent: 0,
+        source: 'fail-open-no-db',
+      });
+    }
 
     // Получаем баланс из БД
     const { rows } = await sql`
@@ -70,6 +87,14 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     const { safeError } = await import('@/lib/logger');
     safeError('❌ [BILLING] Error getting balance:', error?.message);
+    if (isFailOpenEnabled()) {
+      return NextResponse.json({
+        success: true,
+        balance: 0,
+        totalSpent: 0,
+        source: 'fail-open-on-error',
+      });
+    }
     return NextResponse.json(
       { error: 'Failed to get balance' },
       { status: 500 }
@@ -116,6 +141,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { amount, operation, metadata = {} } = body;
+
+    if (!isDbConfigured()) {
+      return NextResponse.json({
+        success: true,
+        deducted: Number(amount) || 0,
+        balanceBefore: 0,
+        balanceAfter: 0,
+        operation,
+        skipped: true,
+        source: 'fail-open-no-db',
+      });
+    }
 
     // Валидация входных данных
     const MAX_SINGLE_DEDUCTION = BILLING_CONFIG.maxSingleDeduction;
@@ -239,6 +276,14 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     const { safeError } = await import('@/lib/logger');
     safeError('❌ [BILLING] Deduction error:', error?.message);
+    if (isFailOpenEnabled()) {
+      return NextResponse.json({
+        success: true,
+        deducted: 0,
+        skipped: true,
+        source: 'fail-open-on-error',
+      });
+    }
     return NextResponse.json(
       { 
         error: 'Failed to deduct credits'

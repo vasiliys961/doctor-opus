@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { flushSync } from 'react-dom'
 import ImageUpload from '@/components/ImageUpload'
 import ImageEditor, { DrawingPath } from '@/components/ImageEditor'
 import AnalysisResult from '@/components/AnalysisResult'
@@ -42,6 +41,17 @@ export default function MRIPage() {
   const [history, setHistory] = useState<Array<{role: string, content: string}>>([])
   const [showEditor, setShowEditor] = useState(false)
   const [pendingAutoAnalyze, setPendingAutoAnalyze] = useState(false)
+  const pendingResultRef = useRef('')
+  const resultRafRef = useRef<number | null>(null)
+
+  const updateResultSafely = (nextText: string) => {
+    pendingResultRef.current = nextText
+    if (resultRafRef.current !== null) return
+    resultRafRef.current = window.requestAnimationFrame(() => {
+      resultRafRef.current = null
+      setResult(pendingResultRef.current)
+    })
+  }
 
   const dataUrlToFile = (dataUrl: string, fileName: string, fallbackType = 'image/jpeg'): File => {
     const match = dataUrl.match(/^data:(.+);base64,(.+)$/)
@@ -87,6 +97,14 @@ export default function MRIPage() {
     // analyzeImage пересоздается на рендер, это ожидаемо для автозапуска bridge-события.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAutoAnalyze, file, loading])
+
+  useEffect(() => {
+    return () => {
+      if (resultRafRef.current !== null) {
+        cancelAnimationFrame(resultRafRef.current)
+      }
+    }
+  }, [])
 
   // Применение маски ко всем срезам/кадрам
   const applyMaskToAllSlices = async (drawingPaths: DrawingPath[], editedFirstFile: File) => {
@@ -209,9 +227,7 @@ export default function MRIPage() {
 
         await handleSSEStream(response, {
           onChunk: (content, accumulatedText) => {
-            flushSync(() => {
-              setResult(accumulatedText)
-            })
+            updateResultSafely(accumulatedText)
           },
           onUsage: (usage) => {
             console.log('📊 [MRI STREAMING] Получена точная стоимость:', usage.total_cost)
@@ -232,6 +248,11 @@ export default function MRIPage() {
             setError(`Ошибка streaming: ${error.message}`)
           },
           onComplete: (finalText) => {
+            if (resultRafRef.current !== null) {
+              cancelAnimationFrame(resultRafRef.current)
+              resultRafRef.current = null
+            }
+            setResult(finalText)
             console.log('✅ [MRI STREAMING] Анализ завершен')
             setAnalysisStep('description_complete')
           }

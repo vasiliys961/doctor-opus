@@ -32,6 +32,24 @@ export const MODELS = {
   FUGU_ULTRA: 'sakana/fugu-ultra',                       // Sakana Fugu Ultra — резервная модель без прямых мед. бенчмарков
 };
 
+const IMAGE_STAGE2_SINGLE_MAX_TOKENS = Number(process.env.IMAGE_STAGE2_SINGLE_MAX_TOKENS || 10000);
+const IMAGE_STAGE2_MULTI_MAX_TOKENS = Number(process.env.IMAGE_STAGE2_MULTI_MAX_TOKENS || 14000);
+
+function buildConclusionFirstOutputContract(): string {
+  return `
+ОБЯЗАТЕЛЬНЫЙ ФОРМАТ ОТВЕТА (КРИТИЧНО):
+1) Начни сразу с краткого заключения (до 6 пунктов), без длинного вступления.
+2) Первая строка: "Статус: КРИТИЧЕСКОЕ" или "Статус: НЕ КРИТИЧЕСКОЕ".
+3) Если ответ может не поместиться, сначала выдай:
+   - статус,
+   - ключевые находки,
+   - клинический вывод,
+   - первый клинический шаг.
+   И только потом расширяй детали.
+4) Не повторяй одно и то же разными словами.
+5) Пиши компактно и клинически по делу.`;
+}
+
 const MODELS_LIST = [
   MODELS.OPUS,
   MODELS.SONNET,
@@ -491,7 +509,9 @@ export async function analyzeImageOpusTwoStage(options: {
 ### ТЕХНИЧЕСКИЕ ДАННЫЕ ИЗ ИЗОБРАЖЕНИЯ (JSON):
 ${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
-${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ НА РУССКОМ ЯЗЫКЕ.`;
+${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ НА РУССКОМ ЯЗЫКЕ.
+
+${buildConclusionFirstOutputContract()}`;
 
     const basePrompt = isRadiologyOnly ? RADIOLOGY_PROTOCOL_PROMPT : (specialty === 'ai_consultant' ? SYSTEM_PROMPT : STRATEGIC_SYSTEM_PROMPT);
     const messages = [
@@ -513,7 +533,7 @@ ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦ�
         body: JSON.stringify({
           model: targetModel,
           messages: messages,
-          max_tokens: 10000, // Оптимизировано: двухэтапный анализ
+          max_tokens: IMAGE_STAGE2_SINGLE_MAX_TOKENS,
           temperature: 0.1,
         })
       });
@@ -840,6 +860,8 @@ ${JSON.stringify(prepareVisionDataForTextPrompt(jsonExtraction), null, 2)}
 
 ${options.clinicalContext ? `### КЛИНИЧЕСКИЙ КОНТЕКСТ ПАЦИЕНТА:\n${options.clinicalContext}\n\n` : ''}ПРОАНАЛИЗИРУЙ ДАННЫЕ И СФОРМУЛИРУЙ ПОЛНЫЙ ОТЧЕТ НА РУССКОМ ЯЗЫКЕ.
 
+${buildConclusionFirstOutputContract()}
+
 ИНСТРУКЦИЯ К КЛИНИЧЕСКОЙ ДИРЕКТИВЕ:
 ${directiveCriteria}`;
     
@@ -861,7 +883,7 @@ ${directiveCriteria}`;
             { role: 'system' as const, content: resolvePromptRuntimeVars(basePrompt) },
             { role: 'user' as const, content: contextPrompt }
           ],
-          max_tokens: 12000, // Оптимизировано: множественные изображения
+          max_tokens: IMAGE_STAGE2_MULTI_MAX_TOKENS,
           temperature: 0.1,
         })
       });
