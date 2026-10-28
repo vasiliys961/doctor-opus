@@ -32,3 +32,30 @@ Deliver interoperable AI-ready whole-person longitudinal research datasets, reus
 - Machine-readable, documented export and reproducible pipeline.
 - Passing tests for import, harmonization, and analysis.
 - Explicit validation and limitations documentation.
+
+
+## Cross-project integration charter (28 Oct 2026)
+The NIH-oriented system reuses capabilities as adapters rather than copying code or merging unrelated repository histories.
+
+Candidate sources to audit and connect:
+- Doctor Opus (including English-language edition): multidisciplinary clinical reasoning, lab/genetic and longitudinal data tools.
+- Opus Radiology AI: structured imaging findings with model/version/evidence metadata, not unvalidated diagnoses.
+- Doctor Opus ECG / ECG engine: signal-derived metrics, rhythm flags, calibrated predictions where validated.
+- Sonopus Ultra: portable ultrasound image and acquisition observations; mark experimental outputs accordingly.
+- Clinical visit documentation / ambient transcription: consent-based visit notes, symptom timeline, medication and history extraction.
+- Medical real-time multilingual translator: language-independent research interviews, original transcript plus translated transcript with uncertainty flags.
+- Patient advisor: standardized questionnaires and patient-reported outcomes.
+- Peripheral streams: spirometry, CGM, dermatology and other modules if integration passes review.
+
+Integration contract for every adapter:
+patient_pseudonym, encounter_id, source_module, source_version, timestamp, observation_code,
+value, unit, uncertainty_or_confidence, evidence_reference, acquisition_method,
+language, consent_scope, provenance, review_status.
+
+Prioritize one real end-to-end demonstration:
+multilingual intake -> clinician-reviewed longitudinal profile -> labs/ECG/CGM summaries
+-> social determinants -> cohort dashboard -> reproducible cardiometabolic analysis.
+Imaging/ultrasound plug in after first pipeline works. No unreviewed LLM output is treated as verified evidence.
+No clinical data leaves its authorization scope. Document validation and permissible datasets.
+
+Milestones: A inventory and adapter tests; B first vertical slice; C cohort analytics; D imaging/US additional streams; E reproducible public-data demonstration. Each milestone requires working tests, not only design documents.
