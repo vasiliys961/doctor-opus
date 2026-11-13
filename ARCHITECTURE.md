@@ -76,10 +76,10 @@ LLM_BASE_URL (Polza или OpenRouter)
 | Sonnet | `anthropic/claude-sonnet-5.5` |
 | GPT | `openai/gpt-6.1-sol` |
 | Gemini | `google/gemini-3.8-flash` |
-| Fable | `anthropic/claude-fable-5.1` |
+| Fable | `anthropic/claude-fable-5.2` |
 | Резерв Fable | `sakana/fugu-ultra` |
 
-Fable 5.1 не стоит по умолчанию на всех страницах. Её вызывают три роли дебатов консилиума: Hypothesis, Challenger, Checklist (`lib/diagnostics/roles.ts`). Если Fable недоступна, подставляется Fugu Ultra. Ручной откат дебатов на Opus: `CONSILIUM_DEBATE_MODEL=opus`.
+Fable 5.2 не стоит по умолчанию на всех страницах. Её вызывают три роли дебатов консилиума: Hypothesis, Challenger, Checklist (`lib/diagnostics/roles.ts`). Если Fable недоступна, подставляется Fugu Ultra. Ручной откат дебатов на Opus: `CONSILIUM_DEBATE_MODEL=opus`.
 
 Тарифы для списания и статистики: `lib/cost-calculator.ts` и `app/statistics/page.tsx`. Старые идентификаторы там оставлены, чтобы уже записанные логи считались по прежней цене.
 
@@ -88,7 +88,7 @@ Fable 5.1 не стоит по умолчанию на всех страница
 Гибрид двух слоёв.
 
 - Быстрый параллельный раунд специальностей плюс роль «Скептик».
-- Полные дебаты на Fable 5.1 только если мнения существенно расходятся.
+- Полные дебаты на Fable 5.2 только если мнения существенно расходятся.
 
 Согласие считается по смыслу диагнозов, не по точному совпадению строки. Жизнеугрожающий диагноз с уверенностью ниже 60% всегда помечается как требующий проверки врачом.
 

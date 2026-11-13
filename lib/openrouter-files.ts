@@ -4,7 +4,8 @@
  */
 
 import { MODELS } from './openrouter';
-import { calculateCost, formatCostLog } from './cost-calculator';
+import { formatCostLog } from './cost-calculator';
+import { readProviderCostRub, unitsFromProviderRub, unitsFromTokens } from './provider-billing';
 import { Specialty, TITAN_CONTEXTS, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, resolvePromptRuntimeVars } from './prompts';
 import { isGeoRestrictionStatus, isOpenAIGeoRestrictionError } from './geo-restriction';
 import mammoth from 'mammoth';
@@ -266,7 +267,7 @@ export async function sendTextRequestWithFiles(
   files: File[],
   model: string = MODELS.OPUS,
   specialty?: Specialty
-): Promise<string> {
+): Promise<{ content: string; totalCost: number }> {
   const apiKey = getLlmApiKey().replace(/[\n\r\t]/g, '').trim();
 
   if (!apiKey) {
@@ -380,7 +381,15 @@ export async function sendTextRequestWithFiles(
       console.log(`   📊 ${formatCostLog(modelUsed, inputTokens, outputTokens, tokensUsed)}`);
     }
 
-    return data.choices[0].message.content || '';
+    const providerRub = readProviderCostRub(data.usage);
+    const totalCost = providerRub != null
+      ? unitsFromProviderRub(providerRub)
+      : unitsFromTokens(inputTokens, outputTokens, modelUsed);
+
+    return {
+      content: data.choices[0].message.content || '',
+      totalCost,
+    };
   } catch (error: any) {
     console.error('Error calling OpenRouter API with files:', error);
     throw new Error(`Ошибка отправки запроса с файлами: ${error.message}`);

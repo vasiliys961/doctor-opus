@@ -6,6 +6,7 @@ import { anonymizeText } from '@/lib/anonymization';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-billing';
+import { wrapStreamWithUsageReconcile } from '@/lib/billing-stream';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 
 function estimateProtocolCost(rawTextLength: number, strictTemplateMode: boolean): number {
@@ -810,7 +811,12 @@ ${evidencePriorityDirective}
         resolvedModel = protocolFallbackModel;
         stream = await sendTextRequestStreaming(prompt, [], resolvedModel);
       }
-      const sanitizedStream = sanitizeProtocolSse(stream);
+      const sanitizedStream = sanitizeProtocolSse(wrapStreamWithUsageReconcile(stream, {
+        email: userEmail,
+        guestKey,
+        estimated: estimatedCost,
+        label: 'Protocol generation',
+      }));
       return new Response(sanitizedStream, {
         headers: {
           'Content-Type': 'text/event-stream',
@@ -854,6 +860,16 @@ ${evidencePriorityDirective}
     }
 
     result = postProcessProtocolOutput(anonymizeText(result));
+    const actual = Number(actualUsage.total_cost.toFixed(2));
+    const delta = Number((actual - estimatedCost).toFixed(2));
+    if (actual > 0 && Math.abs(delta) >= 0.01) {
+      const operation = delta > 0
+        ? 'Protocol generation (доплата по счёту Polza)'
+        : 'Protocol generation (возврат аванса)';
+      const metadata = { estimatedCost, actualCost: actual, adjustment: delta };
+      if (userEmail) await checkAndDeductBalance(userEmail, delta, operation, metadata);
+      else if (guestKey) await checkAndDeductGuestBalance(guestKey, delta, operation, metadata);
+    }
     return NextResponse.json({
       success: true,
       protocol: result,

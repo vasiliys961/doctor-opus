@@ -42,8 +42,8 @@ function estimateAmscRound0Cost(params: { hasImages: boolean; imageCount: number
 function estimateDebateEscalationReserve(): number {
   // Калибровано по реальному прогону (2 полных раунда дебатов, Dr. Hypothesis/Challenger/
   // Checklist на Fable 5.1): фактическая стоимость полного цикла ~114-116 у.е. сверх раунда 0.
-  // Запас на вариативность кейсов.
-  return 135;
+  // Fable 5.2 дешевле на 20% ($8/$40 вместо $10/$50), поэтому запас снижен пропорционально.
+  return 108;
 }
 
 const UNITS_PER_USD = 100; // Тот же множитель, что и в lib/cost-calculator.ts (PRICE_MULTIPLIER)

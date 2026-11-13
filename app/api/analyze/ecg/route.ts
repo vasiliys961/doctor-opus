@@ -5,6 +5,7 @@ import { formatCostLog } from '@/lib/cost-calculator';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
+import { wrapStreamWithUsageReconcile } from '@/lib/billing-stream';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 
 /**
@@ -88,7 +89,12 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      return new Response(stream.pipeThrough(transformStream), {
+      return new Response(wrapStreamWithUsageReconcile(stream, {
+        email: userEmail,
+        guestKey,
+        estimated: estimatedCost,
+        label: 'ECG analysis',
+      }).pipeThrough(transformStream), {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache, no-transform',

@@ -5,6 +5,7 @@
  */
 
 import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
+import { readProviderCostRub, unitsFromProviderRub, unitsFromTokens } from './provider-billing';
 import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, prepareVisionDataForTextPrompt, resolvePromptRuntimeVars } from './prompts';
 import { safeLog, safeError, safeWarn } from './logger';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
@@ -28,9 +29,26 @@ export const MODELS = {
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
   GEMINI_3_FLASH: 'google/gemini-3.8-flash',       // Gemini 3 Flash Preview
   GEMINI_3_PRO: 'google/gemini-3.8-flash',         // Gemini 3.8 Pro Preview
-  FABLE_5: 'anthropic/claude-fable-5.1',                   // Claude Fable 5.1 — глубина рассуждений (HealthBench Professional)
+  GEMINI_4_ARGON: 'google/gemini-4-argon',         // Зрение экспертного режима
+
+  FABLE_5: 'anthropic/claude-fable-5.2',                   // Claude Fable 5.2 — глубина рассуждений
   FUGU_ULTRA: 'sakana/fugu-ultra',                       // Sakana Fugu Ultra — резервная модель без прямых мед. бенчмарков
 };
+
+/** Зрение экспертного заключения (Opus / Fable). Остальные режимы остаются на Flash. */
+export function visionModelForConclusion(conclusionModel?: string): string {
+  const id = String(conclusionModel || '').toLowerCase();
+  if (id.includes('opus') || id.includes('fable')) {
+    return MODELS.GEMINI_4_ARGON;
+  }
+  return MODELS.GEMINI_3_FLASH;
+}
+
+function visionCallTimeout(model: string): number {
+  if (model.includes('gemini-4-argon')) return 180000;
+  if (model === MODELS.GEMINI_3_PRO) return 90000;
+  return 60000;
+}
 
 const IMAGE_STAGE2_SINGLE_MAX_TOKENS = Number(process.env.IMAGE_STAGE2_SINGLE_MAX_TOKENS || 10000);
 const IMAGE_STAGE2_MULTI_MAX_TOKENS = Number(process.env.IMAGE_STAGE2_MULTI_MAX_TOKENS || 14000);
@@ -482,14 +500,15 @@ export async function analyzeImageOpusTwoStage(options: {
   const isRadiologyOnly = options.isRadiologyOnly || false;
   
   try {
-    safeLog(`🚀 [TWO-STAGE] Шаг 1: Извлечение JSON через Gemini Flash...`);
-    
-    // Шаг 1: Извлекаем JSON через Gemini
+    const visionModel = visionModelForConclusion(options.targetModel || MODELS.SONNET);
+    safeLog(`🚀 [TWO-STAGE] Шаг 1: Извлечение JSON через ${visionModel}...`);
+
     const extractionResult = await extractImageJSON({
       imageBase64: options.imageBase64,
       modality: imageType,
       specialty: specialty,
-      enableSmartRouting: true
+      enableSmartRouting: visionModel === MODELS.GEMINI_3_FLASH,
+      preferModel: visionModel,
     });
     const jsonExtraction = extractionResult.data;
     const initialUsage = extractionResult.usage;
@@ -650,10 +669,11 @@ export async function extractImageJSON(options: {
   const callModel = async (model: string, timeoutMs: number = 60000) => {
     safeLog(`📡 [VISION JSON] Trying model: ${model}`);
 
+    const isArgon = model.includes('gemini-4-argon');
     const payload = {
       model,
       messages: [{ role: 'user', content }],
-      max_tokens: 16000,
+      max_tokens: isArgon ? 32768 : 16000,
       temperature: 0.1,
     };
 
@@ -696,6 +716,7 @@ export async function extractImageJSON(options: {
         total_tokens: tokensUsed,
         model,
         total_cost: callCost.totalCostUnits,
+        providerCostRub: readProviderCostRub(resultData.usage) ?? 0,
         stages: [
           {
             model,
@@ -726,7 +747,7 @@ export async function extractImageJSON(options: {
 
     for (const model of orderedModels) {
       try {
-        return await callModel(model, model === MODELS.GEMINI_3_PRO ? 90000 : 60000);
+        return await callModel(model, visionCallTimeout(model));
       } catch (error: any) {
         safeWarn(`⚠️ [VISION JSON] Error with ${model}: ${error.message}, trying next model...`);
         if (String(error.message).includes('[429]')) await sleep(1500);
@@ -833,12 +854,14 @@ export async function analyzeMultipleImagesTwoStage(options: {
   const isRadiologyOnly = options.isRadiologyOnly || false;
   
   try {
-    safeLog(`🚀 [MULTI-TWO-STAGE] Шаг 1: Извлечение JSON...`);
+    const visionModel = visionModelForConclusion(options.targetModel || MODELS.SONNET);
+    safeLog(`🚀 [MULTI-TWO-STAGE] Шаг 1: Извлечение JSON через ${visionModel}...`);
     const extractionResult = await extractImageJSON({
       imagesBase64: options.imagesBase64,
       modality: imageType,
       specialty: specialty,
-      enableSmartRouting: true,
+      enableSmartRouting: visionModel === MODELS.GEMINI_3_FLASH,
+      preferModel: visionModel,
       isComparative: options.isComparative === true
     });
     const jsonExtraction = extractionResult.data;
@@ -1238,7 +1261,10 @@ export async function sendTextRequestWithUsage(
       safeLog(`✅ [${selectedModel}] Запрос завершен`);
       safeLog(`   📊 ${formatCostLog(selectedModel, inputTokens, outputTokens, tokensUsed)}`);
     }
-    const usageCost = calculateCost(inputTokens, outputTokens, selectedModel).totalCostUnits;
+    const providerRub = readProviderCostRub(data.usage);
+    const usageCost = providerRub != null
+      ? unitsFromProviderRub(providerRub)
+      : unitsFromTokens(inputTokens, outputTokens, selectedModel);
 
     return {
       content: data.choices[0].message.content || '',
@@ -1247,7 +1273,7 @@ export async function sendTextRequestWithUsage(
         prompt_tokens: inputTokens,
         completion_tokens: outputTokens,
         total_tokens: tokensUsed || (inputTokens + outputTokens),
-        total_cost: Number(data?.usage?.total_cost) > 0 ? Number(data.usage.total_cost) : usageCost,
+        total_cost: usageCost,
       },
     };
   } catch (error: any) {

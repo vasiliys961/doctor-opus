@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendTextRequest, MODELS } from '@/lib/openrouter';
+import { sendTextRequestWithUsage, MODELS } from '@/lib/openrouter';
 import { sendTextRequestStreaming } from '@/lib/openrouter-streaming';
 import { sendTextRequestWithFiles, sendTextRequestStreamingWithFiles } from '@/lib/openrouter-files';
 import { getServerSession } from "next-auth/next";
@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { anonymizeText, anonymizeObject } from '@/lib/anonymization';
 import { checkRateLimit, RATE_LIMIT_CHAT, getRateLimitKey } from '@/lib/rate-limiter';
 import { checkAndDeductBalance } from '@/lib/server-billing';
+import { reconcileUsageCharge, wrapStreamWithUsageReconcile } from '@/lib/billing-stream';
 import { searchPubMedEvidence, buildPubMedContextBlock } from '@/lib/pubmed-rag';
 import { resolveOpenAccessLinks } from '@/lib/unpaywall';
 
@@ -162,7 +163,7 @@ function estimateChatCost(params: {
   totalFileBytes: number;
 }): number {
   const modelBase =
-    params.selectedModel === MODELS.FABLE_5 || params.selectedModel === 'anthropic/claude-fable-5' ? 4.4 :
+    params.selectedModel === MODELS.FABLE_5 || params.selectedModel.toLowerCase().includes('fable') ? 3.5 :
     (params.selectedModel === MODELS.OPUS || params.selectedModel === MODELS.OPUS_VALIDATED) ? 2.2 :
     params.selectedModel === MODELS.SONNET ? 1.3 :
     params.selectedModel === MODELS.GPT_5_2 ? 1.4 : 0.9;
@@ -291,7 +292,7 @@ export async function POST(request: NextRequest) {
       ? (allowGpt52Chat ? MODELS.GPT_5_2 : MODELS.SONNET)
       : (model === 'sonnet' || model === MODELS.SONNET) 
         ? MODELS.SONNET 
-        : (model === 'fable' || model === 'anthropic/claude-fable-5' || model === MODELS.FABLE_5)
+        : (typeof model === 'string' && (model === 'fable' || model.toLowerCase().includes('claude-fable') || model === MODELS.FABLE_5))
           ? MODELS.FABLE_5
         : (model && (model === 'gemini' || model.includes('gemini')))
           ? MODELS.GEMINI_3_FLASH
@@ -455,7 +456,12 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      return new Response(stream.pipeThrough(transformStream), {
+      return new Response(wrapStreamWithUsageReconcile(stream, {
+        email: session.user.email,
+        estimated: estimatedCost,
+        label: 'AI Assistant chat',
+        model: selectedModel,
+      }).pipeThrough(transformStream), {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache, no-transform',
@@ -472,14 +478,18 @@ export async function POST(request: NextRequest) {
         const stream = await sendTextRequestStreamingWithFiles(finalMessage, formattedHistory, files, selectedModel, specialty as any);
         return handleStreaming(stream);
       } else {
-        const result = await sendTextRequestWithFiles(finalMessage, formattedHistory, files, selectedModel, specialty as any);
-        const { calculateCost } = await import('@/lib/cost-calculator');
-        const costInfo = calculateCost(2000, 1500, selectedModel); // Оценочно для non-streaming
-        
+        const billed = await sendTextRequestWithFiles(finalMessage, formattedHistory, files, selectedModel, specialty as any);
+        await reconcileUsageCharge({
+          email: session.user.email,
+          estimated: estimatedCost,
+          actual: billed.totalCost,
+          label: 'AI Assistant chat',
+        });
+
         return NextResponse.json({
           success: true,
-          result: result,
-          cost: costInfo.totalCostUnits,
+          result: billed.content,
+          cost: billed.totalCost,
           model: selectedModel
         });
       }
@@ -518,8 +528,12 @@ export async function POST(request: NextRequest) {
     console.log('🚀 [CHAT API] Начало запроса к OpenRouter...');
     let result: string;
     let modelUsed = selectedModel;
+    let actualCost = 0;
     try {
-      result = await sendTextRequest(finalMessage, formattedHistory, selectedModel, specialty as any, systemPrompt);
+      const billed = await sendTextRequestWithUsage(finalMessage, formattedHistory, selectedModel, specialty as any, systemPrompt);
+      result = billed.content;
+      modelUsed = billed.modelUsed;
+      actualCost = billed.usage.total_cost;
       console.log('✅ [CHAT API] Ответ от OpenRouter получен успешно.');
     } catch (error) {
       if (!isOpenRouterAccessDenied(error)) {
@@ -545,13 +559,19 @@ export async function POST(request: NextRequest) {
       console.warn(`[CHAT FALLBACK] OpenRouter blocked, using Anthropic direct API (${modelUsed})`);
     }
     
-    const { calculateCost } = await import('@/lib/cost-calculator');
-    const costInfo = calculateCost(1000, 1000, modelUsed);
+    if (actualCost > 0) {
+      await reconcileUsageCharge({
+        email: session.user.email,
+        estimated: estimatedCost,
+        actual: actualCost,
+        label: 'AI Assistant chat',
+      });
+    }
 
     return NextResponse.json({
       success: true,
       result: result,
-      cost: costInfo.totalCostUnits,
+      cost: actualCost,
       model: modelUsed
     });
   } catch (error: any) {

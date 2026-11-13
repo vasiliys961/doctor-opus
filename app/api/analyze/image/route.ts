@@ -32,7 +32,24 @@ export const dynamic = 'force-dynamic';
 // Лимит размера файла: 50MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const COMPLEX_MODALITIES = new Set(['ct', 'mri', 'xray', 'ultrasound']);
-const FABLE_MODEL = (process.env.VALIDATED_FABLE_MODEL || '').trim();
+function resolveValidatedFableModel(raw: string): string {
+  const id = raw.trim().toLowerCase();
+  if (!id) return '';
+  if (
+    id === 'fable' ||
+    id === 'fable-5' ||
+    id === 'fable-5.1' ||
+    id === 'fable-5.2' ||
+    id === 'anthropic/claude-fable-5' ||
+    id === 'anthropic/claude-fable-5.1' ||
+    id === 'anthropic/claude-fable-5.2'
+  ) {
+    return MODELS.FABLE_5;
+  }
+  return raw.trim();
+}
+
+const FABLE_MODEL = resolveValidatedFableModel(process.env.VALIDATED_FABLE_MODEL || '');
 const ENABLE_VALIDATED_FABLE = process.env.ENABLE_VALIDATED_FABLE === 'true' && Boolean(FABLE_MODEL);
 const FABLE_COST_MULTIPLIER = Math.max(1, Number(process.env.VALIDATED_FABLE_COST_MULTIPLIER || '2'));
 const MIN_COMPLEX_IMAGES = Math.max(2, Number(process.env.VALIDATED_COMPLEX_MIN_IMAGES || '3'));

@@ -12,6 +12,7 @@ import { anonymizeText } from "@/lib/anonymization";
 import { getLlmApiKey } from '@/lib/llm-provider';
 import { anonymizeImageBuffer } from "@/lib/server-image-processing";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
+import { wrapStreamWithUsageReconcile } from '@/lib/billing-stream';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 import * as XLSX from 'xlsx';
 
@@ -26,10 +27,18 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   const analysisId = `lab_${Date.now()}`;
+  let reconcileEmail: string | null = null;
+  let reconcileGuest: string | null = null;
+  let reconcileEstimate = 0;
   
   // Вспомогательная функция для стриминга
   const handleStreamingResponse = (stream: ReadableStream) => {
-    return new Response(stream, {
+    return new Response(wrapStreamWithUsageReconcile(stream, {
+      email: reconcileEmail,
+      guestKey: reconcileGuest,
+      estimated: reconcileEstimate,
+      label: 'Lab analysis',
+    }), {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',
@@ -99,6 +108,9 @@ export async function POST(request: NextRequest) {
         { status: 402 }
       );
     }
+    reconcileEmail = userEmail;
+    reconcileGuest = guestKey;
+    reconcileEstimate = estimatedCost;
 
     // Если маскирование включено и это изображение - анонимизируем буфер
     if (maskImage && (file.type.startsWith('image/') || fileType === 'jpg' || fileType === 'jpeg' || fileType === 'png')) {

@@ -3,11 +3,13 @@
  * Реализует Server-Sent Events (SSE) для постепенного получения ответов и двухэтапный анализ
  */
 
-import { calculateCombinedCost, calculateCost, formatCostLog } from './cost-calculator';
+import { formatCostLog } from './cost-calculator';
 import { type ImageType, type Specialty, SYSTEM_PROMPT, DIALOGUE_SYSTEM_PROMPT, STRATEGIC_SYSTEM_PROMPT, prepareVisionDataForTextPrompt, resolvePromptRuntimeVars } from './prompts';
 import { isAnthropicModel, isGeoRestrictionStatus, isOpenAIGeoRestrictionError, shouldUseStage2GeoFallback } from './geo-restriction';
 import { getValidatedOpusModel } from './validated-opus-model';
+import { visionModelForConclusion } from './openrouter';
 import { getLlmApiKey, getLlmChatCompletionsUrl } from './llm-provider';
+import { combinedProviderUnits, unitsFromTokens } from './provider-billing';
 
 const OPENROUTER_API_URL = getLlmChatCompletionsUrl();
 
@@ -102,7 +104,7 @@ function shouldUsePermissionFallback(primaryModel: string, status: number, error
 function createTransformWithUsage(
   stream: ReadableStream, 
   model: string, 
-  initialUsage?: { prompt_tokens: number, completion_tokens: number, model?: string, total_cost?: number, stages?: Array<{ model: string; prompt_tokens: number; completion_tokens: number }> },
+  initialUsage?: { prompt_tokens: number, completion_tokens: number, model?: string, total_cost?: number, providerCostRub?: number, stages?: Array<{ model: string; prompt_tokens: number; completion_tokens: number }> },
   isEstimate: boolean = false
 ): ReadableStream<Uint8Array> {
   const reader = stream.getReader();
@@ -110,6 +112,18 @@ function createTransformWithUsage(
   const decoder = new TextDecoder();
   let usageReceived = false;
   let totalContent = ''; // Собираем весь контент для fallback-расчёта
+
+  const priorStage = () => {
+    if (isEstimate || !initialUsage) return { priorCostRub: 0, priorUnits: 0 };
+    if ((initialUsage.providerCostRub || 0) > 0) return { priorCostRub: initialUsage.providerCostRub };
+    return {
+      priorUnits: unitsFromTokens(
+        initialUsage.prompt_tokens || 0,
+        initialUsage.completion_tokens || 0,
+        initialUsage.model || model
+      ),
+    };
+  };
 
   return new ReadableStream({
     async start(controller) {
@@ -121,7 +135,7 @@ function createTransformWithUsage(
             // КРИТИЧНО: Fallback ПЕРЕД закрытием контроллера
             if (!usageReceived && totalContent) {
               try {
-                const { calculateCost, formatCostLog } = await import('./cost-calculator');
+                const { formatCostLog } = await import('./cost-calculator');
                 const { estimateTokens } = await import('./adaptive-tokens');
                 
                 const approxOutputTokens = estimateTokens(totalContent);
@@ -129,17 +143,12 @@ function createTransformWithUsage(
                 const approxInputTokens = initialUsage?.prompt_tokens || 0;
                 const totalTokens = approxInputTokens + approxOutputTokens;
                 
-                const stageTwoCost = calculateCost(0, approxOutputTokens, model);
-                const stageOneCostUnits = isEstimate
-                  ? 0
-                  : (typeof initialUsage?.total_cost === 'number'
-                    ? initialUsage.total_cost
-                    : (Array.isArray(initialUsage?.stages) && initialUsage.stages.length > 0
-                      ? calculateCombinedCost(initialUsage.stages).totalCostUnits
-                      : (initialUsage?.model
-                        ? calculateCost(initialUsage.prompt_tokens || 0, initialUsage.completion_tokens || 0, initialUsage.model).totalCostUnits
-                        : 0)));
-                const totalCostUnits = stageOneCostUnits + stageTwoCost.totalCostUnits;
+                const totalCostUnits = combinedProviderUnits({
+                  stageModel: model,
+                  stagePromptTokens: 0,
+                  stageCompletionTokens: approxOutputTokens,
+                  ...priorStage(),
+                });
                 
                 console.log(`✅ [STREAMING FALLBACK] Анализ завершен (${model})`);
                 if (initialUsage && initialUsage.prompt_tokens > 0) {
@@ -200,7 +209,7 @@ function createTransformWithUsage(
                   
                   // МГНОВЕННО рассчитываем и логируем (без таймаутов)
                   try {
-                    const { calculateCost, formatCostLog } = await import('./cost-calculator');
+                    const { formatCostLog } = await import('./cost-calculator');
                     
                     // Если это НЕ оценка, а реальные данные из прошлого этапа (Gemini), то суммируем.
                     // Если это была просто оценка для fallback в чате (isEstimate=true), 
@@ -211,17 +220,13 @@ function createTransformWithUsage(
 
                     const stageTwoPrompt = data.usage.prompt_tokens || 0;
                     const stageTwoCompletion = data.usage.completion_tokens || 0;
-                    const stageTwoCost = calculateCost(stageTwoPrompt, stageTwoCompletion, model);
-                    const stageOneCostUnits = isEstimate
-                      ? 0
-                      : (typeof initialUsage?.total_cost === 'number'
-                        ? initialUsage.total_cost
-                        : (Array.isArray(initialUsage?.stages) && initialUsage.stages.length > 0
-                          ? calculateCombinedCost(initialUsage.stages).totalCostUnits
-                          : (initialUsage?.model
-                            ? calculateCost(initialUsage.prompt_tokens || 0, initialUsage.completion_tokens || 0, initialUsage.model).totalCostUnits
-                            : 0)));
-                    const totalCostUnits = stageOneCostUnits + stageTwoCost.totalCostUnits;
+                    const totalCostUnits = combinedProviderUnits({
+                      stageUsage: data.usage,
+                      stageModel: model,
+                      stagePromptTokens: stageTwoPrompt,
+                      stageCompletionTokens: stageTwoCompletion,
+                      ...priorStage(),
+                    });
                     
                     console.log(`✅ [STREAMING] Анализ завершен успешно (${model})`);
                     if (initialUsage && !isEstimate && (initialUsage.prompt_tokens > 0 || initialUsage.completion_tokens > 0)) {
@@ -454,9 +459,16 @@ export async function analyzeImageOpusTwoStageStreaming(
         }
       }, 5000);
 
-      console.log(`🚀 [OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
+      const visionModel = visionModelForConclusion(model);
+      console.log(`🚀 [OPTIMIZED STREAMING] Шаг 1: Извлечение JSON через ${visionModel}...`);
       const { extractImageJSON } = await import('./openrouter');
-      const extractionResult = await extractImageJSON({ imageBase64, modality: imageType || 'unknown', specialty, enableSmartRouting: true });
+      const extractionResult = await extractImageJSON({
+        imageBase64,
+        modality: imageType || 'unknown',
+        specialty,
+        enableSmartRouting: visionModel === MODELS.GEMINI_3_FLASH,
+        preferModel: visionModel,
+      });
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       
@@ -682,13 +694,15 @@ export async function analyzeMultipleImagesOpusTwoStageStreaming(
         }
       }, 5000);
 
-      console.log(`🚀 [MULTI-OPTIMIZED STREAMING] Шаг 1: Извлечение JSON...`);
+      const visionModel = visionModelForConclusion(model);
+      console.log(`🚀 [MULTI-OPTIMIZED STREAMING] Шаг 1: Извлечение JSON через ${visionModel}...`);
       const { extractImageJSON } = await import('./openrouter');
       const extractionResult = await extractImageJSON({
         imagesBase64,
         modality: imageType || 'unknown',
         specialty: specialty,
-        enableSmartRouting: true,
+        enableSmartRouting: visionModel === MODELS.GEMINI_3_FLASH,
+        preferModel: visionModel,
         isComparative
       });
       const jsonExtraction = extractionResult.data;
@@ -919,8 +933,15 @@ export async function analyzeMultipleImagesWithJSONStreaming(
         }
       }, 5000);
 
+      const visionModel = visionModelForConclusion(model);
       const { extractImageJSON } = await import('./openrouter');
-      const extractionResult = await extractImageJSON({ imagesBase64, modality: imageType || 'unknown', specialty, enableSmartRouting: true });
+      const extractionResult = await extractImageJSON({
+        imagesBase64,
+        modality: imageType || 'unknown',
+        specialty,
+        enableSmartRouting: visionModel === MODELS.GEMINI_3_FLASH,
+        preferModel: visionModel,
+      });
       const jsonExtraction = extractionResult.data;
       const initialUsage = extractionResult.usage;
       

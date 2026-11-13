@@ -12,6 +12,7 @@ import { getLlmApiKey } from '@/lib/llm-provider';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { checkAndDeductBalance, checkAndDeductGuestBalance, getAnalysisCost } from '@/lib/server-billing';
+import { wrapStreamWithUsageReconcile } from '@/lib/billing-stream';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 import { anonymizeImageBuffer } from '@/lib/server-image-processing';
 
@@ -25,10 +26,18 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   const analysisId = `lab_images_${Date.now()}`;
+  let reconcileEmail: string | null = null;
+  let reconcileGuest: string | null = null;
+  let reconcileEstimate = 0;
   
   // Вспомогательная функция для стриминга
   const handleStreamingResponse = (stream: ReadableStream) => {
-    return new Response(stream, {
+    return new Response(wrapStreamWithUsageReconcile(stream, {
+      email: reconcileEmail,
+      guestKey: reconcileGuest,
+      estimated: reconcileEstimate,
+      label: 'Lab images analysis',
+    }), {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',
@@ -81,6 +90,9 @@ export async function POST(request: NextRequest) {
         { status: 402 }
       );
     }
+    reconcileEmail = userEmail;
+    reconcileGuest = guestKey;
+    reconcileEstimate = estimatedCost;
 
     try {
       getLlmApiKey();
