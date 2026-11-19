@@ -166,7 +166,8 @@ function estimateChatCost(params: {
     params.selectedModel === MODELS.FABLE_5 || params.selectedModel.toLowerCase().includes('fable') ? 3.5 :
     (params.selectedModel === MODELS.OPUS || params.selectedModel === MODELS.OPUS_VALIDATED) ? 2.2 :
     params.selectedModel === MODELS.SONNET ? 1.3 :
-    params.selectedModel === MODELS.GPT_5_2 ? 1.4 : 0.9;
+    params.selectedModel === MODELS.GPT_5_2 ? 1.4 :
+    (params.selectedModel === MODELS.HAIKU_5_5 || params.selectedModel.toLowerCase().includes('haiku-5')) ? 0.5 : 0.9;
   const textFactor = Math.min(1.4, params.messageLength / 3000);
   const historyFactor = Math.min(1.8, params.historyLength * 0.12);
   const filesFactor = params.filesCount > 0 ? (0.6 + Math.min(1.5, params.totalFileBytes / (8 * 1024 * 1024))) : 0;
@@ -294,6 +295,8 @@ export async function POST(request: NextRequest) {
         ? MODELS.SONNET 
         : (typeof model === 'string' && (model === 'fable' || model.toLowerCase().includes('claude-fable') || model === MODELS.FABLE_5))
           ? MODELS.FABLE_5
+        : (model === 'haiku' || model === MODELS.HAIKU_5_5)
+          ? MODELS.HAIKU_5_5
         : (model && (model === 'gemini' || model.includes('gemini')))
           ? MODELS.GEMINI_3_FLASH
       : MODELS.OPUS_VALIDATED;

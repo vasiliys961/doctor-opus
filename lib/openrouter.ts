@@ -25,7 +25,8 @@ export const MODELS = {
   GPT_5_2: 'openai/gpt-6.1-sol',                  // GPT-6.1 Sol (legacy key name kept for compatibility)
   GROK_4_7: 'x-ai/grok-4.7',                         // xAI Grok 4.7
   GROK_4_5: 'x-ai/grok-4.7',                         // Legacy key alias -> Grok 4.7
-  HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5
+  HAIKU: 'anthropic/claude-haiku-4.5',                   // Claude Haiku 4.5 — служебные шаги
+  HAIKU_5_5: 'anthropic/claude-haiku-5.5',               // Claude Haiku 5.5 — быстрые запросы
   LLAMA: 'meta-llama/llama-3.2-90b-vision-instruct',     // Резерв
   GEMINI_3_FLASH: 'google/gemini-3.8-flash',       // Gemini 3 Flash Preview
   GEMINI_3_PRO: 'google/gemini-3.8-flash',         // Gemini 3.8 Pro Preview

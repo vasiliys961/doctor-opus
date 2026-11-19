@@ -21,6 +21,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'openai/gpt-5.6-terra': { input: 2.5, output: 15.0 }, // Исторические логи
   'x-ai/grok-4.7': { input: 2.0, output: 6.0 }, // Grok 4.7 (xAI pricing)
   'x-ai/grok-4.5': { input: 2.0, output: 6.0 }, // Исторические логи
+  'anthropic/claude-haiku-5.5': { input: 0.10, output: 0.50 }, // до 100k токенов; длиннее $0.50 / $2.50
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
   'meta-llama/llama-3.2-90b-vision-instruct': { input: 0.15, output: 0.60 },
   'google/gemini-3.8-flash': { input: 0.50, output: 3.00 },
@@ -81,8 +82,10 @@ function getModelPricing(model: string): { input: number; output: number } {
     return { input: 2.0, output: 10.0 };
   } else if (modelLower.includes('sonnet')) {
     return { input: 3.0, output: 15.0 };
+  } else if (modelLower.includes('haiku-5.5') || modelLower.includes('haiku-5-5')) {
+    return { input: 0.10, output: 0.50 };
   } else if (modelLower.includes('haiku')) {
-    return { input: 0.25, output: 1.25 };
+    return { input: 1.0, output: 5.0 };
   } else if (modelLower.includes('gemini-4-argon')) {
     return { input: 2.00, output: 10.00 };
   } else if (modelLower.includes('gemini-3.8')) {

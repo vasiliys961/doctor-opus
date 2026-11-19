@@ -21,7 +21,7 @@ import ConsiliumAuditView from '@/components/advanced/ConsiliumAuditView'
 import { ConsiliumProgressEvent, DiagnosticResult } from '@/lib/diagnostics/types'
 
 type ResponseStyle = 'brief' | 'detailed'
-type ChatModel = 'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable'
+type ChatModel = 'opus' | 'sonnet' | 'gpt52' | 'gemini' | 'fable' | 'haiku'
 const MAX_CHAT_FILES_PER_BATCH = 4;
 const MAX_CHAT_TOTAL_BYTES_PER_BATCH = 16 * 1024 * 1024;
 const BRIDGE_CHAT_KEY = 'mobile_bridge_chat_draft';
@@ -49,6 +49,7 @@ const getDisplayModelName = (model: ChatModel) => {
   if (model === 'opus') return 'anthropic/claude-opus-5.5';
   if (model === 'fable') return 'anthropic/claude-fable-5.2';
   if (model === 'gemini') return 'google/gemini-3.8-flash';
+  if (model === 'haiku') return 'anthropic/claude-haiku-5.5';
   return model;
 };
 
@@ -208,9 +209,9 @@ export default function ChatPage() {
 
     if (text.length <= 180 && !useLibrary) {
       return {
-        model: 'gpt52',
+        model: 'haiku',
         title: 'Короткий быстрый вопрос',
-        reason: 'Для кратких уточнений обычно быстрее и дешевле использовать Terra.',
+        reason: 'Для краткого уточнения быстрее и дешевле Haiku 5.5.',
       }
     }
 
@@ -226,6 +227,7 @@ export default function ChatPage() {
     fable: 'Fable 5.2',
     sonnet: 'Sonnet 5.5',
     gemini: 'Gemini 3.8',
+    haiku: 'Haiku 5.5',
   }
 
   // Загружаем PDF.js v3 из локальных файлов (public/pdfjs/)
@@ -1712,6 +1714,7 @@ export default function ChatPage() {
               className="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
               disabled={loading}
             >
+              <option value="haiku">⚡ Haiku 5.5 (быстрые запросы)</option>
               <option value="gpt52">🚀 GPT-6.1 Sol</option>
               <option value="opus">🧠 Opus 5.5</option>
               <option value="fable">🚀 Fable 5.2 (дороже)</option>

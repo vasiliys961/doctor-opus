@@ -225,6 +225,7 @@ export default function Navigation() {
             <p className="text-[10px] uppercase tracking-widest text-primary-300 mb-2 font-bold">Клиническая версия</p>
             <ul className="space-y-1 text-xs opacity-70">
               <li>• Opus 5.5 / Fable 5.2 + Gemini 3.8</li>
+              <li>• Haiku 5.5 — быстрые запросы в чате и протоколе</li>
               <li>• Подсказка «Рекомендуем модель» (без автопереключения)</li>
               <li>• Просмотр DICOM + измерения</li>
               <li>• Мультимодальный анализ (изображения + документы)</li>

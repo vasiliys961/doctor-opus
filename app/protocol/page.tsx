@@ -32,7 +32,7 @@ const PROTOCOL_DRAFT_WINDOW_NAME_PREFIX = 'secure_protocol_draft:'
 const PROTOCOL_TEMPLATE_RAG_KEY = 'protocol_template_rag_doc_id'
 const ECG_FUNCTIONAL_TEMPLATE_ID = 'ecg-functional-conclusion'
 const PROTOCOL_GPT52_MODEL = 'openai/gpt-5.4'
-type ProtocolModel = 'sonnet' | 'opus' | 'gemini' | 'gpt52' | 'grok45'
+type ProtocolModel = 'sonnet' | 'opus' | 'gemini' | 'gpt52' | 'haiku'
 
 type InteractionSeverity = 'minor' | 'moderate' | 'major'
 
@@ -118,17 +118,17 @@ export default function ProtocolPage() {
 
     if (!sourceText) {
       return {
-        model: 'gpt52',
-        title: 'Быстрый старт протокола',
-        reason: 'Для первичного черновика обычно достаточно самой быстрой модели.',
+        model: 'haiku',
+        title: 'Быстрый запрос',
+        reason: 'Для первичного черновика достаточно Haiku 5.5: она быстрее и дешевле.',
       }
     }
 
     if (stabilityMode) {
       return {
-        model: 'gpt52',
+        model: 'haiku',
         title: 'Режим стабильности',
-        reason: 'Для слабых ПК и нестабильной сети чаще лучше быстрый и предсказуемый режим.',
+        reason: 'Для слабых ПК и нестабильной сети лучше короткий быстрый запрос на Haiku 5.5.',
       }
     }
 
@@ -142,9 +142,9 @@ export default function ProtocolPage() {
 
     if (strictTemplateMode && sourceLength <= 3500) {
       return {
-        model: 'gpt52',
-        title: 'Строгий шаблон протокола',
-        reason: 'Для шаблонной структуры и скорости в большинстве случаев этого достаточно.',
+        model: 'haiku',
+        title: 'Быстрый запрос по шаблону',
+        reason: 'Короткий протокол по готовой структуре Haiku 5.5 собирает быстрее.',
       }
     }
 
@@ -155,8 +155,8 @@ export default function ProtocolPage() {
     }
   }, [conversationTranscriptText, rawText, stabilityMode, strictTemplateMode])
   const protocolModelLabelMap: Record<ProtocolModel, string> = {
+    haiku: 'Haiku 5.5',
     gpt52: 'GPT-6.1 Sol',
-    grok45: 'Grok 4.7',
     sonnet: 'Sonnet 5.5',
     opus: 'Opus 5.5',
     gemini: 'Gemini 3.8',
@@ -520,8 +520,8 @@ export default function ProtocolPage() {
     const modelsMap: Record<string, string> = {
       'opus': MODELS.OPUS_VALIDATED,
       'sonnet': MODELS.SONNET,
+      'haiku': MODELS.HAIKU_5_5,
       'gpt52': PROTOCOL_GPT52_MODEL,
-      'grok45': MODELS.GROK_4_7,
       'gemini': MODELS.GEMINI_3_FLASH
     };
 
@@ -1784,8 +1784,8 @@ export default function ProtocolPage() {
               </span>
             </label>
             <select value={model} onChange={(e) => setModel(e.target.value as any)} className="w-full md:w-auto px-2 py-1 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-primary-500" disabled={loading}>
-              <option value="gpt52">🚀 GPT-6.1 Sol (быстрее)</option>
-              <option value="grok45">🧪 Grok 4.7 (beta)</option>
+              <option value="haiku">⚡ Haiku 5.5 (быстрые запросы)</option>
+              <option value="gpt52">🚀 GPT-6.1 Sol</option>
               <option value="sonnet">🤖 Sonnet 5.5 (детальнее, но медленнее)</option>
               <option value="opus">🧠 Opus 5.5</option>
               <option value="gemini">⚡ Gemini 3.8</option>

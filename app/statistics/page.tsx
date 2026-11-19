@@ -19,6 +19,7 @@ const MODEL_PRICING = {
   'anthropic/claude-sonnet-5': { input: 3.0, output: 15.0 },
   'openai/gpt-6.1-sol': { input: 2.0, output: 10.0 },
   'openai/gpt-5.6-terra': { input: 2.5, output: 15.0 },
+  'anthropic/claude-haiku-5.5': { input: 0.10, output: 0.50 },
   'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
   'google/gemini-3.8-flash': { input: 0.50, output: 3.00 },
   'google/gemini-4-argon': { input: 2.00, output: 10.00 },

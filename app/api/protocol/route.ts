@@ -9,10 +9,13 @@ import { checkAndDeductBalance, checkAndDeductGuestBalance } from '@/lib/server-
 import { wrapStreamWithUsageReconcile } from '@/lib/billing-stream';
 import { getRateLimitKey } from '@/lib/rate-limiter';
 
-function estimateProtocolCost(rawTextLength: number, strictTemplateMode: boolean): number {
-  const base = strictTemplateMode ? 3.2 : 2.4;
-  const sizeFactor = Math.min(2.5, rawTextLength / 4000);
-  return Number(Math.min(10, Math.max(1.5, base + sizeFactor)).toFixed(2));
+function estimateProtocolCost(rawTextLength: number, strictTemplateMode: boolean, model?: string): number {
+  const isHaiku = model === 'haiku' || String(model || '').toLowerCase().includes('haiku-5');
+  const base = isHaiku ? 0.6 : (strictTemplateMode ? 3.2 : 2.4);
+  const sizeFactor = Math.min(isHaiku ? 0.8 : 2.5, rawTextLength / 4000);
+  const floor = isHaiku ? 0.4 : 1.5;
+  const cap = isHaiku ? 3 : 10;
+  return Number(Math.min(cap, Math.max(floor, base + sizeFactor)).toFixed(2));
 }
 
 const STRICT_FAST_RAWTEXT_THRESHOLD = 12000;
@@ -567,7 +570,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Шаблон не предоставлен' }, { status: 400 });
     }
 
-    const estimatedCost = estimateProtocolCost(rawText.length, isStrictTemplateMode);
+    const estimatedCost = estimateProtocolCost(rawText.length, isStrictTemplateMode, model);
     const actualUsage: TextRequestUsage = {
       prompt_tokens: 0,
       completion_tokens: 0,
@@ -745,6 +748,8 @@ ${evidencePriorityDirective}
     const effectiveModel = model === 'grok45' && !allowGrokProtocol ? 'sonnet' : model;
     const MODEL = effectiveModel === 'opus'
       ? MODELS.OPUS_VALIDATED
+      : effectiveModel === 'haiku'
+        ? MODELS.HAIKU_5_5
       : effectiveModel === 'gpt52'
         ? PROTOCOL_GPT52_MODEL
         : effectiveModel === 'grok45'
