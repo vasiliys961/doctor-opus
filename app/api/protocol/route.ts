@@ -758,6 +758,8 @@ ${evidencePriorityDirective}
             ? MODELS.GEMINI_3_FLASH
             : MODELS.SONNET;
     const protocolFallbackModel = effectiveModel === 'grok45' ? MODELS.SONNET : null;
+    // Haiku 5.5 на том же протоколе упиралась в общий лимит чата (8000) и обрывала текст.
+    const protocolMaxTokens = MODEL === MODELS.HAIKU_5_5 ? 32000 : undefined;
     
     // По умолчанию streaming не блокируем: иначе пользователь получает весь текст одним куском.
     // Двухшаговый deferred strict-режим включается только явным env-флагом.
@@ -809,12 +811,12 @@ ${evidencePriorityDirective}
       let resolvedModel = MODEL;
       let stream: ReadableStream<Uint8Array>;
       try {
-        stream = await sendTextRequestStreaming(prompt, [], MODEL);
+        stream = await sendTextRequestStreaming(prompt, [], MODEL, undefined, undefined, protocolMaxTokens);
       } catch (primaryError) {
         if (!protocolFallbackModel) throw primaryError;
         console.warn(`[PROTOCOL] Primary model ${MODEL} failed, fallback to ${protocolFallbackModel}`);
         resolvedModel = protocolFallbackModel;
-        stream = await sendTextRequestStreaming(prompt, [], resolvedModel);
+        stream = await sendTextRequestStreaming(prompt, [], resolvedModel, undefined, undefined, protocolMaxTokens);
       }
       const sanitizedStream = sanitizeProtocolSse(wrapStreamWithUsageReconcile(stream, {
         email: userEmail,
@@ -837,7 +839,7 @@ ${evidencePriorityDirective}
     let resolvedModel = MODEL;
     let result: string;
     try {
-      const initialResult = await sendTextRequestWithUsage(prompt, [], MODEL);
+      const initialResult = await sendTextRequestWithUsage(prompt, [], MODEL, undefined, undefined, protocolMaxTokens);
       addUsage(initialResult.usage);
       result = initialResult.content;
       resolvedModel = initialResult.modelUsed || resolvedModel;

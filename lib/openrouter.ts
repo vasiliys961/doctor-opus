@@ -1125,7 +1125,8 @@ export async function sendTextRequestWithUsage(
   history: Array<{role: string, content: string}> = [],
   model: string = MODELS.OPUS,
   specialty?: Specialty,
-  customSystemPrompt?: string
+  customSystemPrompt?: string,
+  maxTokensOverride?: number
 ): Promise<TextRequestResult> {
   const apiKey = getLlmApiKey();
   
@@ -1177,8 +1178,11 @@ export async function sendTextRequestWithUsage(
         const payload = {
           model: targetModel,
           messages,
-          max_tokens: 10000, // Оптимизировано: текстовый запрос
+          max_tokens: maxTokensOverride && maxTokensOverride > 0 ? maxTokensOverride : 10000,
           temperature: 0.1,
+          ...(String(targetModel).toLowerCase().includes('haiku-5')
+            ? { reasoning: { effort: 'low' } }
+            : {}),
         };
         try {
           attemptResponse = await fetchWithTimeout(OPENROUTER_API_URL, {

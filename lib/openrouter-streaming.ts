@@ -1195,7 +1195,8 @@ export async function sendTextRequestStreaming(
   history: Array<{role: string, content: string}> = [],
   model: string = MODELS.OPUS,
   specialty?: Specialty,
-  customSystemPrompt?: string
+  customSystemPrompt?: string,
+  maxTokensOverride?: number
 ): Promise<ReadableStream<Uint8Array>> {
   const apiKey = getLlmApiKey();
   if (!apiKey) throw new Error('LLM_API_KEY (или OPENROUTER_API_KEY) is not configured');
@@ -1273,10 +1274,16 @@ export async function sendTextRequestStreaming(
               body: JSON.stringify({
                 model: targetModel,
                 messages,
-                max_tokens: adaptiveMaxTokens, // Адаптивно в зависимости от длины диалога
+                max_tokens: maxTokensOverride && maxTokensOverride > 0
+                  ? maxTokensOverride
+                  : adaptiveMaxTokens,
                 temperature: 0.1,
                 stream: true,
-                stream_options: { include_usage: true }
+                stream_options: { include_usage: true },
+                // Haiku 5.5 тратит бюджет на скрытое рассуждение и обрезает протокол.
+                ...(String(targetModel).toLowerCase().includes('haiku-5')
+                  ? { reasoning: { effort: 'low' } }
+                  : {}),
               }),
               signal: controller.signal
             });
